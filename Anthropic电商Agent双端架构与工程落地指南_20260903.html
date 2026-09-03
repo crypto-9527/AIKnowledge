@@ -1,0 +1,2053 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anthropic 电商 Agent 双端架构 · 结构化阅读版（附一手事实核验与五个可计算沙盘）</title>
+<meta name="description" content="Anthropic commerce-agents 参考实现的完整结构化重排版，保留原文全部段落、表格、代码块与超链接，附一手事实核验、五张图示矢量还原与五个可计算交互沙盘。">
+<style>
+/* ============================================================
+   1. 设计令牌与双主题（默认深色）
+   ============================================================ */
+:root{
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-head: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --sidebar-w: 272px;
+  --maxw: 940px;
+}
+html[data-theme="dark"]{
+  --bg: #181715;
+  --bg-elev: #201E1B;
+  --surface-1: #23211D;
+  --surface-2: #2A2724;
+  --surface-3: #332F2A;
+  --border: #3A3630;
+  --border-soft: #2E2A25;
+  --text-primary: #E8E3DA;
+  --text-secondary: #B4ACA0;
+  --text-muted: #8A8278;
+  --accent: #D97757;
+  --accent-soft: rgba(217,119,87,.14);
+  --emerald: #5FB89A;
+  --rose: #E0796F;
+  --amber: #DDA94A;
+  --cyan: #6FB3CF;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 28px rgba(0,0,0,.28);
+  --code-bg: #14120F;
+}
+html[data-theme="light"]{
+  --bg: #FAF7F2;
+  --bg-elev: #FFFFFF;
+  --surface-1: #FFFFFF;
+  --surface-2: #F4EFE7;
+  --surface-3: #EAE3D8;
+  --border: #DED5C7;
+  --border-soft: #E8E1D5;
+  --text-primary: #262220;
+  --text-secondary: #554E47;
+  --text-muted: #807769;
+  --accent: #C25C3A;
+  --accent-soft: rgba(194,92,58,.10);
+  --emerald: #2F7A5C;
+  --rose: #B03F37;
+  --amber: #9A6D14;
+  --cyan: #2A6F8C;
+  --shadow: 0 1px 2px rgba(80,60,40,.08), 0 8px 26px rgba(80,60,40,.10);
+  --code-bg: #F2ECE2;
+}
+
+/* ============================================================
+   2. 基础重置
+   ============================================================ */
+*,*::before,*::after{ box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+body{
+  margin:0; background:var(--bg); color:var(--text-primary);
+  font-family:var(--font-body); font-size:16.5px; line-height:1.85;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  transition: background-color .28s ease, color .28s ease;
+}
+img,svg{ max-width:100%; height:auto; }
+a{ color:var(--accent); text-decoration:none; border-bottom:1px solid transparent; }
+a:hover{ border-bottom-color:var(--accent); }
+hr{ border:0; border-top:1px solid var(--border); margin:2.6rem 0; }
+
+.reading-progress{
+  position:fixed; top:0; left:0; height:3px; width:0%;
+  background:linear-gradient(90deg, var(--accent), var(--amber));
+  z-index:120; transition:width .08s linear;
+}
+
+/* ============================================================
+   3. 布局栅格 + 侧边目录
+   ============================================================ */
+.layout{ display:flex; align-items:flex-start; gap:0; }
+.sidebar{
+  position:sticky; top:0; align-self:flex-start;
+  width:var(--sidebar-w); flex:0 0 var(--sidebar-w);
+  height:100vh; overflow-y:auto; padding:2.2rem 1.1rem 3rem 1.6rem;
+  border-right:1px solid var(--border-soft); background:var(--bg-elev);
+}
+.sidebar::-webkit-scrollbar{ width:6px; }
+.sidebar::-webkit-scrollbar-thumb{ background:var(--border); border-radius:3px; }
+.sb-title{ font-family:var(--font-head); font-size:1.02rem; font-weight:700; margin:0 0 .25rem; letter-spacing:.02em; }
+.sb-sub{ font-size:.74rem; color:var(--text-muted); margin:0 0 1.4rem; line-height:1.5; }
+.toc{ list-style:none; margin:0; padding:0; }
+.toc li{ margin:0; }
+.toc a{
+  display:block; padding:.32rem .6rem; margin:.05rem 0;
+  font-size:.82rem; line-height:1.45; color:var(--text-secondary);
+  border-left:2px solid transparent; border-bottom:0;
+  border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+  transition:all .16s ease;
+}
+.toc a:hover{ background:var(--surface-2); color:var(--text-primary); }
+.toc a.active{
+  color:var(--accent); border-left-color:var(--accent);
+  background:var(--accent-soft); font-weight:600;
+}
+.toc a.lv3{ padding-left:1.5rem; font-size:.78rem; }
+.toc .toc-sep{
+  font-size:.68rem; text-transform:uppercase; letter-spacing:.12em;
+  color:var(--text-muted); margin:1.1rem 0 .3rem; padding-left:.6rem;
+}
+
+.content{ flex:1 1 auto; min-width:0; padding:2.6rem 3rem 8rem; }
+.inner{ max-width:var(--maxw); margin:0 auto; }
+
+.topbar{ position:fixed; top:.85rem; right:1.1rem; z-index:110; display:flex; gap:.45rem; }
+.tbtn{
+  font-family:var(--font-body); font-size:.76rem; cursor:pointer;
+  background:var(--surface-1); color:var(--text-secondary);
+  border:1px solid var(--border); border-radius:999px; padding:.36rem .8rem;
+  box-shadow:var(--shadow); transition:all .16s ease;
+}
+.tbtn:hover{ color:var(--text-primary); border-color:var(--accent); }
+
+/* ============================================================
+   4. 排版
+   ============================================================ */
+.doc-header{ margin-bottom:2.6rem; padding-bottom:1.6rem; border-bottom:2px solid var(--border); }
+.doc-kicker{ font-size:.72rem; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:700; margin-bottom:.7rem; }
+h1{ font-family:var(--font-head); font-size:2.02rem; line-height:1.35; margin:0 0 1rem; font-weight:700; letter-spacing:.01em; }
+h2{ font-family:var(--font-head); font-size:1.48rem; line-height:1.4; margin:3.2rem 0 1.1rem; padding-bottom:.5rem; border-bottom:1px solid var(--border); font-weight:700; }
+h3{ font-family:var(--font-head); font-size:1.15rem; line-height:1.45; margin:2.2rem 0 .8rem; font-weight:700; }
+h4{ font-size:.98rem; margin:1.6rem 0 .5rem; font-weight:700; color:var(--text-secondary); }
+p{ margin:0 0 1.05rem; }
+.lead{ font-size:1.06rem; color:var(--text-secondary); }
+strong{ font-weight:700; color:var(--text-primary); }
+em{ color:var(--text-secondary); }
+
+.content ul, .content ol{ margin:0 0 1.1rem; padding-left:1.5rem; }
+.content li{ margin:.34rem 0; }
+.content li::marker{ color:var(--accent); }
+.content ul ul, .content ol ol{ margin:.3rem 0 .3rem; }
+
+.steps{ list-style:none; padding-left:0; }
+.steps li{ position:relative; padding-left:2.4rem; margin:.7rem 0; min-height:1.9rem; }
+.steps li .n{
+  position:absolute; left:0; top:.12rem; width:1.7rem; height:1.7rem;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:50%; background:var(--accent-soft); color:var(--accent);
+  font-family:var(--font-mono); font-size:.78rem; font-weight:700;
+  border:1px solid var(--accent);
+}
+
+blockquote{
+  margin:1.5rem 0; padding:1rem 1.25rem;
+  background:var(--surface-1); border-left:3px solid var(--accent);
+  border-radius:0 var(--radius-md) var(--radius-md) 0;
+  color:var(--text-secondary);
+}
+blockquote p{ margin:0 0 .5rem; }
+blockquote p:last-child{ margin-bottom:0; }
+blockquote strong{ color:var(--text-primary); }
+
+code{
+  font-family:var(--font-mono); font-size:.855em;
+  background:var(--code-bg); padding:.12em .4em; border-radius:var(--radius-sm);
+  border:1px solid var(--border-soft); color:var(--accent); word-break:break-word;
+}
+pre{
+  background:var(--code-bg); border:1px solid var(--border);
+  border-radius:var(--radius-md); padding:1rem 1.15rem; overflow-x:auto;
+  margin:1.2rem 0; line-height:1.65;
+}
+pre code{ background:none; border:0; padding:0; font-size:.82rem; color:var(--text-primary); }
+
+/* ============================================================
+   5. 表格
+   ============================================================ */
+.tw{ overflow-x:auto; margin:1.4rem 0; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-1); }
+table{ border-collapse:collapse; width:100%; font-size:.875rem; min-width:520px; }
+thead th{
+  background:var(--surface-3); color:var(--text-primary);
+  text-align:left; font-weight:700; padding:.62rem .8rem;
+  border-bottom:2px solid var(--border); white-space:nowrap;
+}
+tbody td{ padding:.6rem .8rem; border-bottom:1px solid var(--border-soft); vertical-align:top; line-height:1.62; }
+tbody tr:last-child td{ border-bottom:0; }
+tbody tr:hover{ background:var(--surface-2); }
+tbody td:first-child{ font-weight:600; color:var(--text-primary); white-space:nowrap; }
+table.compact td:first-child{ white-space:normal; }
+.tw caption{ caption-side:top; text-align:left; font-size:.78rem; color:var(--text-muted); padding:.6rem .8rem .1rem; }
+
+/* ============================================================
+   6. 提示块 / 徽章 / 增强块
+   ============================================================ */
+.callout{
+  margin:1.5rem 0; padding:1rem 1.2rem; border-radius:var(--radius-md);
+  background:var(--surface-1); border:1px solid var(--border);
+  border-left:3px solid var(--cyan); font-size:.92rem;
+}
+.callout.warn{ border-left-color:var(--amber); }
+.callout.danger{ border-left-color:var(--rose); }
+.callout.ok{ border-left-color:var(--emerald); }
+.callout .ct{ display:block; font-weight:700; margin-bottom:.35rem; font-size:.86rem; letter-spacing:.02em; color:var(--cyan); }
+.callout.warn .ct{ color:var(--amber); }
+.callout.danger .ct{ color:var(--rose); }
+.callout.ok .ct{ color:var(--emerald); }
+.callout p:last-child{ margin-bottom:0; }
+
+.badge{
+  display:inline-block; font-size:.68rem; font-weight:700; line-height:1.5;
+  padding:.1rem .48rem; border-radius:999px; vertical-align:.1em;
+  border:1px solid currentColor; white-space:nowrap;
+}
+.b-ok{ color:var(--emerald); }
+.b-warn{ color:var(--amber); }
+.b-info{ color:var(--cyan); }
+.b-add{ color:var(--accent); }
+.b-risk{ color:var(--rose); }
+
+.enhance{
+  border:1px dashed var(--border); border-left:3px solid var(--accent);
+  border-radius:0 var(--radius-md) var(--radius-md) 0;
+  background:var(--surface-1); padding:1.15rem 1.3rem; margin:1.6rem 0;
+}
+.enhance > .eh-tag{
+  display:inline-block; font-size:.68rem; font-weight:700; letter-spacing:.08em;
+  color:var(--accent); border:1px solid var(--accent); border-radius:999px;
+  padding:.12rem .55rem; margin-bottom:.7rem;
+}
+.enhance h3:first-of-type, .enhance h4:first-of-type{ margin-top:.2rem; }
+
+.grid2{ display:grid; grid-template-columns:repeat(auto-fit,minmax(258px,1fr)); gap:.9rem; margin:1.3rem 0; }
+.card{ background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius-md); padding:.95rem 1.05rem; }
+.card h4{ margin:0 0 .45rem; color:var(--accent); font-size:.9rem; }
+.card p, .card ul{ margin:0; font-size:.87rem; color:var(--text-secondary); }
+.card ul{ padding-left:1.15rem; }
+
+.dot{ display:inline-block; width:.55rem; height:.55rem; border-radius:50%; margin-right:.4rem; vertical-align:.05em; }
+.dot-ok{ background:var(--emerald); }
+.dot-warn{ background:var(--amber); }
+.dot-add{ background:var(--accent); }
+.dot-risk{ background:var(--rose); }
+.dot-cyan{ background:var(--cyan); }
+
+/* ============================================================
+   7. 交互沙盘
+   ============================================================ */
+.sandbox{
+  border:1px solid var(--border); border-radius:var(--radius-lg);
+  background:var(--surface-1); padding:1.35rem 1.4rem 1.5rem; margin:1.7rem 0;
+  box-shadow:var(--shadow);
+}
+.sandbox > .sb-head{ display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap; margin-bottom:.3rem; }
+.sandbox .sb-idx{
+  font-family:var(--font-mono); font-size:.72rem; font-weight:700;
+  color:var(--accent); border:1px solid var(--accent);
+  border-radius:var(--radius-sm); padding:.05rem .38rem;
+}
+.sandbox .sb-name{ font-family:var(--font-head); font-size:1.08rem; font-weight:700; }
+.sandbox .sb-desc{ font-size:.83rem; color:var(--text-muted); margin:.15rem 0 1.1rem; line-height:1.65; }
+
+.ctrl-row{ display:grid; grid-template-columns:repeat(auto-fit,minmax(216px,1fr)); gap:.85rem 1.4rem; margin-bottom:1.1rem; }
+.ctrl{ display:flex; flex-direction:column; gap:.28rem; }
+.ctrl label{ font-size:.78rem; color:var(--text-secondary); font-weight:600; display:flex; justify-content:space-between; align-items:baseline; gap:.5rem; }
+.ctrl label .cv{ font-family:var(--font-mono); font-size:.8rem; color:var(--accent); font-weight:700; }
+input[type="range"]{
+  -webkit-appearance:none; appearance:none; width:100%; height:5px;
+  background:var(--surface-3); border-radius:3px; outline:none; cursor:pointer;
+  border:1px solid var(--border);
+}
+input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none; appearance:none; width:16px; height:16px;
+  border-radius:50%; background:var(--accent); border:2px solid var(--bg);
+  box-shadow:0 0 0 1px var(--accent); cursor:pointer;
+}
+input[type="range"]::-moz-range-thumb{
+  width:14px; height:14px; border-radius:50%; background:var(--accent);
+  border:2px solid var(--bg); box-shadow:0 0 0 1px var(--accent); cursor:pointer;
+}
+select{
+  font-family:var(--font-body); font-size:.82rem; padding:.36rem .55rem;
+  background:var(--surface-2); color:var(--text-primary);
+  border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; width:100%;
+}
+select:focus, input:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+
+.readout{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.7rem; margin-top:.9rem; }
+.ro{ background:var(--surface-2); border:1px solid var(--border-soft); border-radius:var(--radius-md); padding:.62rem .8rem; }
+.ro .rk{ font-size:.71rem; color:var(--text-muted); display:block; margin-bottom:.18rem; }
+.ro .rv{ font-family:var(--font-mono); font-size:1.12rem; font-weight:700; color:var(--text-primary); line-height:1.28; }
+.ro.hi .rv{ color:var(--accent); }
+.ro.good .rv{ color:var(--emerald); }
+.ro.bad .rv{ color:var(--rose); }
+.ro.mid .rv{ color:var(--amber); }
+
+.chart-wrap{
+  margin-top:1rem; background:var(--surface-2); border:1px solid var(--border-soft);
+  border-radius:var(--radius-md); padding:.6rem .4rem .3rem; overflow-x:auto;
+}
+.chart-wrap svg{ display:block; margin:0 auto; }
+.legend{ display:flex; gap:1.1rem; justify-content:center; flex-wrap:wrap; font-size:.75rem; color:var(--text-secondary); margin-top:.4rem; }
+.legend span{ display:inline-flex; align-items:center; gap:.35rem; }
+.legend i{ width:14px; height:3px; border-radius:2px; display:inline-block; }
+
+.formula-note{
+  font-size:.78rem; color:var(--text-muted); margin-top:.85rem;
+  padding-top:.75rem; border-top:1px dashed var(--border); line-height:1.75;
+}
+.formula-note code{ font-size:.78rem; }
+
+/* 纯 CSS 数学排版 */
+.math-block{
+  margin:.9rem 0; padding:.75rem 1.1rem; background:var(--surface-2);
+  border:1px solid var(--border); border-radius:var(--radius-md);
+  font-family:"Newsreader","Songti SC",Georgia,serif; font-size:1.06rem;
+  overflow-x:auto; text-align:center; color:var(--text-primary); line-height:2.1;
+}
+.math-inline{ font-family:"Newsreader","Songti SC",Georgia,serif; font-style:italic; padding:0 .2rem; }
+.mfrac{ display:inline-flex; flex-direction:column; vertical-align:-0.55em; padding:0 .25em; text-align:center; font-size:.95em; line-height:1.15; }
+.mfrac > .num{ border-bottom:1.5px solid currentColor; padding-bottom:.15em; display:block; }
+.mfrac > .den{ padding-top:.15em; display:block; }
+.msqrt{ display:inline-flex; align-items:center; vertical-align:-0.1em; padding:0 .15em; }
+.msqrt::before{ content:"√"; font-size:1.25em; margin-right:1px; line-height:1; }
+.msqrt > .radicand{ border-top:1.5px solid currentColor; padding-top:.1em; display:inline-block; line-height:1.15; }
+.mop{ display:inline-block; font-size:1.45em; vertical-align:-0.22em; line-height:1; font-style:normal; padding:0 .12em; }
+sup{ font-size:.72em; vertical-align:super; line-height:0; }
+sub{ font-size:.72em; vertical-align:sub; line-height:0; }
+
+.risk-out{ margin-top:1rem; border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; }
+.risk-head{ padding:.7rem 1rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; background:var(--surface-2); border-left:4px solid var(--accent); }
+.risk-head .rl{ font-family:var(--font-head); font-size:1.02rem; font-weight:700; }
+.risk-head .rs{ font-family:var(--font-mono); font-size:.8rem; color:var(--text-secondary); }
+
+details{ margin:1.1rem 0; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-1); overflow:hidden; }
+details > summary{
+  cursor:pointer; padding:.7rem 1rem; font-weight:600; font-size:.9rem;
+  color:var(--text-primary); list-style:none; user-select:none;
+  display:flex; align-items:center; gap:.5rem;
+}
+details > summary::-webkit-details-marker{ display:none; }
+details > summary::before{ content:"▸"; color:var(--accent); font-size:.85rem; transition:transform .18s ease; display:inline-block; }
+details[open] > summary::before{ transform:rotate(90deg); }
+details > .dbody{ padding:.2rem 1.1rem 1.1rem; font-size:.88rem; }
+details > .dbody > p:last-child, details > .dbody > .tw:last-child{ margin-bottom:0; }
+
+.stamp{
+  margin:2.4rem 0; padding:1.4rem 1.6rem; text-align:center;
+  border:2px solid var(--accent); border-radius:var(--radius-lg);
+  background:var(--accent-soft);
+}
+.stamp .st{ font-family:var(--font-head); font-size:1.24rem; font-weight:700; line-height:1.55; color:var(--text-primary); }
+.stamp .sd{ font-size:.85rem; color:var(--text-secondary); margin-top:.5rem; }
+
+.meta-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:.7rem; margin:1.2rem 0; }
+.meta-item{ background:var(--surface-1); border:1px solid var(--border-soft); border-radius:var(--radius-md); padding:.7rem .9rem; }
+.meta-item .mk{ font-size:.7rem; color:var(--text-muted); display:block; text-transform:uppercase; letter-spacing:.09em; }
+.meta-item .mv{ font-size:.85rem; color:var(--text-primary); font-weight:600; word-break:break-all; }
+.footnote{ font-size:.78rem; color:var(--text-muted); line-height:1.75; margin-top:1.5rem; padding-top:1rem; border-top:1px solid var(--border-soft); }
+
+/* ============================================================
+   8. 响应式与打印
+   ============================================================ */
+@media (min-width: 1180px){ .content{ padding:2.6rem 4rem 8rem; } }
+@media (max-width: 900px){
+  .sidebar{
+    position:static; width:100%; flex:none; height:auto; max-height:none;
+    border-right:0; border-bottom:1px solid var(--border); padding:1.4rem 1.2rem 1.2rem;
+  }
+  .layout{ flex-direction:column; }
+  .content{ padding:1.8rem 1.15rem 6rem; }
+  h1{ font-size:1.6rem; }
+  h2{ font-size:1.26rem; }
+  .toc{ display:flex; flex-wrap:wrap; gap:.2rem; }
+  .toc li{ flex:1 1 auto; }
+  .toc .toc-sep{ flex:1 1 100%; }
+  .toc a.lv3{ padding-left:.6rem; }
+}
+@media print{
+  .sidebar, .topbar, .reading-progress, .tbtn{ display:none !important; }
+  body{ background:#fff; color:#1a1a1a; font-size:10.5pt; line-height:1.6; }
+  .content{ padding:0; }
+  .layout{ display:block; }
+  h1,h2,h3,h4{ page-break-after:avoid; break-after:avoid; }
+  table, .sandbox, .tw, blockquote, .stamp, pre, .enhance, .chart-wrap{ page-break-inside:avoid; break-inside:avoid; }
+  .sandbox{ box-shadow:none; border:1px solid #bbb; }
+  a{ color:#8a3b22; }
+  details{ border:1px solid #ccc; }
+  details > .dbody{ display:block !important; }
+}
+</style>
+</head>
+<body>
+<div class="reading-progress" id="progress"></div>
+
+<div class="topbar">
+  <button class="tbtn" id="btn-theme" type="button" title="切换深浅主题">◐ 主题</button>
+  <button class="tbtn" id="btn-top" type="button" title="回到顶部">↑ 顶部</button>
+</div>
+
+<div class="layout">
+
+  <!-- ============ 侧边目录 ============ -->
+  <aside class="sidebar">
+    <p class="sb-title">电商 Agent 双端架构</p>
+    <p class="sb-sub">Anthropic commerce-agents 参考实现 · 结构化阅读版</p>
+    <ul class="toc" id="toc">
+      <li class="toc-sep">原文</li>
+      <li><a href="#sec-summary">一分钟速览</a></li>
+      <li><a href="#sec-contents">参考实现包含什么</a></li>
+      <li><a href="#sec-agents">两个 Agent 分别做什么</a></li>
+      <li><a href="#sec-pipeline">一次任务怎样走到业务结果</a></li>
+      <li><a href="#sec-one">为什么只用一个主 Agent</a></li>
+      <li><a href="#sec-latency">怎样缩短响应时间降成本</a></li>
+      <li><a href="#sec-prod">记忆、写操作与上线风险</a></li>
+      <li><a href="#sec-memory" class="lv3">· 会话结束后再写入记忆</a></li>
+      <li><a href="#sec-gates" class="lv3">· 付款和改价由代码控制</a></li>
+      <li><a href="#sec-evals" class="lv3">· 用快照评测固定失败</a></li>
+      <li><a href="#sec-release" class="lv3">· 多团队如何发布更新</a></li>
+      <li><a href="#sec-runtime">三种运行方式怎么选</a></li>
+      <li><a href="#sec-verticals">四个行业样例</a></li>
+      <li><a href="#sec-pilot">怎样开始试点</a></li>
+      <li class="toc-sep">核验与推演（增强）</li>
+      <li><a href="#sec-verify">一手事实核验</a></li>
+      <li><a href="#sec-s1">沙盘 1 · 缓存经济性</a></li>
+      <li><a href="#sec-s2">沙盘 2 · 前缀错位的代价</a></li>
+      <li><a href="#sec-s3">沙盘 3 · 单轮延迟预算</a></li>
+      <li><a href="#sec-s4">沙盘 4 · 写操作安全链</a></li>
+      <li><a href="#sec-s5">沙盘 5 · 评测覆盖与复现成本</a></li>
+      <li class="toc-sep">附录</li>
+      <li><a href="#sec-formula">公式与参数口径</a></li>
+      <li><a href="#sec-meta">文档元信息</a></li>
+    </ul>
+  </aside>
+
+  <!-- ============ 正文 ============ -->
+  <main class="content">
+  <div class="inner">
+
+    <header class="doc-header">
+      <p class="doc-kicker">Anthropic · Commerce Agents · Reference Blueprint</p>
+      <h1>Anthropic 开源其一套可运行的 AI 电商 Agents 参考实现</h1>
+      <p class="lead">这套参考实现包含 Shopping Agent、Merchant Agent、十个 Skills、四个行业示例和三种运行方式，并演示业务工具、呈现组件、记忆、安全审批和评测的实现。</p>
+      <p style="font-size:.92rem;color:var(--text-muted)">结构化重排视线：模型负责判断，Skills 提供流程，tools 暴露接口，后端拥有事实与规则，Harness 控制状态与权限，客户端负责呈现——钱、价格与库存的最终决定权始终留在代码里。</p>
+      <div class="meta-grid">
+        <div class="meta-item"><span class="mk">来源</span><span class="mv">小互 · AI 解读站（best.xiaohu.ai）</span></div>
+        <div class="meta-item"><span class="mk">分类</span><span class="mv">产品发布 · 参考实现</span></div>
+        <div class="meta-item"><span class="mk">核验时间</span><span class="mv">2026-09-03</span></div>
+        <div class="meta-item"><span class="mk">一手源 A</span><span class="mv"><a href="https://claude.com/blog/the-anatomy-of-effective-commerce-agents" target="_blank" rel="noopener">工程深析博文</a></span></div>
+        <div class="meta-item"><span class="mk">一手源 B</span><span class="mv"><a href="https://claude.com/blog/claude-for-commerce-agents" target="_blank" rel="noopener">发布博文（2026-09-02）</a></span></div>
+        <div class="meta-item"><span class="mk">一手源 C</span><span class="mv"><a href="https://github.com/anthropics/commerce-agents" target="_blank" rel="noopener">github.com/anthropics/commerce-agents</a></span></div>
+      </div>
+    </header>
+
+    <div class="callout ok">
+      <span class="ct">阅读说明</span>
+      <p>本文完整保留原文全部段落、列表、<strong>3 张表格</strong>、代码块与超链接。凡带 <span class="badge b-add">增强</span> 标记的区块与「核验与推演」章节，均为本次转换时依据一手来源补充的溯源、图示还原与量化工具，<strong>不属于原文</strong>，可整块跳过而不影响原文完整性。</p>
+      <p style="margin-top:.6rem">原文引用的 5 张图片（<code>media/source/*.webp|png|gif</code>）<strong>不在附件中</strong>，本文以按图注与上下文重绘的内联 SVG 示意图替代，并逐张标注「非原图截图」。</p>
+    </div>
+
+    <!-- ===================== 一分钟速览 ===================== -->
+    <h2 id="sec-summary">一分钟速览</h2>
+    <ul>
+      <li>Anthropic 开源的参考实现包含 Shopping Agent、Merchant Agent、十个 Skills、四个行业示例、三种运行方式和一个 Claude Code 插件。Anthropic 称购物车金额最高增加 35%、完成购买可能性提高 60%，但未公开实验方法。</li>
+      <li>参考架构使用一个主 Agent 持有会话状态，高频规则放进 system prompt，长尾流程按需加载 Skills；typed tools 连接企业系统，并把商品卡、行程和经营界面保存在消息历史中。</li>
+      <li>性能优化覆盖完整任务轮次、工具并行、eager dispatch、流式组件和前缀缓存；模型与 effort 应通过完整 Eval suite 比较，并按完成任务的成本和质量选择。</li>
+      <li>生产部署需要异步长期记忆、服务端 ID、确定性写入 gates、Snapshot Evals、canary 和能力开关；支付、认证、业务授权和合规仍由采用方负责。</li>
+    </ul>
+
+    <p>Anthropic 开源了一套可运行的 AI 电商 Agents 参考实现，覆盖顾客购物和商家运营两端。项目包含 Shopping Agent、Merchant Agent、十个领域 Skills、四个行业示例、三种运行方式和一个 Claude Code 插件。</p>
+    <p>这套代码实现了模型循环、领域流程、业务工具、结构化界面、长期记忆、安全审批和 Evals。模型理解目标、选择工具并组织结果；企业系统提供目录、库存、价格、订单、权限和支付；Harness 管理模型循环、状态、工具执行、流式输出和安全限制。采用方需要接入自己的业务系统，并补充生产认证、业务授权、欺诈控制、支付和合规。</p>
+    <p>Anthropic 称，使用 Claude 购物 Agent 的零售商，购物车金额最高增加 35%，消费者完成购买的可能性提高 60%。Anthropic 未公布客户样本、基线、实验方法或时间窗口，因此这两个数字不能视为平均收益或部署承诺。</p>
+
+    <div class="callout warn">
+      <span class="ct">核验提示 · 这两个数字的准确出处</span>
+      <p>「+35% / +60%」<strong>不在工程深析博文</strong>中，而出现在 2026-09-02 的发布博文：<em>“Retailers running shopping agents on Claude have seen carts up to 35% larger and shoppers 60% more likely to complete a purchase.”</em></p>
+      <p>二手媒体报道将其归于 Anthropic 平台产品负责人 Angela Jiang 的口述，口径为<strong>「某一家未具名伙伴」的 30–35%</strong>，而非跨客户平均。详见 <a href="#sec-verify">一手事实核验</a>。</p>
+    </div>
+
+    <!-- ===================== 包含什么 ===================== -->
+    <h2 id="sec-contents">这套参考实现包含什么</h2>
+    <p><a href="https://github.com/anthropics/commerce-agents" target="_blank" rel="noopener">Commerce Agents 仓库</a> 包含以下内容：</p>
+    <ul>
+      <li>两个 Agent：Shopping Agent 与 Merchant Agent。</li>
+      <li>十个 Skills：两类 Agent 各五个，覆盖搜索、购买研究、规划、客服、个性化、经营分析、商品、库存、定价促销和营销活动。</li>
+      <li>四个可运行行业示例：零售、旅行、电信和娱乐票务。每个示例都有消费者前台和商家后台。</li>
+      <li>三种运行方式：Messages API、Claude Agent SDK 和 Claude Managed Agents。</li>
+      <li>七个本地 Python 包、八个 Web 应用、共享后端接口、前端组件、测试和部署脚本。</li>
+      <li>一个 Claude Code 插件，提供搭建 Agent、增加业务流程、编写 Evals 和审查现有 Agent 的命令。</li>
+    </ul>
+    <p>仓库要求 Python 3.11+ 和 Node 22。配置凭据后，一条命令即可启动零售示例；参数可以切换到商家后台或同时启动两端：</p>
+<pre><code>python scripts/run_demo.py retail
+python scripts/run_demo.py retail --merchant
+python scripts/run_demo.py retail --all</code></pre>
+    <p>Claude Code 插件提供 <code>/scaffold-commerce-agent</code>、<code>/add-commerce-flow</code>、<code>/author-commerce-evals</code> 和 <code>/review-commerce-agent</code>。这些命令会根据采用方的技术栈、业务系统和现有 Agent 生成或审查实现。</p>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 仓库核实</span>
+      <h4>十个 Skills 的规范目录名（已核实）</h4>
+      <p style="font-size:.88rem;color:var(--text-secondary);margin-bottom:.8rem">原文只给出中文概称。已从仓库目录逐字读取，两类 Agent 各五个，与原文描述完全对应：</p>
+      <div class="grid2">
+        <div class="card">
+          <h4>shopping-agent/skills/</h4>
+          <ul>
+            <li><code>search-discovery</code> — 搜索</li>
+            <li><code>purchase-research</code> — 购买研究</li>
+            <li><code>planning-goals</code> — 规划</li>
+            <li><code>customer-care</code> — 客服</li>
+            <li><code>memory-personalization</code> — 个性化</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>merchant-agent/skills/</h4>
+          <ul>
+            <li><code>performance-insights</code> — 经营分析</li>
+            <li><code>catalog-listings</code> — 商品</li>
+            <li><code>inventory-operations</code> — 库存</li>
+            <li><code>pricing-promotions</code> — 定价促销</li>
+            <li><code>marketing-campaigns</code> — 营销活动</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== 两个 Agent ===================== -->
+    <h2 id="sec-agents">两个 Agent 分别做什么</h2>
+    <div class="tw">
+      <table>
+        <caption>表 1 · Shopping Agent 与 Merchant Agent 的任务、数据、界面与执行边界对照</caption>
+        <thead><tr><th>维度</th><th>Shopping Agent：面向消费者</th><th>Merchant Agent：面向商家员工</th></tr></thead>
+        <tbody>
+          <tr><td>任务</td><td>搜索、比较、按预算或场景规划、加入购物车、查询订单、解释退换货和退款政策</td><td>分析销售表现、维护商品、处理库存和订单告警、拟定调价促销、起草营销活动</td></tr>
+          <tr><td>数据</td><td>商品目录、库存、偏好、购物车、订单和售后政策</td><td>销售指标、商品信息、库存、定价、促销和活动数据</td></tr>
+          <tr><td>界面</td><td>商品卡、比较表、组合方案、购物车和结账入口</td><td>经营指标、异常列表、变更预览和活动草案</td></tr>
+          <tr><td>执行边界</td><td>可以整理购物车，不能下单或扣款；宿主收银台完成支付</td><td>写操作先生成 staged change；宿主审批后才能执行</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 图示还原（非原图截图）</span>
+      <h4>图 1 · Shopping Agent 的单会话界面</h4>
+      <p style="font-size:.84rem;color:var(--text-muted);margin-bottom:.9rem">原文此处为 <code>media/source/launch-shopping-demo.webp</code>，图注为「Shopping Agent 在一次会话中显示需求、商品卡片和购物车」。该图片文件不在附件中，以下为按图注与上下文重绘的示意图。</p>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 690 350" role="img" aria-label="Shopping Agent 单会话界面示意图" style="max-width:690px;">
+          <rect x="8" y="8" width="674" height="334" rx="10" fill="var(--surface-1)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <text x="345" y="32" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-muted)">ACME Retail · 消费者前台（虚构品牌）</text>
+          <line x1="8" y1="42" x2="682" y2="42" stroke="var(--border)" stroke-width="1"></line>
+
+          <rect x="36" y="58" width="360" height="40" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1"></rect>
+          <text x="50" y="76" font-size="11" font-weight="700" fill="var(--text-primary)">用户：周末带两个孩子露营，需要帐篷、睡袋和炉具</text>
+          <text x="50" y="91" font-size="9" fill="var(--text-muted)">多商品请求 · 场景约束（2 名儿童）· 隐含预算</text>
+
+          <rect x="36" y="112" width="112" height="86" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.1"></rect>
+          <text x="92" y="134" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">帐篷</text>
+          <text x="92" y="150" text-anchor="middle" font-size="9" fill="var(--text-muted)">3–4 人 · 防水</text>
+          <text x="92" y="168" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent)">服务端报价</text>
+          <text x="92" y="184" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">ID 由后端下发</text>
+
+          <rect x="160" y="112" width="112" height="86" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.1"></rect>
+          <text x="216" y="134" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">睡袋 ×2</text>
+          <text x="216" y="150" text-anchor="middle" font-size="9" fill="var(--text-muted)">-5℃ 舒适温标</text>
+          <text x="216" y="168" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent)">服务端报价</text>
+          <text x="216" y="184" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">儿童尺寸</text>
+
+          <rect x="284" y="112" width="112" height="86" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.1"></rect>
+          <text x="340" y="134" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">炉具</text>
+          <text x="340" y="150" text-anchor="middle" font-size="9" fill="var(--text-muted)">便携 · 气罐兼容</text>
+          <text x="340" y="168" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent)">服务端报价</text>
+          <text x="340" y="184" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">缺货则候补</text>
+
+          <rect x="424" y="112" width="234" height="86" rx="7" fill="var(--surface-3)" stroke="var(--accent)" stroke-width="1.3"></rect>
+          <text x="541" y="132" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">购物车摘要（staged）</text>
+          <line x1="440" y1="142" x2="642" y2="142" stroke="var(--border)" stroke-width="1"></line>
+          <text x="440" y="158" font-size="9" fill="var(--text-secondary)">3 个 SKU · 数量与价格均来自后端</text>
+          <text x="440" y="174" font-size="9" fill="var(--text-secondary)">checkout 只生成摘要 + 宿主结账入口</text>
+          <text x="440" y="190" font-size="9" font-weight="700" fill="var(--rose)">后端无扣款方法 · 模型不生成结账 URL</text>
+
+          <rect x="36" y="216" width="622" height="46" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.1"></rect>
+          <text x="50" y="236" font-size="10.5" font-weight="700" fill="var(--text-primary)">同一会话继续：我的订单到哪了？这件能退吗？退款政策怎么算？</text>
+          <text x="50" y="252" font-size="9" fill="var(--text-muted)">订单查询 / 退换货解释 / 政策问答 —— 不跳转客服页，也不切换 Agent</text>
+
+          <rect x="36" y="276" width="300" height="46" rx="7" fill="var(--surface-2)" stroke="var(--emerald)" stroke-width="1.2"></rect>
+          <text x="186" y="296" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--emerald)">页面 / 账户 / 偏好预载</text>
+          <text x="186" y="312" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">减少额外查询轮次</text>
+
+          <rect x="358" y="276" width="300" height="46" rx="7" fill="var(--surface-2)" stroke="var(--cyan)" stroke-width="1.2"></rect>
+          <text x="508" y="296" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--cyan)">商品卡写入消息历史</text>
+          <text x="508" y="312" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">「左边第三个」可被稳定指代</text>
+        </svg>
+      </div>
+      <p style="font-size:.8rem;color:var(--text-muted);margin:.7rem 0 0">关键约束：参考后端<strong>没有扣款或下单方法</strong>，结账 URL 由后端返回、宿主渲染，模型全程不接触。</p>
+    </div>
+
+    <p>Shopping Agent 可以处理多商品请求，并在同一会话中继续回答订单和售后问题。<code>checkout</code> 只生成购物车摘要和宿主提供的结账入口。参考后端没有扣款或下单方法，结账 URL 也不交给模型生成。</p>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 图示还原（非原图截图）</span>
+      <h4>图 2 · Merchant Agent 的经营工作台</h4>
+      <p style="font-size:.84rem;color:var(--text-muted);margin-bottom:.9rem">原文此处为 <code>media/source/launch-merchant-workspace.png</code>，图注为「Merchant Agent 显示经营指标、异常和等待批准的操作草案」。该图片文件不在附件中，以下为按图注与上下文重绘的示意图。</p>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 690 330" role="img" aria-label="Merchant Agent 经营工作台示意图" style="max-width:690px;">
+          <rect x="8" y="8" width="674" height="314" rx="10" fill="var(--surface-1)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <text x="345" y="32" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-muted)">ACME Retail · 商家后台（Portal）</text>
+          <line x1="8" y1="42" x2="682" y2="42" stroke="var(--border)" stroke-width="1"></line>
+
+          <rect x="26" y="56" width="152" height="62" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="102" y="76" text-anchor="middle" font-size="9" fill="var(--text-muted)">本周 GMV</text>
+          <text x="102" y="98" text-anchor="middle" font-size="15" font-weight="700" fill="var(--text-primary)">服务端指标</text>
+
+          <rect x="190" y="56" width="152" height="62" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="266" y="76" text-anchor="middle" font-size="9" fill="var(--text-muted)">转化率</text>
+          <text x="266" y="98" text-anchor="middle" font-size="15" font-weight="700" fill="var(--text-primary)">服务端指标</text>
+
+          <rect x="354" y="56" width="152" height="62" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="430" y="76" text-anchor="middle" font-size="9" fill="var(--text-muted)">库存周转</text>
+          <text x="430" y="98" text-anchor="middle" font-size="15" font-weight="700" fill="var(--text-primary)">SQL 视图</text>
+
+          <rect x="518" y="56" width="146" height="62" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="591" y="76" text-anchor="middle" font-size="9" fill="var(--text-muted)">活动投放</text>
+          <text x="591" y="98" text-anchor="middle" font-size="15" font-weight="700" fill="var(--text-primary)">服务端指标</text>
+
+          <rect x="26" y="132" width="330" height="176" rx="7" fill="var(--surface-2)" stroke="var(--rose)" stroke-width="1.2"></rect>
+          <text x="191" y="152" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--rose)">异常列表（只读事实，来自后端）</text>
+          <line x1="40" y1="160" x2="342" y2="160" stroke="var(--border)" stroke-width="1"></line>
+          <text x="40" y="178" font-size="9" fill="var(--text-secondary)">· SKU A 将在促销开始前售罄</text>
+          <text x="40" y="196" font-size="9" fill="var(--text-secondary)">· 3 条 listing 缺少必填属性</text>
+          <text x="40" y="214" font-size="9" fill="var(--text-secondary)">· 价格漂移：线上价 &gt; 目录价</text>
+          <text x="40" y="232" font-size="9" fill="var(--text-secondary)">· 上季库存周转低于阈值</text>
+          <text x="40" y="258" font-size="8.5" font-weight="700" fill="var(--text-muted)">Agent 只读取并解释，不自行修改任何记录</text>
+          <text x="40" y="274" font-size="8.5" fill="var(--text-muted)">分析 delegate 只读数据，不扩充可写 ID 集合</text>
+          <text x="40" y="294" font-size="8.5" fill="var(--text-muted)">（仓库说明：verticals 共提供 7 个 PresentationExtension）</text>
+
+          <rect x="370" y="132" width="294" height="176" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"></rect>
+          <text x="517" y="152" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent)">staged change · 等待人工批准</text>
+          <line x1="384" y1="160" x2="650" y2="160" stroke="var(--accent)" stroke-width="1"></line>
+          <text x="384" y="178" font-size="9" fill="var(--text-secondary)">动作：SKU A 补货 120 件</text>
+          <text x="384" y="196" font-size="9" fill="var(--text-secondary)">服务端 change ID：由后端生成</text>
+          <text x="384" y="214" font-size="9" fill="var(--text-secondary)">复检：补货量上限 / 受保护字段</text>
+          <text x="384" y="232" font-size="9" fill="var(--text-secondary)">执行前按当前配置重新校验</text>
+          <rect x="384" y="248" width="128" height="26" rx="6" fill="var(--surface-1)" stroke="var(--emerald)" stroke-width="1.2"></rect>
+          <text x="448" y="266" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--emerald)">批准（运营人员点击）</text>
+          <rect x="530" y="248" width="120" height="26" rx="6" fill="var(--surface-1)" stroke="var(--rose)" stroke-width="1.2"></rect>
+          <text x="590" y="266" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--rose)">驳回</text>
+          <text x="384" y="294" font-size="8.5" fill="var(--text-muted)">Agent SDK CLI 用 y/N；Web 示例用批准按钮</text>
+        </svg>
+      </div>
+      <p style="font-size:.8rem;color:var(--text-muted);margin:.7rem 0 0">原文补充：Managed Agents 可以使用平台工具审批；生产部署仍需接入企业已有的身份和审批系统。</p>
+    </div>
+
+    <p>Merchant Agent 读取经营数据并生成补货、商品修复、调价、促销或活动草案。所有写操作先暂存。Agent SDK 命令行示例使用 <code>y/N</code> 确认，Web 示例要求运营人员点击预览卡上的批准按钮，Managed Agents 可以使用平台工具审批。生产部署仍需接入企业已有的身份和审批系统。</p>
+    <p>两类 Agent 都只能基于企业系统返回的事实工作，最终业务动作由宿主系统执行。</p>
+
+    <!-- ===================== 请求 → 业务结果 ===================== -->
+    <h2 id="sec-pipeline">一次任务怎样从请求走到业务结果</h2>
+    <p>用户请求、当前页面和账户信息先进入主 Agent。高频规则由 system prompt 提供，低频但复杂的流程按需从 Skills 加载。主 Agent 再调用带类型的业务工具，后端返回目录、库存、价格、订单或经营数据，Harness 执行工具、保存状态并强制安全限制，客户端最终渲染商品卡、行程、比较表或变更预览。</p>
+
+    <blockquote>
+      <p><strong>模型、prompt、skill、tool、业务后端、UI 与 Harness 各自负责什么？</strong></p>
+      <p>Commerce Agent 责任栈：模型负责判断，skills 提供流程，tools 暴露接口，后端拥有事实与规则，Harness 控制状态和权限，客户端呈现。</p>
+    </blockquote>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 图示还原</span>
+      <h4>图 3 · 六层责任栈与一次请求的流向</h4>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 690 300" role="img" aria-label="Commerce Agent 六层责任栈" style="max-width:690px;">
+          <defs>
+            <marker id="arw3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"></path>
+            </marker>
+          </defs>
+
+          <rect x="14" y="16" width="662" height="34" rx="7" fill="var(--surface-3)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="345" y="38" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">客户端 · 呈现：商品卡 / 行程 / 比较表 / 变更预览</text>
+
+          <rect x="14" y="62" width="662" height="34" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"></rect>
+          <text x="345" y="84" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">Harness · 模型循环 / 状态 / 工具执行 / 流式事件 / 安全 gates</text>
+
+          <rect x="14" y="108" width="320" height="34" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="174" y="130" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">业务后端 · 事实与规则</text>
+
+          <rect x="356" y="108" width="320" height="34" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="516" y="130" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">Tools（typed）· 暴露接口</text>
+
+          <rect x="14" y="154" width="320" height="34" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="174" y="176" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">Skills · 按需加载的领域流程</text>
+
+          <rect x="356" y="154" width="320" height="34" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="516" y="176" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">Prompt（system）· 高频规则</text>
+
+          <rect x="14" y="200" width="662" height="34" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="345" y="222" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">模型 · 理解目标、选择工具、组织结果</text>
+
+          <line x1="345" y1="200" x2="345" y2="192" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arw3)"></line>
+          <line x1="174" y1="154" x2="174" y2="146" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arw3)"></line>
+          <line x1="516" y1="154" x2="516" y2="146" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arw3)"></line>
+          <line x1="174" y1="108" x2="174" y2="100" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arw3)"></line>
+          <line x1="516" y1="108" x2="516" y2="100" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arw3)"></line>
+          <line x1="345" y1="62" x2="345" y2="54" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arw3)"></line>
+
+          <path d="M 660 33 L 676 33 L 676 234 L 20 234 L 20 225" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arw3)"></path>
+          <text x="345" y="262" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--accent)">工具返回值 → 模型上下文；渲染对象 → 客户端组件</text>
+          <text x="345" y="282" text-anchor="middle" font-size="9" fill="var(--text-muted)">反向链路：只回传模型决策所需字段，剔除图片 URL、内部元数据与无关字段</text>
+        </svg>
+      </div>
+    </div>
+
+    <p>这条链路对应六类代码：</p>
+    <ol class="steps">
+      <li><span class="n">1</span><strong>Core</strong>：定义角色、状态、工具合同、安全 gates、grounding 和长期记忆。</li>
+      <li><span class="n">2</span><strong>Skills</strong>：保存按需加载的领域流程。</li>
+      <li><span class="n">3</span><strong>Runtime</strong>：处理模型循环、工具执行、流式事件、会话状态和错误。</li>
+      <li><span class="n">4</span><strong>Backend interface</strong>：连接目录、库存、价格、订单、经营数据和企业权限系统。</li>
+      <li><span class="n">5</span><strong>Presentation tools</strong>：生成带类型的商品卡、行程、套餐比较、图表和变更预览。</li>
+      <li><span class="n">6</span><strong>Examples 与 tests</strong>：展示行业扩展方式，并测试正常、拒绝和边界行为。</li>
+    </ol>
+
+    <p>工具应调用企业已有的搜索、排序、库存、履约、促销和分析系统。<code>search_products</code> 应接收已经排序的结果，模型只负责根据用户目标选择和解释。固定业务规则应留在上游系统或后端接口中，不应在 Agent 工具里重复实现。</p>
+    <p>工具返回值会直接进入模型上下文，因此只应保留模型决策所需字段。大量图片 URL、内部元数据和无关字段会增加 token 成本并降低模型定位关键信息的能力。错误结果也应给出下一步要求，例如“查询库存时必须提供 product ID”，而不是只返回 403。</p>
+    <p>不同模型、Skills、运行时和前端可以在这些接口上独立替换。业务事实、账户权限、交易限制和支付继续由现有系统管理。</p>
+    <p>Presentation Tool 把 UI 定义成带类型的工具调用。模型调用 <code>present_products</code>、<code>present_itinerary</code> 或 <code>present_plan_comparison</code>；服务端校验并补全参数；客户端按固定组件渲染。工具参数要与屏幕布局一致，历史消息才能保留“左边第三个”对应的对象。</p>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 图示还原（非原图截图）</span>
+      <h4>图 4 · Presentation Tool 的流式参数管线</h4>
+      <p style="font-size:.84rem;color:var(--text-muted);margin-bottom:.9rem">原文此处为 <code>media/source/anatomy-presentation-tool.gif</code>，图注为「Presentation Tool 将流式工具参数转成经服务端校验和补全的客户端组件」。该动图文件不在附件中，以下为按图注重绘的静态管线示意图。</p>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 690 210" role="img" aria-label="Presentation Tool 流式管线示意图" style="max-width:690px;">
+          <defs>
+            <marker id="arw4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"></path>
+            </marker>
+          </defs>
+          <rect x="16" y="52" width="150" height="106" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <text x="91" y="74" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">模型流式输出</text>
+          <text x="91" y="94" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">tool 参数逐 token 吐出</text>
+          <text x="91" y="112" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">present_products(</text>
+          <text x="91" y="128" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">  id, title, price …</text>
+          <text x="91" y="146" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">)</text>
+
+          <line x1="170" y1="105" x2="238" y2="105" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arw4)"></line>
+
+          <rect x="242" y="52" width="196" height="106" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"></rect>
+          <text x="340" y="74" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">服务端校验与补全</text>
+          <text x="340" y="94" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">按 schema 校验顶层参数</text>
+          <text x="340" y="112" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">ID provenance 检查</text>
+          <text x="340" y="130" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">按 ID 回填商品 / 订单记录</text>
+          <text x="340" y="148" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--rose)">卡片只渲染服务端填好的记录</text>
+
+          <line x1="442" y1="105" x2="510" y2="105" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arw4)"></line>
+
+          <rect x="514" y="52" width="160" height="106" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <text x="594" y="74" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">客户端固定组件</text>
+          <rect x="530" y="86" width="128" height="22" rx="4" fill="var(--surface-3)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="594" y="101" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">商品卡 1（已渲染）</text>
+          <rect x="530" y="112" width="128" height="22" rx="4" fill="var(--surface-3)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="594" y="127" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">商品卡 2（已渲染）</text>
+          <rect x="530" y="138" width="128" height="20" rx="4" fill="var(--surface-1)" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3"></rect>
+          <text x="594" y="152" text-anchor="middle" font-size="8.5" fill="var(--accent)">商品卡 3（流式填充中）</text>
+
+          <text x="345" y="186" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">默认实现按顶层参数分段缓冲以保留 schema 校验；eager_input_streaming 更细但跳过该保证，需为结构错误设置重试</text>
+          <text x="345" y="202" text-anchor="middle" font-size="9" fill="var(--text-muted)">原文立场：自定义标签方案会扩大 system prompt、降低嵌套结构可靠性，并让历史消息依赖额外解析器</text>
+        </svg>
+      </div>
+    </div>
+
+    <p>默认实现按顶层参数分段缓冲，以保留服务端 schema 校验。<code>eager_input_streaming</code> 可以获得更细的流式更新，但会跳过这项 schema 保证，因此需要对结构错误设置重试。自定义标签方案会扩大 system prompt、降低嵌套结构可靠性，并让历史消息依赖额外解析器。</p>
+
+    <!-- ===================== 为什么只用一个主 Agent ===================== -->
+    <h2 id="sec-one">为什么只用一个主 Agent</h2>
+    <p>参考架构使用一个主 Agent 持有会话状态，没有前置 intent router，也没有为每个业务域配置一个独立 subagent。购物车、用户偏好、历史消息和待批准变更都留在同一个会话中。频繁交接会复制或压缩状态，增加 token、延迟和约束丢失风险。</p>
+    <p>Anthropic 表示，在若干企业部署的比较中，“一个 Agent 加 Skills”的质量持续高于单一大 prompt 和多 subagent 方案，成本和延迟通常也更低。Anthropic 未公开这组比较数据，采用方仍需用自己的流量和 Evals 验证。</p>
+
+    <div class="callout">
+      <span class="ct">原文逐字核验（工程深析博文）</span>
+      <p><em>“In our comparisons across several enterprise deployments, a single agent with skills consistently has outperformed both the one-prompt-for-everything design and the subagent design on quality, and often at a lower cost and latency per task.”</em></p>
+      <p>关于交接代价：<em>“Each handoff can cost several times the tokens and adds seconds of latency.”</em> —— 原文未提供具体倍率与秒数，故本文不对该数字做二次量化。</p>
+    </div>
+
+    <p>Subagent 适合两类任务：一类是深度研究等边界明确、会产生大量中间材料的任务，主 Agent 只接收压缩结果；另一类是已有独立合规责任的专业 Agent，例如药房或金融服务 Agent，由 handoff 将整段对话交给它处理。</p>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 原文补充（原文未含）</span>
+      <h4>delegation 与 hand-off 的分界</h4>
+      <p style="font-size:.88rem;color:var(--text-secondary)">工程深析博文对两者给出了明确区分，这是原消化稿未展开的一层：<strong>区别在于会话的所有权</strong>。</p>
+      <div class="grid2">
+        <div class="card">
+          <h4>hand-off（交接）</h4>
+          <p>领域 Agent 成为用户的直接对话方，用自己的循环把任务做完。适用于已有独立合规面的专业 Agent（药房、金融服务）。</p>
+        </div>
+        <div class="card">
+          <h4>delegation（委托）</h4>
+          <p>编排者保留会话所有权，领域 Agent 在单轮内被调进调出，<strong>每次交换都会退化</strong>。适用于窄而自包含的任务（如 deep-research subagent）。</p>
+        </div>
+      </div>
+    </div>
+
+    <p>高频规则放在 system prompt，长尾流程放在 Skills。Anthropic 给出的起点是：约三分之一以上流量会使用的规则可以放进 prompt。安全和法律规则、品牌限制、过敏信息等关键事实应始终放进 prompt。若当前页面等信号已经能确定所需 Skill，Harness 可以在第一次模型调用前直接注入，省去一次加载 Skill 的模型轮次。</p>
+
+    <div class="callout ok">
+      <span class="ct">原文逐字核验 · 三分之一阈值</span>
+      <p><em>“A good starting point is that anything relevant to a third or more of your traffic, whether anticipated before launch or observed in production, goes in the system prompt, and the rest goes in skills.”</em></p>
+      <p>同时原文明确：<strong>Skills 应作为 tool result 加载，不应追加到 system prompt</strong>——<em>“skills should be loaded as tool results rather than appended to the system prompt. The skill body then lands in the conversation prefix and is cached along with it.”</em></p>
+    </div>
+
+    <!-- ===================== 延迟与成本 ===================== -->
+    <h2 id="sec-latency">怎样缩短响应时间并降低成本</h2>
+    <p>任务总耗时等于多轮模型生成、工具执行和往返时间之和。模型单轮输出更快，不代表完整任务更快；规划能力较弱的模型可能需要更多轮次。</p>
+    <p>参考实现使用以下方法降低完整任务耗时：</p>
+    <ul>
+      <li>预载当前页面、账户和高概率相关信息，减少额外查询。</li>
+      <li>在同一轮并行调用彼此独立的商品搜索、政策查询或指标读取。</li>
+      <li>工具参数完整后立即执行，不等待模型结束整轮输出。Anthropic 表示这曾将数秒间隔缩短到几百毫秒。</li>
+      <li>提示模型优先输出最慢工具的调用参数。</li>
+      <li>逐步渲染组件和简短进度信息。</li>
+      <li>同时衡量任务完成率、grounded accuracy、p50/p99 延迟和单个完成任务成本。</li>
+    </ul>
+    <p>Anthropic 估计典型 commerce 界面响应包含约 500–700 个输出 token；不流式显示时，用户可能等待五秒以上才能看到内容。这是经验值，部署方需要测量自己的链路。</p>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 图示还原（非原图截图）</span>
+      <h4>图 5 · 完成后统一渲染 vs 逐步流式渲染的可见等待</h4>
+      <p style="font-size:.84rem;color:var(--text-muted);margin-bottom:.9rem">原文此处为 <code>media/source/anatomy-perceived-latency.gif</code>，图注为「相同 Agent 在完成后统一渲染和逐步流式渲染下的可见等待差异」。该动图文件不在附件中，以下为按原文「500–700 token ≈ 5 秒以上 spinner」推导重绘的时间轴对比。</p>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 690 230" role="img" aria-label="统一渲染与流式渲染等待时间对比" style="max-width:690px;">
+          <line x1="80" y1="46" x2="660" y2="46" stroke="var(--border-soft)" stroke-width="1"></line>
+          <text x="80" y="36" font-size="9" fill="var(--text-muted)">0s</text>
+          <text x="225" y="36" font-size="9" fill="var(--text-muted)">2s</text>
+          <text x="370" y="36" font-size="9" fill="var(--text-muted)">4s</text>
+          <text x="515" y="36" font-size="9" fill="var(--text-muted)">6s</text>
+          <text x="656" y="36" font-size="9" fill="var(--text-muted)">8s</text>
+
+          <text x="76" y="74" font-size="10" font-weight="700" fill="var(--rose)">统一渲染</text>
+          <rect x="80" y="62" width="290" height="20" rx="4" fill="var(--surface-3)" stroke="var(--rose)" stroke-width="1.2"></rect>
+          <text x="225" y="77" text-anchor="middle" font-size="9" fill="var(--rose)">spinner（约 5 秒以上，原文经验值）</text>
+          <rect x="370" y="62" width="60" height="20" rx="4" fill="var(--emerald)" opacity="0.55" stroke="var(--emerald)" stroke-width="1"></rect>
+          <text x="400" y="77" text-anchor="middle" font-size="8.5" fill="var(--emerald)">内容</text>
+          <text x="440" y="77" font-size="9" fill="var(--text-muted)">首个可见内容 = 整轮生成结束</text>
+
+          <text x="76" y="128" font-size="10" font-weight="700" fill="var(--emerald)">流式渲染</text>
+          <rect x="80" y="116" width="58" height="20" rx="4" fill="var(--surface-3)" stroke="var(--emerald)" stroke-width="1.2"></rect>
+          <text x="109" y="131" text-anchor="middle" font-size="8.5" fill="var(--emerald)">首个参数</text>
+          <rect x="138" y="116" width="52" height="20" rx="4" fill="var(--emerald)" opacity="0.35" stroke="var(--emerald)" stroke-width="1"></rect>
+          <text x="164" y="131" text-anchor="middle" font-size="8.5" fill="var(--text-primary)">卡 1</text>
+          <rect x="190" y="116" width="52" height="20" rx="4" fill="var(--emerald)" opacity="0.45" stroke="var(--emerald)" stroke-width="1"></rect>
+          <text x="216" y="131" text-anchor="middle" font-size="8.5" fill="var(--text-primary)">卡 2</text>
+          <rect x="242" y="116" width="52" height="20" rx="4" fill="var(--emerald)" opacity="0.55" stroke="var(--emerald)" stroke-width="1"></rect>
+          <text x="268" y="131" text-anchor="middle" font-size="8.5" fill="var(--text-primary)">卡 3</text>
+          <rect x="294" y="116" width="76" height="20" rx="4" fill="var(--emerald)" opacity="0.7" stroke="var(--emerald)" stroke-width="1"></rect>
+          <text x="332" y="131" text-anchor="middle" font-size="8.5" fill="var(--text-primary)">比较表</text>
+          <text x="384" y="131" font-size="9" fill="var(--text-muted)">首个可见内容 ≈ 首个参数流完 + 一次往返</text>
+
+          <line x1="80" y1="164" x2="660" y2="164" stroke="var(--border)" stroke-width="1"></line>
+          <rect x="80" y="178" width="580" height="42" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="370" y="196" text-anchor="middle" font-size="10" font-weight="700" fill="var(--accent)">原文口径：500–700 输出 token ≈ 不流式时「five or more seconds of a spinner」</text>
+          <text x="370" y="212" text-anchor="middle" font-size="8.5" fill="var(--text-muted)">本文据此反推的生成速率基线为 600 ÷ 5 ≈ 120 tok/s（推导值，非 Anthropic 公布数字）——见沙盘 3</text>
+        </svg>
+      </div>
+    </div>
+
+    <p>Prompt caching 按前缀工作。稳定的全局 prompt 与工具定义放在最前；用户级上下文和历史放在中间；当前页面、时间戳和本轮消息等易变内容放在最后。</p>
+
+    <blockquote>
+      <p><strong>为什么时间戳放错位置会让整段上下文失去缓存？</strong></p>
+      <p>稳定字节从左到右排列：全局 prompt 和工具、会话上下文与历史、本轮消息、时间等 volatile 内容。</p>
+    </blockquote>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 原文补充（原文未含）</span>
+      <h4>图 6 · 缓存三段结构与最常见的失效原因</h4>
+      <p style="font-size:.88rem;color:var(--text-secondary);margin-bottom:.8rem">工程深析博文将一次请求按变更频率划分为三段，与原文的排序结论一致，但给出了更精确的机制表述。</p>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 690 170" role="img" aria-label="Prompt 缓存三段结构" style="max-width:690px;">
+          <rect x="20" y="40" width="200" height="46" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"></rect>
+          <text x="120" y="60" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">Global</text>
+          <text x="120" y="78" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">system prompt 主体 + 工具定义</text>
+
+          <rect x="228" y="40" width="220" height="46" rx="6" fill="var(--surface-2)" stroke="var(--cyan)" stroke-width="1.2"></rect>
+          <text x="338" y="60" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">Session</text>
+          <text x="338" y="78" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">用户级上下文 + 对话历史</text>
+
+          <rect x="456" y="40" width="214" height="46" rx="6" fill="var(--surface-2)" stroke="var(--rose)" stroke-width="1.2"></rect>
+          <text x="563" y="60" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">Volatile</text>
+          <text x="563" y="78" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">当前时间 / 当前页面 / 本轮消息</text>
+
+          <text x="120" y="104" text-anchor="middle" font-size="9" fill="var(--accent)">跨 session 字节一致</text>
+          <text x="338" y="104" text-anchor="middle" font-size="9" fill="var(--cyan)">session 内稳定</text>
+          <text x="563" y="104" text-anchor="middle" font-size="9" fill="var(--rose)">每轮都可能变化</text>
+
+          <line x1="20" y1="118" x2="670" y2="118" stroke="var(--border)" stroke-width="1"></line>
+          <text x="345" y="138" text-anchor="middle" font-size="9.5" fill="var(--text-secondary)">断点策略：Global 段末尾放一个断点；每轮把最新断点移到最新 user turn 的末尾（roll forward）</text>
+          <text x="345" y="156" text-anchor="middle" font-size="9" font-weight="700" fill="var(--rose)">最常见的错误：把时间戳或当前页面放在 system prompt 顶部 —— 每轮静默击穿缓存</text>
+        </svg>
+      </div>
+    </div>
+
+    <p>Skills 应作为 tool result 加入消息历史，不应追加到 system prompt。缓存断点也要随会话向前移动：每轮把最新断点放到最新用户消息之后，使累计历史和长工具结果可以继续命中缓存。时间戳或当前页面如果放在 system prompt 顶部，会使后续前缀每轮失效。</p>
+    <p>按当时的 Claude 定价，缓存读取约为新输入的十分之一，缓存写入约为 1.25 倍，第二次复用即可覆盖写入溢价。Anthropic 称，其较好的 commerce 部署缓存命中率为 90%–99%，约 100K token 时缓存读取快 1.5–2 倍。实际结果取决于请求结构和缓存前缀是否稳定。</p>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 原文补充（原文未含）</span>
+      <p>工程深析博文另给出一个原消化稿未提及的关键参数：<strong>面向消费者的大流量场景应使用默认的 5 分钟缓存过期</strong>（<em>“the cheapest, default 5 minute cache expiration”</em>）。同时提供了自检方法——读取 <code>turn_complete</code> 的 <code>cache_read_input_tokens</code>，<strong>第二轮若为 0，说明前缀发生了变化</strong>。</p>
+    </div>
+
+    <p>模型与 effort 应通过完整 Eval suite 比较。Anthropic 建议把 Opus 作为分析型 Merchant Agent 的 sweep 起点，把 Sonnet 作为延迟更敏感的 Shopping Agent 起点。每个候选模型都应根据失败用例调整 prompt，再比较质量下限、延迟和每个完成任务的成本。更强的模型可能因减少复杂请求的轮次而获得更低的 p90/p99 延迟。</p>
+
+    <div class="callout ok">
+      <span class="ct">原文逐字核验 · 模型选择</span>
+      <p><em>“We recommend starting at Opus for merchant agents, whose tasks are analysis-heavy, and Sonnet for consumer agents, where latency weighs more.”</em></p>
+      <p>成本口径：<em>“Measure cost per completed task rather than per model call, since a cheaper model that needs more turns, or fails more often, is not cheaper.”</em></p>
+      <p>尾部延迟：<em>“a more intelligent configuration sometimes wins on latency (most commonly on p90 and p99) despite slower tokens, because it plans its tool calls better and needs fewer rounds on the most complex requests.”</em></p>
+    </div>
+
+    <!-- ===================== 生产：记忆 / 写操作 / 上线风险 ===================== -->
+    <h2 id="sec-prod">怎样处理记忆、写操作和上线风险</h2>
+    <p>Agent 跨会话运行时，需要长期记忆、代码级安全限制和可重复评测。</p>
+
+    <h3 id="sec-memory">会话结束后再写入长期记忆</h3>
+    <p>长期记忆保存在企业数据库中。每条记录包含短 key、短 value、类别、来源会话和更新时间。商家侧按具体操作人存取，并继续执行原有权限。</p>
+    <p>写入由会话结束后的异步 extractor 完成。它只读取最近一轮的用户和助手文本，不读取工具返回，避免把商品描述或恶意评论写成用户事实。Anthropic 的内部 commerce memory Eval 显示，这种方式的事实召回比主 Agent 在前台调用保存工具高 13%；Anthropic 未公开这套评测集。</p>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 图示还原（非原图截图）</span>
+      <h4>图 7 · 异步 extractor 的记忆写入路径</h4>
+      <p style="font-size:.84rem;color:var(--text-muted);margin-bottom:.9rem">原文此处为 <code>media/source/anatomy-memory.png</code>，图注为「异步 extractor 从会话文本中提取跨会话事实并写入企业记忆库」。该图片文件不在附件中，以下为按图注与上下文重绘的示意图。</p>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 690 210" role="img" aria-label="异步记忆提取路径示意图" style="max-width:690px;">
+          <defs>
+            <marker id="arw7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"></path>
+            </marker>
+          </defs>
+          <rect x="18" y="46" width="158" height="76" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <text x="97" y="66" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">会话（前台）</text>
+          <text x="97" y="86" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">用户文本 / 助手文本</text>
+          <text x="97" y="104" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--rose)">工具返回值不参与</text>
+          <text x="97" y="118" text-anchor="middle" font-size="8" fill="var(--text-muted)">避免商品描述被写成用户事实</text>
+
+          <line x1="180" y1="84" x2="248" y2="84" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arw7)"></line>
+          <text x="214" y="76" text-anchor="middle" font-size="8" fill="var(--accent)">会话后</text>
+
+          <rect x="252" y="46" width="186" height="76" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"></rect>
+          <text x="345" y="66" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">异步 extractor</text>
+          <text x="345" y="86" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">独立线程 / 进程</text>
+          <text x="345" y="104" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">创建 / 更新 / 删除事实</text>
+          <text x="345" y="118" text-anchor="middle" font-size="8" fill="var(--emerald)">不增加会话延迟</text>
+
+          <line x1="442" y1="84" x2="510" y2="84" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arw7)"></line>
+
+          <rect x="514" y="46" width="158" height="76" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <text x="593" y="66" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--text-primary)">企业记忆库</text>
+          <text x="593" y="86" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">短 key + 短 value + 类别</text>
+          <text x="593" y="104" text-anchor="middle" font-size="8.5" fill="var(--text-secondary)">来源会话 + 更新时间</text>
+          <text x="593" y="118" text-anchor="middle" font-size="8" fill="var(--text-muted)">商家侧按操作人隔离</text>
+
+          <rect x="18" y="142" width="654" height="52" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="345" y="162" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--text-primary)">读取三层：常驻上下文（每轮必需） · 可预测预读（页面/请求可推断） · 按需查询（其余走查询工具）</text>
+          <text x="345" y="182" text-anchor="middle" font-size="9" fill="var(--text-secondary)">治理要求：用户可查看、纠正、删除；需设保留期；允许按地区或业务关闭记忆</text>
+        </svg>
+      </div>
+    </div>
+
+    <p>读取分为三层：每轮都需要的少量事实常驻上下文；可由当前页面或请求预测的事实提前读取；其余事实通过查询工具获取。用户需要能够查看、纠正和删除记忆。部署方还需要设置保留期，并允许按地区或业务关闭记忆。</p>
+
+    <h3 id="sec-gates">付款和改价由代码控制</h3>
+    <p>钱、价格、库存、退款和活动发布由 Harness 中的代码控制。Prompt 只能影响模型行为，不能充当最终执行限制。</p>
+
+    <blockquote>
+      <p><strong>一个调价或结账请求怎样在模型之外被限制和批准？</strong></p>
+      <p>动作安全链：提议、来源校验、限额校验、暂存、人工批准、宿主执行；任一步失败都不会改变业务。</p>
+    </blockquote>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 图示还原</span>
+      <h4>图 8 · 动作安全链（六步串联，任一失败即终止）</h4>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 690 146" role="img" aria-label="动作安全链六步示意图" style="max-width:690px;">
+          <defs>
+            <marker id="arw8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"></path>
+            </marker>
+          </defs>
+          <rect x="10" y="44" width="98" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="59" y="66" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text-primary)">提议</text>
+          <text x="59" y="84" text-anchor="middle" font-size="8" fill="var(--text-muted)">模型输出动作</text>
+
+          <rect x="118" y="44" width="98" height="52" rx="6" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="1.2"></rect>
+          <text x="167" y="66" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text-primary)">来源校验</text>
+          <text x="167" y="84" text-anchor="middle" font-size="8" fill="var(--text-muted)">ID provenance</text>
+
+          <rect x="226" y="44" width="98" height="52" rx="6" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="1.2"></rect>
+          <text x="275" y="66" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text-primary)">限额校验</text>
+          <text x="275" y="84" text-anchor="middle" font-size="8" fill="var(--text-muted)">按写入后状态</text>
+
+          <rect x="334" y="44" width="98" height="52" rx="6" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="1.2"></rect>
+          <text x="383" y="66" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text-primary)">暂存</text>
+          <text x="383" y="84" text-anchor="middle" font-size="8" fill="var(--text-muted)">staged + 服务端 ID</text>
+
+          <rect x="442" y="44" width="98" height="52" rx="6" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="1.2"></rect>
+          <text x="491" y="66" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text-primary)">人工批准</text>
+          <text x="491" y="84" text-anchor="middle" font-size="8" fill="var(--text-muted)">宿主审批面</text>
+
+          <rect x="550" y="44" width="130" height="52" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.6"></rect>
+          <text x="615" y="66" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text-primary)">宿主执行</text>
+          <text x="615" y="84" text-anchor="middle" font-size="8" fill="var(--text-muted)">后端最终写入</text>
+
+          <line x1="110" y1="70" x2="116" y2="70" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#arw8)"></line>
+          <line x1="218" y1="70" x2="224" y2="70" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#arw8)"></line>
+          <line x1="326" y1="70" x2="332" y2="70" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#arw8)"></line>
+          <line x1="434" y1="70" x2="440" y2="70" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#arw8)"></line>
+          <line x1="542" y1="70" x2="548" y2="70" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#arw8)"></line>
+
+          <text x="345" y="118" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--rose)">任一步失败 → 业务状态不变（fail-closed）</text>
+          <text x="345" y="136" text-anchor="middle" font-size="9" fill="var(--text-muted)">原文立场：Prompt 只能影响模型行为，不能充当最终执行限制；每道 gate 必须落在代码里</text>
+        </svg>
+      </div>
+    </div>
+
+    <p>Shopping Agent 的后端接口没有扣款方法。Merchant Agent 的写操作先生成带服务端 ID 的 staged change；应用前按当前配置重新检查价格幅度、折扣深度、补货数量、预算和受保护字段。</p>
+    <p>商品、listing、campaign、change 和渲染对象只能使用当前会话中由服务端返回过的 ID。用户粘贴、第三方内容植入或模型编造的 ID 会在业务后端调用前被拒绝。限额按写入后的结果状态计算，同一会话的购物车写操作串行执行，防止重复或并行调用累积越界。</p>
+
+    <div class="callout ok">
+      <span class="ct">原文逐字核验 · provenance 与限额</span>
+      <p><em>“The harness keeps a per-session record of every ID the server has handed the model, and that record is the only key any write or render will accept.”</em></p>
+      <p><em>“The rule generalizes: enforce every limit on the resulting state rather than the request, and serialize writes per session.”</em></p>
+      <p>覆盖范围延伸至 delegate：<em>“the merchant analysis subagent reads data but never adds to the set of IDs the agent may write to.”</em></p>
+    </div>
+
+    <p>商品描述、评论、政策和已存记忆按不可信输入处理。统一 sanitizer 清除控制字符、双向字符、伪造围栏、对话标记和工具调用格式，并限制长度。费用、披露和其他受监管文案由服务端提供批准过的原文；模型只能选择需要显示的项目，不能改写文案。Evals 对这些字符串逐字检查。</p>
+
+    <div class="callout danger">
+      <span class="ct">边界声明（原文 [!boundary] 提示块）</span>
+      <p>示例没有生产认证和限流，MCP server 默认只绑定本机。真实部署还要增加身份、凭据、业务授权、欺诈与资格规则、支付、合规、日志治理和审批责任。示例中的限制数值只适用于演示配置。</p>
+    </div>
+
+    <h3 id="sec-evals">用 Snapshot Evals 固定失败用例</h3>
+    <p>Snapshot Eval 直接构造 system prompt、工具、消息历史和业务状态，追加待测请求，只运行一轮，再检查最终状态、工具参数和渲染结果。</p>
+
+    <blockquote>
+      <p><strong>怎样把多轮 Agent 的失败变成可重复的一轮测试？</strong></p>
+      <p>快照评测流程：构造状态和模拟后端，运行一轮，检查最终业务状态、工具参数和用户界面。</p>
+    </blockquote>
+
+    <p>模拟用户适合发现未知失败。已发现的失败应转成 Snapshot Eval，用固定状态重复运行。多数用例应检查最终状态和渲染结果，不应固定模型采用的具体路径。</p>
+    <p>用例需要同时覆盖正常与拒绝行为：每个“应该执行”配一个“应该拒绝”，每个“应该追问”配一个“信息已足够，应直接行动”。测试状态还应包括冗长或矛盾历史、用户提示注入、数据面提示注入、跨用户数据访问、空结果、超时、UI 组件、内部 ID 泄露和跨多个业务能力的请求。Anthropic 建议每个用户 flow 从 50–100 个用例开始。</p>
+
+    <h3 id="sec-release">多团队如何发布更新</h3>
+    <p>tool 和 Skill 的 owner 应跟随对应业务系统，共享 prompt 由平台团队负责。每项改动同时提交正例、负例和相邻能力边界用例。CI 运行高流量核心用例、安全用例和受影响用例；完整套件在夜间和发布前运行。</p>
+    <p>生产发布还应使用 canary cohort，提供单个 Skill 的运行时开关，并在旺季前冻结 prompt 和 Skill 变更。Agent 是一个共同部署单元，一处变更可能影响所有业务能力。</p>
+
+    <!-- ===================== 三种运行方式 ===================== -->
+    <h2 id="sec-runtime">三种运行方式怎么选</h2>
+    <div class="tw">
+      <table>
+        <caption>表 2 · Messages API、Claude Agent SDK 与 Claude Managed Agents 的适用情况与采用方责任</caption>
+        <thead><tr><th>运行方式</th><th>循环位置</th><th>适用情况</th><th>采用方责任</th></tr></thead>
+        <tbody>
+          <tr><td>Messages API</td><td>企业后端</td><td>需要精确控制会话、流式事件、工具执行和观测</td><td>管理循环、状态、扩缩容和故障恢复</td></tr>
+          <tr><td>Claude Agent SDK</td><td>SDK 与宿主进程</td><td>需要快速获得 Agent 循环并使用 Claude Code 生态</td><td>将演示确认流接入真实身份和审批 UI</td></tr>
+          <tr><td>Claude Managed Agents</td><td>Anthropic 托管运行时</td><td>希望减少 Agent 运行基础设施</td><td>通过 MCP/backend 提供数据和动作，并核对平台兼容性</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><code>y/N</code> 只属于 Agent SDK 的商家命令行示例。Managed Agents 的工具审批也不能代替企业业务授权。所有运行方式都需要在后端或 MCP server 前执行 provenance、限额和写入 gates。</p>
+    <p>Messages API 和 Agent SDK 示例支持 Anthropic API、GCP Vertex AI、AWS Bedrock、Microsoft Foundry 和内部网关。Managed Agents 的支持范围应按部署文档核对。</p>
+    <p>Snowflake、BigQuery、Databricks、Stripe、Square、PayPal、Slack、Google Drive 和 Gmail 连接器没有包含在项目中。采用方需要通过后端接口或 MCP server 接入这些数据源和执行端。</p>
+
+    <div class="callout warn">
+      <span class="ct">核验提示 · 两句需要降级阅读</span>
+      <p><strong>「内部网关」</strong>：两篇 Anthropic 博文均未出现该表述。发布博文原文为 <em>“The code deploys where you already build with Claude, including the Claude API, Amazon Bedrock, Microsoft Foundry, or Google Cloud Vertex AI.”</em> 仓库另有 <code>docs/deployment.md</code> 覆盖其他平台，但「内部网关」属分析者补充。</p>
+      <p><strong>「连接器未包含」</strong>：未在两篇博文中逐字核实，属分析者推断，但方向与仓库「接入自己的后端接口或 MCP server」的设计一致。</p>
+    </div>
+
+    <!-- ===================== 四个行业样例 ===================== -->
+    <h2 id="sec-verticals">四个行业样例分别解决什么问题</h2>
+    <p><a href="https://github.com/anthropics/commerce-agents/tree/main/examples" target="_blank" rel="noopener">examples/</a> 中的四个行业都提供消费者前台和商家后台。</p>
+    <div class="tw">
+      <table>
+        <caption>表 3 · 四个行业样例的消费者侧与商家侧能力对照</caption>
+        <thead><tr><th>行业</th><th>消费者侧</th><th>商家侧</th></tr></thead>
+        <tbody>
+          <tr><td>零售</td><td>搜索、比较、计划、购物车、结账交接和记忆</td><td>经营摘要、补货、listing 修复和 SQL 视图分析</td></tr>
+          <tr><td>旅行</td><td>按日期查询库存、组合行程、显示 itinerary</td><td>查看入住率、按日期窗口调整房价</td></tr>
+          <tr><td>电信</td><td>读取账户上下文、比较套餐、显示服务端费用披露</td><td>分析套餐结构、明确受影响线路、保护监管费用</td></tr>
+          <tr><td>娱乐票务</td><td>限时占位、候补、转票、座位图和全价披露</td><td>分析活动销售节奏、释放占位、在调价时保留费用约束</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>行业差异通过后端接口、gates 和 Presentation Extension 实现。旅行库存必须绑定日期，票务库存需要占位时限，电信费用使用服务端批准文案。这些规则不交给模型自行判断。</p>
+    <p>示例品牌与人物均为虚构。代码不会下单、收费或修改线上 listing。示例进程内保存 session、cart 和 staged changes，并使用单 worker，因此不能直接作为生产架构。项目采用 Apache-2.0 许可，维护状态为 unmaintained，不接受贡献。</p>
+
+    <div class="callout ok">
+      <span class="ct">原文逐字核验 · 许可与维护状态</span>
+      <p>仓库 LICENSE 段逐字写明：<em>“Copyright 2026 Anthropic PBC. Licensed under the Apache License 2.0. This is a reference implementation; it is not maintained and does not accept contributions.”</em></p>
+      <p>虚构声明亦逐字存在：<em>“Every company, brand, product, and person here is fictional; the only company is ACME.”</em></p>
+    </div>
+
+    <div class="enhance">
+      <span class="eh-tag">增强 · 仓库核实（原文未含）</span>
+      <h4>四个 vertical 的端口与起步切口</h4>
+      <div class="tw">
+        <table class="compact">
+          <caption>表 4 · 仓库 README 给出的端口与试点起步建议（增强补充，非原文）</caption>
+          <thead><tr><th>Vertical</th><th>前台端口</th><th>后台端口</th><th>关键约束</th></tr></thead>
+          <tbody>
+            <tr><td>retail</td><td>:3000</td><td>:3100</td><td>checkout 交接 + 记忆</td></tr>
+            <tr><td>travel</td><td>:3001</td><td>:3101</td><td>库存绑定日期窗口</td></tr>
+            <tr><td>telecom</td><td>:3002</td><td>:3102</td><td>服务端批准的费用文案</td></tr>
+            <tr><td>entertainment</td><td>:3003</td><td>:3103</td><td>占位时限与全价披露</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size:.88rem;color:var(--text-secondary)">README 的「Start small」建议值得单独指出，因为它把「试点」变成了可执行的工程切口：<strong>购物侧试点只实现 search 与商品详情，其余方法 stub 并返回 unavailable（且不改动任何 prompt 字节）</strong>；<strong>商家侧试点实现八个读方法，并让写方法直接拒绝</strong>——摘要与指标可在无写通路的情况下先跑起来。</p>
+      <p style="font-size:.88rem;color:var(--text-secondary)">仓库自检命令：<code>ruff check . &amp;&amp; ruff format --check . &amp;&amp; pytest &amp;&amp; python scripts/check.py</code>，另有 <code>scripts/verify_all.py</code>（追加部署 dry run 与 Web 构建）。</p>
+    </div>
+
+    <!-- ===================== 试点 ===================== -->
+    <h2 id="sec-pilot">怎样开始试点</h2>
+    <p>试点可以按以下顺序实施：</p>
+    <ol class="steps">
+      <li><span class="n">1</span><strong>只读能力</strong>：接入搜索、商品详情、政策和经营数据；写方法返回 unavailable。</li>
+      <li><span class="n">2</span><strong>可操作界面</strong>：增加商品卡、比较、行程或经营预览，并用真实请求建立正负 Evals。</li>
+      <li><span class="n">3</span><strong>受控写入</strong>：开放购物车暂存或 staged change，由现有身份、审批、限额和业务规则决定是否执行；支付留在宿主收银台。</li>
+    </ol>
+    <p>采用方需要先选择一条具体业务流程，再实现可信后端工具、代码级 gates、可重复 Evals 和生产审批。参考实现提供这些接口和示例，但不包含采用方的生产系统。</p>
+
+    <!-- ==================================================================
+         核验与推演
+         ================================================================== -->
+    <h2 id="sec-verify">一手事实核验</h2>
+    <p>原消化稿整体忠实，但存在两处需要降级或补全的地方。以下核验基于三份一手材料：工程深析博文（2026-09 发布）、发布博文（2026-09-02）、仓库 README 与目录（核验时点 2026-09-03）。</p>
+
+    <div class="tw">
+      <table class="compact">
+        <caption>表 5 · 事实核验清单（增强补充，非原文）</caption>
+        <thead><tr><th>断言</th><th>出处</th><th>结论</th></tr></thead>
+        <tbody>
+          <tr><td><span class="dot dot-ok"></span>购物车 +35%、购买可能 +60%</td><td>发布博文（非工程深析）</td><td><strong>数字存在但需降级</strong>。逐句为 <em>“carts up to 35% larger and shoppers 60% more likely to complete a purchase.”</em> 无样本、基线、方法、时间窗口。二手媒体归于 Angela Jiang 口述的<strong>单一未具名伙伴</strong>（30–35%）。不可视为平均收益。</td></tr>
+          <tr><td><span class="dot dot-ok"></span>十个 Skills，各五个</td><td>仓库目录</td><td><strong>完全核实</strong>。见上文技能目录表，与原文中文概称一一对应。</td></tr>
+          <tr><td><span class="dot dot-ok"></span>两 Agent / 四行业 / 三运行方式</td><td>README</td><td><strong>核实</strong>。retail、travel、telecom、entertainment；Messages API、Agent SDK、Managed Agents（beta）。</td></tr>
+          <tr><td><span class="dot dot-ok"></span>Python 3.11+ / Node 22；七包 / 八 Web 应用</td><td>README</td><td><strong>核实</strong>。<em>“the seven packages”</em>、<em>“the eight web apps”</em>。</td></tr>
+          <tr><td><span class="dot dot-ok"></span>Apache-2.0 / unmaintained / 不接受贡献</td><td>README LICENSE 段</td><td><strong>逐字核实</strong>。</td></tr>
+          <tr><td><span class="dot dot-ok"></span><code>run_demo.py</code> 三条命令</td><td>README</td><td><strong>核实</strong>，另含 <code>--merchant</code> / <code>--all</code> 与四个 vertical 端口。</td></tr>
+          <tr><td><span class="dot dot-ok"></span>500–700 输出 token ≈ 5 秒以上</td><td>工程深析博文</td><td><strong>逐字核实</strong>：<em>“typically 500–700 output tokens, which without streaming is five or more seconds of a spinner.”</em></td></tr>
+          <tr><td><span class="dot dot-ok"></span>缓存读取 1/10、写入 1.25×、第二次复用回本</td><td>工程深析博文</td><td><strong>核实</strong>。本文据此反解盈亏平衡命中率 ≈ 21.74%（沙盘 1）。</td></tr>
+          <tr><td><span class="dot dot-ok"></span>90–99% 命中率、~100k 时快 1.5–2×</td><td>工程深析博文</td><td><strong>核实</strong>：<em>“90–99% cache hit rates”</em>、<em>“around 1.5 to 2x faster at ~100k tokens”</em>。</td></tr>
+          <tr><td><span class="dot dot-ok"></span>异步记忆 +13% 事实召回</td><td>工程深析博文</td><td><strong>核实</strong>：<em>“achieved 13% higher fact recall on our internal commerce memory eval suite.”</em> 评测集未公开。</td></tr>
+          <tr><td><span class="dot dot-ok"></span>每 flow 50–100 用例</td><td>工程深析博文</td><td><strong>核实</strong>：<em>“50-100 eval cases per user flow is a good starting point.”</em></td></tr>
+          <tr><td><span class="dot dot-ok"></span>三分之一以上流量进 system prompt</td><td>工程深析博文</td><td><strong>核实</strong>（见上文逐字引用）。</td></tr>
+          <tr><td><span class="dot dot-ok"></span>eager dispatch：数秒 → 几百毫秒</td><td>工程深析博文</td><td><strong>核实</strong>：<em>“multi-second gaps down to a few hundred milliseconds.”</em></td></tr>
+          <tr><td><span class="dot dot-ok"></span>单 Agent + Skills 优于单大 prompt 与 subagent</td><td>工程深析博文</td><td><strong>核实表述</strong>，但原文未公开比较数据（原文仅称 <em>“In our comparisons across several enterprise deployments”</em>）。</td></tr>
+          <tr><td><span class="dot dot-ok"></span>Opus（Merchant）/ Sonnet（Consumer）起点</td><td>工程深析博文</td><td><strong>核实</strong>，并补充「按每个完成任务计成本」的口径。</td></tr>
+          <tr><td><span class="dot dot-ok"></span>ID provenance / 限额按写入后状态 / 写串行</td><td>工程深析博文</td><td><strong>核实</strong>（见上文逐字引用）。</td></tr>
+          <tr><td><span class="dot dot-add"></span>默认缓存 TTL 5 分钟</td><td>工程深析博文</td><td><strong>原文补充</strong>：原消化稿未提及，为高流量消费级场景的关键参数。</td></tr>
+          <tr><td><span class="dot dot-add"></span>delegation 与 hand-off 的分界</td><td>工程深析博文</td><td><strong>原文补充</strong>：区别在于会话所有权，原消化稿未展开。</td></tr>
+          <tr><td><span class="dot dot-add"></span>生态伙伴与客户名单</td><td>发布博文</td><td><strong>原文补充</strong>：Accenture、Mastercard、Visa 为伙伴；Shopify、Priceline、Wix 为客户案例。</td></tr>
+          <tr><td><span class="dot dot-warn"></span>「内部网关」支持</td><td>—</td><td><strong>未核实</strong>：两篇博文均无此表述，属分析者补充，应按推断阅读。</td></tr>
+          <tr><td><span class="dot dot-warn"></span>Snowflake / Stripe / Slack 等连接器未包含</td><td>—</td><td><strong>未逐字核实</strong>：方向与仓库设计一致，但官方材料未逐条列出，按推断阅读。</td></tr>
+          <tr><td><span class="dot dot-warn"></span>MCP server 默认只绑定本机；示例单 worker</td><td>—</td><td><strong>未核验</strong>：属仓库部署细节，本次未在两篇博文中逐字匹配，保留原表述但标注为未核验。</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <span class="ct">三处最需要更正的阅读方式</span>
+      <ol style="margin:0;padding-left:1.2rem">
+        <li><strong>「+35% / +60%」不是工程结论，而是发布材料中的市场口径</strong>，且二手报道指向单一未具名伙伴。工程深析博文全文不含这两个数字。</li>
+        <li><strong>「一个 Agent 加 Skills 更优」是 Anthropic 的自述比较，没有公开数据集</strong>；可作为架构默认值，不可作为已证结论。</li>
+        <li><strong>「MCP server 默认只绑定本机」未在一手材料中核实</strong>；这是安全边界声明的核心一句，落地前应在仓库 <code>docs/safety.md</code> 中自行确认。</li>
+      </ol>
+    </div>
+
+    <!-- ===================== 沙盘 1 ===================== -->
+    <h2 id="sec-s1">沙盘 1 · 缓存经济性：命中率多少才开始省钱</h2>
+    <div class="sandbox">
+      <div class="sb-head"><span class="sb-idx">SANDBOX 01</span><span class="sb-name">Prefix Caching 盈亏平衡反解</span></div>
+      <p class="sb-desc">Anthropic 只给了三个单价系数（读取 1/10、写入 1.25×、第二次复用回本）和一个目标区间（90–99%）。本沙盘用这三个系数反解出<strong>缓存真正开始省钱的最低命中率</strong>，并给出会话维度的累计成本比。所有系数均来自原文，无虚构价格。</p>
+
+      <div class="ctrl-row">
+        <div class="ctrl">
+          <label>可缓存前缀 token 数 <span class="cv" id="val-cache-p">100,000</span></label>
+          <input type="range" id="cache-p" min="5000" max="200000" step="1000" value="100000">
+        </div>
+        <div class="ctrl">
+          <label>缓存命中率 h <span class="cv" id="val-cache-h">95%</span></label>
+          <input type="range" id="cache-h" min="0" max="100" step="1" value="95">
+        </div>
+        <div class="ctrl">
+          <label>单会话轮次 n <span class="cv" id="val-cache-n">6</span></label>
+          <input type="range" id="cache-n" min="1" max="20" step="1" value="6">
+        </div>
+      </div>
+
+      <div class="readout">
+        <div class="ro hi"><span class="rk">稳态节省率 S(h)</span><span class="rv" id="res-cache-save">—</span></div>
+        <div class="ro"><span class="rk">盈亏平衡命中率 h*</span><span class="rv" id="res-cache-be">21.74%</span></div>
+        <div class="ro good"><span class="rk">本会话累计节省</span><span class="rv" id="res-cache-total">—</span></div>
+        <div class="ro"><span class="rk">本会话省下 token 当量</span><span class="rv" id="res-cache-tokens">—</span></div>
+      </div>
+
+      <div class="chart-wrap">
+        <svg viewBox="0 0 660 250" role="img" aria-label="缓存节省率随命中率变化曲线" style="max-width:660px;">
+          <line x1="60" y1="168.46" x2="620" y2="168.46" id="cache-zero" stroke="var(--border)" stroke-width="1"></line>
+          <text x="56" y="172" text-anchor="end" font-size="9" fill="var(--text-muted)">0</text>
+          <text x="56" y="36" text-anchor="end" font-size="9" fill="var(--text-muted)">+90%</text>
+          <text x="56" y="212" text-anchor="end" font-size="9" fill="var(--text-muted)">−30%</text>
+          <line x1="60" y1="30" x2="60" y2="210" stroke="var(--border)" stroke-width="1"></line>
+          <line x1="60" y1="210" x2="620" y2="210" stroke="var(--border)" stroke-width="1"></line>
+
+          <polyline id="cache-curve" fill="none" stroke="var(--accent)" stroke-width="2"
+            points="60.00,203.08 116.00,187.15 172.00,171.23 228.00,155.31 284.00,139.38 340.00,123.46 396.00,107.54 452.00,91.62 508.00,75.69 564.00,59.77 620.00,43.85"></polyline>
+
+          <line id="cache-beline" x1="181.74" y1="30" x2="181.74" y2="210" stroke="var(--rose)" stroke-width="1.2" stroke-dasharray="4 3"></line>
+          <text id="cache-belabel" x="186" y="46" font-size="9" fill="var(--rose)">h* = 21.74%</text>
+          <text x="340" y="232" text-anchor="middle" font-size="9.5" fill="var(--text-secondary)">横轴：缓存命中率 h（0 → 100%，等距 10 点） · 纵轴：稳态节省率 S(h)</text>
+          <text x="340" y="246" text-anchor="middle" font-size="9" fill="var(--text-muted)">红虚线左侧为净亏损区：命中率不足 21.74% 时，缓存写入溢价反而抬高总成本</text>
+        </svg>
+      </div>
+
+      <div class="formula-note">
+        <strong>推导（系数均取自原文）：</strong>设新鲜输入单价为 1，缓存读取 0.10、缓存写入 1.25。
+        命中率 h 下的每轮期望系数 <code>c(h) = 0.10h + 1.25(1−h)</code>，稳态节省率
+        <code>S(h) = 1 − c(h) = 1.15h − 0.25</code>。
+        令 <code>S(h) = 0</code> 得
+        <div class="math-block">
+          <i>h</i><sup>*</sup> =
+          <span class="mfrac"><span class="num">0.25</span><span class="den">1.15</span></span>
+          ≈ 0.2174
+        </div>
+        会话累计成本比（首轮必写）：<code>[1.25 + (n−1)·c(h)] / n</code>。
+        代入 h = 90% 与 h = 99%：稳态节省率分别为 <strong>78.5%</strong> 与 <strong>88.9%</strong>——这正是原文把 90–99% 定为设计目标的算术理由。
+        <br><br>
+        <strong>口径声明：</strong>本沙盘只使用 Anthropic 公布的相对系数，未引入任何绝对价格；「token 当量」= 节省比例 × 前缀 token 数 × 轮次，为相对度量而非账单金额。
+      </div>
+    </div>
+
+    <!-- ===================== 沙盘 2 ===================== -->
+    <h2 id="sec-s2">沙盘 2 · 前缀错位的代价：时间戳放错位置有多贵</h2>
+    <div class="sandbox">
+      <div class="sb-head"><span class="sb-idx">SANDBOX 02</span><span class="sb-name">Volatile 段位置失效模型</span></div>
+      <p class="sb-desc">原文只说「时间戳放错位置会让整段上下文失去缓存」，没有给量级。本沙盘用可缓存三段模型把它算成 token 数：<strong>把 volatile 段从末尾挪到最前，缓存命中前缀从 G+S 塌缩为 0</strong>，代价按 0.9·(G+S) 每轮线性累积。</p>
+
+      <div class="ctrl-row">
+        <div class="ctrl">
+          <label>Global 段（稳定）<span class="cv" id="val-seg-g">8,000</span></label>
+          <input type="range" id="seg-g" min="1000" max="40000" step="500" value="8000">
+        </div>
+        <div class="ctrl">
+          <label>Session 段（历史）<span class="cv" id="val-seg-s">60,000</span></label>
+          <input type="range" id="seg-s" min="1000" max="200000" step="1000" value="60000">
+        </div>
+        <div class="ctrl">
+          <label>Volatile 段（时间/页面）<span class="cv" id="val-seg-v">500</span></label>
+          <input type="range" id="seg-v" min="100" max="5000" step="50" value="500">
+        </div>
+        <div class="ctrl">
+          <label>每会话轮次 T<span class="cv" id="val-seg-t">6</span></label>
+          <input type="range" id="seg-t" min="1" max="20" step="1" value="6">
+        </div>
+      </div>
+
+      <div class="readout">
+        <div class="ro good"><span class="rk">正确排序：可缓存前缀</span><span class="rv" id="res-seg-cacheable">—</span></div>
+        <div class="ro bad"><span class="rk">错误排序：可缓存前缀</span><span class="rv" id="res-seg-cacheable-wrong">0</span></div>
+        <div class="ro bad"><span class="rk">每轮额外 token 当量</span><span class="rv" id="res-seg-extra">—</span></div>
+        <div class="ro hi"><span class="rk">整会话额外 token 当量</span><span class="rv" id="res-seg-session">—</span></div>
+      </div>
+
+      <div class="chart-wrap">
+        <svg viewBox="0 0 690 190" role="img" aria-label="前缀排序对比条形图" style="max-width:690px;">
+          <text x="14" y="52" font-size="10" font-weight="700" fill="var(--emerald)">正确排序</text>
+          <rect x="96" y="36" width="0" height="26" rx="4" id="seg-bar-g1" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"></rect>
+          <rect x="96" y="36" width="0" height="26" rx="4" id="seg-bar-s1" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"></rect>
+          <rect x="96" y="36" width="0" height="26" rx="4" id="seg-bar-v1" fill="var(--surface-3)" stroke="var(--rose)" stroke-width="1.2"></rect>
+          <text x="686" y="52" text-anchor="end" font-size="9" id="seg-note1" fill="var(--text-muted)">—</text>
+
+          <text x="14" y="112" font-size="10" font-weight="700" fill="var(--rose)">错误排序</text>
+          <rect x="96" y="96" width="0" height="26" rx="4" id="seg-bar-v2" fill="var(--surface-3)" stroke="var(--rose)" stroke-width="1.2"></rect>
+          <rect x="96" y="96" width="0" height="26" rx="4" id="seg-bar-g2" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <rect x="96" y="96" width="0" height="26" rx="4" id="seg-bar-s2" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"></rect>
+          <text x="686" y="112" text-anchor="end" font-size="9" id="seg-note2" fill="var(--rose)">—</text>
+
+          <line x1="96" y1="140" x2="686" y2="140" stroke="var(--border)" stroke-width="1"></line>
+          <text x="96" y="158" font-size="9" fill="var(--text-secondary)">
+            <tspan id="seg-legend-g">G</tspan>
+          </text>
+          <text x="200" y="158" font-size="9" fill="var(--text-secondary)">
+            <tspan id="seg-legend-s">S</tspan>
+          </text>
+          <text x="330" y="158" font-size="9" fill="var(--rose)">
+            <tspan id="seg-legend-v">V（volatile，每轮变化）</tspan>
+          </text>
+          <text x="391" y="180" text-anchor="middle" font-size="9" fill="var(--text-muted)">彩色描边 = 可命中缓存；灰色 = 只能按新鲜价计费</text>
+        </svg>
+      </div>
+
+      <div class="formula-note">
+        <strong>推导：</strong>请求按变更频率分为 G（跨 session 字节一致）、S（session 内稳定）、V（每轮变化）三段。
+        <div class="math-block">
+          每轮额外代价 = (1 − 0.10) · (G + S) = 0.9 · (G + S)
+        </div>
+        因为错误排序下 V 位于最前，其后的全部字节每轮都不同，命中前缀长度归零；正确排序下 G+S 按 0.10 计费，只差这 0.9 的系数。
+        <br><br>
+        <strong>为何量级惊人：</strong>默认参数下 G+S = 68,000 token，每轮多付 61,200 token 当量，6 轮会话多付约 <strong>36.7 万</strong> token 当量——而被挪动的 volatile 内容本身只有 500 token。<strong>这是全文中投入产出比最高的一处改动：移动 500 个 token 的位置，代价是 0.9 × 68,000 × T。</strong>
+        <br><br>
+        <strong>口径声明：</strong>token 当量为相对度量（以新鲜输入单价为 1），不含输出 token 与批处理折扣；首轮写入溢价未计入，故为稳态保守估计。
+      </div>
+    </div>
+
+    <!-- ===================== 沙盘 3 ===================== -->
+    <h2 id="sec-s3">沙盘 3 · 单轮延迟预算：eager dispatch 与流式渲染值多少秒</h2>
+    <div class="sandbox">
+      <div class="sb-head"><span class="sb-idx">SANDBOX 03</span><span class="sb-name">完整任务耗时分解</span></div>
+      <p class="sb-desc">原文给出两个锚点：commerce 响应约 500–700 输出 token、不流式时约 5 秒以上 spinner；eager dispatch 把数秒间隔压到几百毫秒。本沙盘把这两个锚点放进同一个延迟预算模型，让「完整任务耗时」而不是「单轮输出速度」成为比较对象。</p>
+
+      <div class="ctrl-row">
+        <div class="ctrl">
+          <label>单轮输出 token <span class="cv" id="val-lat-tok">600</span></label>
+          <input type="range" id="lat-tok" min="200" max="1500" step="10" value="600">
+        </div>
+        <div class="ctrl">
+          <label>生成速率 tok/s <span class="cv" id="val-lat-rate">120</span></label>
+          <input type="range" id="lat-rate" min="40" max="220" step="5" value="120">
+        </div>
+        <div class="ctrl">
+          <label>任务轮次 R <span class="cv" id="val-lat-rounds">3</span></label>
+          <input type="range" id="lat-rounds" min="1" max="8" step="1" value="3">
+        </div>
+        <div class="ctrl">
+          <label>最慢工具耗时 s <span class="cv" id="val-lat-tool">1.20</span></label>
+          <input type="range" id="lat-tool" min="0" max="60" step="1" value="12">
+        </div>
+        <div class="ctrl">
+          <label>单轮往返开销 s <span class="cv" id="val-lat-rt">0.35</span></label>
+          <input type="range" id="lat-rt" min="0" max="100" step="1" value="35">
+        </div>
+        <div class="ctrl">
+          <label>首个工具参数完成时的输出占比 <span class="cv" id="val-lat-frac">20%</span></label>
+          <input type="range" id="lat-frac" min="5" max="80" step="1" value="20">
+        </div>
+        <div class="ctrl">
+          <label>缓存读取加速（TTFT）</label>
+          <select id="lat-cache">
+            <option value="1.0">1.0× （前缀未命中）</option>
+            <option value="1.5" selected="selected">1.5× （原文下界，~100k）</option>
+            <option value="2.0">2.0× （原文上界，~100k）</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="readout">
+        <div class="ro bad"><span class="rk">不流式：首个可见内容</span><span class="rv" id="res-lat-spinner">—</span></div>
+        <div class="ro good"><span class="rk">流式：首个可见内容</span><span class="rv" id="res-lat-first">—</span></div>
+        <div class="ro"><span class="rk">单轮耗时（串行派发）</span><span class="rv" id="res-lat-round">—</span></div>
+        <div class="ro"><span class="rk">单轮耗时（eager）</span><span class="rv" id="res-lat-round-eager">—</span></div>
+        <div class="ro hi"><span class="rk">任务总耗时（串行派发）</span><span class="rv" id="res-lat-total">—</span></div>
+        <div class="ro hi"><span class="rk">任务总耗时（eager）</span><span class="rv" id="res-lat-total-eager">—</span></div>
+      </div>
+
+      <div class="chart-wrap">
+        <svg viewBox="0 0 690 210" role="img" aria-label="任务总耗时构成对比" style="max-width:690px;" id="lat-svg">
+          <text x="14" y="40" font-size="10" font-weight="700" fill="var(--rose)">串行派发</text>
+          <text x="14" y="112" font-size="10" font-weight="700" fill="var(--emerald)">eager 派发</text>
+          <line x1="96" y1="66" x2="686" y2="66" stroke="var(--border)" stroke-width="1"></line>
+          <line x1="96" y1="138" x2="686" y2="138" stroke="var(--border)" stroke-width="1"></line>
+          <text x="391" y="172" text-anchor="middle" font-size="9.5" fill="var(--text-secondary)">每段 = <tspan id="lat-legend">—</tspan></text>
+          <text x="391" y="192" text-anchor="middle" font-size="9" fill="var(--text-muted)">深色 = 模型生成 · 浅色 = 工具执行 · 描边 = 往返开销</text>
+        </svg>
+      </div>
+
+      <div class="readout">
+        <div class="ro good"><span class="rk">eager 节省（整任务）</span><span class="rv" id="res-lat-gain">—</span></div>
+        <div class="ro"><span class="rk">首轮 TTFT（含缓存加速）</span><span class="rv" id="res-lat-ttft">—</span></div>
+      </div>
+
+      <div class="formula-note">
+        <strong>推导：</strong>设单轮输出 <i>T</i> token、生成速率 <i>r</i>、最慢工具耗时 <i>t</i><sub>tool</sub>、往返 <i>t</i><sub>rt</sub>、首个工具参数完成时已输出占比 <i>a</i>。
+        <div class="math-block">
+          串行：<i>t</i><sub>round</sub> = <span class="mfrac"><span class="num"><i>T</i></span><span class="den"><i>r</i></span></span> + <i>t</i><sub>tool</sub> + <i>t</i><sub>rt</sub>
+          &nbsp;&nbsp;·&nbsp;&nbsp;
+          eager：<i>t</i><sub>round</sub> = max&nbsp;( <span class="mfrac"><span class="num"><i>T</i></span><span class="den"><i>r</i></span></span> , <i>a</i> · <span class="mfrac"><span class="num"><i>T</i></span><span class="den"><i>r</i></span></span> + <i>t</i><sub>tool</sub> ) + <i>t</i><sub>rt</sub>
+        </div>
+        任务总耗时 = <code>R · t_round + TTFT</code>；不流式首个可见内容 = <code>T / r</code>，流式首个可见内容 = <code>a·T / r + t_rt</code>。
+        <br><br>
+        <strong>参数口径（重要）：</strong>
+        <ul style="margin:.5rem 0 0;padding-left:1.2rem">
+          <li><strong>默认值 600 token / 120 tok·s⁻¹ 为本文推导基线</strong>，由原文「500–700 token ≈ five or more seconds」反推（600 ÷ 5 = 120）。<strong>Anthropic 未公布生成速率</strong>，请按自己的链路实测覆盖。</li>
+          <li>工具耗时、往返开销、首个参数占比均为<strong>用户可调假设</strong>，非 Anthropic 数据。</li>
+          <li>「缓存读取加速 1.5× / 2.0×」取自原文 <em>“around 1.5 to 2x faster at ~100k tokens”</em>，此处仅作用于 TTFT，不作用于生成段。</li>
+        </ul>
+        <br>
+        <strong>读法提醒：</strong>把「最慢工具耗时」调大、把「首个参数占比」调小，eager 的收益会显著放大——这正是原文「提示模型优先输出最慢工具的调用参数」这条建议的算术依据。
+      </div>
+    </div>
+
+    <!-- ===================== 沙盘 4 ===================== -->
+    <h2 id="sec-s4">沙盘 4 · 写操作安全链：去掉一道代码 gate 会发生什么</h2>
+    <div class="sandbox">
+      <div class="sb-head"><span class="sb-idx">SANDBOX 04</span><span class="sb-name">串联 gate 的失效概率与并行写越界</span></div>
+      <p class="sb-desc">原文的动作安全链是六步串联，但没给每步的强度。本沙盘把「每道 gate 漏放一个不安全动作的概率 ε」显式化，用串联结构展示一个结论：<strong>把任何一道代码 gate 换成 prompt 约束或干脆去掉，整条链的防护会按倍数退化，而不是按加法退化。</strong></p>
+
+      <h4 style="margin-top:.3rem">4a · 安全链串联失效概率</h4>
+      <div class="ctrl-row">
+        <div class="ctrl">
+          <label>来源校验（ID provenance）</label>
+          <select id="gate-1">
+            <option value="0.05" selected="selected">代码强制 · ε = 0.05</option>
+            <option value="0.30">仅提示词约束 · ε = 0.30</option>
+            <option value="1.00">无此 gate · ε = 1.00</option>
+          </select>
+        </div>
+        <div class="ctrl">
+          <label>限额校验（按写入后状态）</label>
+          <select id="gate-2">
+            <option value="0.05" selected="selected">代码强制 · ε = 0.05</option>
+            <option value="0.30">仅提示词约束 · ε = 0.30</option>
+            <option value="1.00">无此 gate · ε = 1.00</option>
+          </select>
+        </div>
+        <div class="ctrl">
+          <label>暂存（staged + 服务端 ID）</label>
+          <select id="gate-3">
+            <option value="0.05" selected="selected">代码强制 · ε = 0.05</option>
+            <option value="0.30">仅提示词约束 · ε = 0.30</option>
+            <option value="1.00">无此 gate · ε = 1.00</option>
+          </select>
+        </div>
+        <div class="ctrl">
+          <label>人工批准</label>
+          <select id="gate-4">
+            <option value="0.05" selected="selected">代码强制 · ε = 0.05</option>
+            <option value="0.30">仅提示词约束 · ε = 0.30</option>
+            <option value="1.00">无此 gate · ε = 1.00</option>
+          </select>
+        </div>
+        <div class="ctrl">
+          <label>宿主执行前的最终校验</label>
+          <select id="gate-5">
+            <option value="0.05" selected="selected">代码强制 · ε = 0.05</option>
+            <option value="0.30">仅提示词约束 · ε = 0.30</option>
+            <option value="1.00">无此 gate · ε = 1.00</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="readout">
+        <div class="ro hi"><span class="rk">不安全动作穿透全链的概率</span><span class="rv" id="res-gate-p">—</span></div>
+        <div class="ro"><span class="rk">等效「万里挑一」量级</span><span class="rv" id="res-gate-odds">—</span></div>
+        <div class="ro bad"><span class="rk">最薄弱一环</span><span class="rv" id="res-gate-worst">—</span></div>
+      </div>
+
+      <div class="risk-out">
+        <div class="risk-head">
+          <span class="rl" id="res-gate-level">—</span>
+          <span class="rs" id="res-gate-desc">—</span>
+        </div>
+      </div>
+
+      <h4 style="margin-top:1.5rem">4b · 并行写越界：为什么限额必须按写入后状态计算</h4>
+      <p class="sb-desc" style="margin-bottom:.9rem">原文规则：<strong>限额按写入后的结果状态计算，且同一会话的写操作串行执行</strong>。下面用购物车数量上限复现「按请求校验」与「按写入后状态 + 串行」的终态差异。</p>
+
+      <div class="ctrl-row">
+        <div class="ctrl">
+          <label>数量上限 cap <span class="cv" id="val-wr-cap">10</span></label>
+          <input type="range" id="wr-cap" min="1" max="50" step="1" value="10">
+        </div>
+        <div class="ctrl">
+          <label>当前已持有数量 <span class="cv" id="val-wr-cur">8</span></label>
+          <input type="range" id="wr-cur" min="0" max="49" step="1" value="8">
+        </div>
+        <div class="ctrl">
+          <label>单轮并行调用数 m <span class="cv" id="val-wr-m">3</span></label>
+          <input type="range" id="wr-m" min="1" max="8" step="1" value="3">
+        </div>
+        <div class="ctrl">
+          <label>每次调用数量 u <span class="cv" id="val-wr-u">2</span></label>
+          <input type="range" id="wr-u" min="1" max="10" step="1" value="2">
+        </div>
+      </div>
+
+      <div class="readout">
+        <div class="ro bad"><span class="rk">按请求校验：终态</span><span class="rv" id="res-wr-req">—</span></div>
+        <div class="ro bad"><span class="rk">按请求校验：越界量</span><span class="rv" id="res-wr-req-over">—</span></div>
+        <div class="ro good"><span class="rk">按写入后状态：终态</span><span class="rv" id="res-wr-state">—</span></div>
+        <div class="ro good"><span class="rk">按写入后状态：越界量</span><span class="rv" id="res-wr-state-over">0</span></div>
+        <div class="ro"><span class="rk">被拒绝的调用次数</span><span class="rv" id="res-wr-reject">—</span></div>
+      </div>
+
+      <div class="formula-note">
+        <strong>推导（4a）：</strong>五道 gate 串联且相互独立，不安全动作穿透概率
+        <div class="math-block">
+          <i>P</i><sub>bypass</sub> =
+          <span class="mop">∏</span><span style="font-size:.85em;vertical-align:-0.5em;">5</span><sub></sub>
+          &nbsp;<i>ε</i><sub>i</sub>
+        </div>
+        <strong>ε 取值是本文设定的演示基线，不是 Anthropic 数据：</strong>「代码强制」取 0.05（即单道 gate 拦下 95%）、「仅提示词约束」取 0.30（反映 prompt 无法作为执行限制的原文立场）、「无此 gate」取 1.00。真实 ε 必须用你自己的红队用例测出来——<strong>这个模型的价值在于结构（乘法），不在于这三个数字。</strong>
+        <br><br>
+        <strong>推导（4b）：</strong>设上限 <i>C</i>、当前 <i>c</i>、并行调用 <i>m</i> 次、每次数量 <i>u</i>。
+        <div class="math-block">
+          按请求校验：终态 = <i>c</i> + <i>m</i>·<i>u</i> &nbsp;·&nbsp; 越界 = max(0, <i>c</i> + <i>m</i>·<i>u</i> − <i>C</i>)
+        </div>
+        <div class="math-block">
+          按写入后状态：允许次数 <i>k</i> = max(0, ⌊(<i>C</i> − <i>c</i>)/<i>u</i>⌋) &nbsp;·&nbsp; 终态 = min(<i>C</i>, <i>c</i> + <i>k</i>·<i>u</i>) &nbsp;·&nbsp; 拒绝 = <i>m</i> − <i>k</i>
+        </div>
+        默认参数（C=10, c=8, m=3, u=2）：按请求校验放行全部三次，终态 14<strong>越界 4</strong>；按写入后状态只允许 1 次，终态 10、拒绝 2 次。这正是原文「同一会话的购物车写操作串行执行，防止重复或并行调用累积越界」的具体含义。
+      </div>
+    </div>
+
+    <!-- ===================== 沙盘 5 ===================== -->
+    <h2 id="sec-s5">沙盘 5 · 评测覆盖与复现成本：为什么失败要转成 Snapshot Eval</h2>
+    <div class="sandbox">
+      <div class="sb-head"><span class="sb-idx">SANDBOX 05</span><span class="sb-name">用例规模与缺陷复现经济学</span></div>
+      <p class="sb-desc">原文给了两条硬指标（每 flow 50–100 用例、「应该执行」配「应该拒绝」）和一条方法论（已发现的失败转成 Snapshot Eval）。本沙盘把第二条量化：<strong>一个偶发缺陷，靠多轮在线复现要跑多少次才能稳定抓到，而快照评测为什么是 1 次。</strong></p>
+
+      <div class="ctrl-row">
+        <div class="ctrl">
+          <label>用户 flow 数量 F <span class="cv" id="val-ev-f">6</span></label>
+          <input type="range" id="ev-f" min="1" max="30" step="1" value="6">
+        </div>
+        <div class="ctrl">
+          <label>每 flow 用例数 C <span class="cv" id="val-ev-c">75</span></label>
+          <input type="range" id="ev-c" min="50" max="100" step="1" value="75">
+        </div>
+        <div class="ctrl">
+          <label>缺陷单次运行复现概率 q <span class="cv" id="val-ev-q">15%</span></label>
+          <input type="range" id="ev-q" min="1" max="100" step="1" value="15">
+        </div>
+        <div class="ctrl">
+          <label>失败发生在第 k 轮 <span class="cv" id="val-ev-k">5</span></label>
+          <input type="range" id="ev-k" min="1" max="20" step="1" value="5">
+        </div>
+      </div>
+
+      <div class="readout">
+        <div class="ro hi"><span class="rk">评测集总规模 F × C</span><span class="rv" id="res-ev-total">—</span></div>
+        <div class="ro"><span class="rk">正负例配比建议</span><span class="rv" id="res-ev-neg">—</span></div>
+        <div class="ro bad"><span class="rk">在线复现：期望运行次数</span><span class="rv" id="res-ev-runs">—</span></div>
+        <div class="ro good"><span class="rk">快照评测：复现成本比</span><span class="rv" id="res-ev-ratio">—</span></div>
+        <div class="ro"><span class="rk">n 次运行后累计捕获率</span><span class="rv" id="res-ev-catch">—</span></div>
+      </div>
+
+      <div class="ctrl-row">
+        <div class="ctrl">
+          <label>累计运行次数 n <span class="cv" id="val-ev-n">6</span></label>
+          <input type="range" id="ev-n" min="1" max="30" step="1" value="6">
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <svg viewBox="0 0 660 250" role="img" aria-label="缺陷捕获概率随运行次数变化" style="max-width:660px;">
+          <line x1="60" y1="30" x2="60" y2="210" stroke="var(--border)" stroke-width="1"></line>
+          <line x1="60" y1="210" x2="620" y2="210" stroke="var(--border)" stroke-width="1"></line>
+          <text x="56" y="34" text-anchor="end" font-size="9" fill="var(--text-muted)">100%</text>
+          <text x="56" y="214" text-anchor="end" font-size="9" fill="var(--text-muted)">0%</text>
+          <text x="60" y="228" text-anchor="middle" font-size="9" fill="var(--text-muted)">n=1</text>
+          <text x="620" y="228" text-anchor="middle" font-size="9" fill="var(--text-muted)">n=20</text>
+
+          <polyline id="ev-snap" fill="none" stroke="var(--emerald)" stroke-width="2" stroke-dasharray="6 4"
+            points="60.00,30.00 89.47,30.00 118.95,30.00 148.42,30.00 177.89,30.00 207.37,30.00 236.84,30.00 266.32,30.00 295.79,30.00 325.26,30.00 354.74,30.00 384.21,30.00 413.68,30.00 443.16,30.00 472.63,30.00 502.11,30.00 531.58,30.00 561.05,30.00 590.53,30.00 620.00,30.00"></polyline>
+
+          <polyline id="ev-curve" fill="none" stroke="var(--accent)" stroke-width="2.2" points=""></polyline>
+
+          <line id="ev-nline" x1="207.37" y1="30" x2="207.37" y2="210" stroke="var(--amber)" stroke-width="1.2" stroke-dasharray="4 3"></line>
+          <text id="ev-nlabel" x="212" y="46" font-size="9" fill="var(--amber)">n = 6</text>
+          <text x="340" y="246" text-anchor="middle" font-size="9" fill="var(--text-secondary)">横轴：运行次数 n（1 → 20，等距 20 点） · 纵轴：至少一次捕获到该缺陷的概率</text>
+        </svg>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--emerald)"></i>Snapshot Eval（构造固定状态，n=1 即确定捕获）</span>
+        <span><i style="background:var(--accent)"></i>多轮在线复现（概率性）</span>
+        <span><i style="background:var(--amber)"></i>当前 n</span>
+      </div>
+
+      <div class="formula-note">
+        <strong>推导：</strong>设缺陷在单次运行中出现的概率为 <i>q</i>，运行 <i>n</i> 次至少捕获一次的概率
+        <div class="math-block">
+          <i>P</i>(<i>n</i>) = 1 − (1 − <i>q</i>)<sup><i>n</i></sup> &nbsp;·&nbsp; 期望运行次数 <i>E</i>[<i>n</i>] = <span class="mfrac"><span class="num">1</span><span class="den"><i>q</i></span></span>
+        </div>
+        失败发生在第 <i>k</i> 轮时，一次在线复现要重放 <i>k</i> 轮；Snapshot Eval 直接构造状态、只跑 1 轮，故成本比
+        <div class="math-block">
+          复现成本比 = <span class="mfrac"><span class="num"><i>k</i></span><span class="den"><i>q</i></span></span>
+        </div>
+        默认参数（k=5, q=0.15）：期望运行 6.7 次、每次 5 轮，合计约 33 轮；快照 1 轮，成本比约 <strong>33×</strong>，且捕获概率从「跑 6 次约 62%」变为「确定性 100%」。
+        <br><br>
+        <strong>参数口径：</strong><i>q</i> 与 <i>k</i> 为<strong>用户可调假设</strong>，代表你自己链路上的偶发缺陷特征，非 Anthropic 数据。<i>F</i> 与 <i>C</i> 的默认值取自原文建议区间（每 flow 50–100 用例）。「正负例配比」按原文「每个『应该执行』配一个『应该拒绝』」折算为 1:1。
+        <br><br>
+        <strong>与原文的一致性提醒：</strong>原文强调「多数用例应检查最终状态和渲染结果，不应固定模型采用的具体路径」——快照的价值在于<strong>固定输入与判定，而不是固定推理轨迹</strong>。
+      </div>
+    </div>
+
+    <div class="stamp">
+      <div class="st">模型负责判断，代码负责后果。</div>
+      <div class="sd">这套参考实现真正的交付物不是两个 Agent，而是一条边界：事实在后端，权限在 Harness，钱在宿主收银台，证据在 Evals。</div>
+    </div>
+
+    <!-- ===================== 附录 ===================== -->
+    <h2 id="sec-formula">公式与参数口径</h2>
+    <p>为避免「沙盘输出看似权威、实则无处溯源」，此处集中声明本文全部推导的系数来源与假设边界。</p>
+    <div class="tw">
+      <table class="compact">
+        <caption>表 6 · 全部公式系数来源声明（增强补充，非原文）</caption>
+        <thead><tr><th>系数 / 参数</th><th>数值</th><th>来源</th></tr></thead>
+        <tbody>
+          <tr><td>缓存读取单价</td><td>0.10 × 新鲜单价</td><td>Anthropic 原文（<em>“a tenth of fresh ones”</em>）</td></tr>
+          <tr><td>缓存写入单价</td><td>1.25 × 新鲜单价</td><td>Anthropic 原文（<em>“roughly 1.25x”</em>）</td></tr>
+          <tr><td>盈亏平衡命中率</td><td>21.74%</td><td>本文由上述两系数反解</td></tr>
+          <tr><td>目标命中率区间</td><td>90–99%</td><td>Anthropic 原文</td></tr>
+          <tr><td>缓存读取加速</td><td>1.5–2.0× @ ~100k</td><td>Anthropic 原文</td></tr>
+          <tr><td>缓存默认 TTL</td><td>5 分钟</td><td>Anthropic 原文</td></tr>
+          <tr><td>输出 token / 等待</td><td>500–700 token ≈ ≥5 s</td><td>Anthropic 原文</td></tr>
+          <tr><td>生成速率基线</td><td>120 tok·s⁻¹</td><td><strong>本文推导</strong>（600 ÷ 5），Anthropic 未公布</td></tr>
+          <tr><td>eager dispatch 收益</td><td>数秒 → 几百毫秒</td><td>Anthropic 原文（量级，非精确值）</td></tr>
+          <tr><td>每 flow 用例数</td><td>50–100</td><td>Anthropic 原文</td></tr>
+          <tr><td>异步记忆召回提升</td><td>+13%</td><td>Anthropic 原文（内部评测集，未公开）</td></tr>
+          <tr><td>gate 漏放率 ε</td><td>0.05 / 0.30 / 1.00</td><td><strong>本文演示基线假设</strong>，非 Anthropic 数据</td></tr>
+          <tr><td>缺陷复现概率 q、失败轮次 k</td><td>可调</td><td><strong>用户假设</strong>，需按自身链路实测</td></tr>
+          <tr><td>工具耗时 / 往返 / 首参占比</td><td>可调</td><td><strong>用户假设</strong>，非 Anthropic 数据</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout warn">
+      <span class="ct">防造假声明</span>
+      <p>本页所有沙盘的回显数值均由上表公式在浏览器内实时计算得出，<strong>没有任何一个数字是预先写死的结论</strong>。凡标注「本文推导」「本文演示基线假设」「用户假设」的参数，均<strong>不是 Anthropic 公布的数据</strong>，请在落地前用自己的流量替换。凡可由原文逐字核实的系数，均已在上文 <a href="#sec-verify">一手事实核验</a> 中给出英文原句。</p>
+    </div>
+
+    <h2 id="sec-meta">文档元信息</h2>
+    <div class="meta-grid">
+      <div class="meta-item"><span class="mk">原始附件</span><span class="mv">claude-commerce-agents.md（19.8 KB）</span></div>
+      <div class="meta-item"><span class="mk">来源站点</span><span class="mv"><a href="https://best.xiaohu.ai/article/claude-commerce-agents/" target="_blank" rel="noopener">best.xiaohu.ai/article/claude-commerce-agents</a></span></div>
+      <div class="meta-item"><span class="mk">一手源 · 工程深析</span><span class="mv"><a href="https://claude.com/blog/the-anatomy-of-effective-commerce-agents" target="_blank" rel="noopener">claude.com/blog/the-anatomy-of-effective-commerce-agents</a></span></div>
+      <div class="meta-item"><span class="mk">一手源 · 发布</span><span class="mv"><a href="https://claude.com/blog/claude-for-commerce-agents" target="_blank" rel="noopener">claude.com/blog/claude-for-commerce-agents（2026-09-02）</a></span></div>
+      <div class="meta-item"><span class="mk">一手源 · 仓库</span><span class="mv"><a href="https://github.com/anthropics/commerce-agents" target="_blank" rel="noopener">github.com/anthropics/commerce-agents</a></span></div>
+      <div class="meta-item"><span class="mk">许可证</span><span class="mv">Apache-2.0 · unmaintained · 不接受贡献</span></div>
+      <div class="meta-item"><span class="mk">核验时点</span><span class="mv">2026-09-03（仓库 945 stars，创建于 2026-09-01）</span></div>
+      <div class="meta-item"><span class="mk">转换说明</span><span class="mv">保留原文标题层级、段落、列表、3 张表格、代码块与全部超链接</span></div>
+    </div>
+    <p class="footnote">
+      原文引用的 5 张图片（<code>launch-shopping-demo.webp</code>、<code>launch-merchant-workspace.png</code>、<code>anatomy-presentation-tool.gif</code>、<code>anatomy-perceived-latency.gif</code>、<code>anatomy-memory.png</code>）不在附件中，本文以 8 张内联 SVG 示意图替代，均标注「非原图截图」，仅用于还原结构与关系，不代表原始截图内容。<br>
+      标注为 <span class="badge b-add">增强</span> 的区块、图 3 / 图 6 / 图 8、表 4 / 表 5 / 表 6 以及全部五个沙盘，均为本次转换补充，不属于原文。<br>
+      本文件为零外部依赖单文件 HTML：无 CDN、无远程字体、无外链图片，断网双击即可完整阅读与交互。
+    </p>
+
+  </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- 主题 ---------- */
+  var root = document.documentElement;
+  var THEME_KEY = "commerce-agents-doc-theme";
+  try {
+    var saved = localStorage.getItem(THEME_KEY);
+    if (saved === "light" || saved === "dark") { root.setAttribute("data-theme", saved); }
+    else { root.setAttribute("data-theme", "dark"); }
+  } catch (e) { root.setAttribute("data-theme", "dark"); }
+
+  document.getElementById("btn-theme").addEventListener("click", function () {
+    var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    drawCache();
+    drawSeg();
+    drawLat();
+    drawEv();
+  });
+
+  document.getElementById("btn-top").addEventListener("click", function () {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  /* ---------- 阅读进度 ---------- */
+  var progress = document.getElementById("progress");
+  function updateProgress() {
+    var h = document.documentElement;
+    var total = h.scrollHeight - h.clientHeight;
+    var pct = total > 0 ? (h.scrollTop || document.body.scrollTop) / total * 100 : 0;
+    progress.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  }
+
+  /* ---------- 目录高亮 ---------- */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll("#toc a"));
+  var targets = tocLinks.map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); });
+  function updateToc() {
+    var y = window.scrollY + 130;
+    var idx = 0;
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i] && targets[i].offsetTop <= y) { idx = i; }
+    }
+    for (var j = 0; j < tocLinks.length; j++) {
+      if (j === idx) { tocLinks[j].classList.add("active"); }
+      else { tocLinks[j].classList.remove("active"); }
+    }
+  }
+  window.addEventListener("scroll", function () { updateProgress(); updateToc(); }, { passive: true });
+
+  /* ---------- 工具函数 ---------- */
+  function fmt(n) {
+    var s = String(Math.round(n));
+    var out = "";
+    while (s.length > 3) { out = "," + s.slice(-3) + out; s = s.slice(0, -3); }
+    return s + out;
+  }
+  function pct(v, d) { return (v * 100).toFixed(d === undefined ? 1 : d) + "%"; }
+
+  /* =========================================================
+     沙盘 1：缓存经济性
+     c(h) = 0.10h + 1.25(1-h) ; S(h) = 1 - c(h) = 1.15h - 0.25
+     ========================================================= */
+  var CB_X0 = 60, CB_X1 = 620, CB_Y0 = 210, CB_Y1 = 30, CB_VMIN = -0.3, CB_VMAX = 1.0;
+
+  function cbX(h) { return CB_X0 + h * (CB_X1 - CB_X0); }
+  function cbY(v) { return CB_Y0 - (v - CB_VMIN) / (CB_VMAX - CB_VMIN) * (CB_Y0 - CB_Y1); }
+
+  function drawCache() {
+    var P = parseFloat(document.getElementById("cache-p").value);
+    var h = parseFloat(document.getElementById("cache-h").value) / 100;
+    var n = parseInt(document.getElementById("cache-n").value, 10);
+
+    document.getElementById("val-cache-p").textContent = fmt(P);
+    document.getElementById("val-cache-h").textContent = (h * 100).toFixed(0) + "%";
+    document.getElementById("val-cache-n").textContent = String(n);
+
+    var c = 0.10 * h + 1.25 * (1 - h);
+    var S = 1 - c;
+    var hStar = 0.25 / 1.15;
+
+    document.getElementById("res-cache-save").textContent = pct(S, 1);
+    document.getElementById("res-cache-be").textContent = pct(hStar, 2);
+
+    var totalCache = 1.25 + (n - 1) * c;
+    var totalPlain = n;
+    var sessionSave = 1 - totalCache / totalPlain;
+    document.getElementById("res-cache-total").textContent = pct(sessionSave, 1);
+    document.getElementById("res-cache-tokens").textContent = fmt(sessionSave * P * n);
+
+    var pts = [];
+    for (var i = 0; i <= 10; i++) {
+      var hh = i / 10;
+      pts.push(cbX(hh).toFixed(2) + "," + cbY(1.15 * hh - 0.25).toFixed(2));
+    }
+    document.getElementById("cache-curve").setAttribute("points", pts.join(" "));
+
+    var bx = cbX(hStar);
+    var bl = document.getElementById("cache-beline");
+    bl.setAttribute("x1", bx.toFixed(2));
+    bl.setAttribute("x2", bx.toFixed(2));
+    var blb = document.getElementById("cache-belabel");
+    blb.setAttribute("x", (bx + 4).toFixed(2));
+    blb.textContent = "h* = " + pct(hStar, 2);
+  }
+
+  ["cache-p", "cache-h", "cache-n"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", drawCache);
+  });
+
+  /* =========================================================
+     沙盘 2：前缀错位
+     每轮额外 = 0.9 * (G + S)
+     ========================================================= */
+  var SEG_X0 = 96, SEG_W = 590;
+
+  function drawSeg() {
+    var G = parseFloat(document.getElementById("seg-g").value);
+    var S = parseFloat(document.getElementById("seg-s").value);
+    var V = parseFloat(document.getElementById("seg-v").value);
+    var T = parseInt(document.getElementById("seg-t").value, 10);
+
+    document.getElementById("val-seg-g").textContent = fmt(G);
+    document.getElementById("val-seg-s").textContent = fmt(S);
+    document.getElementById("val-seg-v").textContent = fmt(V);
+    document.getElementById("val-seg-t").textContent = String(T);
+
+    var total = G + S + V;
+    var extra = 0.9 * (G + S);
+
+    document.getElementById("res-seg-cacheable").textContent = fmt(G + S);
+    document.getElementById("res-seg-cacheable-wrong").textContent = "0";
+    document.getElementById("res-seg-extra").textContent = fmt(extra);
+    document.getElementById("res-seg-session").textContent = fmt(extra * T);
+
+    var wG = G / total * SEG_W;
+    var wS = S / total * SEG_W;
+    var wV = V / total * SEG_W;
+
+    var g1 = document.getElementById("seg-bar-g1");
+    var s1 = document.getElementById("seg-bar-s1");
+    var v1 = document.getElementById("seg-bar-v1");
+    g1.setAttribute("x", SEG_X0);
+    g1.setAttribute("width", wG.toFixed(2));
+    s1.setAttribute("x", (SEG_X0 + wG).toFixed(2));
+    s1.setAttribute("width", wS.toFixed(2));
+    v1.setAttribute("x", (SEG_X0 + wG + wS).toFixed(2));
+    v1.setAttribute("width", wV.toFixed(2));
+
+    var v2 = document.getElementById("seg-bar-v2");
+    var g2 = document.getElementById("seg-bar-g2");
+    var s2 = document.getElementById("seg-bar-s2");
+    v2.setAttribute("x", SEG_X0);
+    v2.setAttribute("width", Math.max(wV, 2).toFixed(2));
+    g2.setAttribute("x", (SEG_X0 + wV).toFixed(2));
+    g2.setAttribute("width", wG.toFixed(2));
+    s2.setAttribute("x", (SEG_X0 + wV + wG).toFixed(2));
+    s2.setAttribute("width", wS.toFixed(2));
+
+    document.getElementById("seg-note1").textContent = "可缓存 " + fmt(G + S) + " · 仅 " + fmt(V) + " 按新鲜价";
+    document.getElementById("seg-note2").textContent = "可缓存 0 · 全部 " + fmt(total) + " 按新鲜价";
+
+    document.getElementById("seg-legend-g").textContent = "■ G = " + fmt(G);
+    document.getElementById("seg-legend-s").textContent = "■ S = " + fmt(S);
+    document.getElementById("seg-legend-v").textContent = "■ V = " + fmt(V) + "（volatile，每轮变化）";
+  }
+
+  ["seg-g", "seg-s", "seg-v", "seg-t"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", drawSeg);
+  });
+
+  /* =========================================================
+     沙盘 3：延迟预算
+     ========================================================= */
+  var LAT_X0 = 96, LAT_W = 590;
+
+  function drawLat() {
+    var T = parseFloat(document.getElementById("lat-tok").value);
+    var r = parseFloat(document.getElementById("lat-rate").value);
+    var R = parseInt(document.getElementById("lat-rounds").value, 10);
+    var tTool = parseFloat(document.getElementById("lat-tool").value) / 10;
+    var tRt = parseFloat(document.getElementById("lat-rt").value) / 100;
+    var a = parseFloat(document.getElementById("lat-frac").value) / 100;
+    var sp = parseFloat(document.getElementById("lat-cache").value);
+
+    document.getElementById("val-lat-tok").textContent = fmt(T);
+    document.getElementById("val-lat-rate").textContent = String(r);
+    document.getElementById("val-lat-rounds").textContent = String(R);
+    document.getElementById("val-lat-tool").textContent = tTool.toFixed(2);
+    document.getElementById("val-lat-rt").textContent = tRt.toFixed(2);
+    document.getElementById("val-lat-frac").textContent = (a * 100).toFixed(0) + "%";
+
+    var tGen = T / r;
+    var spinner = tGen;
+    var first = a * T / r + tRt;
+    var roundSerial = tGen + tTool + tRt;
+    var roundEager = Math.max(tGen, a * tGen + tTool) + tRt;
+    var ttft = 0.8 / sp;
+    var totalSerial = R * roundSerial + ttft;
+    var totalEager = R * roundEager + ttft;
+    var gain = totalSerial - totalEager;
+
+    document.getElementById("res-lat-spinner").textContent = spinner.toFixed(2) + " s";
+    document.getElementById("res-lat-first").textContent = first.toFixed(2) + " s";
+    document.getElementById("res-lat-round").textContent = roundSerial.toFixed(2) + " s";
+    document.getElementById("res-lat-round-eager").textContent = roundEager.toFixed(2) + " s";
+    document.getElementById("res-lat-total").textContent = totalSerial.toFixed(2) + " s";
+    document.getElementById("res-lat-total-eager").textContent = totalEager.toFixed(2) + " s";
+    document.getElementById("res-lat-gain").textContent = gain.toFixed(2) + " s";
+    document.getElementById("res-lat-ttft").textContent = ttft.toFixed(2) + " s";
+
+    var maxT = Math.max(totalSerial, totalEager, 0.1);
+    var svg = document.getElementById("lat-svg");
+    var i, html = "";
+    html += '<text x="14" y="40" font-size="10" font-weight="700" fill="var(--rose)">串行派发</text>';
+    html += '<text x="14" y="112" font-size="10" font-weight="700" fill="var(--emerald)">eager 派发</text>';
+    html += '<line x1="96" y1="66" x2="686" y2="66" stroke="var(--border)" stroke-width="1"></line>';
+    html += '<line x1="96" y1="138" x2="686" y2="138" stroke="var(--border)" stroke-width="1"></line>';
+
+    var sx = LAT_X0;
+    html += '<rect x="' + sx.toFixed(2) + '" y="30" width="' + (ttft / maxT * LAT_W).toFixed(2) + '" height="26" rx="3" fill="var(--amber)" opacity="0.75" stroke="var(--amber)" stroke-width="1"></rect>';
+    sx += ttft / maxT * LAT_W;
+    for (i = 0; i < R; i++) {
+      html += '<rect x="' + sx.toFixed(2) + '" y="30" width="' + (tGen / maxT * LAT_W).toFixed(2) + '" height="26" rx="3" fill="var(--rose)" opacity="0.35" stroke="var(--rose)" stroke-width="1"></rect>';
+      sx += tGen / maxT * LAT_W;
+      html += '<rect x="' + sx.toFixed(2) + '" y="30" width="' + (tTool / maxT * LAT_W).toFixed(2) + '" height="26" rx="3" fill="var(--rose)" opacity="0.15" stroke="var(--rose)" stroke-width="1"></rect>';
+      sx += tTool / maxT * LAT_W;
+      html += '<rect x="' + sx.toFixed(2) + '" y="30" width="' + (tRt / maxT * LAT_W).toFixed(2) + '" height="26" rx="3" fill="var(--surface-3)" stroke="var(--border)" stroke-width="1"></rect>';
+      sx += tRt / maxT * LAT_W;
+    }
+
+    var ex = LAT_X0;
+    html += '<rect x="' + ex.toFixed(2) + '" y="102" width="' + (ttft / maxT * LAT_W).toFixed(2) + '" height="26" rx="3" fill="var(--amber)" opacity="0.75" stroke="var(--amber)" stroke-width="1"></rect>';
+    ex += ttft / maxT * LAT_W;
+    for (i = 0; i < R; i++) {
+      var genW = (roundEager - tRt) / maxT * LAT_W;
+      html += '<rect x="' + ex.toFixed(2) + '" y="102" width="' + genW.toFixed(2) + '" height="26" rx="3" fill="var(--emerald)" opacity="0.3" stroke="var(--emerald)" stroke-width="1"></rect>';
+      ex += genW;
+      html += '<rect x="' + ex.toFixed(2) + '" y="102" width="' + (tRt / maxT * LAT_W).toFixed(2) + '" height="26" rx="3" fill="var(--surface-3)" stroke="var(--border)" stroke-width="1"></rect>';
+      ex += tRt / maxT * LAT_W;
+    }
+
+    html += '<text x="391" y="172" text-anchor="middle" font-size="9.5" fill="var(--text-secondary)">每段 = 一个轮次：模型生成 → 工具执行 → 往返</text>';
+    html += '<text x="391" y="192" text-anchor="middle" font-size="9" fill="var(--text-muted)">琥珀 = TTFT（含缓存加速 ' + sp.toFixed(1) + '×） · 彩色 = 轮次 · 描边 = 往返开销</text>';
+    svg.innerHTML = html;
+  }
+
+  ["lat-tok", "lat-rate", "lat-rounds", "lat-tool", "lat-rt", "lat-frac"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", drawLat);
+  });
+  document.getElementById("lat-cache").addEventListener("change", drawLat);
+
+  /* =========================================================
+     沙盘 4：安全链 + 并行写
+     ========================================================= */
+  var GATE_IDS = ["gate-1", "gate-2", "gate-3", "gate-4", "gate-5"];
+  var GATE_NAMES = ["来源校验", "限额校验", "暂存", "人工批准", "宿主执行校验"];
+
+  function drawGate() {
+    var eps = GATE_IDS.map(function (id) { return parseFloat(document.getElementById(id).value); });
+    var p = 1;
+    var worst = 0, worstIdx = 0;
+    for (var i = 0; i < eps.length; i++) {
+      p = p * eps[i];
+      if (eps[i] > worst) { worst = eps[i]; worstIdx = i; }
+    }
+
+    var out;
+    if (p >= 0.001) { out = pct(p, 3); }
+    else { out = p.toExponential(2); }
+    document.getElementById("res-gate-p").textContent = out;
+
+    var odds = p > 0 ? 1 / p : Infinity;
+    var oddsTxt;
+    if (!isFinite(odds)) { oddsTxt = "不会穿透"; }
+    else if (odds >= 1e8) { oddsTxt = "优于 1/" + (odds / 1e8).toFixed(1) + " 亿"; }
+    else if (odds >= 1e4) { oddsTxt = "约 1/" + fmt(odds); }
+    else { oddsTxt = "约 1/" + odds.toFixed(1); }
+    document.getElementById("res-gate-odds").textContent = oddsTxt;
+
+    var worstTxt = GATE_NAMES[worstIdx] + "（ε = " + worst.toFixed(2);
+    if (worst >= 1) { worstTxt += " · 无此 gate"; }
+    else if (worst >= 0.3) { worstTxt += " · 仅提示词约束"; }
+    else { worstTxt += " · 代码强制"; }
+    worstTxt += "）";
+    document.getElementById("res-gate-worst").textContent = worstTxt;
+
+    var level, desc, col;
+    if (p <= 1e-6) { level = "结构完整"; desc = "五道 gate 全部由代码强制，穿透概率处于可接受量级。"; col = "var(--emerald)"; }
+    else if (p <= 1e-4) { level = "基本可控"; desc = "存在一道非代码 gate，穿透概率抬升一个量级以上。"; col = "var(--cyan)"; }
+    else if (p <= 1e-2) { level = "需要加固"; desc = "多道 gate 依赖提示词或已缺失，防护强度接近单点。"; col = "var(--amber)"; }
+    else { level = "形同虚设"; desc = "安全链已经不能称为执行限制，钱与价格实际由模型决定。"; col = "var(--rose)"; }
+
+    var lv = document.getElementById("res-gate-level");
+    lv.textContent = level;
+    lv.style.color = col;
+    document.getElementById("res-gate-desc").textContent = desc;
+    document.querySelector(".risk-head").style.borderLeftColor = col;
+  }
+
+  GATE_IDS.forEach(function (id) {
+    document.getElementById(id).addEventListener("change", drawGate);
+  });
+
+  function drawWrite() {
+    var C = parseInt(document.getElementById("wr-cap").value, 10);
+    var c = parseInt(document.getElementById("wr-cur").value, 10);
+    var m = parseInt(document.getElementById("wr-m").value, 10);
+    var u = parseInt(document.getElementById("wr-u").value, 10);
+
+    document.getElementById("val-wr-cap").textContent = String(C);
+    document.getElementById("val-wr-cur").textContent = String(c);
+    document.getElementById("val-wr-m").textContent = String(m);
+    document.getElementById("val-wr-u").textContent = String(u);
+
+    var reqFinal = c + m * u;
+    var reqOver = Math.max(0, reqFinal - C);
+
+    var k = Math.max(0, Math.floor((C - c) / u));
+    var stateFinal = Math.min(C, c + k * u);
+    var stateOver = Math.max(0, stateFinal - C);
+    var reject = m - k;
+
+    document.getElementById("res-wr-req").textContent = String(reqFinal);
+    document.getElementById("res-wr-req-over").textContent = String(reqOver);
+    document.getElementById("res-wr-state").textContent = String(stateFinal);
+    document.getElementById("res-wr-state-over").textContent = String(stateOver);
+    document.getElementById("res-wr-reject").textContent = String(Math.max(0, reject));
+  }
+
+  ["wr-cap", "wr-cur", "wr-m", "wr-u"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", drawWrite);
+  });
+
+  /* =========================================================
+     沙盘 5：评测覆盖与复现成本
+     P(n) = 1 - (1-q)^n ; E[n] = 1/q ; 成本比 = k/q
+     ========================================================= */
+  var EV_X0 = 60, EV_X1 = 620, EV_Y0 = 210, EV_Y1 = 30, EV_NMAX = 20;
+
+  function evX(i) { return EV_X0 + i / (EV_NMAX - 1) * (EV_X1 - EV_X0); }
+  function evY(p) { return EV_Y0 - p * (EV_Y0 - EV_Y1); }
+
+  function drawEv() {
+    var F = parseInt(document.getElementById("ev-f").value, 10);
+    var C = parseInt(document.getElementById("ev-c").value, 10);
+    var q = parseFloat(document.getElementById("ev-q").value) / 100;
+    var k = parseInt(document.getElementById("ev-k").value, 10);
+    var n = parseInt(document.getElementById("ev-n").value, 10);
+
+    document.getElementById("val-ev-f").textContent = String(F);
+    document.getElementById("val-ev-c").textContent = String(C);
+    document.getElementById("val-ev-q").textContent = (q * 100).toFixed(0) + "%";
+    document.getElementById("val-ev-k").textContent = String(k);
+    document.getElementById("val-ev-n").textContent = String(n);
+
+    document.getElementById("res-ev-total").textContent = fmt(F * C) + " 例";
+    document.getElementById("res-ev-neg").textContent = fmt(F * Math.floor(C / 2)) + " 正 / " + fmt(F * (C - Math.floor(C / 2))) + " 负";
+
+    var runs = 1 / q;
+    document.getElementById("res-ev-runs").textContent = runs.toFixed(1) + " 次";
+    document.getElementById("res-ev-ratio").textContent = (k / q).toFixed(1) + "×";
+
+    var catchN = 1 - Math.pow(1 - q, n);
+    document.getElementById("res-ev-catch").textContent = pct(catchN, 1);
+
+    var pts = [];
+    for (var i = 1; i <= EV_NMAX; i++) {
+      pts.push(evX(i - 1).toFixed(2) + "," + evY(1 - Math.pow(1 - q, i)).toFixed(2));
+    }
+    document.getElementById("ev-curve").setAttribute("points", pts.join(" "));
+
+    var nx = evX(Math.min(n, EV_NMAX) - 1);
+    var nl = document.getElementById("ev-nline");
+    nl.setAttribute("x1", nx.toFixed(2));
+    nl.setAttribute("x2", nx.toFixed(2));
+    var nlb = document.getElementById("ev-nlabel");
+    nlb.setAttribute("x", (nx + 4).toFixed(2));
+    nlb.textContent = "n = " + n + " → " + pct(catchN, 0);
+  }
+
+  ["ev-f", "ev-c", "ev-q", "ev-k", "ev-n"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", drawEv);
+  });
+
+  /* ---------- 初始化 ---------- */
+  drawCache();
+  drawSeg();
+  drawLat();
+  drawGate();
+  drawWrite();
+  drawEv();
+  updateProgress();
+  updateToc();
+})();
+</script>
+</body>
+</html>

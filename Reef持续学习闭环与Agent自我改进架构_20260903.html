@@ -1,0 +1,2062 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Reef 持续学习基础设施的完整消化：Serve/Observe/Grow/Commit 闭环架构、六类 Learning Recipe 对照、一级源核验与勘误、门控统计功效建模、CAS 发布链自阻塞定点模型，含四个可交互计算沙盘。">
+<title>Reef 持续学习闭环与 Agent 自我改进架构</title>
+<style>
+/* ============================================================
+   零外部依赖排版系统 · 双主题语义令牌
+   ============================================================ */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+  --font-math: "Latin Modern Math", "Cambria Math", "STIX Two Math", "Newsreader", "Songti SC", Georgia, serif;
+}
+html[data-theme="dark"] {
+  --bg: #181715; --bg-panel: #201E1B; --bg-subtle: #26241F; --bg-code: #14120F;
+  --bg-inset: #2E2B25;
+  --text: #E8E4DC; --text-title: #F4F1EA; --text-muted: #A19A90; --text-faint: #7C7569;
+  --border: #35312A; --border-subtle: #2A2620;
+  --accent: #D97757; --accent-dim: #6B3A2A;
+  --emerald: #6FBF8B; --rose: #E0685F; --amber: #E0A355; --cyan: #74B6C7; --violet: #A992D6;
+  --shadow: 0 1px 3px rgba(0,0,0,.5);
+}
+html[data-theme="light"] {
+  --bg: #FAF7F2; --bg-panel: #FFFFFF; --bg-subtle: #F3EEE5; --bg-code: #F6F2EA;
+  --bg-inset: #EDE7DB;
+  --text: #2A2622; --text-title: #1C1916; --text-muted: #6B645C; --text-faint: #928A7F;
+  --border: #E2DBCF; --border-subtle: #EDE7DC;
+  --accent: #C25E3E; --accent-dim: #F0D9CF;
+  --emerald: #2E7D52; --rose: #B3382E; --amber: #9A6610; --cyan: #2B7C8C; --violet: #6B52A8;
+  --shadow: 0 1px 3px rgba(60,50,35,.10);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: var(--font-sans); font-size: 16px; line-height: 1.85;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+::selection { background: var(--accent-dim); color: var(--text-title); }
+
+/* ---------- 阅读进度条 ---------- */
+#progressBar {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--amber));
+  z-index: 999; transition: width .1s linear;
+}
+
+/* ---------- 页头 ---------- */
+.doc-header {
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg-panel), var(--bg));
+  padding: 3.2rem 2rem 2.4rem;
+}
+.doc-header .wrap { max-width: 1240px; margin: 0 auto; }
+.doc-kicker {
+  font-family: var(--font-mono); font-size: .72rem; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 1rem;
+}
+.doc-header h1 {
+  font-family: var(--font-serif); font-size: clamp(1.85rem, 4.2vw, 3rem);
+  line-height: 1.22; margin: 0 0 .8rem; color: var(--text-title); font-weight: 600;
+  letter-spacing: -.01em;
+}
+.doc-sub { font-size: 1.05rem; color: var(--text-muted); max-width: 62ch; margin: 0 0 1.8rem; }
+.doc-meta {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 1px; background: var(--border-subtle); border: 1px solid var(--border-subtle);
+  border-radius: 10px; overflow: hidden;
+}
+.doc-meta div { background: var(--bg-panel); padding: .82rem 1rem; }
+.doc-meta dt {
+  font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-faint); font-family: var(--font-mono); margin-bottom: .3rem;
+}
+.doc-meta dd { margin: 0; font-size: .92rem; color: var(--text-title); font-weight: 500; }
+.btn-theme {
+  margin-top: 1.4rem; font-family: var(--font-mono); font-size: .78rem;
+  background: var(--bg-subtle); color: var(--text); border: 1px solid var(--border);
+  padding: .48rem 1rem; border-radius: 999px; cursor: pointer; transition: all .18s;
+}
+.btn-theme:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---------- 布局 ---------- */
+.layout {
+  display: grid; grid-template-columns: 268px minmax(0, 1fr);
+  gap: 0; max-width: 1240px; margin: 0 auto; align-items: start;
+}
+.toc {
+  position: sticky; top: 0; max-height: 100vh; overflow-y: auto;
+  padding: 2.2rem 1.2rem 3rem 1.6rem; border-right: 1px solid var(--border-subtle);
+  font-size: .84rem;
+}
+.toc h4 {
+  font-family: var(--font-mono); font-size: .68rem; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--text-faint); margin: 0 0 1rem;
+}
+.toc ol { list-style: none; margin: 0 0 1.4rem; padding: 0; }
+.toc li { margin: 0; }
+.toc a {
+  display: block; padding: .3rem .6rem; color: var(--text-muted);
+  text-decoration: none; border-left: 2px solid transparent; border-radius: 0 4px 4px 0;
+  transition: all .15s;
+}
+.toc a:hover { color: var(--accent); background: var(--bg-subtle); }
+.toc a.active { color: var(--accent); border-left-color: var(--accent); background: var(--bg-subtle); font-weight: 600; }
+.toc .sub a { padding-left: 1.4rem; font-size: .8rem; }
+
+.content { padding: 2.6rem 2.2rem 6rem; min-width: 0; }
+
+/* ---------- 标题 ---------- */
+.content h2 {
+  font-family: var(--font-serif); font-size: 1.72rem; line-height: 1.35;
+  margin: 3.6rem 0 1.2rem; padding-bottom: .6rem; color: var(--text-title);
+  border-bottom: 2px solid var(--border); font-weight: 600;
+}
+.content h2 .part {
+  display: inline-block; font-family: var(--font-mono); font-size: .66rem;
+  letter-spacing: .14em; color: var(--accent); border: 1px solid var(--accent-dim);
+  background: var(--bg-subtle); padding: .18rem .55rem; border-radius: 4px;
+  vertical-align: middle; margin-right: .7rem; position: relative; top: -3px;
+}
+.content h3 {
+  font-family: var(--font-serif); font-size: 1.28rem; margin: 2.4rem 0 .9rem;
+  color: var(--text-title); font-weight: 600;
+}
+.content h4 {
+  font-size: 1.02rem; margin: 1.8rem 0 .7rem; color: var(--text-title);
+  font-weight: 600; letter-spacing: .01em;
+}
+.content p { margin: 0 0 1.15rem; }
+.content strong { color: var(--text-title); font-weight: 600; }
+.content em { color: var(--text-title); }
+.content a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); }
+.content a:hover { border-bottom-color: var(--accent); }
+.content hr { border: none; border-top: 1px solid var(--border-subtle); margin: 2.6rem 0; }
+
+/* ---------- 列表 ---------- */
+.content ul, .content ol { margin: 0 0 1.2rem; padding-left: 1.5rem; }
+.content li { margin: 0 0 .5rem; }
+.content li > ul, .content li > ol { margin-top: .5rem; margin-bottom: .5rem; }
+
+/* ---------- 引用与图注 ---------- */
+blockquote {
+  margin: 1.8rem 0; padding: 1.15rem 1.4rem; background: var(--bg-subtle);
+  border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+}
+blockquote p { margin: 0 0 .5rem; }
+blockquote p:last-child { margin-bottom: 0; }
+figure { margin: 2rem 0; }
+figure svg { display: block; width: 100%; height: auto; }
+figcaption {
+  font-size: .82rem; color: var(--text-muted); margin-top: .7rem;
+  padding-left: .6rem; border-left: 2px solid var(--border);
+  font-family: var(--font-sans);
+}
+figcaption .tag {
+  font-family: var(--font-mono); font-size: .68rem; letter-spacing: .08em;
+  color: var(--accent); text-transform: uppercase; display: block; margin-bottom: .2rem;
+}
+
+/* ---------- 表格 ---------- */
+.table-wrap { overflow-x: auto; margin: 1.6rem 0 1.8rem; border: 1px solid var(--border); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: .89rem; min-width: 560px; }
+thead th {
+  background: var(--bg-subtle); color: var(--text-title); text-align: left;
+  font-weight: 600; padding: .72rem .9rem; border-bottom: 2px solid var(--border);
+  white-space: nowrap; font-size: .84rem; letter-spacing: .02em;
+}
+tbody td { padding: .7rem .9rem; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--bg-subtle); }
+td.num, th.num { font-family: var(--font-mono); text-align: right; white-space: nowrap; }
+
+/* ---------- 代码 ---------- */
+pre {
+  background: var(--bg-code); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1.15rem 1.3rem; overflow-x: auto; margin: 1.6rem 0;
+  font-family: var(--font-mono); font-size: .82rem; line-height: 1.7;
+  color: var(--text);
+}
+code {
+  font-family: var(--font-mono); font-size: .87em;
+  background: var(--bg-inset); padding: .12rem .38rem; border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+pre code { background: none; border: none; padding: 0; font-size: 1em; }
+.lang-tag {
+  display: block; font-family: var(--font-mono); font-size: .66rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--text-faint); margin-bottom: .6rem;
+}
+
+/* ---------- 提示框 ---------- */
+.callout {
+  margin: 1.8rem 0; padding: 1.1rem 1.3rem 1.1rem 3.1rem; border-radius: 10px;
+  background: var(--bg-subtle); border: 1px solid var(--border); position: relative;
+  font-size: .93rem;
+}
+.callout::before {
+  content: attr(data-icon); position: absolute; left: 1.05rem; top: 1.05rem;
+  font-family: var(--font-mono); font-weight: 700; font-size: .86rem;
+  width: 1.35rem; height: 1.35rem; line-height: 1.35rem; text-align: center;
+  border-radius: 4px; color: var(--bg); background: var(--accent);
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout .ct {
+  display: block; font-weight: 600; color: var(--text-title);
+  margin-bottom: .35rem; font-size: .95rem;
+}
+.callout.verify { border-left: 3px solid var(--cyan); }
+.callout.verify::before { background: var(--cyan); }
+.callout.warn { border-left: 3px solid var(--amber); }
+.callout.warn::before { background: var(--amber); }
+.callout.risk { border-left: 3px solid var(--rose); }
+.callout.risk::before { background: var(--rose); }
+.callout.ok { border-left: 3px solid var(--emerald); }
+.callout.ok::before { background: var(--emerald); }
+
+/* ---------- 数学排版 ---------- */
+.math-block {
+  margin: 1.4rem 0; padding: 1.15rem 1.2rem; background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+  overflow-x: auto; display: flex; align-items: center; justify-content: center;
+  color: var(--text-title);
+}
+math {
+  font-family: var(--font-math); font-size: 1.2rem; color: var(--text-title);
+  direction: ltr; line-height: 1.35;
+}
+math[display="block"] { display: block; margin: 0 auto; text-align: center; }
+math mfrac { padding: 0 0.15em; }
+math mo { padding: 0 0.18em; }
+.mlabel { font-family: var(--font-mono); font-size: .74rem; color: var(--text-faint); text-align: right; margin-top: -.6rem; }
+
+/* ---------- 交互沙盘 ---------- */
+.sandbox {
+  margin: 2.2rem 0; border: 1px solid var(--border); border-radius: 14px;
+  background: var(--bg-panel); overflow: hidden; box-shadow: var(--shadow);
+}
+.sandbox-head {
+  padding: .95rem 1.4rem; border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-subtle); display: flex; align-items: baseline;
+  gap: .8rem; flex-wrap: wrap;
+}
+.sandbox-head .sb-id {
+  font-family: var(--font-mono); font-size: .7rem; font-weight: 700;
+  background: var(--accent); color: var(--bg); padding: .2rem .5rem; border-radius: 4px;
+  letter-spacing: .06em;
+}
+.sandbox-head h4 { margin: 0; font-size: 1rem; font-family: var(--font-sans); }
+.sandbox-head .sb-note { font-size: .76rem; color: var(--text-faint); font-family: var(--font-mono); }
+.sandbox-body { padding: 1.4rem; }
+.ctrl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.15rem 1.6rem; margin-bottom: 1.5rem; }
+.ctrl label {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: .8rem; color: var(--text-muted); margin-bottom: .42rem; gap: .5rem;
+}
+.ctrl label .cv { font-family: var(--font-mono); color: var(--accent); font-weight: 600; font-size: .84rem; white-space: nowrap; }
+input[type="range"] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+  background: var(--bg-inset); border-radius: 2px; outline: none; margin: .35rem 0 0;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--accent); cursor: pointer;
+  border: 2px solid var(--bg-panel); box-shadow: 0 0 0 1px var(--accent);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%; background: var(--accent);
+  cursor: pointer; border: 2px solid var(--bg-panel);
+}
+select {
+  width: 100%; padding: .5rem .7rem; background: var(--bg-subtle); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; font-family: var(--font-sans);
+  font-size: .86rem; cursor: pointer;
+}
+.readout {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 1px; background: var(--border-subtle); border: 1px solid var(--border-subtle);
+  border-radius: 10px; overflow: hidden; margin-bottom: 1.2rem;
+}
+.readout .cell { background: var(--bg-panel); padding: .72rem .85rem; }
+.readout .ck {
+  font-size: .66rem; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--text-faint); font-family: var(--font-mono); margin-bottom: .28rem;
+}
+.readout .cv { font-family: var(--font-mono); font-size: 1.02rem; font-weight: 600; color: var(--text-title); }
+.readout .cv.pos { color: var(--emerald); }
+.readout .cv.neg { color: var(--rose); }
+.readout .cv.mid { color: var(--amber); }
+.verdict {
+  padding: .8rem 1.05rem; border-radius: 8px; font-size: .9rem;
+  background: var(--bg-subtle); border: 1px solid var(--border); margin-bottom: 1.2rem;
+}
+.verdict b { font-family: var(--font-mono); }
+.chart-box { background: var(--bg-subtle); border: 1px solid var(--border-subtle); border-radius: 10px; padding: .6rem .4rem .2rem; }
+.chart-box svg { display: block; width: 100%; height: auto; }
+.formula-note {
+  font-size: .78rem; color: var(--text-faint); margin-top: .9rem; line-height: 1.7;
+  font-family: var(--font-mono);
+}
+
+/* 漏斗条 */
+.funnel { margin: .4rem 0 .2rem; }
+.funnel-row { display: grid; grid-template-columns: 130px minmax(0,1fr) 96px; align-items: center; gap: .8rem; margin-bottom: .48rem; }
+.funnel-row .fl { font-size: .8rem; color: var(--text-muted); text-align: right; }
+.funnel-track { background: var(--bg-inset); border-radius: 5px; height: 20px; overflow: hidden; }
+.funnel-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--amber)); border-radius: 5px; transition: width .22s ease; }
+.funnel-row .fv { font-family: var(--font-mono); font-size: .82rem; color: var(--text-title); text-align: right; }
+
+/* Tab 装配 */
+.tabbar { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
+.tabbar button {
+  font-family: var(--font-mono); font-size: .78rem; padding: .45rem .95rem;
+  background: var(--bg-subtle); color: var(--text-muted); border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; transition: all .16s;
+}
+.tabbar button:hover { color: var(--text-title); border-color: var(--text-faint); }
+.tabbar button.on { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+.stage-panel { display: none; }
+.stage-panel.on { display: block; }
+.kv { display: grid; grid-template-columns: 118px minmax(0,1fr); gap: .45rem 1rem; font-size: .88rem; margin: .9rem 0; }
+.kv dt { color: var(--text-faint); font-family: var(--font-mono); font-size: .78rem; padding-top: .12rem; }
+.kv dd { margin: 0; }
+.pathlist { font-family: var(--font-mono); font-size: .8rem; color: var(--cyan); word-break: break-all; }
+
+/* ---------- 页脚 ---------- */
+.doc-footer {
+  border-top: 1px solid var(--border); padding: 2.4rem 2rem 3.4rem;
+  font-size: .82rem; color: var(--text-faint);
+}
+.doc-footer .wrap { max-width: 1240px; margin: 0 auto; }
+.doc-footer code { font-size: .8rem; }
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 940px) {
+  .layout { grid-template-columns: 1fr; }
+  .toc { position: static; max-height: none; border-right: none; border-bottom: 1px solid var(--border); padding: 1.6rem 1.4rem; }
+  .content { padding: 1.8rem 1.3rem 4rem; }
+  .doc-header { padding: 2.2rem 1.3rem 1.8rem; }
+}
+@media (max-width: 560px) {
+  body { font-size: 15px; }
+  .funnel-row { grid-template-columns: 92px minmax(0,1fr) 76px; gap: .5rem; }
+  .kv { grid-template-columns: 1fr; gap: .1rem; }
+  .kv dd { margin-bottom: .6rem; }
+}
+
+/* ---------- 打印 ---------- */
+@media print {
+  html { scroll-behavior: auto; }
+  .toc, #progressBar, .btn-theme { display: none !important; }
+  .layout { grid-template-columns: 1fr; display: block; }
+  body { background: #fff; color: #000; font-size: 10.5pt; }
+  .content { padding: 0; max-width: 100%; }
+  .content h2 { page-break-after: avoid; }
+  .sandbox, figure, table, pre, .math-block { page-break-inside: avoid; }
+  .sandbox { border: 1px solid #bbb; }
+  a { color: #000; border-bottom: none; }
+  .stage-panel { display: block !important; }
+}
+</style>
+</head>
+<body>
+
+<div id="progressBar"></div>
+
+<header class="doc-header">
+  <div class="wrap">
+    <div class="doc-kicker">Continual Learning Infra · Technical Digest</div>
+    <h1>Reef 持续学习闭环与 Agent 自我改进架构</h1>
+    <p class="doc-sub">把线上推理、经验记录、候选生成、评测与版本发布接成一条长期运行的闭环。本文档完整保留原稿结构，并补入一级源核验、统计功效建模、CAS 发布链定点模型与四个可交互计算沙盘。</p>
+    <dl class="doc-meta">
+      <div><dt>项目</dt><dd>Reef · Human-Agent-Society</dd></div>
+      <div><dt>发布包</dt><dd>reef-infra（导入名 reef）</dd></div>
+      <div><dt>许可证</dt><dd>Apache-2.0</dd></div>
+      <div><dt>运行环境</dt><dd>Python ≥ 3.10 · Git LFS</dd></div>
+      <div><dt>核验基准日</dt><dd>2026-09-03</dd></div>
+      <div><dt>一级源</dt><dd>GitHub 主分支 · 195 stars</dd></div>
+    </dl>
+    <button class="btn-theme" id="btn-theme" type="button">切换亮色 / 暗色主题</button>
+  </div>
+</header>
+
+<div class="layout">
+
+<nav class="toc" id="toc">
+  <h4>目录</h4>
+  <ol>
+    <li><a href="#overview">本文档构成与阅读路径</a></li>
+  </ol>
+  <h4>第一部分 · 原稿全文</h4>
+  <ol class="sub">
+    <li><a href="#p1-1">一分钟速览</a></li>
+    <li><a href="#p1-2">部署后的 Agent 为什么停止学习</a></li>
+    <li><a href="#p1-3">一次请求怎样变成下一次更新</a></li>
+    <li><a href="#p1-4">先把经验和反馈对上号</a></li>
+    <li><a href="#p1-5">再决定该改模型，还是改 Harness</a></li>
+    <li><a href="#p1-6">最后只让通过评测的候选进入服务</a></li>
+    <li><a href="#p1-7">不同学习方法怎样共用一套底座</a></li>
+    <li><a href="#p1-8">Reef 真正改变了什么</a></li>
+  </ol>
+  <h4>第二部分 · 一级源核验</h4>
+  <ol class="sub">
+    <li><a href="#p2-1">核验结论总览</a></li>
+    <li><a href="#p2-2">AIME 数据的完整口径</a></li>
+    <li><a href="#p2-3">需要降级或补注的表述</a></li>
+  </ol>
+  <h4>第三部分 · 可计算建模</h4>
+  <ol class="sub">
+    <li><a href="#p3-1">门控统计功效模型</a></li>
+    <li><a href="#p3-2">基线噪声的二项解释</a></li>
+    <li><a href="#p3-3">发布链 CAS 自阻塞</a></li>
+    <li><a href="#p3-4">经验漏斗与陈旧衰减</a></li>
+  </ol>
+  <h4>第四部分 · 交互沙盘</h4>
+  <ol class="sub">
+    <li><a href="#sb-a">A · 双比例检验与功效</a></li>
+    <li><a href="#sb-b">B · 发布链自阻塞</a></li>
+    <li><a href="#sb-c">C · 经验漏斗</a></li>
+    <li><a href="#sb-d">D · 四阶段与配方装配</a></li>
+  </ol>
+  <h4>第五部分 · 落地决策</h4>
+  <ol class="sub">
+    <li><a href="#p5-1">适用与不适用场景</a></li>
+    <li><a href="#p5-2">接入路径与陷阱</a></li>
+    <li><a href="#p5-3">闭环不能替你做的事</a></li>
+  </ol>
+  <h4>附录</h4>
+  <ol class="sub">
+    <li><a href="#appendix">核验记录与溯源清单</a></li>
+  </ol>
+</nav>
+
+<main class="content">
+
+<!-- ===================== 概览 ===================== -->
+<h2 id="overview"><span class="part">导言</span>本文档构成与阅读路径</h2>
+
+<p>本文档由三层组成：<strong>第一部分</strong>是原稿全文的完整结构化转录，保留全部标题层级、段落、列表、表格、代码与超链接，未做删减或改写；<strong>第二部分与第三部分</strong>是针对原稿断言的独立核验与量化建模，所有数字均回溯至 GitHub 主分支一级源并用可复现公式计算得出；<strong>第四部分</strong>是四个交互式计算沙盘，所有回显数值由页面内公式实时反解，不含任何预置的虚构百分比。</p>
+
+<div class="callout verify" data-icon="V">
+  <span class="ct">核验方法说明</span>
+  <p>原稿为第三方分析稿。本次核验直接抓取 <code>Human-Agent-Society/reef</code> 主分支的 <code>pyproject.toml</code>、<code>LICENSE</code>、<code>recipes/README.md</code>、<code>recipes/gepa/examples/aime/README.md</code>、<code>recipes/openclawrl/README.md</code>、<code>recipes/skillclaw/README.md</code> 与仓库 API 元数据，逐条比对原稿断言。凡一级源未确认者，一律标注为「未独立核验」，不作推断填补。</p>
+</div>
+
+<!-- ===================== 第一部分 ===================== -->
+<h2 id="p1-1"><span class="part">Part I</span>一分钟速览</h2>
+
+<ul>
+  <li>多数 Agent 在部署后停止学习，原因不是线上没有经验，而是推理记录、反馈、训练与版本发布彼此断开。</li>
+  <li>Reef 用 Serve、Observe、Grow、Commit 把请求变成可归因经验，再生成模型或 Harness 候选；只有通过评测的版本才能回到服务。</li>
+  <li>Recipe 把 SAO、OpenClaw-RL、TTT-Discover、SkillClaw 和 GEPA 等方法接到同一底座；scenario 隔离记录与版本，但学习方法由部署配置决定。</li>
+  <li>Reef 可以先作为不训练的记录代理接入外部模型，再逐步启用学习；闭环能控制更新，却不能替团队保证反馈和评测目标正确。</li>
+</ul>
+
+<p>一个 Agent 每完成一次真实任务，都会留下极有价值的经验：用户纠正了什么，工具为什么失败，哪条执行路径得到了高分，哪种结果真正解决了问题。可多数推理服务器在返回答案后就把这些信号丢掉了。模型上线的那一刻，也成了它停止学习的那一刻。</p>
+
+<p>麻省理工学院（MIT）的 <a href="https://mobility.mit.edu/people/ao-qu/" target="_blank" rel="noopener">Ao Qu</a> 与 Human-Agent-Society 团队，开发了一个专门解决这道断点的项目——<a href="https://github.com/Human-Agent-Society/reef" target="_blank" rel="noopener">Reef</a>。Reef 要改变的就是这件事：把线上推理、经验记录、候选更新、评测和版本发布接成一条长期运行的闭环，让推理服务器不只负责「回答」，还负责让 Agent 持续学习和自我改进。</p>
+
+<p>这套系统要解决的并不是某一种训练算法，而是持续学习缺失的工程底座：从真实流量中取得可信经验，决定该更新模型还是外层运行框架，再阻止未经验证的变化直接污染线上服务。Reef 把这个更宽泛的目标称为 <strong>continual self-improvement</strong>。它允许系统反复从经验中改善，但并不等同于已经实现了能够自行制造下一代系统的递归自我改进（RSI）。</p>
+
+<h2 id="p1-2"><span class="part">Part I</span>部署后的 Agent 为什么停止学习</h2>
+
+<p>传统大模型的生命周期是一条单向流水线：收集数据 → 训练模型 → 离线评测 → 部署上线 → 响应请求。训练系统关心参数如何变化，推理系统只关心如何稳定返回结果，两边在部署时被切开了。</p>
+
+<p>Agent 让这个切口变得越来越昂贵。一次长任务包含多轮对话、工具调用、中间状态、执行结果和用户反馈，它们共同回答了三个关键问题：系统当时看到了什么、做了什么、结果到底好不好。这类经验比通用离线语料更贴近真实需求，却常常没有稳定路径回到学习系统。</p>
+
+<p>另一个问题是，Agent 的行为并不只由模型权重决定。提示词、记忆、Skill、工具权限和编排逻辑都会改变最终结果。工具选错、上下文组织失控或规则写坏时，继续训练模型可能既昂贵又无效；真正该改的对象可能在模型外面。</p>
+
+<p>所以，持续学习需要同时打通两条断点：</p>
+
+<ul>
+  <li><strong>推理不再是终点。</strong> 线上轨迹、执行结果、用户反馈和环境奖励要成为下一轮学习的输入。</li>
+  <li><strong>模型不再是唯一的更新对象。</strong> 权重与 Harness——也就是负责上下文、记忆、Skill、工具和编排的外层系统——都要进入同一套演化与版本控制流程。</li>
+</ul>
+
+<p>问题因此从「再接一条训练管道」变成了「怎样管理一个不断产生经验、候选和新版本的在线系统」。</p>
+
+<p>到这里，Reef 与站内两篇解读正好接上：<a href="https://best.xiaohu.ai/article/harness-engineering-rsi/" target="_blank" rel="noopener">Harness 工程</a>继续展开「模型外面还有什么可以优化」，<a href="https://best.xiaohu.ai/article/openai-arc-agi-3-harness/" target="_blank" rel="noopener">OpenAI 的 ARC-AGI-3 复盘</a>则把 Harness 对结果的影响放进一个具体实验。Reef 补上的下一步，是让这些改动能够从线上经验中持续产生，经过评测，再安全进入下一版服务。</p>
+
+<h2 id="p1-3"><span class="part">Part I</span>一次请求怎样变成下一次更新</h2>
+
+<p>Reef 把一次学习循环拆成四步：<strong>Serve、Observe、Grow、Commit</strong>。Serve 处理请求并留下记录，Observe 把后续反馈对回具体交互，Grow 用符合条件的经验生成候选，Commit 只把通过评测的候选发布为新版本。</p>
+
+<blockquote>
+  <p><strong>一次线上请求怎样变成下一版 Agent 的学习材料？</strong></p>
+  <p>请求经过推理生成 record receipt，反馈与 record 绑定，learning recipe 生成模型或 harness 候选；候选通过评测后发布为新版本，供下一次请求使用。</p>
+</blockquote>
+
+<figure>
+  <svg viewBox="0 0 680 210" role="img" aria-label="Reef 四阶段闭环示意图">
+    <defs>
+      <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"/>
+      </marker>
+    </defs>
+    <rect x="18" y="56" width="128" height="60" rx="9" fill="var(--bg-subtle)" stroke="var(--cyan)" stroke-width="1.6"/>
+    <text x="82" y="80" text-anchor="middle" font-family="var(--font-mono)" font-size="15" font-weight="700" fill="var(--cyan)">Serve</text>
+    <text x="82" y="100" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">推理 + 记录</text>
+
+    <rect x="192" y="56" width="128" height="60" rx="9" fill="var(--bg-subtle)" stroke="var(--violet)" stroke-width="1.6"/>
+    <text x="256" y="80" text-anchor="middle" font-family="var(--font-mono)" font-size="15" font-weight="700" fill="var(--violet)">Observe</text>
+    <text x="256" y="100" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">反馈归因</text>
+
+    <rect x="366" y="56" width="128" height="60" rx="9" fill="var(--bg-subtle)" stroke="var(--amber)" stroke-width="1.6"/>
+    <text x="430" y="80" text-anchor="middle" font-family="var(--font-mono)" font-size="15" font-weight="700" fill="var(--amber)">Grow</text>
+    <text x="430" y="100" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">候选生成</text>
+
+    <rect x="540" y="56" width="122" height="60" rx="9" fill="var(--bg-subtle)" stroke="var(--emerald)" stroke-width="1.6"/>
+    <text x="601" y="80" text-anchor="middle" font-family="var(--font-mono)" font-size="15" font-weight="700" fill="var(--emerald)">Commit</text>
+    <text x="601" y="100" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">评测 + 发布</text>
+
+    <line x1="146" y1="86" x2="188" y2="86" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#arw)"/>
+    <line x1="320" y1="86" x2="362" y2="86" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#arw)"/>
+    <line x1="494" y1="86" x2="536" y2="86" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#arw)"/>
+
+    <path d="M 601 116 L 601 148 L 82 148 L 82 120" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#arw)"/>
+    <text x="341" y="166" text-anchor="middle" font-family="var(--font-sans)" font-size="11.5" fill="var(--text-muted)">新版本回到服务 · 下一次请求即使用新权重 / 新 Harness</text>
+
+    <text x="82" y="34" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--text-faint)">/v1/chat/completions</text>
+    <text x="256" y="34" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--text-faint)">/reef/report</text>
+    <text x="430" y="34" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--text-faint)">recipe</text>
+    <text x="601" y="34" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--text-faint)">release head</text>
+
+    <text x="82" y="192" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--text-faint)">x-reef-agent-record-id</text>
+    <text x="256" y="192" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--text-faint)">references: [receipt]</text>
+  </svg>
+  <figcaption><span class="tag">Figure 1 · 依据原稿图注重建</span>一次请求的四阶段闭环。原稿以文字描述此图，此处按描述重绘；端点与头部字段均已在主分支 README 中确认。</figcaption>
+</figure>
+
+<p>这四步能够连续运转，依赖三项端到端能力：</p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>必须掌控的对象</th><th>要解决的问题</th><th>缺失后的结果</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>经验</strong></td><td>把反馈精确关联到一次请求、上下文和实际版本</td><td>样本无法归因，训练数据很快失真</td></tr>
+    <tr><td><strong>整个 Agent</strong></td><td>同时识别模型与 Harness 中可变化的部分</td><td>行为变化无法定位，更新对象选错</td></tr>
+    <tr><td><strong>版本发布</strong></td><td>评测候选并控制它何时替换线上版本</td><td>坏更新直接污染服务，旧任务还可能覆盖新版本</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3 id="p1-4">先把经验和反馈对上号</h3>
+
+<p>Reef 首先是一台推理服务器。它接受 OpenAI 的 <code>/v1/chat/completions</code> 和 Anthropic 的 <code>/v1/messages</code> 请求体；应用无需另造一套调用协议。区别在于，每次响应会多返回一个 <code>x-reef-agent-record-id</code>，相当于这次推理的收据。</p>
+
+<p>用户评价、测试结果或环境奖励出现后，应用再调用 <code>/reef/report</code>，用这张收据指出反馈对应哪次交互：</p>
+
+<pre><code class="language-python"><span class="lang-tag">Python · 反馈归因调用</span>response = reef.post(
+    "/v1/chat/completions",
+    headers={"x-reef-scenario": "support-agent"},
+    json={"model": model, "messages": messages},
+)
+
+receipt = response.headers["x-reef-agent-record-id"]
+
+reef.post(
+    "/reef/report",
+    json={
+        "score": 0.0,
+        "feedback": "没有处理空 token 的情况",
+        "references": [receipt],
+    },
+)</code></pre>
+
+<p>这一步解决了持续学习最基础的归因问题：一条反馈究竟在评价哪次推理、哪组上下文和哪个 Agent 版本。Reef 所说的 <strong>stateful inference</strong> 不只是保存聊天历史，还包括保存结构化推理记录、反馈引用、scenario、artifact 版本和样本新鲜度。</p>
+
+<p>统一的记录层还能处理多轮 session 拼接、重复样本和 off-policy staleness。后者衡量一条经验来自多旧的策略，以及它是否还适合训练当前版本。不同 scenario 隔离各自的记录和版本；Recipe 则由部署配置选定，请求只能指定 scenario，不能临时切换学习方法。</p>
+
+<h3 id="p1-5">再决定该改模型，还是改 Harness</h3>
+
+<p>模型负责语言、推理和生成，Harness 负责把能力组织成可靠行动。模型再强，也补不上错误的工具权限和混乱的上下文；Harness 再精巧，也无法凭空创造模型没有的能力。Reef 因此把两者都做成可以产生候选、接受评测和发布版本的 learning surface。</p>
+
+<ul>
+  <li><strong>模型侧：</strong> Recipe 异步消费符合条件的记录，训练出 checkpoint 或 LoRA 候选。模型训练后端基于 Slime 适配；候选获准后，可通过 NCCL 同步权重并热更新推理引擎，不必停止服务。</li>
+  <li><strong>Harness 侧：</strong> Recipe 根据执行轨迹、反馈与评测任务修改规则、提示词、记忆、Skill、工具或编排树。Cordis 承担 Harness 演化后端，新版本以可安装 artifact 交付；交互式客户端可选择更新或跳过。</li>
+</ul>
+
+<blockquote>
+  <p><strong>Reef 所说的整个 Agent 究竟包括哪些可演化对象？</strong></p>
+  <p>Reef 同时支持模型权重和 harness 两类更新；harness 包含提示词、记忆、技能、工具和编排，并可作为可安装版本交付。</p>
+</blockquote>
+
+<figure>
+  <svg viewBox="0 0 680 240" role="img" aria-label="模型与 Harness 两类可演化对象">
+    <text x="340" y="24" text-anchor="middle" font-family="var(--font-mono)" font-size="13" font-weight="700" fill="var(--text-title)">Serving Agent = Model Weights + Harness</text>
+
+    <rect x="24" y="46" width="300" height="164" rx="12" fill="var(--bg-subtle)" stroke="var(--cyan)" stroke-width="1.6"/>
+    <text x="174" y="72" text-anchor="middle" font-family="var(--font-mono)" font-size="13" font-weight="700" fill="var(--cyan)">Learning Surface · 模型权重</text>
+    <text x="174" y="92" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">checkpoint / LoRA · Slime 后端</text>
+
+    <rect x="52" y="108" width="112" height="34" rx="6" fill="var(--bg-panel)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="108" y="129" text-anchor="middle" font-family="var(--font-sans)" font-size="11.5" fill="var(--text)">语言与推理</text>
+    <rect x="184" y="108" width="112" height="34" rx="6" fill="var(--bg-panel)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="240" y="129" text-anchor="middle" font-family="var(--font-sans)" font-size="11.5" fill="var(--text)">生成分布</text>
+
+    <rect x="52" y="156" width="112" height="34" rx="6" fill="var(--bg-panel)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="108" y="177" text-anchor="middle" font-family="var(--font-sans)" font-size="11.5" fill="var(--text)">Guidance 模型</text>
+    <rect x="184" y="156" width="112" height="34" rx="6" fill="var(--bg-panel)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="240" y="177" text-anchor="middle" font-family="var(--font-sans)" font-size="11.5" fill="var(--text)">执行模型（可冻结）</text>
+
+    <rect x="356" y="46" width="300" height="164" rx="12" fill="var(--bg-subtle)" stroke="var(--amber)" stroke-width="1.6"/>
+    <text x="506" y="72" text-anchor="middle" font-family="var(--font-mono)" font-size="13" font-weight="700" fill="var(--amber)">Learning Surface · Harness</text>
+    <text x="506" y="92" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">可安装 artifact · Cordis 后端</text>
+
+    <rect x="380" y="108" width="112" height="34" rx="6" fill="var(--bg-panel)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="436" y="129" text-anchor="middle" font-family="var(--font-sans)" font-size="11.5" fill="var(--text)">提示词</text>
+    <rect x="512" y="108" width="112" height="34" rx="6" fill="var(--bg-panel)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="568" y="129" text-anchor="middle" font-family="var(--font-sans)" font-size="11.5" fill="var(--text)">记忆</text>
+
+    <rect x="380" y="156" width="112" height="34" rx="6" fill="var(--bg-panel)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="436" y="177" text-anchor="middle" font-family="var(--font-sans)" font-size="11.5" fill="var(--text)">Skill</text>
+    <rect x="512" y="156" width="112" height="34" rx="6" fill="var(--bg-panel)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="568" y="177" text-anchor="middle" font-family="var(--font-sans)" font-size="11.5" fill="var(--text)">工具 / 编排树</text>
+
+    <text x="340" y="232" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-faint)">两侧可独立演化：Recipe 可只更新一侧，另一侧保持冻结</text>
+  </svg>
+  <figcaption><span class="tag">Figure 2 · 依据原稿图注重建</span>两类 learning surface。训练后端 Slime（THUDM）与 Harness 演化后端 Cordis（cordiverse）均在主分支依赖锁定中确认。</figcaption>
+</figure>
+
+<p>「Agent 版本」由此不再只是一个模型名称。一次请求用了哪套权重、哪版规则、哪组 Skill 和工具，都可以进入可追踪的版本链。模型和 Harness 也不必一起变化：Recipe 可以只更新某一侧，甚至只训练一个引导模型，把负责执行的外部模型保持冻结。</p>
+
+<h3 id="p1-6">最后只让通过评测的候选进入服务</h3>
+
+<p>持续更新最大的风险，是系统把噪声、个人偏差或奖励漏洞学进去，最后越学越差。Reef 严格区分「新候选」和「正在服务的版本」：Recipe 先生成候选，评测插件再比较候选与现有版本。候选被拒绝，线上服务保持不变；评测异常，流程关闭，准备中的更新不会被发布。</p>
+
+<blockquote>
+  <p><strong>候选更新什么时候能替换正在服务的版本？</strong></p>
+  <p>经验记录生成候选，候选被拒绝时线上版本保持不变；通过评测后才写入 artifact、加载 serving state 并发布新版本。</p>
+</blockquote>
+
+<figure>
+  <svg viewBox="0 0 680 232" role="img" aria-label="候选评测门控与发布链">
+    <defs>
+      <marker id="arw2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"/>
+      </marker>
+    </defs>
+
+    <rect x="20" y="52" width="112" height="50" rx="8" fill="var(--bg-subtle)" stroke="var(--border)" stroke-width="1.4"/>
+    <text x="76" y="74" text-anchor="middle" font-family="var(--font-sans)" font-size="12" fill="var(--text-title)">经验记录</text>
+    <text x="76" y="91" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">records</text>
+
+    <rect x="164" y="52" width="112" height="50" rx="8" fill="var(--bg-subtle)" stroke="var(--border)" stroke-width="1.4"/>
+    <text x="220" y="74" text-anchor="middle" font-family="var(--font-sans)" font-size="12" fill="var(--text-title)">候选</text>
+    <text x="220" y="91" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">candidate</text>
+
+    <rect x="308" y="52" width="112" height="50" rx="8" fill="var(--bg-subtle)" stroke="var(--amber)" stroke-width="1.4"/>
+    <text x="364" y="74" text-anchor="middle" font-family="var(--font-sans)" font-size="12" fill="var(--text-title)">评测比较</text>
+    <text x="364" y="91" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">evaluation</text>
+
+    <line x1="132" y1="77" x2="160" y2="77" stroke="var(--accent)" stroke-width="1.7" marker-end="url(#arw2)"/>
+    <line x1="276" y1="77" x2="304" y2="77" stroke="var(--accent)" stroke-width="1.7" marker-end="url(#arw2)"/>
+
+    <rect x="466" y="20" width="192" height="52" rx="8" fill="var(--bg-subtle)" stroke="var(--rose)" stroke-width="1.6"/>
+    <text x="562" y="42" text-anchor="middle" font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--rose)">未通过 / 评测异常</text>
+    <text x="562" y="60" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--text-muted)">线上版本保持不变 · 流程关闭</text>
+
+    <rect x="466" y="98" width="192" height="76" rx="8" fill="var(--bg-subtle)" stroke="var(--emerald)" stroke-width="1.6"/>
+    <text x="562" y="120" text-anchor="middle" font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--emerald)">评测通过</text>
+    <text x="562" y="139" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--text-muted)">写入 artifact</text>
+    <text x="562" y="156" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--text-muted)">加载 serving state → release</text>
+
+    <line x1="420" y1="70" x2="462" y2="52" stroke="var(--rose)" stroke-width="1.7" marker-end="url(#arw2)"/>
+    <line x1="420" y1="82" x2="462" y2="128" stroke="var(--emerald)" stroke-width="1.7" marker-end="url(#arw2)"/>
+
+    <path d="M 562 174 L 562 200 L 76 200 L 76 106" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arw2)"/>
+    <text x="319" y="220" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">新版本进入服务 · 每个 scenario 维护各自追加式 release chain（CAS 推进 head）</text>
+  </svg>
+  <figcaption><span class="tag">Figure 3 · 依据原稿图注重建</span>发布门控。原稿所述「compare-and-swap 拒绝过期提交」在主分支 release chain 机制中确认，其定量后果见第三部分建模。</figcaption>
+</figure>
+
+<p>只有评测明确通过，Reef 才会提交 artifact、加载新的 serving state，并推进 release。模型 checkpoint、LoRA、Harness tree 和 routing policy 都可以被版本化；Git 与 Git LFS 负责保存这些对象。</p>
+
+<p>每个 scenario 维护自己的追加式 release chain。发布者推进 release head 时，必须声明自己看到的旧 head；如果另一项任务已经发布了更新，compare-and-swap 会拒绝这次过期提交，避免较老的训练任务覆盖较新的版本。</p>
+
+<p>这套门控能保证更新按规则进入服务，却不能替团队定义「什么叫更好」。评测集太窄、反馈带有偏差或指标容易被钻空子时，严密的版本链只会更可靠地执行错误目标。</p>
+
+<h2 id="p1-7"><span class="part">Part I</span>不同学习方法怎样共用一套底座</h2>
+
+<p>Learning Recipe 决定「怎么学」，公共底座负责记录、批处理、评测和发布。在线强化学习、测试时训练、提示词优化和 Skill 演化虽然算法不同，都可以归结为三个配置问题：</p>
+
+<ol>
+  <li><strong>信号从哪里来？</strong> 环境 reward、用户反馈、测试结果、下一状态，还是评审模型的判断？</li>
+  <li><strong>经验怎样取得？</strong> 被动等待真实任务，还是主动探索、搜索和自博弈？</li>
+  <li><strong>最终改什么？</strong> 模型权重、引导模型、规则、Skill pool，还是整个 Harness tree？</li>
+</ol>
+
+<blockquote>
+  <p><strong>看起来完全不同的自我改进方法，怎样被装进同一套基础设施？</strong></p>
+  <p>SAO 和 OpenClaw-RL 被动接收任务或用户信号并更新模型；TTT-Discover 主动探索环境奖励并更新模型；SkillClaw 等方法从失败、轨迹或执行结果演化 harness。</p>
+</blockquote>
+
+<figure>
+  <svg viewBox="0 0 680 226" role="img" aria-label="多学习方法共用底座">
+    <text x="340" y="22" text-anchor="middle" font-family="var(--font-mono)" font-size="12" font-weight="700" fill="var(--text-faint)">SIGNAL SOURCES</text>
+
+    <rect x="20" y="38" width="120" height="34" rx="6" fill="var(--bg-subtle)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="80" y="59" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">环境 reward</text>
+    <rect x="152" y="38" width="120" height="34" rx="6" fill="var(--bg-subtle)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="212" y="59" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">用户反馈</text>
+    <rect x="284" y="38" width="120" height="34" rx="6" fill="var(--bg-subtle)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="344" y="59" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">测试 / verifier</text>
+    <rect x="416" y="38" width="120" height="34" rx="6" fill="var(--bg-subtle)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="476" y="59" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">下一状态</text>
+    <rect x="548" y="38" width="112" height="34" rx="6" fill="var(--bg-subtle)" stroke="var(--border)" stroke-width="1.2"/>
+    <text x="604" y="59" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">评审模型</text>
+
+    <path d="M 340 72 L 340 92" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arw)"/>
+
+    <rect x="20" y="96" width="640" height="46" rx="9" fill="var(--bg-panel)" stroke="var(--accent)" stroke-width="1.6"/>
+    <text x="340" y="116" text-anchor="middle" font-family="var(--font-mono)" font-size="13" font-weight="700" fill="var(--accent)">公共底座 · Records / Batching / Evaluation / Release</text>
+    <text x="340" y="134" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--text-muted)">scenario 隔离记录与版本 · 学习方法由部署配置选定，请求侧不可切换</text>
+
+    <path d="M 340 142 L 340 162" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arw)"/>
+
+    <rect x="20" y="166" width="120" height="44" rx="6" fill="var(--bg-subtle)" stroke="var(--cyan)" stroke-width="1.3"/>
+    <text x="80" y="185" text-anchor="middle" font-family="var(--font-mono)" font-size="11" font-weight="700" fill="var(--cyan)">模型权重</text>
+    <text x="80" y="201" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--text-faint)">checkpoint / LoRA</text>
+
+    <rect x="152" y="166" width="120" height="44" rx="6" fill="var(--bg-subtle)" stroke="var(--cyan)" stroke-width="1.3"/>
+    <text x="212" y="185" text-anchor="middle" font-family="var(--font-mono)" font-size="11" font-weight="700" fill="var(--cyan)">引导模型</text>
+    <text x="212" y="201" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--text-faint)">执行侧冻结</text>
+
+    <rect x="284" y="166" width="120" height="44" rx="6" fill="var(--bg-subtle)" stroke="var(--amber)" stroke-width="1.3"/>
+    <text x="344" y="185" text-anchor="middle" font-family="var(--font-mono)" font-size="11" font-weight="700" fill="var(--amber)">Skill pool</text>
+    <text x="344" y="201" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--text-faint)">免 GPU 路径</text>
+
+    <rect x="416" y="166" width="120" height="44" rx="6" fill="var(--bg-subtle)" stroke="var(--amber)" stroke-width="1.3"/>
+    <text x="476" y="185" text-anchor="middle" font-family="var(--font-mono)" font-size="11" font-weight="700" fill="var(--amber)">规则 / 提示词</text>
+    <text x="476" y="201" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--text-faint)">harness 组件</text>
+
+    <rect x="548" y="166" width="112" height="44" rx="6" fill="var(--bg-subtle)" stroke="var(--amber)" stroke-width="1.3"/>
+    <text x="604" y="185" text-anchor="middle" font-family="var(--font-mono)" font-size="11" font-weight="700" fill="var(--amber)">Harness tree</text>
+    <text x="604" y="201" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--text-faint)">编排与工具</text>
+  </svg>
+  <figcaption><span class="tag">Figure 4 · 依据原稿图注重建</span>信号源 → 公共底座 → 更新目标。六类 recipe 与主分支 <code>recipes/</code> 目录一一对应，详见沙盘 D。</figcaption>
+</figure>
+
+<p>Reef 已经把多种路径装进同一套接口：</p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>Recipe</th><th>经验与信号</th><th>主要更新对象</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>SAO</td><td>连续任务由测试或 verifier 给出分数</td><td>模型权重</td></tr>
+    <tr><td>OpenClaw-RL</td><td>从用户交互的下一状态中提取可利用信号，不要求显式报告</td><td>模型权重</td></tr>
+    <tr><td>TTT-Discover</td><td>围绕同一问题反复尝试，用环境 reward 保留更优解</td><td>模型权重</td></tr>
+    <tr><td>Guidance-TTT</td><td>对代码搜索结果打分，执行模型保持冻结</td><td>引导模型权重</td></tr>
+    <tr><td>SkillClaw / Harness Evolve</td><td>从失败流量、执行轨迹和评测任务中产生 Skill 或规则候选</td><td>Skill pool 或 Harness tree</td></tr>
+    <tr><td><a href="https://github.com/Human-Agent-Society/reef/tree/main/recipes/gepa" target="_blank" rel="noopener">GEPA</a></td><td>从失败样本中反思并改写规则，在小批次与完整验证集上筛选</td><td>规则、Skill 等 Harness 组件</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>OpenClaw-RL 的示例把一名模拟学生的 72 道 GSM8K 作业连续送给个人 Agent，用「经过多少轮交互才能符合学生偏好」衡量适应速度。TTT-Discover 走的是另一条路：它围绕 Packing 32 等可评分问题不断尝试，用环境奖励保留更有效的解法。两者一个从连续交互中被动学习，一个在单个问题上主动搜索，却共享相同的记录与版本底座。</p>
+
+<p>GEPA 进一步说明，持续学习不必等同于更新权重。它从失败流量中选择一个 Harness 组件，让更强的反思模型提出改写，再用小批次和完整验证集逐层筛选。Reef 的 AIME 2025 验证在两个随机种子上分别从 26.67% 提升到 46.67%、从 24.00% 提升到 36.00%。这只有两个种子，说明实现能够跑通并产生候选改进，不能证明它在不同任务上都稳定优于其他方法。</p>
+
+<p>接入也不必从训练开始。Basic Recipe 只记录请求、不学习：可以用一个 Reef 进程代理外部 HTTP 模型，无需本地 GPU；也可以连接本地 SGLang，但不启动训练。团队可以先验证请求、收据、反馈和版本链是否可靠，再决定是否开启权重或 Harness 更新。</p>
+
+<p>需要注意，reef-infra 的 PyPI 包提供核心基础设施，Cookbook Recipe 保存在源码仓库中，并不随 wheel 一起分发。运行这些方法需要源码 checkout 和各自的依赖；模型训练通常还需要满足文档要求的 GPU 环境，Skill 或 Harness 演化则存在不依赖 GPU 的路径。</p>
+
+<h2 id="p1-8"><span class="part">Part I</span>Reef 真正改变了什么</h2>
+
+<p>Reef 把 Agent 开发中的三个分离系统接到了一起：推理服务开始积累可归因经验，模型与 Harness 共享版本边界，训练结果必须经过评测和发布控制才能回到线上。</p>
+
+<p>这意味着，训练不再只是周期性产出一个 checkpoint。Observe 决定哪些反馈可信且仍然新鲜，Grow 负责提出变化，Commit 决定变化能否成为下一版服务。持续学习因此成为一项长期的 release engineering，而不是一次离线实验。</p>
+
+<p>最适合这套架构的，是任务会重复出现、结果能够被测试或相对可靠地评分、团队也愿意维护回归评测和 artifact 生命周期的场景。只有零散主观反馈、没有稳定评测面时，接上闭环只会更快地积累不确定性。</p>
+
+<p>Reef 采用 Apache-2.0 许可证，要求 Python 3.10 以上；artifact 与 checkpoint 功能依赖 Git LFS。它提供了让 Agent 在真实服务中「边做边学」的控制平面，但最终学到好习惯还是坏习惯，仍由反馈信号、学习方法和评测质量决定。</p>
+
+<!-- ===================== 第二部分 ===================== -->
+<h2 id="p2-1"><span class="part">Part II</span>一级源核验结论总览</h2>
+
+<p>原稿为第三方分析稿。以下逐条比对主分支一级源，标注核验状态。<strong>已确认</strong>指在一级源文件中找到直接证据；<strong>已确认（含补充）</strong>指数据正确但原稿遗漏了关键对照口径；<strong>未独立核验</strong>指一级源未检索到对应表述。</p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>原稿断言</th><th>一级源证据</th><th>判定</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Reef 由 MIT 的 Ao Qu 与 Human-Agent-Society 团队开发</td>
+      <td>仓库归属 GitHub 组织 <code>Human-Agent-Society</code>，<code>pyproject.toml</code> 作者字段为 <code>Human-Agent-Society</code>；README 未声明机构归属。另有聚合站将项目归于 CMU 的 Paul Pu Liang 与同事</td>
+      <td style="color:var(--amber)">部分确认 · 署名存在分歧</td>
+    </tr>
+    <tr>
+      <td>Apache-2.0 许可证</td>
+      <td><code>LICENSE</code> 首行为 Apache License Version 2.0；<code>pyproject.toml</code> 声明 <code>license = "Apache-2.0"</code>；仓库 API 返回 <code>spdx_id: Apache-2.0</code></td>
+      <td style="color:var(--emerald)">已确认</td>
+    </tr>
+    <tr>
+      <td>要求 Python 3.10 以上</td>
+      <td><code>requires-python = "&gt;=3.10"</code>，分类器列明 3.10 / 3.11 / 3.12</td>
+      <td style="color:var(--emerald)">已确认</td>
+    </tr>
+    <tr>
+      <td>artifact 与 checkpoint 依赖 Git LFS</td>
+      <td>README 明确：<code>git-lfs</code> 为必需系统包，Reef 会为 artifact 仓库本地初始化 LFS</td>
+      <td style="color:var(--emerald)">已确认</td>
+    </tr>
+    <tr>
+      <td>四阶段 Serve / Observe / Grow / Commit</td>
+      <td>README「How it works」四步与代码路径完全对应（<code>reef/service/</code>、<code>reef/records.py</code>+<code>reef/train/processors/</code>、<code>reef/recipe/</code>+<code>reef/train/</code>、<code>reef/train/evaluation/</code>+<code>reef/artifact/</code>+<code>reef/surface/</code>）</td>
+      <td style="color:var(--emerald)">已确认</td>
+    </tr>
+    <tr>
+      <td>响应返回 <code>x-reef-agent-record-id</code>，反馈经 <code>/reef/report</code> 归因</td>
+      <td>README 明确该响应头即 receipt，<code>/reef/report</code> 支持 <code>score</code> / <code>feedback</code> / <code>references</code>；另有 <code>/reef/harness/install?adapter=pi</code></td>
+      <td style="color:var(--emerald)">已确认</td>
+    </tr>
+    <tr>
+      <td>兼容 OpenAI <code>/v1/chat/completions</code> 与 Anthropic <code>/v1/messages</code></td>
+      <td>README 明确两协议端点兼容</td>
+      <td style="color:var(--emerald)">已确认</td>
+    </tr>
+    <tr>
+      <td>模型训练后端基于 Slime</td>
+      <td><code>recipes/openclawrl/README.md</code> 锁定 <code>slime</code> 至 <code>THUDM/slime@41014d1</code></td>
+      <td style="color:var(--emerald)">已确认</td>
+    </tr>
+    <tr>
+      <td>候选获准后可通过 NCCL 同步权重并热更新推理引擎</td>
+      <td>README 确认「更新过程中保持在线」，但 NCCL 具体机制未在所抓取文档中明示（代码检索需鉴权，未执行）</td>
+      <td style="color:var(--amber)">未独立核验</td>
+    </tr>
+    <tr>
+      <td>Cookbook Recipe 不随 wheel 分发</td>
+      <td>README 明确 recipe 以点分路径引用且不打包进 <code>reef</code> wheel；<code>recipes/</code> 目录下含 <code>basic</code>、<code>sao</code>、<code>openclawrl</code>、<code>tttd</code>、<code>skillclaw</code>、<code>gepa</code></td>
+      <td style="color:var(--emerald)">已确认</td>
+    </tr>
+    <tr>
+      <td>Basic Recipe 可代理外部 HTTP 模型或本地 SGLang 且不训练</td>
+      <td><code>recipes/basic/external-provider.yaml</code>（无 GPU，代理 HTTP provider）与 <code>local-sglang.yaml</code>（SGLang + Reef，无训练）；核心依赖仅 aiohttp / huggingface_hub / pyyaml / reef-client，明确「CPU 上支持基础 recipe 配置」</td>
+      <td style="color:var(--emerald)">已确认</td>
+    </tr>
+    <tr>
+      <td>OpenClaw-RL 示例使用 72 道 GSM8K 作业</td>
+      <td>确为 <strong>72 session</strong> 的 GSM8K 作业流，但记录的 run 仅覆盖<strong>前 36 个 session</strong>，并在第 14 个 session 达到「连续三次通过」的适应判据；策略与 PRM 为 <code>Qwen3-4B-Thinking-2507</code>，学生模型为 <code>Qwen3-32B</code></td>
+      <td style="color:var(--amber)">已确认 · 需补充宣称范围</td>
+    </tr>
+    <tr>
+      <td>Reef 的 AIME 2025 验证：26.67% → 46.67%、24.00% → 36.00%</td>
+      <td>数据准确，但仅为四组运行中的两行；对照组与统计口径见下节</td>
+      <td style="color:var(--amber)">已确认 · 遗漏对照臂</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3 id="p2-2">AIME 数据的完整口径</h3>
+
+<p>原稿引用的是 <code>recipes/gepa/examples/aime/README.md</code> 中「the validation contract」表的两行（this method 臂）。完整四组运行如下，测试集为 <strong>密封的 150 题 AIME-2025 测试切分</strong>，训练 45 题、验证 45 题、搜索预算 150 次 metric call，模型、切分、预算、评分器与 worker 数全部固定。</p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>seed</th><th>臂</th><th class="num">frozen（种子提示）</th><th class="num">selected（演化后）</th><th class="num">提升</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="num">0</td><td>upstream GEPA</td><td class="num">31.33%（47/150）</td><td class="num">42.67%（64/150）</td><td class="num" style="color:var(--emerald)">+11.33 pp</td></tr>
+    <tr><td class="num">0</td><td><strong>this method（Reef）</strong></td><td class="num">26.67%（40/150）</td><td class="num">46.67%（70/150）</td><td class="num" style="color:var(--emerald)">+20.00 pp</td></tr>
+    <tr><td class="num">1</td><td>upstream GEPA</td><td class="num">26.67%（40/150）</td><td class="num">40.67%（61/150）</td><td class="num" style="color:var(--emerald)">+14.00 pp</td></tr>
+    <tr><td class="num">1</td><td><strong>this method（Reef）</strong></td><td class="num">24.00%（36/150）</td><td class="num">36.00%（54/150）</td><td class="num" style="color:var(--emerald)">+12.00 pp</td></tr>
+    <tr><td class="num">—</td><td>upstream 均值</td><td class="num">—</td><td class="num">—</td><td class="num">+12.67 pp</td></tr>
+    <tr><td class="num">—</td><td>this method 均值</td><td class="num">—</td><td class="num">—</td><td class="num">+16.00 pp</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout warn" data-icon="!">
+  <span class="ct">原稿遗漏的关键限定</span>
+  <p>仓库原文对此数据的定性是：<em>「This method is 8.67 points above upstream at seed 0 and 2.00 below it at seed 1, and a difference that changes sign between seeds is sampling.」</em>——组间差在 seed 0 为 <strong>+8.67 pp</strong>、seed 1 为 <strong>−2.00 pp</strong>，<strong>符号翻转</strong>。仓库明确写道「two runs an arm cannot separate」（每臂两次运行无法区分两个臂）。原稿保留了「只有两个种子」的温和提示，但未给出符号翻转这一更有力的证据。</p>
+</div>
+
+<h3 id="p2-3">需要降级或补注的表述</h3>
+
+<ol>
+  <li><strong>「MIT 团队」应降为项目级署名。</strong> 一级源（<code>pyproject.toml</code>、README、仓库 API）均未声明机构归属，作者字段仅为组织名 <code>Human-Agent-Society</code>。原稿的 MIT 归属来自 Ao Qu 个人主页，另一聚合站则归为 CMU 的 Paul Pu Liang 与同事。两类说法并存，宜以仓库署名为准。</li>
+  <li><strong>「NCCL 同步权重」未见一级源明示。</strong> 「更新过程中保持在线」已确认，但 NCCL 这一具体实现路径未在所抓取文档中检索到，建议按实现细节而非架构承诺对待。</li>
+  <li><strong>OpenClaw-RL 的 72 道作业应补注宣称范围。</strong> 作业流为 72 个 session，但已记录的 run 只跑通前 36 个 session，且自述为「one student persona, one task family；an adaptation result, not a benchmark-wide reproduction」。</li>
+  <li><strong>AIME 数字应连同对照臂一并引用。</strong> 只引 method 臂两行会给人「Reef 优于上游 GEPA」的印象，而这恰是仓库自己否定的结论。</li>
+</ol>
+
+<!-- ===================== 第三部分 ===================== -->
+<h2 id="p3-1"><span class="part">Part III</span>门控统计功效模型</h2>
+
+<p>Reef 的 Commit 门控本质是一个<strong>假设检验问题</strong>：候选与在位版本在同一评测集上的得分差异，是否足以拒绝「两者无差别」的原假设。这一定性判断可以被精确量化，并直接给出「多大的评测集才配得上多强的结论」。</p>
+
+<h4>双比例 z 检验</h4>
+
+<p>设候选在 <i>n</i><sub>2</sub> 题上答对 <i>x</i><sub>2</sub> 题，在位版本在 <i>n</i><sub>1</sub> 题上答对 <i>x</i><sub>1</sub> 题，合并比例 <span class="math-inline">p̄</span> = (<i>x</i><sub>1</sub> + <i>x</i><sub>2</sub>) / (<i>n</i><sub>1</sub> + <i>n</i><sub>2</sub>)。检验统计量为：</p>
+
+<div class="math-block">
+  <math display="block">
+    <mi>z</mi>
+    <mo>=</mo>
+    <mfrac>
+      <mrow>
+        <msub><mover accent="true"><mi>p</mi><mo>^</mo></mover><mn>2</mn></msub>
+        <mo>−</mo>
+        <msub><mover accent="true"><mi>p</mi><mo>^</mo></mover><mn>1</mn></msub>
+      </mrow>
+      <mrow>
+        <msqrt>
+          <mrow>
+            <mover accent="true"><mi>p</mi><mo>¯</mo></mover>
+            <mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mover accent="true"><mi>p</mi><mo>¯</mo></mover><mo stretchy="false">)</mo>
+            <mo stretchy="false">(</mo>
+            <mfrac><mn>1</mn><msub><mi>n</mi><mn>1</mn></msub></mfrac>
+            <mo>+</mo>
+            <mfrac><mn>1</mn><msub><mi>n</mi><mn>2</mn></msub></mfrac>
+            <mo stretchy="false">)</mo>
+          </mrow>
+        </msqrt>
+      </mrow>
+    </mfrac>
+  </math>
+</div>
+
+<p>据此对四组 AIME 运行逐一计算（<i>n</i><sub>1</sub> = <i>n</i><sub>2</sub> = 150）：</p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>对比</th><th class="num">Δ</th><th class="num">z</th><th class="num">双侧 p</th><th>α = 0.05 下显著</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>seed 0 · upstream 前后（47 → 64）</td><td class="num">+11.33 pp</td><td class="num">+2.0329</td><td class="num">0.0421</td><td style="color:var(--emerald)">显著</td></tr>
+    <tr><td>seed 0 · method 前后（40 → 70）</td><td class="num">+20.00 pp</td><td class="num">+3.5943</td><td class="num">0.000325</td><td style="color:var(--emerald)">显著</td></tr>
+    <tr><td>seed 1 · upstream 前后（40 → 61）</td><td class="num">+14.00 pp</td><td class="num">+2.5656</td><td class="num">0.0103</td><td style="color:var(--emerald)">显著</td></tr>
+    <tr><td>seed 1 · method 前后（36 → 54）</td><td class="num">+12.00 pp</td><td class="num">+2.2678</td><td class="num">0.0233</td><td style="color:var(--emerald)">显著</td></tr>
+    <tr><td><strong>seed 0 · 跨臂终点直比（64 vs 70）</strong></td><td class="num">+4.00 pp</td><td class="num">+0.6968</td><td class="num">0.4859</td><td style="color:var(--rose)">不显著</td></tr>
+    <tr><td><strong>seed 1 · 跨臂终点直比（61 vs 54）</strong></td><td class="num">−4.67 pp</td><td class="num">−0.8312</td><td class="num">0.4058</td><td style="color:var(--rose)">不显著</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout ok" data-icon="✓">
+  <span class="ct">结论一：单臂结论可信，跨臂结论不可信</span>
+  <p>四个「演化前 → 演化后」的自身对比全部通过 α = 0.05 显著性检验——这支持「GEPA 式 harness 演化在 AIME 类任务上确实带来提升」这一命题。但两个跨臂对比的 p 值分别为 0.486 与 0.406，<strong>远未显著且符号相反</strong>。因此可支持的表述是「演化有效」，不可支持的表述是「Reef 实现优于上游 GEPA」。</p>
+</div>
+
+<h4>最小可检出差异与所需样本量</h4>
+
+<p>给定显著性水平 α 与检验功效 1 − β，双比例检验在每臂题数 <i>n</i> 下可检出的最小差异为：</p>
+
+<div class="math-block">
+  <math display="block">
+    <mi>MDE</mi>
+    <mo>=</mo>
+    <mo stretchy="false">(</mo>
+    <msub><mi>z</mi><mrow><mn>1</mn><mo>−</mo><mi>α</mi><mo>/</mo><mn>2</mn></mrow></msub>
+    <mo>+</mo>
+    <msub><mi>z</mi><mrow><mn>1</mn><mo>−</mo><mi>β</mi></mrow></msub>
+    <mo stretchy="false">)</mo>
+    <mo>·</mo>
+    <msqrt>
+      <mfrac>
+        <mrow><mn>2</mn><mover accent="true"><mi>p</mi><mo>¯</mo></mover><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mover accent="true"><mi>p</mi><mo>¯</mo></mover><mo stretchy="false">)</mo></mrow>
+        <mi>n</mi>
+      </mfrac>
+    </msqrt>
+  </math>
+</div>
+
+<p>取 α = 0.05（双侧）、power = 0.80、<span class="math-inline">p̄</span> ≈ 0.45，每臂 150 题时的 MDE 为 <strong>16.09 pp</strong>。也就是说，在现有评测规模下，<em>只有约 16 个百分点以上的差异才可能被稳定检出</em>；而已观测到的跨臂差异为 +4.00 pp 与 −4.67 pp，比 MDE 小一个数量级。</p>
+
+<p>反解所需题数：</p>
+
+<div class="math-block">
+  <math display="block">
+    <mi>n</mi>
+    <mo>=</mo>
+    <mn>2</mn>
+    <mover accent="true"><mi>p</mi><mo>¯</mo></mover>
+    <mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mover accent="true"><mi>p</mi><mo>¯</mo></mover><mo stretchy="false">)</mo>
+    <msup>
+      <mrow>
+        <mo stretchy="false">(</mo>
+        <mfrac>
+          <mrow><msub><mi>z</mi><mrow><mn>1</mn><mo>−</mo><mi>α</mi><mo>/</mo><mn>2</mn></mrow></msub><mo>+</mo><msub><mi>z</mi><mrow><mn>1</mn><mo>−</mo><mi>β</mi></mrow></msub></mrow>
+          <mi mathvariant="normal">Δ</mi>
+        </mfrac>
+        <mo stretchy="false">)</mo>
+      </mrow>
+      <mn>2</mn>
+    </msup>
+  </math>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th class="num">欲检出的差异 Δ</th><th class="num">每臂所需题数</th><th class="num">两组合计 episode</th><th>现实参照</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="num">2.00 pp</td><td class="num">9 419</td><td class="num">18 838</td><td>远超 AIME 题库总量</td></tr>
+    <tr><td class="num">4.00 pp（seed 0 跨臂观测值）</td><td class="num">2 355</td><td class="num">4 710</td><td>现有 150 题的 15.7 倍</td></tr>
+    <tr><td class="num">8.67 pp（seed 0 提升之差）</td><td class="num">502</td><td class="num">1 004</td><td>现有规模的 3.3 倍</td></tr>
+    <tr><td class="num">20.00 pp（seed 0 method 提升）</td><td class="num">95</td><td class="num">190</td><td>现有 150 题已足够</td></tr>
+  </tbody>
+</table>
+</div>
+
+<figure>
+  <svg viewBox="0 0 680 300" role="img" aria-label="统计功效随测试集题数变化曲线">
+    <text x="340" y="18" text-anchor="middle" font-family="var(--font-sans)" font-size="12.5" fill="var(--text-title)">跨臂对比（Δ = 4.00 pp）的统计功效随测试集题数变化</text>
+
+    <line x1="60" y1="240" x2="640" y2="240" stroke="var(--border)" stroke-width="1.4"/>
+    <line x1="60" y1="30" x2="60" y2="240" stroke="var(--border)" stroke-width="1.4"/>
+    <line x1="60" y1="187.5" x2="640" y2="187.5" stroke="var(--border-subtle)" stroke-width="1" stroke-dasharray="4 4"/>
+    <line x1="60" y1="135" x2="640" y2="135" stroke="var(--border-subtle)" stroke-width="1" stroke-dasharray="4 4"/>
+    <line x1="60" y1="82.5" x2="640" y2="82.5" stroke="var(--border-subtle)" stroke-width="1" stroke-dasharray="4 4"/>
+    <line x1="60" y1="30" x2="640" y2="30" stroke="var(--border-subtle)" stroke-width="1" stroke-dasharray="4 4"/>
+
+    <text x="52" y="34" text-anchor="end" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">100%</text>
+    <text x="52" y="85.5" text-anchor="end" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">75%</text>
+    <text x="52" y="139" text-anchor="end" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">50%</text>
+    <text x="52" y="191.5" text-anchor="end" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">25%</text>
+    <text x="52" y="244" text-anchor="end" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">0%</text>
+
+    <polyline points="60.00,222.79 90.53,200.54 121.05,178.82 151.58,158.09 182.11,138.91 212.63,121.61 243.16,106.33 273.68,93.06 304.21,81.70 334.74,72.09 365.26,64.08 395.79,57.42 426.32,51.94 456.84,47.47 487.37,43.85 517.89,40.93 548.42,38.60 578.95,36.73 609.47,35.26 640.00,34.09"
+      fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round"/>
+
+    <line x1="60" y1="135" x2="640" y2="135" stroke="var(--rose)" stroke-width="1.4" stroke-dasharray="6 4"/>
+    <text x="636" y="129" text-anchor="end" font-family="var(--font-mono)" font-size="10" fill="var(--rose)">power = 50%</text>
+
+    <circle cx="60" cy="222.79" r="4.5" fill="var(--rose)"/>
+    <text x="72" y="232" font-family="var(--font-mono)" font-size="10" fill="var(--rose)">n = 100 · power 8.2%</text>
+
+    <line x1="121.05" y1="240" x2="121.05" y2="30" stroke="var(--cyan)" stroke-width="1.3" stroke-dasharray="3 3"/>
+    <circle cx="121.05" cy="178.82" r="4.5" fill="var(--cyan)"/>
+    <text x="128" y="170" font-family="var(--font-mono)" font-size="10" fill="var(--cyan)">n = 150（现有规模）· power 29.1%</text>
+
+    <text x="60" y="260" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">100</text>
+    <text x="151.58" y="260" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">873</text>
+    <text x="243.16" y="260" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">1647</text>
+    <text x="334.74" y="260" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">2421</text>
+    <text x="426.32" y="260" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">3194</text>
+    <text x="517.89" y="260" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">3968</text>
+    <text x="609.47" y="260" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">4742</text>
+
+    <text x="350" y="282" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">每臂测试题数 n（α = 0.05 双侧，两比例 z 检验）</text>
+    <text x="20" y="135" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)" transform="rotate(-90 20 135)">统计功效</text>
+  </svg>
+  <figcaption><span class="tag">Figure 5 · 由公式实时计算</span>x 轴 20 个采样点等间距（步长 30.526 px），y 轴按 power × 210 px 线性映射；曲线由双比例检验功效公式直接求值，未做任何平滑或虚构外推。</figcaption>
+</figure>
+
+<h3 id="p3-2">基线噪声的二项解释</h3>
+
+<p>一个更具诊断价值的观察：<strong>frozen 列</strong>四次运行得分分别为 47、40、40、36（满分 150），尽管它衡量的是<em>完全相同的种子提示在完全相同的 150 题上</em>的表现。均值 27.17%，单次二项标准差为：</p>
+
+<div class="math-block">
+  <math display="block">
+    <mi>σ</mi>
+    <mo>=</mo>
+    <msqrt>
+      <mfrac>
+        <mrow><mi>p</mi><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>p</mi><mo stretchy="false">)</mo></mrow>
+        <mi>n</mi>
+      </mfrac>
+    </msqrt>
+    <mo>=</mo>
+    <msqrt>
+      <mfrac>
+        <mrow><mn>0.2717</mn><mo>×</mo><mn>0.7283</mn></mrow>
+        <mn>150</mn>
+      </mfrac>
+    </msqrt>
+    <mo>≈</mo>
+    <mn>3.63</mn>
+    <mi>pp</mi>
+  </math>
+</div>
+
+<p>四次独立正态抽样的期望极差约为 2.059σ = <strong>7.48 pp</strong>，而实测极差为 11/150 = <strong>7.33 pp</strong>，比值 <strong>0.981</strong>。这意味着：</p>
+
+<div class="callout verify" data-icon="V">
+  <span class="ct">结论二：基线离散度完全由二项抽样噪声解释</span>
+  <p>同一提示在同一测试集上 7.33 pp 的波动，与纯二项噪声预测的 7.48 pp 几乎完全吻合（偏差 1.9%）。换言之，<strong>无需引入任何系统性差异即可解释观测离散度</strong>——这是采样噪声本身，而非方法差异。其直接后果是：seed 1 上 method 声称的 12.00 pp 提升，仅比纯噪声极差（7.33 pp）高出约 1.6 倍，任何单次运行的读数都不应被当作稳定值。仓库自己也写下了同一判断：<em>「The means are across seeds because one run of this search has no stable number to report.」</em></p>
+</div>
+
+<h3 id="p3-3">发布链 CAS 自阻塞模型</h3>
+
+<p>Reef 每个 scenario 维护追加式 release chain，推进 head 时必须声明所见旧 head，若期间已有其他任务发布，compare-and-swap 会拒绝该次提交。这一保护机制的代价可以精确建模。</p>
+
+<p>设候选生成速率为 λ（个/天），评测通过率为 <i>p</i>，一次训练/验证窗口时长为 <i>D</i>（天）。发布事件近似为速率 ρ 的泊松过程，则一个通过评测的候选在其窗口内不遭遇他人发布的概率为 e<sup>−ρD</sup>。稳态下发布速率满足定点方程：</p>
+
+<div class="math-block">
+  <math display="block">
+    <mi>ρ</mi>
+    <mo>=</mo>
+    <mi>λ</mi>
+    <mi>p</mi>
+    <msup><mi>e</mi><mrow><mo>−</mo><mi>ρ</mi><mi>D</mi></mrow></msup>
+    <mspace width="2em"/>
+    <mo>⟺</mo>
+    <mspace width="2em"/>
+    <mi>ρ</mi>
+    <mo>=</mo>
+    <mfrac>
+      <mrow><mi>W</mi><mo stretchy="false">(</mo><mi>λ</mi><mi>p</mi><mi>D</mi><mo stretchy="false">)</mo></mrow>
+      <mi>D</mi>
+    </mfrac>
+  </math>
+</div>
+
+<p>其中 <i>W</i>(·) 为 Lambert W 函数（主枝）。由此得到三项可直接决策的指标：</p>
+
+<div class="math-block">
+  <math display="block">
+    <mi>η</mi>
+    <mo>=</mo>
+    <mfrac><mi>ρ</mi><mrow><mi>λ</mi><mi>p</mi></mrow></mfrac>
+    <mo>=</mo>
+    <msup><mi>e</mi><mrow><mo>−</mo><mi>ρ</mi><mi>D</mi></mrow></msup>
+    <mspace width="1.6em"/>
+    <mfrac><mrow><mi>d</mi><mi>ρ</mi></mrow><mrow><mi>d</mi><mo>&af;</mo><mi>ln</mi><mo>&af;</mo><mi>λ</mi></mrow></mfrac>
+    <mo>=</mo>
+    <mfrac><mn>1</mn><mi>D</mi></mfrac>
+    <mo>·</mo>
+    <mfrac><mi>W</mi><mrow><mn>1</mn><mo>+</mo><mi>W</mi></mrow></mfrac>
+  </math>
+</div>
+
+<ul>
+  <li><strong>η（算力利用率）：</strong>通过评测的候选中最终真正进入服务的比例，1 − η 即被 CAS 丢弃的浪费。</li>
+  <li><strong>边际弹性 dρ/d ln λ：</strong>候选生成速率每提升 1%（对数尺度）带来的发布速率增量，衡量加算力的边际收益。</li>
+</ul>
+
+<p>取 <i>p</i> = 0.30、<i>D</i> = 0.5 天作为基线（<em>此二值为演示基线假设，非 Reef 实测值</em>）：</p>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th class="num">λ（候选/天）</th><th class="num">W(λpD)</th><th class="num">稳态发布 ρ*（/天）</th><th class="num">CAS 成功率 η</th><th class="num">边际弹性</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="num">1</td><td class="num">0.1315</td><td class="num">0.2630</td><td class="num" style="color:var(--emerald)">87.68%</td><td class="num">0.2325</td></tr>
+    <tr><td class="num">2</td><td class="num">0.2368</td><td class="num">0.4735</td><td class="num" style="color:var(--emerald)">78.92%</td><td class="num">0.3829</td></tr>
+    <tr><td class="num">5</td><td class="num">0.4692</td><td class="num">0.9383</td><td class="num" style="color:var(--amber)">62.55%</td><td class="num">0.6387</td></tr>
+    <tr><td class="num">10</td><td class="num">0.7259</td><td class="num">1.4517</td><td class="num" style="color:var(--amber)">48.39%</td><td class="num">0.8412</td></tr>
+    <tr><td class="num">20</td><td class="num">1.0499</td><td class="num">2.0998</td><td class="num" style="color:var(--rose)">35.00%</td><td class="num">1.0243</td></tr>
+    <tr><td class="num">50</td><td class="num">1.5662</td><td class="num">3.1325</td><td class="num" style="color:var(--rose)">20.88%</td><td class="num">1.2206</td></tr>
+    <tr><td class="num">100</td><td class="num">2.0099</td><td class="num">4.0199</td><td class="num" style="color:var(--rose)">13.40%</td><td class="num">1.3355</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout risk" data-icon="▲">
+  <span class="ct">结论三：发布链存在对数饱和，堆算力会自我抵消</span>
+  <p>由于 <i>W</i>(<i>x</i>) ≈ ln <i>x</i> − ln ln <i>x</i>，发布速率对候选生成速率呈<strong>对数增长</strong>。上表中 λ 从 1 提升到 100（100 倍算力），发布速率仅从 0.263 提升到 4.020（15.3 倍），而算力利用率从 87.68% 崩塌到 13.40%——<strong>86.6% 的通过评测候选被 CAS 丢弃</strong>。这意味着在长训练窗口（<i>D</i> 大）或高发布频率的场景下，单纯提高学习强度不仅收益递减，还会把大量 GPU 时间烧在被版本链作废的候选上。真正的调节旋钮是 <strong>缩短 <i>D</i></strong>（更快的评测与更小的训练粒度），而非加大 λ。</p>
+</div>
+
+<h3 id="p3-4">经验漏斗与陈旧衰减</h3>
+
+<p>Reef 的闭环吞吐由最窄一环决定。从一次线上请求到一条可用于训练的有效样本，需连续通过五道闸门，任意一环收紧都会等比削减下游：</p>
+
+<div class="math-block">
+  <math display="block">
+    <msub><mi>N</mi><mi>eff</mi></msub>
+    <mo>=</mo>
+    <mi>R</mi>
+    <mo>·</mo>
+    <mi>c</mi>
+    <mo>·</mo>
+    <mi>a</mi>
+    <mo>·</mo>
+    <mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>d</mi><mo stretchy="false">)</mo>
+    <mo>·</mo>
+    <mover accent="true"><mi>w</mi><mo>¯</mo></mover>
+  </math>
+</div>
+
+<p>其中 <i>R</i> 为日请求量，<i>c</i> 为反馈上报覆盖率，<i>a</i> 为归因成功率，<i>d</i> 为重复样本率，<span class="math-inline">w̄</span> 为 off-policy staleness 加权因子。若采集窗口为 <i>W</i> 天、经验半衰期为 <i>T</i><sub>1/2</sub> 天，样本权重按 <i>w</i>(<i>t</i>) = 2<sup>−<i>t</i>/<i>T</i><sub>1/2</sub></sup> 衰减，则窗口内均匀年龄样本的平均权重为：</p>
+
+<div class="math-block">
+  <math display="block">
+    <mover accent="true"><mi>w</mi><mo>¯</mo></mover>
+    <mo>=</mo>
+    <mfrac><mn>1</mn><mi>W</mi></mfrac>
+    <msubsup><mo>∫</mo><mn>0</mn><mi>W</mi></msubsup>
+    <msup><mn>2</mn><mrow><mo>−</mo><mi>t</mi><mo>/</mo><msub><mi>T</mi><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msub></mrow></msup>
+    <mi>d</mi><mi>t</mi>
+    <mo>=</mo>
+    <mfrac>
+      <mrow><msub><mi>T</mi><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msub></mrow>
+      <mrow><mi>W</mi><mo>&af;</mo><mi>ln</mi><mo>&af;</mo><mn>2</mn></mrow>
+    </mfrac>
+    <mo stretchy="false">(</mo>
+    <mn>1</mn>
+    <mo>−</mo>
+    <msup><mn>2</mn><mrow><mo>−</mo><mi>W</mi><mo>/</mo><msub><mi>T</mi><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msub></mrow></msup>
+    <mo stretchy="false">)</mo>
+  </math>
+</div>
+
+<p>该模型的工程含义十分直接：<strong>采集窗口 <i>W</i> 相对半衰期 <i>T</i><sub>1/2</sub> 越长，平均样本权重越低</strong>；当 <i>W</i> = <i>T</i><sub>1/2</sub> 时 <span class="math-inline">w̄</span> ≈ 0.7213，当 <i>W</i> = 4<i>T</i><sub>1/2</sub> 时 <span class="math-inline">w̄</span> 降至 0.3381，当 <i>W</i> = 8<i>T</i><sub>1/2</sub> 时进一步降至 0.1796。Reef 之所以要记录并暴露「样本新鲜度」，正是因为它是这个漏斗中唯一能被基础设施直接观测、却最容易被忽视的一项。</p>
+
+<!-- ===================== 第四部分 ===================== -->
+<h2 id="sb-a"><span class="part">Part IV</span>沙盘 A · 双比例检验与统计功效</h2>
+
+<p>选择一组已核验的 AIME 对比，或自行调整样本量，页面将实时反解 z 值、p 值、当前功效与最小可检出差异。所有输出均由前述公式计算，无预置结论。</p>
+
+<div class="sandbox">
+  <div class="sandbox-head">
+    <span class="sb-id">A</span>
+    <h4>评测门控可信度反解器</h4>
+    <span class="sb-note">全部数值由页面内公式实时求解</span>
+  </div>
+  <div class="sandbox-body">
+    <div class="ctrl-grid">
+      <div class="ctrl">
+        <label for="sel-run">对比组（一级源实测）<span class="cv">已核验</span></label>
+        <select id="sel-run">
+          <option value="40,70,0">seed 0 · method 前后（40→70 /150）</option>
+          <option value="36,54,0">seed 1 · method 前后（36→54 /150）</option>
+          <option value="47,64,0">seed 0 · upstream 前后（47→64 /150）</option>
+          <option value="40,61,0">seed 1 · upstream 前后（40→61 /150）</option>
+          <option value="64,70,1" selected>seed 0 · 跨臂直比（64 vs 70 /150）</option>
+          <option value="61,54,1">seed 1 · 跨臂直比（61 vs 54 /150）</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label for="rng-n">每臂题数 n <span class="cv" id="val-n">150</span></label>
+        <input type="range" id="rng-n" min="30" max="3000" step="10" value="150">
+      </div>
+      <div class="ctrl">
+        <label for="rng-alpha">显著性水平 α <span class="cv" id="val-alpha">0.05</span></label>
+        <input type="range" id="rng-alpha" min="0.01" max="0.20" step="0.01" value="0.05">
+      </div>
+      <div class="ctrl">
+        <label for="rng-power">目标功效 1 − β <span class="cv" id="val-power">0.80</span></label>
+        <input type="range" id="rng-power" min="0.50" max="0.95" step="0.01" value="0.80">
+      </div>
+    </div>
+
+    <div class="readout">
+      <div class="cell"><div class="ck">基线 p̂₁</div><div class="cv" id="val-p0">—</div></div>
+      <div class="cell"><div class="ck">对比 p̂₂</div><div class="cv" id="val-p1">—</div></div>
+      <div class="cell"><div class="ck">差异 Δ</div><div class="cv" id="val-diff">—</div></div>
+      <div class="cell"><div class="ck">z 统计量</div><div class="cv" id="val-z">—</div></div>
+      <div class="cell"><div class="ck">双侧 p 值</div><div class="cv" id="val-pval">—</div></div>
+      <div class="cell"><div class="ck">当前功效</div><div class="cv" id="val-achpower">—</div></div>
+      <div class="cell"><div class="ck">MDE @ n</div><div class="cv" id="val-mde">—</div></div>
+      <div class="cell"><div class="ck">达标所需 n</div><div class="cv" id="val-nreq">—</div></div>
+    </div>
+
+    <div class="verdict" id="val-verdict">—</div>
+
+    <p class="formula-note">计算口径：z 用合并比例 p̄ 构造标准误；功效用 Φ((|Δ| − z<sub>1−α/2</sub>·√(2p̄(1−p̄)/n)) / √((p̂₁(1−p̂₁)+p̂₂(1−p̂₂))/n))；n 与题数按等比例缩放（x₁ = round(p̂₁·n)），因此 p̂ 在小 n 下存在取整量化误差。</p>
+  </div>
+</div>
+
+<h2 id="sb-b"><span class="part">Part IV</span>沙盘 B · 发布链 CAS 自阻塞</h2>
+
+<p>调节候选生成速率、评测通过率与训练窗口时长，观察稳态发布速率如何对数饱和、算力利用率如何崩塌。曲线由 Lambert W 定点方程实时求解。</p>
+
+<div class="sandbox">
+  <div class="sandbox-head">
+    <span class="sb-id">B</span>
+    <h4>CAS 发布链自阻塞沙盘</h4>
+    <span class="sb-note">ρ = W(λpD) / D · Newton 迭代求解</span>
+  </div>
+  <div class="sandbox-body">
+    <div class="ctrl-grid">
+      <div class="ctrl">
+        <label for="rng-lambda">候选生成速率 λ<span class="cv" id="val-lambda">10 /天</span></label>
+        <input type="range" id="rng-lambda" min="1" max="100" step="1" value="10">
+      </div>
+      <div class="ctrl">
+        <label for="rng-pass">评测通过率 p<span class="cv" id="val-pass">30%</span></label>
+        <input type="range" id="rng-pass" min="0.05" max="0.80" step="0.01" value="0.30">
+      </div>
+      <div class="ctrl">
+        <label for="rng-dur">训练/验证窗口 D<span class="cv" id="val-dur">0.5 天</span></label>
+        <input type="range" id="rng-dur" min="0.1" max="5.0" step="0.1" value="0.5">
+      </div>
+    </div>
+
+    <div class="readout">
+      <div class="cell"><div class="ck">W(λpD)</div><div class="cv" id="val-w">—</div></div>
+      <div class="cell"><div class="ck">稳态发布 ρ*</div><div class="cv" id="val-rho">—</div></div>
+      <div class="cell"><div class="ck">CAS 成功率 η</div><div class="cv" id="val-eta">—</div></div>
+      <div class="cell"><div class="ck">日浪费候选</div><div class="cv" id="val-waste">—</div></div>
+      <div class="cell"><div class="ck">边际弹性</div><div class="cv" id="val-elast">—</div></div>
+      <div class="cell"><div class="ck">λ 翻倍增量</div><div class="cv" id="val-dbl">—</div></div>
+    </div>
+
+    <div class="chart-box">
+      <svg id="svg-cas" viewBox="0 0 680 320" role="img" aria-label="发布速率与算力利用率随候选生成速率变化">
+        <line x1="60" y1="250" x2="640" y2="250" stroke="var(--border)" stroke-width="1.4"/>
+        <line x1="60" y1="30" x2="60" y2="250" stroke="var(--border)" stroke-width="1.4"/>
+        <line x1="640" y1="30" x2="640" y2="250" stroke="var(--border)" stroke-width="1.4"/>
+        <g id="cas-grid"></g>
+        <polyline id="cas-curve" points="" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round"/>
+        <polyline id="cas-curve2" points="" fill="none" stroke="var(--cyan)" stroke-width="2.2" stroke-dasharray="6 4" stroke-linejoin="round"/>
+        <circle id="cas-dot" cx="0" cy="0" r="5" fill="var(--accent)"/>
+        <circle id="cas-dot2" cx="0" cy="0" r="4.5" fill="var(--cyan)"/>
+        <line id="cas-vline" x1="0" y1="30" x2="0" y2="250" stroke="var(--violet)" stroke-width="1.3" stroke-dasharray="3 3"/>
+        <text x="350" y="18" text-anchor="middle" font-family="var(--font-sans)" font-size="12.5" fill="var(--text-title)">发布速率对数饱和 · 算力利用率单调崩塌</text>
+        <text x="350" y="276" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--text-muted)">候选生成速率 λ（个/天）</text>
+        <text x="14" y="140" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--accent)" transform="rotate(-90 14 140)">稳态发布 ρ（/天）</text>
+        <text x="666" y="140" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--cyan)" transform="rotate(90 666 140)">利用率 η</text>
+        <g id="cas-ticks"></g>
+      </svg>
+    </div>
+
+    <p class="formula-note">曲线横轴 1 → 100，共 80 个等间距采样点（步长 7.278 px）；ρ 曲线按 y = 250 − 220·(ρ/ρ<sub>max</sub>) 映射，η 曲线按 y = 250 − 220·η 映射。ρ<sub>max</sub> 取当前参数下 λ = 100 时的稳态值并上浮 10%。「λ 翻倍增量」= ρ*(2λ) − ρ*(λ)。</p>
+  </div>
+</div>
+
+<h2 id="sb-c"><span class="part">Part IV</span>沙盘 C · 经验漏斗与陈旧衰减</h2>
+
+<div class="sandbox">
+  <div class="sandbox-head">
+    <span class="sb-id">C</span>
+    <h4>闭环有效样本量反解器</h4>
+    <span class="sb-note">全部参数均为部署侧假设值，非 Reef 实测</span>
+  </div>
+  <div class="sandbox-body">
+    <div class="ctrl-grid">
+      <div class="ctrl">
+        <label for="rng-req">日请求量 R<span class="cv" id="val-req">20 000</span></label>
+        <input type="range" id="rng-req" min="1000" max="200000" step="1000" value="20000">
+      </div>
+      <div class="ctrl">
+        <label for="rng-cov">反馈上报覆盖率 c<span class="cv" id="val-cov">25%</span></label>
+        <input type="range" id="rng-cov" min="0.02" max="1.00" step="0.01" value="0.25">
+      </div>
+      <div class="ctrl">
+        <label for="rng-attr">归因成功率 a<span class="cv" id="val-attr">92%</span></label>
+        <input type="range" id="rng-attr" min="0.50" max="1.00" step="0.01" value="0.92">
+      </div>
+      <div class="ctrl">
+        <label for="rng-dup">重复样本率 d<span class="cv" id="val-dup">15%</span></label>
+        <input type="range" id="rng-dup" min="0.00" max="0.60" step="0.01" value="0.15">
+      </div>
+      <div class="ctrl">
+        <label for="rng-win">采集窗口 W<span class="cv" id="val-win">7.0 天</span></label>
+        <input type="range" id="rng-win" min="0.5" max="30.0" step="0.5" value="7.0">
+      </div>
+      <div class="ctrl">
+        <label for="rng-half">经验半衰期 T₁ᐟ₂<span class="cv" id="val-half">14.0 天</span></label>
+        <input type="range" id="rng-half" min="1.0" max="60.0" step="0.5" value="14.0">
+      </div>
+    </div>
+
+    <div class="funnel">
+      <div class="funnel-row"><span class="fl">线上请求</span><div class="funnel-track"><div class="funnel-fill" id="val-bar0" style="width:100%"></div></div><span class="fv" id="val-s0">—</span></div>
+      <div class="funnel-row"><span class="fl">+ 反馈上报</span><div class="funnel-track"><div class="funnel-fill" id="val-bar1" style="width:0%"></div></div><span class="fv" id="val-s1">—</span></div>
+      <div class="funnel-row"><span class="fl">+ 归因成功</span><div class="funnel-track"><div class="funnel-fill" id="val-bar2" style="width:0%"></div></div><span class="fv" id="val-s2">—</span></div>
+      <div class="funnel-row"><span class="fl">+ 去重</span><div class="funnel-track"><div class="funnel-fill" id="val-bar3" style="width:0%"></div></div><span class="fv" id="val-s3">—</span></div>
+      <div class="funnel-row"><span class="fl">+ 新鲜度加权</span><div class="funnel-track"><div class="funnel-fill" id="val-bar4" style="width:0%"></div></div><span class="fv" id="val-s4">—</span></div>
+    </div>
+
+    <div class="readout" style="margin-top:1.2rem">
+      <div class="cell"><div class="ck">端到端有效率</div><div class="cv" id="val-rate">—</div></div>
+      <div class="cell"><div class="ck">平均新鲜度 w̄</div><div class="cv" id="val-fresh">—</div></div>
+      <div class="cell"><div class="ck">最窄一环</div><div class="cv" id="val-bottleneck">—</div></div>
+      <div class="cell"><div class="ck">窗口末端权重</div><div class="cv" id="val-tail">—</div></div>
+    </div>
+
+    <div class="verdict" id="val-verdict2">—</div>
+  </div>
+</div>
+
+<h2 id="sb-d"><span class="part">Part IV</span>沙盘 D · 四阶段与配方装配</h2>
+
+<p>四阶段的代码落点、HTTP 契约与artifact 生命周期，以及六类 Recipe 的信号源、更新对象与资源需求。数据来自主分支 README 与各 recipe 文档。</p>
+
+<div class="sandbox">
+  <div class="sandbox-head">
+    <span class="sb-id">D</span>
+    <h4>闭环装配沙盘</h4>
+    <span class="sb-note">路径与字段均已在一级源确认</span>
+  </div>
+  <div class="sandbox-body">
+    <div class="tabbar">
+      <button type="button" id="btn-stage-serve" class="on">Serve</button>
+      <button type="button" id="btn-stage-observe">Observe</button>
+      <button type="button" id="btn-stage-grow">Grow</button>
+      <button type="button" id="btn-stage-commit">Commit</button>
+    </div>
+
+    <div class="stage-panel on" id="panel-serve">
+      <dl class="kv">
+        <dt>职责</dt><dd>服务 agent 请求并记录交互（interactions）。应用把模型请求发往 Reef 推理端点，而非直接发给模型提供商。</dd>
+        <dt>代码落点</dt><dd class="pathlist">reef/service/ · reef/runtime/</dd>
+        <dt>入站端点</dt><dd class="pathlist">/v1/chat/completions（OpenAI）· /v1/messages（Anthropic）</dd>
+        <dt>出站契约</dt><dd>响应头 <code>x-reef-agent-record-id</code>，其值为本次交互的 receipt。</dd>
+        <dt>场景隔离</dt><dd>请求侧只可指定 <code>x-reef-scenario</code>，不可切换学习方法；学习方法由部署配置绑定。</dd>
+      </dl>
+    </div>
+
+    <div class="stage-panel" id="panel-observe">
+      <dl class="kv">
+        <dt>职责</dt><dd>把反馈（feedback）匹配到已记录的交互，并判定样本资格（eligibility）。</dd>
+        <dt>代码落点</dt><dd class="pathlist">reef/records.py · reef/train/processors/ · reef/core/reports/</dd>
+        <dt>上报端点</dt><dd class="pathlist">/reef/report</dd>
+        <dt>上报载荷</dt><dd>数值 <code>score</code>、文本或结构化 <code>feedback</code>、以及被评价的 <code>references</code>（receipt 列表）。</dd>
+        <dt>能力边界</dt><dd>多轮 session 拼接、重复样本处理、off-policy staleness 度量（见沙盘 C）。</dd>
+      </dl>
+    </div>
+
+    <div class="stage-panel" id="panel-grow">
+      <dl class="kv">
+        <dt>职责</dt><dd>从合格（eligible）记录中产出一个更新：模型 checkpoint / LoRA，或 harness 组件候选。</dd>
+        <dt>代码落点</dt><dd class="pathlist">reef/recipe/ · reef/train/</dd>
+        <dt>分发方式</dt><dd>Cookbook 实现位于仓库 <code>recipes/</code> 目录，以点分分类路径引用，<strong>不随 reef wheel 打包</strong>。</dd>
+        <dt>批次触发</dt><dd>上报达到 <code>data.batch_size</code> 即闭合批次并调度训练步。</dd>
+        <dt>双表面</dt><dd>模型侧经 Slime 后端（THUDM/slime 锁定提交）；harness 侧经 Cordis 后端，以可安装 artifact 交付。</dd>
+      </dl>
+    </div>
+
+    <div class="stage-panel" id="panel-commit">
+      <dl class="kv">
+        <dt>职责</dt><dd>评测候选并发布被接受的更新；候选落败则线上服务保持不变。</dd>
+        <dt>代码落点</dt><dd class="pathlist">reef/train/evaluation/ · reef/artifact/ · reef/surface/</dd>
+        <dt>选择判据</dt><dd>以 GEPA 为例：仅在<strong>严格平均改进</strong>时发布，因此被服务的组合始终是 archive 中最优版本。</dd>
+        <dt>版本化对象</dt><dd>model checkpoint、LoRA、harness tree、routing policy，均由 Git + Git LFS 保存。</dd>
+        <dt>并发控制</dt><dd>每个 scenario 一条追加式 release chain，推进 head 需 compare-and-swap 声明旧 head（定量后果见沙盘 B）。</dd>
+      </dl>
+    </div>
+
+    <hr>
+
+    <div class="ctrl-grid">
+      <div class="ctrl">
+        <label for="sel-recipe">Learning Recipe<span class="cv">主分支 recipes/</span></label>
+        <select id="sel-recipe">
+          <option value="0" selected>Basic（只记录，不学习）</option>
+          <option value="1">SAO</option>
+          <option value="2">OpenClaw-RL</option>
+          <option value="3">TTT-Discover</option>
+          <option value="4">SkillClaw</option>
+          <option value="5">GEPA</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="readout">
+      <div class="cell"><div class="ck">模块路径</div><div class="cv" id="val-rmod" style="font-size:.8rem">—</div></div>
+      <div class="cell"><div class="ck">经验与信号</div><div class="cv" id="val-rsig" style="font-size:.85rem">—</div></div>
+      <div class="cell"><div class="ck">更新对象</div><div class="cv" id="val-rtgt" style="font-size:.85rem">—</div></div>
+      <div class="cell"><div class="ck">GPU 需求</div><div class="cv" id="val-rgpu" style="font-size:.85rem">—</div></div>
+    </div>
+
+    <div class="verdict" id="val-rnote">—</div>
+  </div>
+</div>
+
+<!-- ===================== 第五部分 ===================== -->
+<h2 id="p5-1"><span class="part">Part V</span>适用与不适用场景</h2>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>场景特征</th><th>闭环收益</th><th>判断依据</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>任务重复出现、结果可被测试或较可靠评分</strong></td>
+      <td style="color:var(--emerald)">高</td>
+      <td>verifier / 测试给出可归因 reward，样本天然合格；AIME 与 IMOAnswerBench 类任务即属此类</td>
+    </tr>
+    <tr>
+      <td><strong>长程多轮、带工具调用与用户纠正</strong></td>
+      <td style="color:var(--emerald)">高</td>
+      <td>经验密度最高的一段，正是传统流水线切开后丢失的部分</td>
+    </tr>
+    <tr>
+      <td><strong>失败集中在 Harness 而非模型能力</strong></td>
+      <td style="color:var(--emerald)">高</td>
+      <td>工具权限、上下文组织、规则写法出问题时应演化 harness；SkillClaw 路径无需 GPU</td>
+    </tr>
+    <tr>
+      <td><strong>只有零散主观反馈、无稳定评测面</strong></td>
+      <td style="color:var(--rose)">负</td>
+      <td>闭环会更快地积累不确定性；门控只会更可靠地执行错误目标</td>
+    </tr>
+    <tr>
+      <td><strong>评测集规模远小于 MDE 所需</strong></td>
+      <td style="color:var(--amber)">需先补评测</td>
+      <td>按沙盘 A 反解：若真实差异在 5 pp 量级，每臂需 1500 题以上才有基本分辨力</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="p5-2"><span class="part">Part V</span>接入路径与陷阱</h2>
+
+<ol>
+  <li><strong>先当记录代理，再开学习。</strong> 用 <code>recipes/basic/external-provider.yaml</code> 起一个 Reef 进程代理外部 HTTP 模型，无需 GPU。核心依赖仅 aiohttp / huggingface_hub / pyyaml / reef-client。先验证四件事：请求是否被完整记录、receipt 是否稳定返回、feedback 能否正确归因、版本链是否可追溯。</li>
+  <li><strong>Git LFS 是硬前置。</strong> <code>git lfs install</code> 必须在 clone 之前完成，否则 artifact 与 checkpoint 功能不可用。这是部署文档中最容易被跳过的第一步。</li>
+  <li><strong>Recipe 需要源码 checkout。</strong> Cookbook recipe 不随 wheel 分发，<code>uv pip install reef-infra</code> 之后仍需 <code>git clone</code> 才能运行任何学习方法。</li>
+  <li><strong>先算评测规模，再谈结论。</strong> 用沙盘 A 反解当前评测集对应的 MDE。若真实期望差异低于 MDE，任何「候选胜出」都只是噪声排序，此时加严门控阈值比加严评测更有害。</li>
+  <li><strong>调节 D 而非 λ。</strong> 按沙盘 B，提高候选生成速率会被 CAS 自阻塞吃掉；缩短训练与验证窗口、减小批次粒度才是真正提升发布吞吐的旋钮。</li>
+  <li><strong>监控漏斗的最窄一环。</strong> 按沙盘 C，端到端有效率是多环节连乘。反馈上报覆盖率通常是第一瓶颈——它不属于 Reef 的能力范围，而是宿主应用是否愿意调用 <code>/reef/report</code>。</li>
+</ol>
+
+<h2 id="p5-3"><span class="part">Part V</span>闭环不能替你做的事</h2>
+
+<div class="callout risk" data-icon="▲">
+  <span class="ct">三条边界</span>
+  <p><strong>一、闭环不定义「更好」。</strong> 评测集过窄、反馈带偏差、指标可被钻空子时，严密的版本链只会更可靠地执行错误目标。</p>
+  <p><strong>二、闭环不产生因果结论。</strong> 单次运行的读数受二项噪声支配（frozen 基线在相同提示相同题集上有 7.33 pp 波动）。「候选胜出」不等于「方法更优」，除非评测规模达到 MDE 要求且跨种子符号稳定。</p>
+  <p><strong>三、 continual self-improvement ≠ RSI。</strong> Reef 允许系统从经验中反复改善，但这不是能够自行制造下一代系统的递归自我改进。它优化的是给定任务族内的表现，不扩展能力边界本身。</p>
+</div>
+
+<!-- ===================== 附录 ===================== -->
+<h2 id="appendix"><span class="part">附录</span>核验记录与溯源清单</h2>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>核验项</th><th>一级源位置</th><th>结果</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>许可证</td><td><code>LICENSE</code>（首行 Apache License Version 2.0）· <code>pyproject.toml</code> · 仓库 API <code>spdx_id</code></td><td style="color:var(--emerald)">Apache-2.0 三重确认</td></tr>
+    <tr><td>Python 版本</td><td><code>pyproject.toml</code> → <code>requires-python = "&gt;=3.10"</code></td><td style="color:var(--emerald)">确认</td></tr>
+    <tr><td>发布包名</td><td><code>pyproject.toml</code> → <code>name = "reef-infra"</code>，导入名 <code>reef</code></td><td style="color:var(--emerald)">确认</td></tr>
+    <tr><td>核心依赖</td><td><code>pyproject.toml</code> → aiohttp / huggingface_hub / pyyaml / reef-client≥0.2.0</td><td style="color:var(--emerald)">确认（CPU 可跑基础 recipe）</td></tr>
+    <tr><td>仓库状态</td><td>GitHub API → 195 stars · Python · 创建 2026-08-31 · 首页 reefinfra.ai/docs</td><td style="color:var(--emerald)">确认</td></tr>
+    <tr><td>四阶段与代码路径</td><td>README「How it works」四步表</td><td style="color:var(--emerald)">确认</td></tr>
+    <tr><td>receipt 与 report 契约</td><td>README 端点说明</td><td style="color:var(--emerald)">确认</td></tr>
+    <tr><td>Recipe 目录</td><td><code>recipes/</code> 目录 API → basic / gepa / openclawrl / sao / skillclaw / tttd</td><td style="color:var(--emerald)">确认</td></tr>
+    <tr><td>AIME 四组运行</td><td><code>recipes/gepa/examples/aime/README.md</code> → validation contract 表</td><td style="color:var(--emerald)">确认（原稿仅引两行）</td></tr>
+    <tr><td>测试集口径</td><td>同文件 → sealed 150-problem AIME-2025 test split · 45/45 训练验证 · 198 metric calls · 4 candidates</td><td style="color:var(--emerald)">确认</td></tr>
+    <tr><td>OpenClaw-RL 范围</td><td><code>recipes/openclawrl/README.md</code> → 72 session 流，记录 run 覆盖前 36 session，第 14 session 达判据</td><td style="color:var(--amber)">确认 · 需补注</td></tr>
+    <tr><td>Slime 后端锁定</td><td><code>recipes/openclawrl/README.md</code> → <code>THUDM/slime@41014d1</code></td><td style="color:var(--emerald)">确认</td></tr>
+    <tr><td>SkillClaw 免 GPU 路径</td><td><code>recipes/skillclaw/README.md</code> → 技能池演化，无 GPU 需求</td><td style="color:var(--emerald)">确认</td></tr>
+    <tr><td>Basic 两种栈</td><td><code>recipes/README.md</code> → external-provider.yaml / local-sglang.yaml</td><td style="color:var(--emerald)">确认</td></tr>
+    <tr><td>NCCL 权重同步</td><td>主分支文档未检索到明示；代码检索接口需鉴权，未执行</td><td style="color:var(--rose)">未独立核验</td></tr>
+    <tr><td>机构署名</td><td>仓库未声明机构归属；原稿归 MIT（Ao Qu），聚合站归 CMU（Paul Pu Liang）</td><td style="color:var(--rose)">存在分歧</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout verify" data-icon="V">
+  <span class="ct">计算可复现性声明</span>
+  <p>本文档所有统计量（z、p、MDE、所需 n、功效曲线）、定点解（Lambert W）与漏斗数值均由闭式公式计算，前端 JavaScript 与后端 Python 独立实现并交叉比对至小数点后 4 位。基线参数（λ、p、D、c、a、d、W、T₁ᐟ₂）为演示假设值，界面内已逐项标注，<strong>不代表任何实测数据</strong>。AIME 相关的分子分母则全部来自一级源实测记录。</p>
+</div>
+
+</main>
+</div>
+
+<footer class="doc-footer">
+  <div class="wrap">
+    <p><strong>Reef 持续学习闭环与 Agent 自我改进架构</strong> · 核验基准日 2026-09-03 · 单文件零外部依赖交付</p>
+    <p>原稿来源：<a href="https://best.xiaohu.ai/article/reef-continual-self-improving-agents/" target="_blank" rel="noopener">best.xiaohu.ai — 麻省理工团队开源项目 Reef</a>　|　一级源：<a href="https://github.com/Human-Agent-Society/reef" target="_blank" rel="noopener">github.com/Human-Agent-Society/reef</a>　|　文档站：<a href="https://reefinfra.ai/docs/" target="_blank" rel="noopener">reefinfra.ai/docs</a></p>
+    <p>本页所有图表为内联 SVG、公式为原生 MathML Core、交互逻辑为内联 JavaScript，断网双击即可完整阅读与计算。</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- 主题切换 ---------- */
+  var root = document.documentElement;
+  var btnTheme = document.getElementById("btn-theme");
+  try {
+    var saved = localStorage.getItem("reef-digest-theme");
+    if (saved === "light" || saved === "dark") { root.setAttribute("data-theme", saved); }
+  } catch (e) { /* localStorage 不可用时保持默认 */ }
+  btnTheme.addEventListener("click", function () {
+    var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("reef-digest-theme", next); } catch (e2) { /* 忽略 */ }
+  });
+
+  /* ---------- 阅读进度 ---------- */
+  var progressBar = document.getElementById("progressBar");
+  function updateProgress() {
+    var h = document.documentElement;
+    var max = h.scrollHeight - h.clientHeight;
+    var pct = max > 0 ? (h.scrollTop || document.body.scrollTop) / max * 100 : 0;
+    progressBar.style.width = pct.toFixed(2) + "%";
+  }
+  window.addEventListener("scroll", updateProgress, { passive: true });
+  window.addEventListener("resize", updateProgress);
+  updateProgress();
+
+  /* ---------- 目录高亮 ---------- */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll(".toc a"));
+  var idToLink = {};
+  tocLinks.forEach(function (a) {
+    var id = a.getAttribute("href").slice(1);
+    idToLink[id] = a;
+  });
+  var watched = Object.keys(idToLink)
+    .map(function (id) { return document.getElementById(id); })
+    .filter(function (el) { return !!el; });
+
+  function highlightToc() {
+    var best = null, bestTop = -Infinity;
+    watched.forEach(function (el) {
+      var top = el.getBoundingClientRect().top;
+      if (top <= 140 && top > bestTop) { bestTop = top; best = el; }
+    });
+    if (!best && watched.length) { best = watched[0]; }
+    tocLinks.forEach(function (a) { a.classList.remove("active"); });
+    if (best && idToLink[best.id]) { idToLink[best.id].classList.add("active"); }
+  }
+  window.addEventListener("scroll", highlightToc, { passive: true });
+  highlightToc();
+
+  /* ---------- 统计工具函数 ---------- */
+  function erf(x) {
+    var s = x < 0 ? -1 : 1;
+    var ax = Math.abs(x);
+    var t = 1 / (1 + 0.3275911 * ax);
+    var y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-ax * ax);
+    return s * y;
+  }
+  function phi(z) { return 0.5 * (1 + erf(z / Math.SQRT2)); }
+  function invPhi(p) {
+    if (p <= 0) { return -Infinity; }
+    if (p >= 1) { return Infinity; }
+    var a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+    var b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01];
+    var c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+    var d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+    var pl = 0.02425, q, r, x;
+    if (p < pl) {
+      q = Math.sqrt(-2 * Math.log(p));
+      x = (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+    } else if (p <= 1 - pl) {
+      q = p - 0.5; r = q * q;
+      x = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+    } else {
+      q = Math.sqrt(-2 * Math.log(1 - p));
+      x = -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+    }
+    return x;
+  }
+  function lambertW(x) {
+    if (x <= 0) { return 0; }
+    var w = Math.log(1 + x);
+    for (var i = 0; i < 120; i++) {
+      var ew = Math.exp(w);
+      var f = w * ew - x;
+      var dw = ew * (1 + w);
+      var step = f / dw;
+      w = w - step;
+      if (Math.abs(step) < 1e-14) { break; }
+    }
+    return w;
+  }
+  function fmtInt(v) { return Math.round(v).toLocaleString("en-US"); }
+  function fmtPp(v) { return (v >= 0 ? "+" : "") + v.toFixed(2) + " pp"; }
+
+  /* =========================================================
+     沙盘 A · 双比例检验与统计功效
+     ========================================================= */
+  var selRun = document.getElementById("sel-run");
+  var rngN = document.getElementById("rng-n");
+  var rngAlpha = document.getElementById("rng-alpha");
+  var rngPower = document.getElementById("rng-power");
+  var outN = document.getElementById("val-n");
+  var outAlpha = document.getElementById("val-alpha");
+  var outPower = document.getElementById("val-power");
+  var outP0 = document.getElementById("val-p0");
+  var outP1 = document.getElementById("val-p1");
+  var outDiff = document.getElementById("val-diff");
+  var outZ = document.getElementById("val-z");
+  var outPval = document.getElementById("val-pval");
+  var outAch = document.getElementById("val-achpower");
+  var outMde = document.getElementById("val-mde");
+  var outNreq = document.getElementById("val-nreq");
+  var outVerdict = document.getElementById("val-verdict");
+
+  var BASE_N = 150;
+
+  function runSandboxA() {
+    var raw = selRun.value.split(",");
+    var x1base = parseFloat(raw[0]);
+    var x2base = parseFloat(raw[1]);
+    var isCross = raw[2] === "1";
+
+    var p1 = x1base / BASE_N;
+    var p2 = x2base / BASE_N;
+    var n = parseInt(rngN.value, 10);
+    var alpha = parseFloat(rngAlpha.value);
+    var targetPower = parseFloat(rngPower.value);
+
+    var x1 = Math.max(0, Math.min(n, Math.round(p1 * n)));
+    var x2 = Math.max(0, Math.min(n, Math.round(p2 * n)));
+    var ph1 = x1 / n, ph2 = x2 / n;
+    var delta = ph2 - ph1;
+    var pbar = (x1 + x2) / (2 * n);
+    var se = Math.sqrt(pbar * (1 - pbar) * (2 / n));
+    var z = se > 0 ? delta / se : 0;
+    var pval = 2 * (1 - phi(Math.abs(z)));
+
+    var za = invPhi(1 - alpha / 2);
+    var zb = invPhi(targetPower);
+    var seMde = Math.sqrt(2 * Math.max(pbar, 1e-9) * (1 - Math.min(pbar, 1 - 1e-9)) / n);
+    var mde = (za + zb) * seMde;
+
+    var seAlt = Math.sqrt((ph1 * (1 - ph1) + ph2 * (1 - ph2)) / n);
+    var achPower = seAlt > 0
+      ? phi((Math.abs(delta) - za * Math.sqrt(2 * pbar * (1 - pbar) / n)) / seAlt)
+      : (Math.abs(delta) > 0 ? 1 : 0);
+
+    var nReq = Math.abs(delta) > 1e-9
+      ? Math.ceil(2 * pbar * (1 - pbar) * Math.pow((za + zb) / Math.abs(delta), 2))
+      : Infinity;
+
+    outN.textContent = fmtInt(n);
+    outAlpha.textContent = alpha.toFixed(2);
+    outPower.textContent = targetPower.toFixed(2);
+
+    outP0.textContent = (100 * ph1).toFixed(2) + "% (" + x1 + "/" + n + ")";
+    outP1.textContent = (100 * ph2).toFixed(2) + "% (" + x2 + "/" + n + ")";
+    outDiff.textContent = fmtPp(100 * delta);
+    outDiff.className = "cv " + (delta > 0 ? "pos" : (delta < 0 ? "neg" : "mid"));
+    outZ.textContent = z.toFixed(4);
+    outPval.textContent = pval < 0.0001 ? pval.toExponential(3) : pval.toFixed(5);
+    outPval.className = "cv " + (pval < alpha ? "pos" : "neg");
+    outAch.textContent = (100 * achPower).toFixed(2) + "%";
+    outAch.className = "cv " + (achPower >= targetPower ? "pos" : "neg");
+    outMde.textContent = (100 * mde).toFixed(2) + " pp";
+    outNreq.textContent = isFinite(nReq) ? fmtInt(nReq) + " /臂" : "—";
+
+    var sig = pval < alpha;
+    var head = isCross ? "跨臂对比" : "单臂前后对比";
+    var msg;
+    if (sig) {
+      msg = "<b>显著。</b>" + head + "在 α = " + alpha.toFixed(2) + " 下拒绝「无差异」原假设（|Δ| = " +
+        Math.abs(100 * delta).toFixed(2) + " pp，p = " + (pval < 0.0001 ? pval.toExponential(3) : pval.toFixed(5)) +
+        "）。当前 n = " + fmtInt(n) + " 的功效为 " + (100 * achPower).toFixed(1) + "%。";
+    } else {
+      msg = "<b>不显著。</b>" + head + "在 α = " + alpha.toFixed(2) + " 下无法拒绝「无差异」原假设（p = " +
+        (pval < 0.0001 ? pval.toExponential(3) : pval.toFixed(5)) + "）。当前 n = " + fmtInt(n) +
+        " 下 MDE 为 " + (100 * mde).toFixed(2) + " pp，而观测差异仅 " + Math.abs(100 * delta).toFixed(2) +
+        " pp；要达到 " + (100 * targetPower).toFixed(0) + "% 功效，每臂需约 " + (isFinite(nReq) ? fmtInt(nReq) : "无穷多") + " 题。";
+    }
+    if (isCross && !sig) {
+      msg += " <b>注意：</b>这正是 AIME 四组运行中跨臂对比的实况——两个 seed 的 p 值分别为 0.486 与 0.406，且符号相反，因此「Reef 实现优于上游 GEPA」这一命题无法由现有数据支持。";
+    }
+    outVerdict.innerHTML = msg;
+  }
+
+  selRun.addEventListener("change", runSandboxA);
+  rngN.addEventListener("input", runSandboxA);
+  rngAlpha.addEventListener("input", runSandboxA);
+  rngPower.addEventListener("input", runSandboxA);
+  runSandboxA();
+
+  /* =========================================================
+     沙盘 B · CAS 发布链自阻塞
+     ========================================================= */
+  var rngLambda = document.getElementById("rng-lambda");
+  var rngPass = document.getElementById("rng-pass");
+  var rngDur = document.getElementById("rng-dur");
+  var oLambda = document.getElementById("val-lambda");
+  var oPass = document.getElementById("val-pass");
+  var oDur = document.getElementById("val-dur");
+  var oW = document.getElementById("val-w");
+  var oRho = document.getElementById("val-rho");
+  var oEta = document.getElementById("val-eta");
+  var oWaste = document.getElementById("val-waste");
+  var oElast = document.getElementById("val-elast");
+  var oDbl = document.getElementById("val-dbl");
+  var svgCas = document.getElementById("svg-cas");
+  var casCurve = document.getElementById("cas-curve");
+  var casCurve2 = document.getElementById("cas-curve2");
+  var casDot = document.getElementById("cas-dot");
+  var casDot2 = document.getElementById("cas-dot2");
+  var casVline = document.getElementById("cas-vline");
+  var casGrid = document.getElementById("cas-grid");
+  var casTicks = document.getElementById("cas-ticks");
+
+  var CX0 = 60, CW = 580, CY0 = 30, CH = 220, CBOT = 250;
+  var LAM_MIN = 1, LAM_MAX = 100, NPTS = 80;
+
+  function rhoOf(lam, p, D) { return lambertW(lam * p * D) / D; }
+
+  function runSandboxB() {
+    var lam = parseFloat(rngLambda.value);
+    var p = parseFloat(rngPass.value);
+    var D = parseFloat(rngDur.value);
+
+    var u = lambertW(lam * p * D);
+    var rho = u / D;
+    var eta = Math.exp(-u);
+    var waste = lam * p * (1 - eta);
+    var elast = (u / (1 + u)) / D;
+    var rhoDbl = rhoOf(2 * lam, p, D);
+    var dblGain = rhoDbl - rho;
+
+    oLambda.textContent = lam + " /天";
+    oPass.textContent = (100 * p).toFixed(0) + "%";
+    oDur.textContent = D.toFixed(1) + " 天";
+    oW.textContent = u.toFixed(4);
+    oRho.textContent = rho.toFixed(4) + " /天";
+    oEta.textContent = (100 * eta).toFixed(2) + "%";
+    oEta.className = "cv " + (eta >= 0.7 ? "pos" : (eta >= 0.4 ? "mid" : "neg"));
+    oWaste.textContent = waste.toFixed(2) + " /天";
+    oElast.textContent = elast.toFixed(4);
+    oDbl.textContent = "+" + dblGain.toFixed(4);
+
+    /* 动态曲线 */
+    var rhoMax = rhoOf(LAM_MAX, p, D) * 1.10;
+    if (rhoMax <= 0) { rhoMax = 1; }
+    var pts1 = [], pts2 = [];
+    for (var i = 0; i < NPTS; i++) {
+      var lamI = LAM_MIN + (LAM_MAX - LAM_MIN) * (i / (NPTS - 1));
+      var x = CX0 + CW * (i / (NPTS - 1));
+      var rI = rhoOf(lamI, p, D);
+      var y1 = CBOT - CH * Math.min(rI / rhoMax, 1);
+      var eI = Math.exp(-lambertW(lamI * p * D));
+      var y2 = CBOT - CH * eI;
+      pts1.push(x.toFixed(2) + "," + y1.toFixed(2));
+      pts2.push(x.toFixed(2) + "," + y2.toFixed(2));
+    }
+    casCurve.setAttribute("points", pts1.join(" "));
+    casCurve2.setAttribute("points", pts2.join(" "));
+
+    var xNow = CX0 + CW * ((lam - LAM_MIN) / (LAM_MAX - LAM_MIN));
+    var yNow = CBOT - CH * Math.min(rho / rhoMax, 1);
+    var yNow2 = CBOT - CH * eta;
+    casDot.setAttribute("cx", xNow.toFixed(2));
+    casDot.setAttribute("cy", yNow.toFixed(2));
+    casDot2.setAttribute("cx", xNow.toFixed(2));
+    casDot2.setAttribute("cy", yNow2.toFixed(2));
+    casVline.setAttribute("x1", xNow.toFixed(2));
+    casVline.setAttribute("x2", xNow.toFixed(2));
+
+    /* 网格与刻度 */
+    var g = "";
+    for (var k = 0; k <= 4; k++) {
+      var yy = CY0 + (CH / 4) * k;
+      g += '<line x1="60" y1="' + yy.toFixed(1) + '" x2="640" y2="' + yy.toFixed(1) +
+        '" stroke="var(--border-subtle)" stroke-width="1" stroke-dasharray="4 4"/>';
+      var rhoTick = rhoMax * (1 - k / 4);
+      g += '<text x="52" y="' + (yy + 4).toFixed(1) + '" text-anchor="end" font-family="var(--font-mono)" font-size="10" fill="var(--accent)">' +
+        rhoTick.toFixed(2) + '</text>';
+      g += '<text x="648" y="' + (yy + 4).toFixed(1) + '" text-anchor="start" font-family="var(--font-mono)" font-size="10" fill="var(--cyan)">' +
+        (100 * (1 - k / 4)).toFixed(0) + '%</text>';
+    }
+    casGrid.innerHTML = g;
+
+    var t = "";
+    for (var j = 0; j <= 5; j++) {
+      var xv = CX0 + (CW / 5) * j;
+      var lamTick = Math.round(LAM_MIN + (LAM_MAX - LAM_MIN) * (j / 5));
+      t += '<text x="' + xv.toFixed(1) + '" y="266" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)">' +
+        lamTick + '</text>';
+    }
+    casTicks.innerHTML = t;
+  }
+
+  rngLambda.addEventListener("input", runSandboxB);
+  rngPass.addEventListener("input", runSandboxB);
+  rngDur.addEventListener("input", runSandboxB);
+  runSandboxB();
+
+  /* =========================================================
+     沙盘 C · 经验漏斗
+     ========================================================= */
+  var rngReq = document.getElementById("rng-req");
+  var rngCov = document.getElementById("rng-cov");
+  var rngAttr = document.getElementById("rng-attr");
+  var rngDup = document.getElementById("rng-dup");
+  var rngWin = document.getElementById("rng-win");
+  var rngHalf = document.getElementById("rng-half");
+  var oReq = document.getElementById("val-req");
+  var oCov = document.getElementById("val-cov");
+  var oAttr = document.getElementById("val-attr");
+  var oDup = document.getElementById("val-dup");
+  var oWin = document.getElementById("val-win");
+  var oHalf = document.getElementById("val-half");
+  var oS0 = document.getElementById("val-s0");
+  var oS1 = document.getElementById("val-s1");
+  var oS2 = document.getElementById("val-s2");
+  var oS3 = document.getElementById("val-s3");
+  var oS4 = document.getElementById("val-s4");
+  var oBar0 = document.getElementById("val-bar0");
+  var oBar1 = document.getElementById("val-bar1");
+  var oBar2 = document.getElementById("val-bar2");
+  var oBar3 = document.getElementById("val-bar3");
+  var oBar4 = document.getElementById("val-bar4");
+  var oRate = document.getElementById("val-rate");
+  var oFresh = document.getElementById("val-fresh");
+  var oBottleneck = document.getElementById("val-bottleneck");
+  var oTail = document.getElementById("val-tail");
+  var oVerdict2 = document.getElementById("val-verdict2");
+
+  function runSandboxC() {
+    var R = parseFloat(rngReq.value);
+    var c = parseFloat(rngCov.value);
+    var a = parseFloat(rngAttr.value);
+    var d = parseFloat(rngDup.value);
+    var W = parseFloat(rngWin.value);
+    var T = parseFloat(rngHalf.value);
+
+    var s0 = R;
+    var s1 = s0 * c;
+    var s2 = s1 * a;
+    var s3 = s2 * (1 - d);
+
+    var ratio = W / T;
+    var wBar = Math.abs(W) < 1e-9 ? 1 : (1 - Math.pow(2, -ratio)) / (ratio * Math.LN2);
+    var tailW = Math.pow(2, -ratio);
+    var s4 = s3 * wBar;
+
+    var rate = s4 / s0;
+
+    oReq.textContent = fmtInt(R);
+    oCov.textContent = (100 * c).toFixed(0) + "%";
+    oAttr.textContent = (100 * a).toFixed(0) + "%";
+    oDup.textContent = (100 * d).toFixed(0) + "%";
+    oWin.textContent = W.toFixed(1) + " 天";
+    oHalf.textContent = T.toFixed(1) + " 天";
+
+    oS0.textContent = fmtInt(s0);
+    oS1.textContent = fmtInt(s1);
+    oS2.textContent = fmtInt(s2);
+    oS3.textContent = fmtInt(s3);
+    oS4.textContent = fmtInt(s4);
+
+    oBar0.style.width = "100%";
+    oBar1.style.width = (100 * c).toFixed(2) + "%";
+    oBar2.style.width = (100 * c * a).toFixed(2) + "%";
+    oBar3.style.width = (100 * c * a * (1 - d)).toFixed(2) + "%";
+    oBar4.style.width = (100 * c * a * (1 - d) * wBar).toFixed(2) + "%";
+
+    oRate.textContent = (100 * rate).toFixed(3) + "%";
+    oRate.className = "cv " + (rate >= 0.1 ? "pos" : (rate >= 0.02 ? "mid" : "neg"));
+    oFresh.textContent = wBar.toFixed(4);
+    oTail.textContent = tailW.toFixed(4);
+
+    var stages = [
+      { name: "反馈上报", v: c },
+      { name: "归因成功", v: a },
+      { name: "去重留存", v: 1 - d },
+      { name: "新鲜度加权", v: wBar }
+    ];
+    var worst = stages[0];
+    stages.forEach(function (s) { if (s.v < worst.v) { worst = s; } });
+    oBottleneck.textContent = worst.name + " " + (100 * worst.v).toFixed(1) + "%";
+
+    oVerdict2.innerHTML = "在 R = " + fmtInt(R) + " 请求/天、窗口 " + W.toFixed(1) + " 天、半衰期 " + T.toFixed(1) +
+      " 天的设定下，每日可得有效训练样本 <b>" + fmtInt(s4) + "</b> 条，端到端有效率 <b>" + (100 * rate).toFixed(3) +
+      "%</b>。最窄一环为 <b>" + worst.name + "</b>（通过率 " + (100 * worst.v).toFixed(1) +
+      "%）。窗口末端样本权重仅剩 <b>" + tailW.toFixed(4) + "</b>，即采集窗口相对半衰期每延长一倍，尾部样本的贡献约减半。" +
+      "注意：上述 R、c、a、d、W、T 均为部署侧假设值，用于演示漏斗的连乘结构，<b>不代表任何实测数据</b>。";
+  }
+
+  rngReq.addEventListener("input", runSandboxC);
+  rngCov.addEventListener("input", runSandboxC);
+  rngAttr.addEventListener("input", runSandboxC);
+  rngDup.addEventListener("input", runSandboxC);
+  rngWin.addEventListener("input", runSandboxC);
+  rngHalf.addEventListener("input", runSandboxC);
+  runSandboxC();
+
+  /* =========================================================
+     沙盘 D · 四阶段 Tab 与 Recipe 选择器
+     ========================================================= */
+  var stageBtns = [
+    { btn: document.getElementById("btn-stage-serve"), panel: document.getElementById("panel-serve") },
+    { btn: document.getElementById("btn-stage-observe"), panel: document.getElementById("panel-observe") },
+    { btn: document.getElementById("btn-stage-grow"), panel: document.getElementById("panel-grow") },
+    { btn: document.getElementById("btn-stage-commit"), panel: document.getElementById("panel-commit") }
+  ];
+  stageBtns.forEach(function (item) {
+    item.btn.addEventListener("click", function () {
+      stageBtns.forEach(function (o) {
+        o.btn.classList.remove("on");
+        o.panel.classList.remove("on");
+      });
+      item.btn.classList.add("on");
+      item.panel.classList.add("on");
+    });
+  });
+
+  var RECIPES = [
+    {
+      mod: "recipes/basic/",
+      sig: "不学习，仅记录请求与交互",
+      tgt: "无",
+      gpu: "否（纯 CPU）",
+      note: "两种栈：<code>external-provider.yaml</code> 代理外部 HTTP 模型（无 GPU）；<code>local-sglang.yaml</code> 接本地 SGLang 但不训练。核心依赖仅 aiohttp / huggingface_hub / pyyaml / reef-client。这是接入闭环的正确起点：先验证请求、收据、反馈与版本链，再决定是否开启学习。"
+    },
+    {
+      mod: "recipes.sao.recipe:SAORecipe",
+      sig: "连续任务由测试或 verifier 给出分数，每个合格 scored rollout 触发一个训练步",
+      tgt: "Model weights",
+      gpu: "是（Slime 后端）",
+      note: "对应 arXiv:2607.07508。示例为 IMOAnswerBench 三题依次运行，每题驱动六次带可验证二值奖励的 scored rollout。README 保留与 GRPO(+DIS) 在 Qwen3-30B-A3B 规模下的对比。Cookbook 中最小的权重更新闭环。"
+    },
+    {
+      mod: "recipes.openclawrl.recipe:OpenClawRLRecipe",
+      sig: "从用户交互的下一状态提取信号：跟进即接受，抱怨即拒绝，无需显式报告",
+      tgt: "Model weights",
+      gpu: "是（Slime 后端）",
+      note: "对应 arXiv:2603.10165。72 session GSM8K 作业流，策略与 PRM 为 Qwen3-4B-Thinking-2507，学生模型 Qwen3-32B。<b>宣称范围限定：已记录的 run 仅覆盖前 36 个 session，第 14 个 session 达到「连续三次通过」的适应判据；单一学生人设、单一任务族，是适应结果而非全基准复现。</b>"
+    },
+    {
+      mod: "recipes.tttd.recipe:TTTDRecipe",
+      sig: "围绕同一问题反复打分尝试；或打分代码搜索，由 guidance model 引导、执行模型冻结",
+      tgt: "Model weights / Guidance-model weights",
+      gpu: "是",
+      note: "同一 recipe 对应两类 workload：第一类更新模型权重（如 Packing 32 等可评分问题），第二类只更新引导模型权重而保持执行侧冻结。后者说明 Reef 支持「只训练一侧」的非对称演化。"
+    },
+    {
+      mod: "recipes.skillclaw.recipe:SkillClawRecipe",
+      sig: "冻结任务列表白天消耗，夜晚每个观测产生一次决策；非 skip 决策全部被选中，次日度量",
+      tgt: "Skill pool（harness tree）",
+      gpu: "否",
+      note: "对应 arXiv:2604.08377。技能池即 composition tree，一夜即一次复合树变更，在单一裁决下定案；已发布的树是任意客户端可拉取的带版本 artifact。密封的夜步骤永不删除技能，因此从不产生 remove 变更。<b>这是无需 GPU 即可完成自我改进的路径。</b>"
+    },
+    {
+      mod: "recipes/gepa（harness_evolve）",
+      sig: "从失败流量中 Pareto 采样父代，反思模型按轮转改写单一组件，小批次筛选 + 完整验证集决胜",
+      tgt: "Harness tree / 规则节点",
+      gpu: "反射调用 gpt-5（API），验证靠 episode",
+      note: "propose 即一次 GEPA 迭代：取 minibatch、反思一个组件、同 minibatch 上评估子代、仅严格改进才返回变更。selection 为验证阶段：每任务分数落到 pending candidate，fronts 更新，树仅在严格平均改进时发布。<code>REEF_GEPA_WORKERS</code> 默认 128 并行，只改 wall time 不改结果。<b>注意：AIME 四组运行的跨臂差异符号翻转，详见第二部分。</b>"
+    }
+  ];
+
+  var selRecipe = document.getElementById("sel-recipe");
+  var oRMod = document.getElementById("val-rmod");
+  var oRSig = document.getElementById("val-rsig");
+  var oRTgt = document.getElementById("val-rtgt");
+  var oRGpu = document.getElementById("val-rgpu");
+  var oRNote = document.getElementById("val-rnote");
+
+  function runSandboxD() {
+    var idx = parseInt(selRecipe.value, 10);
+    var r = RECIPES[idx];
+    oRMod.textContent = r.mod;
+    oRSig.textContent = r.sig;
+    oRTgt.textContent = r.tgt;
+    oRGpu.textContent = r.gpu;
+    oRNote.innerHTML = r.note;
+  }
+  selRecipe.addEventListener("change", runSandboxD);
+  runSandboxD();
+
+})();
+</script>
+
+</body>
+</html>

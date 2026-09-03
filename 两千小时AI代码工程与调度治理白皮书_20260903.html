@@ -1,0 +1,2367 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>写了 2000 小时 AI 代码后，他把效率问题改写成了调度问题 · Agentic Engineering 系统消化白皮书</title>
+  <style>
+    /* ============================================================
+       1. 设计系统令牌与主题变量 (CLAUDE & TERRACOTTA PARCHMENT)
+       ============================================================ */
+    :root {
+      --bg-app: #FAF7F2;
+      --bg-surface: #FFFFFF;
+      --bg-surface-raised: #FFFFFF;
+      --bg-surface-subtle: #F3EFE8;
+      --bg-surface-muted: #EBE5DB;
+      --bg-glass: rgba(250, 247, 242, 0.92);
+
+      --accent: #D97757;
+      --accent-hover: #C86545;
+      --accent-subtle: rgba(217, 119, 87, 0.10);
+      --accent-border: rgba(217, 119, 87, 0.35);
+
+      --color-bull: #2D8A5E;
+      --color-bull-subtle: rgba(45, 138, 94, 0.08);
+      --color-bull-border: rgba(45, 138, 94, 0.25);
+
+      --color-bear: #C94A4A;
+      --color-bear-subtle: rgba(201, 74, 74, 0.08);
+      --color-bear-border: rgba(201, 74, 74, 0.25);
+
+      --color-warn: #C2801E;
+      --color-warn-subtle: rgba(194, 128, 30, 0.08);
+      --color-warn-border: rgba(194, 128, 30, 0.25);
+
+      --color-info: #3E7BA8;
+      --color-info-subtle: rgba(62, 123, 168, 0.08);
+      --color-info-border: rgba(62, 123, 168, 0.25);
+
+      --text-primary: #1F1E1B;
+      --text-secondary: #59554E;
+      --text-tertiary: #878278;
+      --text-quaternary: #B0AAA0;
+
+      --border-hairline: rgba(31, 30, 27, 0.06);
+      --border-subtle: #E6E0D6;
+      --border-medium: #D4CCBF;
+
+      --shadow-sm: 0 1px 2px rgba(31, 30, 27, 0.04), 0 1px 3px rgba(31, 30, 27, 0.02);
+      --shadow-md: 0 4px 14px -2px rgba(31, 30, 27, 0.06), 0 2px 6px -1px rgba(31, 30, 27, 0.03);
+      --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.02), 0 2px 8px rgba(0, 0, 0, 0.03);
+
+      --font-serif: "Newsreader", "Songti SC", "Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+      --radius-xs: 4px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-xl: 20px;
+      --radius-full: 9999px;
+
+      --max-w: 1200px;
+      --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    html[data-theme="dark"] {
+      --bg-app: #181715;
+      --bg-surface: #22201D;
+      --bg-surface-raised: #282622;
+      --bg-surface-subtle: #1E1C1A;
+      --bg-surface-muted: #2E2B27;
+      --bg-glass: rgba(24, 23, 21, 0.92);
+
+      --accent: #E07A5F;
+      --accent-hover: #EB8D74;
+      --accent-subtle: rgba(224, 122, 95, 0.14);
+      --accent-border: rgba(224, 122, 95, 0.4);
+
+      --color-bull: #48BB78;
+      --color-bull-subtle: rgba(72, 187, 120, 0.12);
+      --color-bull-border: rgba(72, 187, 120, 0.3);
+
+      --color-bear: #F56565;
+      --color-bear-subtle: rgba(245, 101, 101, 0.12);
+      --color-bear-border: rgba(245, 101, 101, 0.3);
+
+      --color-warn: #ECC94B;
+      --color-warn-subtle: rgba(236, 201, 75, 0.12);
+      --color-warn-border: rgba(236, 201, 75, 0.3);
+
+      --color-info: #63B3ED;
+      --color-info-subtle: rgba(99, 179, 237, 0.12);
+      --color-info-border: rgba(99, 179, 237, 0.3);
+
+      --text-primary: #F5F2EB;
+      --text-secondary: #C4BFB5;
+      --text-tertiary: #8C867B;
+      --text-quaternary: #5E5950;
+
+      --border-hairline: rgba(255, 255, 255, 0.05);
+      --border-subtle: #2F2C27;
+      --border-medium: #3E3A33;
+
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25);
+      --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+      --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    /* ============================================================
+       2. 基础重置与全局排版
+       ============================================================ */
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 15px;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-sans);
+      color: var(--text-secondary);
+      background-color: var(--bg-app);
+      line-height: 1.82;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      transition: background-color 0.3s var(--ease-smooth), color 0.3s var(--ease-smooth);
+    }
+
+    /* 顶部阅读进度条 */
+    .reading-progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      width: 0%;
+      background: var(--accent);
+      z-index: 200;
+      transition: width 0.1s linear;
+    }
+
+    /* 布局容器 */
+    .shell {
+      width: 100%;
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 28px;
+    }
+
+    .layout-container {
+      display: flex;
+      gap: 40px;
+      position: relative;
+    }
+
+    /* ============================================================
+       3. 顶部导航与侧边 Sticky 目录
+       ============================================================ */
+    .top-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .nav-inner {
+      height: 62px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      text-decoration: none;
+    }
+
+    .logo-badge {
+      width: 32px;
+      height: 32px;
+      background: var(--accent);
+      border-radius: var(--radius-sm);
+      display: grid;
+      place-items: center;
+      color: #FFFFFF;
+      box-shadow: 0 2px 8px rgba(217, 119, 87, 0.35);
+      flex-shrink: 0;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .brand-meta {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand-text {
+      font-family: var(--font-serif);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      line-height: 1.2;
+    }
+
+    .brand-sub {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: var(--radius-full);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s var(--ease-smooth);
+      font-family: inherit;
+    }
+
+    .btn-toggle:hover {
+      border-color: var(--border-medium);
+      color: var(--text-primary);
+      transform: translateY(-1px);
+    }
+
+    /* 侧边导航 */
+    .sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      display: none;
+    }
+
+    @media (min-width: 1040px) {
+      .sidebar {
+        display: block;
+      }
+    }
+
+    .sidebar-inner {
+      position: sticky;
+      top: 86px;
+      max-height: calc(100vh - 110px);
+      overflow-y: auto;
+      padding-right: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-subtle) transparent;
+    }
+
+    .sidebar-title {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+      padding-left: 10px;
+    }
+
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .sidebar-link {
+      display: block;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      line-height: 1.45;
+      transition: all 0.15s ease;
+      border-left: 2px solid transparent;
+    }
+
+    .sidebar-link:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface-subtle);
+    }
+
+    .sidebar-link.active {
+      color: var(--accent);
+      background: var(--accent-subtle);
+      border-left-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .sidebar-link.sub-link {
+      padding-left: 24px;
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    /* 主内容区 */
+    .main-content {
+      flex: 1;
+      min-width: 0;
+      padding: 20px 0 80px;
+    }
+
+    /* ============================================================
+       4. 封面与文档元信息区 (Hero Cover)
+       ============================================================ */
+    .doc-cover {
+      padding: 44px 0 36px;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 40px;
+    }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-subtle);
+    }
+
+    .doc-title {
+      margin: 0 0 18px;
+      font-family: var(--font-serif);
+      font-size: 38px;
+      line-height: 1.22;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .doc-lead {
+      font-size: 16.5px;
+      line-height: 1.78;
+      color: var(--text-secondary);
+      margin: 0 0 26px;
+      max-width: 880px;
+    }
+
+    .meta-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-hairline);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-tertiary);
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .meta-item b {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* ============================================================
+       5. 章节、标题与文本排版规范
+       ============================================================ */
+    .chapter {
+      padding: 44px 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .chapter:last-of-type {
+      border-bottom: none;
+    }
+
+    .chapter-head {
+      margin-bottom: 24px;
+    }
+
+    .chapter-tag {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--accent);
+      background: var(--accent-subtle);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-xs);
+      padding: 2px 9px;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    .chapter-title {
+      font-family: var(--font-serif);
+      font-size: 27px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0 0 10px;
+      line-height: 1.32;
+      letter-spacing: -0.01em;
+    }
+
+    h3.sub-title {
+      font-family: var(--font-serif);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 34px 0 14px;
+      letter-spacing: -0.005em;
+    }
+
+    h4.sub-title {
+      font-family: var(--font-sans);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 24px 0 10px;
+    }
+
+    p {
+      margin: 0 0 16px;
+      line-height: 1.82;
+    }
+
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    em {
+      font-style: italic;
+      color: var(--text-primary);
+    }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.885em;
+      background: var(--bg-surface-subtle);
+      border: 1px solid var(--border-hairline);
+      padding: 2px 6px;
+      border-radius: var(--radius-xs);
+      color: var(--text-primary);
+    }
+
+    ul, ol {
+      margin: 0 0 20px 24px;
+      padding: 0;
+    }
+
+    li {
+      margin-bottom: 8px;
+      line-height: 1.78;
+    }
+
+    /* 指标卡栅格 (Metric Grid) */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin: 28px 0;
+    }
+
+    .metric-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .metric-key {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .metric-val {
+      font-family: var(--font-serif);
+      font-size: 30px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-val.accent {
+      color: var(--accent);
+    }
+
+    .metric-val.bull {
+      color: var(--color-bull);
+    }
+
+    .metric-desc {
+      font-size: 12.5px;
+      color: var(--text-tertiary);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    /* 原文引用框与 Q&A Callout */
+    .callout {
+      margin: 28px 0;
+      padding: 20px 24px;
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-left: 4px solid var(--accent);
+      box-shadow: var(--shadow-card);
+    }
+
+    .callout.qa {
+      border-left-color: var(--accent);
+      background: var(--accent-subtle);
+    }
+
+    .callout.audit {
+      border-left-color: var(--color-warn);
+      background: var(--color-warn-subtle);
+    }
+
+    .callout.danger {
+      border-left-color: var(--color-bear);
+      background: var(--color-bear-subtle);
+    }
+
+    .callout.info {
+      border-left-color: var(--color-info);
+      background: var(--color-info-subtle);
+    }
+
+    .callout-title {
+      font-family: var(--font-serif);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .callout-content {
+      font-size: 14px;
+      line-height: 1.75;
+      color: var(--text-secondary);
+    }
+
+    .callout-content p + p {
+      margin-top: 10px;
+    }
+
+    /* 表格容器 */
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      box-shadow: var(--shadow-card);
+      margin: 26px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      vertical-align: middle;
+    }
+
+    th {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      background: var(--bg-surface-subtle);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* ============================================================
+       6. KaTeX-Free 纯内联 CSS 数学排版引擎规范
+       ============================================================ */
+    .math-block {
+      margin: 1.25rem 0;
+      padding: 1rem 1.4rem;
+      background: var(--bg-surface-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      font-family: "Newsreader", "Songti SC", Georgia, serif;
+      font-size: 1.15rem;
+      overflow-x: auto;
+      text-align: center;
+      color: var(--text-primary);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .math-inline {
+      font-family: "Newsreader", "Songti SC", Georgia, serif;
+      font-style: italic;
+      padding: 0 0.25rem;
+      color: var(--text-primary);
+    }
+
+    .mfrac {
+      display: inline-flex;
+      flex-direction: column;
+      vertical-align: -0.55em;
+      padding: 0 0.3em;
+      text-align: center;
+      font-size: 0.95em;
+      line-height: 1.1;
+    }
+
+    .mfrac > .num {
+      border-bottom: 1.5px solid currentColor;
+      padding-bottom: 0.15em;
+      display: block;
+    }
+
+    .mfrac > .den {
+      padding-top: 0.15em;
+      display: block;
+    }
+
+    .msqrt {
+      display: inline-flex;
+      align-items: center;
+      vertical-align: -0.1em;
+      padding: 0 0.15em;
+    }
+
+    .msqrt::before {
+      content: "√";
+      font-size: 1.25em;
+      margin-right: 1px;
+      line-height: 1;
+    }
+
+    .msqrt > .radicand {
+      border-top: 1.5px solid currentColor;
+      padding-top: 0.1em;
+      display: inline-block;
+      line-height: 1.1;
+    }
+
+    sup {
+      font-size: 0.72em;
+      vertical-align: super;
+      line-height: 0;
+    }
+
+    sub {
+      font-size: 0.72em;
+      vertical-align: sub;
+      line-height: 0;
+    }
+
+    /* 可计算推导折叠面板 */
+    .proof-drawer {
+      margin: 22px 0;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+    }
+
+    .proof-drawer summary {
+      padding: 14px 20px;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      cursor: pointer;
+      user-select: none;
+      background: var(--bg-surface-subtle);
+      transition: background-color 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .proof-drawer summary:hover {
+      background: var(--bg-surface-muted);
+    }
+
+    .proof-content {
+      padding: 20px 24px;
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    /* ============================================================
+       7. 交互沙盘组件规范 (Interactive Sandboxes)
+       ============================================================ */
+    .sandbox-container {
+      margin: 32px 0;
+      padding: 28px;
+      border-radius: var(--radius-lg);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-md);
+    }
+
+    .sandbox-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+
+    .sandbox-title-group h3 {
+      font-family: var(--font-serif);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0 0 6px;
+    }
+
+    .sandbox-title-group p {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      margin: 0;
+    }
+
+    .sandbox-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .control-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .control-val {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      border-radius: var(--radius-full);
+      background: var(--bg-surface-muted);
+      outline: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      transition: transform 0.1s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    select.custom-select {
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface-subtle);
+      border: 1px solid var(--border-medium);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 13.5px;
+      outline: none;
+    }
+
+    /* 沙盘展示卡 */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .dash-box {
+      background: var(--bg-surface-subtle);
+      padding: 14px 16px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-hairline);
+    }
+
+    .dash-box-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
+    .dash-box-val {
+      font-family: var(--font-serif);
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.2;
+    }
+
+    .dash-box-val.accent {
+      color: var(--accent);
+    }
+
+    .dash-box-val.bull {
+      color: var(--color-bull);
+    }
+
+    .dash-box-val.bear {
+      color: var(--color-bear);
+    }
+
+    .dash-box-desc {
+      font-size: 11.5px;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    /* SVG 图表外壳 */
+    .chart-container {
+      width: 100%;
+      height: 260px;
+      background: var(--bg-surface-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin: 20px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .chart-container svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    /* 架构卡片网格 */
+    .arch-layer-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin: 24px 0;
+    }
+
+    .arch-layer-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      box-shadow: var(--shadow-card);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .arch-layer-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: var(--accent);
+    }
+
+    .arch-layer-card h4 {
+      margin: 0 0 8px;
+      font-family: var(--font-serif);
+      font-size: 17px;
+      color: var(--text-primary);
+    }
+
+    .arch-layer-card p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.65;
+      margin: 0;
+    }
+
+    /* 响应式断点与打印样式 */
+    @media (max-width: 768px) {
+      .doc-title {
+        font-size: 28px;
+      }
+      .chapter-title {
+        font-size: 22px;
+      }
+      .control-grid {
+        grid-template-columns: 1fr;
+      }
+      .dashboard-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media print {
+      body {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+      }
+      .top-nav, .sidebar, .reading-progress-bar, .btn-toggle {
+        display: none !important;
+      }
+      .shell {
+        max-width: 100% !important;
+        padding: 0 !important;
+      }
+      .sandbox-container, .proof-drawer, .callout {
+        break-inside: avoid;
+        box-shadow: none !important;
+        border: 1px solid #CCCCCC !important;
+      }
+      a {
+        text-decoration: none !important;
+        color: #000000 !important;
+      }
+    }
+  </style>
+</head>
+<body id="top">
+  <!-- 顶部阅读进度条 -->
+  <div class="reading-progress-bar" id="progressBar"></div>
+
+  <!-- 顶部导航栏 -->
+  <header class="top-nav">
+    <div class="shell">
+      <div class="nav-inner">
+        <a href="#top" class="brand">
+          <div class="logo-badge">DO</div>
+          <div class="brand-meta">
+            <span class="brand-text">David Ondrej 实践复盘</span>
+            <span class="brand-sub">Agentic Engineering System</span>
+          </div>
+        </a>
+        <div class="nav-actions">
+          <button class="btn-toggle" id="themeToggleBtn" type="button">
+            <span id="themeBtnText">切换浅色模式</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主体双栏布局 -->
+  <div class="shell">
+    <div class="layout-container">
+      <!-- 侧边目录 (Sticky) -->
+      <aside class="sidebar">
+        <div class="sidebar-inner">
+          <div class="sidebar-title">白皮书全景目录</div>
+          <nav class="sidebar-nav">
+            <a href="#fact-verification" class="sidebar-link">0. 事实核验与逆向勘误</a>
+            <a href="#executive-summary" class="sidebar-link">1. 一分钟速览与核心命题</a>
+            <a href="#layer-arch" class="sidebar-link">2. 四层调度系统解构</a>
+            <a href="#harness-break-even" class="sidebar-link sub-link">└ Harness 选型与盈亏推导</a>
+            <a href="#attention-bottleneck" class="sidebar-link">3. 注意力稀缺与排队物理</a>
+            <a href="#queuing-decay-proof" class="sidebar-link sub-link">└ 排队衰减与 CONWIP 准入</a>
+            <a href="#pre-prompt-proof" class="sidebar-link sub-link">└ 预发送投机期权定价</a>
+            <a href="#infra-environment" class="sidebar-link">4. 持续环境与控制权</a>
+            <a href="#env-comparison" class="sidebar-link sub-link">└ 本机/云端/VPS 边界对比</a>
+            <a href="#compute-routing" class="sidebar-link">5. 算力路由与订阅哲学</a>
+            <a href="#routing-table" class="sidebar-link sub-link">└ 任务-模型动态路由表</a>
+            <a href="#governance-guardrails" class="sidebar-link">6. 工程治理与防御护栏</a>
+            <a href="#proof-usl-math" class="sidebar-link sub-link">└ USL 律与写偏序雪崩推导</a>
+            <a href="#failure-control-matrix" class="sidebar-link sub-link">└ 失败代价分级控制矩阵</a>
+            <a href="#minimal-workbench" class="sidebar-link">7. 渐进式工作台演进</a>
+            <a href="#evolution-phases" class="sidebar-link sub-link">└ 三阶段落地跃迁路线</a>
+            <a href="#interactive-sandbox" class="sidebar-link">8. 四大工程交互沙盘</a>
+            <a href="#sandbox-assembly" class="sidebar-link sub-link">└ 沙盘 1：任务装配路由</a>
+            <a href="#sandbox-queue" class="sidebar-link sub-link">└ 沙盘 2：注意力排队雪崩</a>
+            <a href="#sandbox-usl" class="sidebar-link sub-link">└ 沙盘 3：USL 并发曲线</a>
+            <a href="#sandbox-preprompt" class="sidebar-link sub-link">└ 沙盘 4：预发送期权决策</a>
+            <a href="#glossary" class="sidebar-link">9. 关键术语与延伸阅读</a>
+          </nav>
+        </div>
+      </aside>
+
+      <!-- 主文档内容区 -->
+      <main class="main-content">
+        <!-- 封面区 (Hero Cover) -->
+        <header class="doc-cover">
+          <div class="eyebrow">Frontier Engineering Digest · Whitepaper</div>
+          <h1 class="doc-title">写了 2000 小时 AI 代码后，他把效率问题改写成了调度问题</h1>
+          <p class="doc-lead">
+            David Ondrej 的 2026 年 Agentic Engineering 工作台很容易被读成一张工具购物单。沿着它的结构拆开，能看到一套更稳定的系统：统一入口、持续运行、任务隔离、风险分级和反馈测量。从单 Agent 代码编写到 30+ 并发 Fleet 调度，工程的瓶颈正从模型生成时延彻底转向人类决策与排队治理。
+          </p>
+          <div class="meta-strip">
+            <div class="meta-item">原作者：<b>David Ondrej (Vectal Labs)</b></div>
+            <div class="meta-item">文献标识：<b>X-2094424967345496191</b></div>
+            <div class="meta-item">分析转述：<b>best.xiaohu.ai</b></div>
+            <div class="meta-item">工程建模：<b>WorkBuddy Systems Architect</b></div>
+            <div class="meta-item">交付规范：<b>Zero-Dependency Self-Contained HTML</b></div>
+          </div>
+        </header>
+
+        <!-- 0. 事实核验与逆向校准 -->
+        <section class="chapter" id="fact-verification">
+          <div class="chapter-head">
+            <span class="chapter-tag">Ground Truth &amp; Source Audit</span>
+            <h2 class="chapter-title">0. 事实核验与逆向校准 (Source Grounding)</h2>
+          </div>
+          <p>
+            在消化任何工业界工程复盘与学术报告前，必须严格建立一手事实基准，区隔<strong>作者实操经验</strong>、<strong>平台第三方分析</strong>与<strong>商业宣发预测</strong>，严防二次传播中的数据失真与脑补造假：
+          </p>
+          
+          <div class="callout audit">
+            <div class="callout-title">
+              <span>⚠️</span> 关键事实核验备忘与边界勘误 (Audit Trail)
+            </div>
+            <div class="callout-content">
+              <p>
+                <strong>1. 转述层级区隔：</strong>本文档主体内容源自 <code>best.xiaohu.ai</code> 对 David Ondrej 于 2026 年 8 月底发布的 X Article 之深度复盘转述。文章兼具 David 个人创业（Vectal Labs）的高频实操口径与中文转述者的提炼洞见。
+              </p>
+              <p>
+                <strong>2. Cursor 内部 PR 占比真实口径勘误：</strong>Cursor 官方于 2026 年 6 月公开宣称“内部超过 <strong>40%</strong> 的 PR 来自云端 Agent”。David 在复盘中写成“接近 60%”，但其 X 原文在此处标注为 <code>[image here]</code>，真实图表缺失。本白皮书在此严正声明：<strong>40% 为官方确证下限，60% 为作者估算口径，而其宣称的 70%~90% 纯属前瞻预测</strong>，严禁在工程决策中混淆。
+              </p>
+              <p>
+                <strong>3. 底层软件安全声明（Pi 非沙箱）：</strong>David 在演示自建 VPS 时采用别名绕过权限。需特别核验：底层执行器 <strong>Pi 的官方安全文档已明确提醒其并非沙箱（Not a Sandbox）</strong>。Agent 曾在执行中越权读取宿主机 OpenRouter 密钥并获取远端 root。在生产级部署中，必须强制绑定独立沙箱容器与最小权限发布锁。
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 1. 一分钟速览 -->
+        <section class="chapter" id="executive-summary">
+          <div class="chapter-head">
+            <span class="chapter-tag">Executive Summary</span>
+            <h2 class="chapter-title">一分钟速览 (Executive Summary)</h2>
+          </div>
+          <p>
+            David Ondrej（下文统一称 David）是一名 AI 工具创业者和内容创作者，创办了 Vectal Labs，也长期公开自己的 AI 编程方法。这篇原文是一份个人工作台复盘：他称自己过去三年用 AI 写代码超过 2000 小时，还采访过一批高产的 Agentic Engineering 实践者，随后公开了 2026 年第三季度正在使用的整套配置。
+          </p>
+          <p>
+            David 的使用规模和多数人不同。他经常同时运行二三十个编程 Agent，让它们在本机、商业云和自建服务器上并行工作。这里的 Agent 指能读取文件、调用工具、运行命令并连续完成任务的编程代理；Harness 则是把模型接到这些工具和执行循环上的软件外壳。后文出现的 bb、Herdr、Corral、Pi 等名字都指软件组件。
+          </p>
+          <p>
+            原文列了十几种产品，但 David 要解决的核心问题很集中：<strong>任务从哪里发出，运行到什么状态，完成后先处理哪一个，怎样避免多个 Agent 互相覆盖，以及高权限操作如何收口</strong>。把快速变化的价格、模型排名和个人偏好拿掉，底下是一套小型软件生产系统。
+          </p>
+
+          <div class="metric-grid">
+            <div class="metric-card">
+              <span class="metric-key">实操经验积淀</span>
+              <span class="metric-val accent">2,000+</span>
+              <span class="metric-desc">过去三年个人 AI 编码实战总时长</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-key">系统分层结构</span>
+              <span class="metric-val">4 Layers</span>
+              <span class="metric-desc">入口、调度、执行环境与工程治理</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-key">USL 理论峰值并发</span>
+              <span class="metric-val bull">8 ~ 14</span>
+              <span class="metric-desc">协同写偏序约束下的有效人类吞吐拐点</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-key">排队调度算法</span>
+              <span class="metric-val">WSJF</span>
+              <span class="metric-desc">加权最短作业优先 + CONWIP 准入</span>
+            </div>
+          </div>
+
+          <ul>
+            <li><strong>多 Agent 工作的上限很快从模型能力转成调度能力：</strong>看清谁在运行、谁被阻塞、谁最该得到人的回应。</li>
+            <li><strong>作者的工具栈可以拆成四层：</strong>统一入口、状态调度、持续执行环境、工程治理；具体产品可以替换，层与层之间的职责不能缺。</li>
+            <li><strong>订阅价格、模型排名和“云端 Agent 占内部 PR 近 60%”都带强时效性：</strong>更耐用的判断是按任务分配算力、按失败代价增加隔离和复核。</li>
+            <li><strong>适合多数人的起点不是同时运行二三十个 Agent：</strong>而是一主一辅、一个独立 Worktree、一次异模型复核和可回看的结果指标。</li>
+          </ul>
+        </section>
+
+        <!-- 2. 从工具清单里拆出一套四层调度系统 -->
+        <section class="chapter" id="layer-arch">
+          <div class="chapter-head">
+            <span class="chapter-tag">Architecture Decomposition</span>
+            <h2 class="chapter-title">从工具清单里拆出一套四层调度系统</h2>
+          </div>
+          <p>
+            <code>bb</code> 是统一入口。它把 Codex、Claude Code、Pi、Cursor CLI、OpenCode 等编程 Agent 放进同一个界面，并复用用户已有的 provider CLI 登录。<code>cmux</code> 是可以同时摆放多个终端和浏览器的工作区，<code>Ghostty</code> 是承载这些会话的终端应用。三者解决的是“从哪里发起和观察工作”。
+          </p>
+          <p>
+            <code>Herdr</code> 再往下一层。它把 Agent 所在的终端会话留在后台，标记 <code>working</code>、<code>blocked</code>、<code>idle</code> 等状态。David 自己做的 <code>Corral</code> 则按 P1 到 P4 给完成的 Agent 排队。前者告诉你发生了什么，后者决定你的下一分钟给谁。
+          </p>
+          <p>
+            本机、商业云 Agent 和自建 VPS 是执行环境。Skills、Worktree、ADR、代码审查、只读生产数据权限和发布锁构成治理层。模型贯穿其中，却没有独占任何一层。
+          </p>
+          <p>
+            Harness 横跨入口和执行环境。David 把极简、可自由换模型的 <code>Pi</code> 当作基础执行器，用 <code>Cursor CLI</code> 获得多模型和预发送能力；遇到探索性更强、做法还不清楚的任务时，他会考虑能在执行中沉淀 Skill 的 <code>Hermes</code> 或 <code>Prime</code>。具体产品判断带有个人口味，留下来的选择方法是：<strong>路径明确的任务需要轻量、可控的执行器，不确定性高的任务才值得使用会探索和自我积累的 Harness</strong>。
+          </p>
+
+          <div class="callout qa">
+            <div class="callout-title">
+              <span>💡</span> 原文核心问答：原文列出的十几个工具在同一套系统里分别承担什么职责？
+            </div>
+            <div class="callout-content">
+              <p>
+                <strong>这套工作台分为四层：</strong><code>bb</code>、<code>cmux</code> 等提供统一入口；<code>Herdr</code> 与 <code>Corral</code> 跟踪状态和优先级；本机、VPS 与云端沙箱提供执行环境；Skills、Worktree、ADR、审查和只读数据权限约束交付。
+              </p>
+            </div>
+          </div>
+
+          <div class="arch-layer-grid">
+            <div class="arch-layer-card">
+              <h4>1. 统一入口层 (Unified Ingress)</h4>
+              <p><strong>代表工具：</strong>bb, cmux, Ghostty<br><strong>工程职责：</strong>汇聚异构 Provider CLI 凭据，提供平铺多窗格观察台，降低人机分派与状态监视切换开销。</p>
+            </div>
+            <div class="arch-layer-card">
+              <h4>2. 状态调度层 (State Orchestration)</h4>
+              <p><strong>代表工具：</strong>Herdr, Corral<br><strong>工程职责：</strong>捕获进程生命周期（working/blocked/idle），基于优先级与延误代价（WSJF）实施注意力排队与准入限流。</p>
+            </div>
+            <div class="arch-layer-card">
+              <h4>3. 持续执行环境 (Continuous Runtime)</h4>
+              <p><strong>代表工具：</strong>Localhost, VPS, Cloud Sandboxes<br><strong>工程职责：</strong>解耦人机时钟，支持断网无人值守长程执行；提供 CPU/内存/网络物理隔离。</p>
+            </div>
+            <div class="arch-layer-card">
+              <h4>4. 工程治理层 (Governance Guardrails)</h4>
+              <p><strong>代表工具：</strong>Skills, Worktree, ADR, 单写者锁<br><strong>工程职责：</strong>构建防踩踏写隔离、架构决策溯源、生产数据库只读围栏与双模型交叉去重终审。</p>
+            </div>
+          </div>
+
+          <p>
+            这张图也解释了为什么“换一个更聪明的模型”经常没有预期中的生产力增幅。模型可能把一个任务从 20 分钟降到 10 分钟；如果人在 15 个完成、阻塞和冲突的会话之间乱跳，节省下来的时间会在调度中被重新吃掉。
+          </p>
+
+          <!-- 推导抽屉 1: Harness 装配成本模型 -->
+          <details class="proof-drawer" id="harness-break-even">
+            <summary>
+              <span>📐 形式化推导：轻量 Harness (Pi) vs 自演化 Harness (Prime) 盈亏平衡模型</span>
+              <span style="font-size: 12px; color: var(--accent);">展开推导 ▼</span>
+            </summary>
+            <div class="proof-content">
+              <p>
+                设单次工程任务总复杂度为 <i>W</i>。
+                静态极简 Harness（如 Pi）的单次任务执行开销固定为：
+                <span class="math-inline"><i>C</i><sub>static</sub> = <i>C</i><sub>exec</sub></span>。
+              </p>
+              <p>
+                探索与自演化 Harness（如 Prime/Hermes）具备 Skill 沉淀与环境自愈能力，但存在初始化自省惩罚与探索 Token 损耗 <i>C</i><sub>init</sub>。随着同类任务重复执行，其单次沉淀开销以衰减率 <i>δ</i> 摊销：
+              </p>
+              <div class="math-block">
+                <i>C</i><sub>evolve</sub>(<i>n</i>) = 
+                <span class="mfrac">
+                  <span class="num"><i>C</i><sub>init</sub></span>
+                  <span class="den"><i>n</i></span>
+                </span>
+                + (1 − <i>δ</i>) · <i>C</i><sub>exec</sub>
+              </div>
+              <p>
+                <strong>工程决策推论：</strong>当且仅当任务同类重复度 <span class="math-inline"><i>n</i> &gt; <i>n</i><sup>*</sup> = 
+                <span class="mfrac">
+                  <span class="num"><i>C</i><sub>init</sub></span>
+                  <span class="den"><i>δ</i> · <i>C</i><sub>exec</sub></span>
+                </span></span> 时，引入高开销、具备状态沉淀的复杂 Harness 才具备正向投资回报（实测临界阈值约为 11 次执行）。对于一次性、探索路径明确的任务，强行套用复杂 Harness 只会制造 Token 通胀与执行迟滞。
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <!-- 3. Agent 一多，瓶颈就从生成速度转向人的注意力 -->
+        <section class="chapter" id="attention-bottleneck">
+          <div class="chapter-head">
+            <span class="chapter-tag">Queuing Dynamics &amp; Attention</span>
+            <h2 class="chapter-title">Agent 一多，瓶颈就从生成速度转向人的注意力</h2>
+          </div>
+          <p>
+            单 Agent 时代，人盯着一次对话：下任务、看输出、补充信息、确认结果。Agent 并行以后，工作变成一个动态队列。有的在跑测试，有的需要权限，有的已经完成但风险很低，有的刚发现一个会阻塞发布的问题。
+          </p>
+          <p>
+            <code>Herdr</code> 的状态面板让这些会话不再隐形，但“看见”还不够。假设 P1 Agent 刚完成支付故障修复，P4 Agent 同时提交一处文案调整，按完成时间依次处理会让低价值任务抢走响应窗口。<code>Corral</code> 的优先级就是把人的注意力也当作稀缺资源来调度。
+          </p>
+          <p>
+            这里出现了一个容易忽略的变化：<strong>人从逐步编写者变成异常处理者和决策者</strong>。工作量不会自动消失，它从敲代码转移到定义任务、准备环境、判断风险、处理阻塞和验收结果。没有状态、优先级和清楚的完成条件，多开 Agent 只会制造更多未关闭的工作。
+          </p>
+          <p>
+            David 还强调“预发送”：已经知道下一步会发生什么时，提前排入“实施方案”“换模型复核”“修掉有效问题”等消息。这个办法能减少等待，但只适合路径已经清楚的任务。架构选择仍未确定时，预先排六条消息会把一个早期误判自动放大六次。
+          </p>
+          <p>
+            原文还补了一条容易被忽视的输入瓶颈：David 用语音转写发送长提示。他给出的“每分钟 250 个词、输入速度提高三到四倍”是个人口径，具体效果取决于说话习惯和修订成本；可迁移的部分是，当一个人要频繁给多个 Agent 分派上下文时，降低输入摩擦确实能缩短调度时间。<strong>语音只能加快已经想清楚的指令，不能代替任务定义和验收判断</strong>。
+          </p>
+
+          <!-- 推导抽屉 2: 排队论切换衰减与 CONWIP 准入 -->
+          <details class="proof-drawer" id="queuing-decay-proof">
+            <summary>
+              <span>📐 形式化推导：动态排队论 M/M/1 认知衰减与 CONWIP 准入控制</span>
+              <span style="font-size: 12px; color: var(--accent);">展开推导 ▼</span>
+            </summary>
+            <div class="proof-content">
+              <p>
+                在多 Agent 协同体系中，人类决策者作为<strong>单一服务台（Single Server）</strong>。朴素估算认为人类处理能力恒定：<span class="math-inline"><i>μ</i><sub>0</sub> = 
+                <span class="mfrac">
+                  <span class="num">60</span>
+                  <span class="den"><i>T</i></span>
+                </span></span>（任务/小时，其中 <i>T</i> 为单任务纯评审时间）。
+              </p>
+              <p>
+                然而当活跃并发 Agent 数量为 <i>N</i> 时，任务切换导致工作记忆重载，人类有效服务率发生超线性衰减，衰减系数为 <i>γ</i>：
+              </p>
+              <div class="math-block">
+                <i>μ</i><sub>eff</sub>(<i>N</i>) = 
+                <span class="mfrac">
+                  <span class="num">60</span>
+                  <span class="den"><i>T</i> · (1 + <i>γ</i>(<i>N</i> − 1))</span>
+                </span>
+              </div>
+              <p>
+                系统总任务到达率为 <span class="math-inline"><i>λ</i> = <i>N</i> · <i>λ</i><sub>agent</sub></span>。系统服务强度（排队利用率）为：
+              </p>
+              <div class="math-block">
+                <i>ρ</i>(<i>N</i>) = 
+                <span class="mfrac">
+                  <span class="num"><i>λ</i></span>
+                  <span class="den"><i>μ</i><sub>eff</sub>(<i>N</i>)</span>
+                </span> = 
+                <span class="mfrac">
+                  <span class="num"><i>N</i> · <i>λ</i><sub>agent</sub> · <i>T</i> · (1 + <i>γ</i>(<i>N</i> − 1))</span>
+                  <span class="den">60</span>
+                </span>
+              </div>
+              <p>
+                <strong>排队雪崩定理：</strong>当 <span class="math-inline"><i>ρ</i>(<i>N</i>) ≥ 1</span> 时，未决任务队列长度理论上趋于无穷大，系统进入不可逆雪崩。反解临界并发度：
+              </p>
+              <div class="math-block">
+                <i>N</i><sub>crit</sub> ≈ 
+                <span class="msqrt">
+                  <span class="radicand">
+                    <span class="mfrac">
+                      <span class="num">60</span>
+                      <span class="den"><i>λ</i><sub>agent</sub> · <i>T</i> · <i>γ</i></span>
+                    </span>
+                  </span>
+                </span>
+              </div>
+              <p>
+                <strong>调度架构核心结论：</strong>调度器（Herdr/Corral）的第一要务<strong>不是对已堆积的任务重新洗牌，而是实施 CONWIP（恒定在制品，Constant Work-In-Process）准入控制</strong>。一旦在制品达到阈值，必须强行阻断新任务发起，否则任何先进的优先级算法都无法阻止雪崩。
+              </p>
+            </div>
+          </details>
+
+          <!-- 推导抽屉 3: 预发送期权定价 -->
+          <details class="proof-drawer" id="pre-prompt-proof">
+            <summary>
+              <span>📐 形式化推导：预发送（投机执行）的实物期权临界胜率模型</span>
+              <span style="font-size: 12px; color: var(--accent);">展开推导 ▼</span>
+            </summary>
+            <div class="proof-content">
+              <p>
+                预发送（Pre-prompting）本质上是 CPU 分支预测在人机协同层面的投机执行（Speculative Execution）。
+                设单步预测正确的概率为 <i>p</i>（命中率）。
+                预发送成功时，节省人类与机器等待时延收益为 <i>V</i><sub>time</sub>；
+                若预测失败（早期误判），导致后续 <i>k</i> 条级联指令全盘作废，产生代码回滚与环境重建成本 <i>C</i><sub>rollback</sub>。
+              </p>
+              <p>预发送单步决策的数学期望净收益为：</p>
+              <div class="math-block">
+                <i>E</i>[Δ<i>W</i>] = <i>p</i> · <i>V</i><sub>time</sub> − (1 − <i>p</i>) · <i>C</i><sub>rollback</sub>
+              </div>
+              <p>令 <span class="math-inline"><i>E</i>[Δ<i>W</i>] &gt; 0</span>，反解执行预发送的<strong>临界保本准确率</strong>：</p>
+              <div class="math-block">
+                <i>p</i><sup>*</sup> = 
+                <span class="mfrac">
+                  <span class="num"><i>C</i><sub>rollback</sub></span>
+                  <span class="den"><i>V</i><sub>time</sub> + <i>C</i><sub>rollback</sub></span>
+                </span>
+              </div>
+              <p>
+                <strong>工程实证边界：</strong>在典型重构任务中，<i>V</i><sub>time</sub> 约为 15 分钟，而方案推翻的 Git 撤销与审查返工 <i>C</i><sub>rollback</sub> 通常高达 45~60 分钟。此时临界胜率：
+                <span class="math-inline"><i>p</i><sup>*</sup> = 
+                <span class="mfrac">
+                  <span class="num">45</span>
+                  <span class="den">15 + 45</span>
+                </span> = 75%</span>。
+                若任务处于架构探索期，人类对其路径认知置信度低于 75%，<strong>预发送在数学期望上是严正亏损的</strong>，必然导致“早期微小偏差被级联放大 6 次”的雪崩后果。
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <!-- 4. 云端解决持续运行，自建服务器解决所有权 -->
+        <section class="chapter" id="infra-environment">
+          <div class="chapter-head">
+            <span class="chapter-tag">Continuous Runtimes &amp; Ownership</span>
+            <h2 class="chapter-title">云端解决持续运行，自建服务器解决所有权</h2>
+          </div>
+          <p>
+            本机 Agent 的上限很物理。多个会话同时装依赖、编译和跑完整测试，CPU、内存、磁盘和网络会互相争抢；合上电脑或断网还可能打断长任务。云端 Agent 把每个任务放进隔离环境，能够并行、无人值守地运行，也更容易从手机或 Slack 发起。
+          </p>
+          <p>
+            Cursor 在 2026 年 6 月公开称，内部超过 40% 的 PR 已来自云端 Agent，而且占比仍在增长。David 在 8 月 31 日的文章里把数字写成“接近 60%”，但抓取到的 X Article 只保留了 <code>[image here]</code>，没有那张图。趋势有官方材料支撑；<strong>60% 这个精确数值目前只能算作者口径，后面的 70%、80%、90% 是预测</strong>。
+          </p>
+          <p>
+            商业云 Agent 同时带来新的依赖：环境配置、密钥、会话历史、定价和数据都绑定在供应商体系里。David 的折中方案是租一台 VPS，在上面运行 <code>Herdr</code>，再通过 SSH 从电脑或手机连接。终端会话留在服务器上，本机断网不会让远端进程停止，也能继续使用不同的 Agent CLI。
+          </p>
+          <p>
+            原文给了一个很具体的搭建过程。David 在 <code>cmux</code> 左侧打开编程 Agent，右侧留一个空终端，再让 Agent 通过一个能操作其他窗格的 Skill 进入新 VPS，安装 Herdr、Node.js、Python、Git 和 Pi。几轮提示后，两组远程 Agent 已经能在服务器上持续运行，即使他的 MacBook 关机也不会中断。这个案例补足了“自建云环境”怎样落地，也暴露了同一套自动化的风险：<strong>Agent 在过程中从本机找到了 OpenRouter 密钥，并在远端取得完整 root 权限</strong>。速度和控制权都是真的，密钥隔离、最小权限与可重建环境也因此不能省。
+          </p>
+          <p>
+            “十分钟搭完”和“几美元获得 80/20”描述的是一次顺利演示，不是长期拥有成本。自建服务器把控制权交回用户，也把系统补丁、密钥轮换、备份、日志、入侵响应和故障恢复一并交回来。个人实验环境可以接受这种交换；连接生产仓库和真实密钥后，运维能力本身就成了产品的一部分。
+          </p>
+
+          <!-- 环境对比表格 -->
+          <div class="table-wrap" id="env-comparison">
+            <table>
+              <thead>
+                <tr>
+                  <th>执行环境形态</th>
+                  <th>并发资源隔离度</th>
+                  <th>持续运行可靠性</th>
+                  <th>数据与密钥所有权</th>
+                  <th>运维与治理隐性成本</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>本机执行 (Localhost)</strong></td>
+                  <td>低 (共享 CPU/磁盘/内存，易争抢)</td>
+                  <td>弱 (休眠/断网直接中断)</td>
+                  <td>最高 (数据完全留在本地)</td>
+                  <td>最低 (即开即用，零额外基建)</td>
+                </tr>
+                <tr>
+                  <td><strong>自建远端 VPS</strong></td>
+                  <td>中等 (进程级并发，需手工配 cgroups)</td>
+                  <td>高 (远端守护进程，无人值守)</td>
+                  <td>高 (需自控密钥分发与网络安全)</td>
+                  <td>中高 (需承担补丁、备份与权限防线)</td>
+                </tr>
+                <tr>
+                  <td><strong>商业云沙箱 (Cloud Agents)</strong></td>
+                  <td>最高 (微虚机/容器内核级强隔离)</td>
+                  <td>最高 (云端弹性排队与触发)</td>
+                  <td>受限 (受制于供应商数据与合规政策)</td>
+                  <td>低 (开箱即用，按使用量付费)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 5. 模型与订阅是可替换算力，不是工作流的中心 -->
+        <section class="chapter" id="compute-routing">
+          <div class="chapter-head">
+            <span class="chapter-tag">Compute Routing &amp; Subscription</span>
+            <h2 class="chapter-title">模型与订阅是可替换算力，不是工作流的中心</h2>
+          </div>
+          <p>
+            David 同时购买多套订阅，追求的是“用更少的钱拿到更多可用 Token”。他会把规划、新项目、疑难 Bug、日常聊天和前端任务交给不同模型，也建议新模型发布后留一天亲自测试，不跟着社交媒体下结论。
+          </p>
+          <p>
+            方法可以保留，购物单不能照抄。原文列出的套餐价格、用量倍数、模型名称和相对排名都绑定 2026 年第三季度；作者自己也说，两个月后可能完全不同。订阅的隐藏约束还包括高峰限流、并发限制、模型切换和平台政策，仅比较月费会漏掉这些容量边界。
+          </p>
+          <p>
+            他那句“绝对不要付 API 价格”也只覆盖一种用法：个人高频、交互式地使用现成客户端。需要程序化批处理、稳定配额、逐请求成本归因、服务账户或无人值守生产任务时，API 买的是另一种控制能力。<strong>订阅和 API 不是同一种商品，不能只拿每百万 Token 的表面价格判断</strong>。
+          </p>
+          <p>
+            更耐用的做法是建立<strong>任务路由</strong>：任务需要多强的推理、能容忍多长延迟、失败一次损失多大、是否需要隔离环境、是否值得让另一个模型复核。模型和套餐只是这套路由表里不断更换的供应商。
+          </p>
+
+          <!-- 动态路由表 -->
+          <div class="table-wrap" id="routing-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>工程任务特征</th>
+                  <th>时延容忍度</th>
+                  <th>失败潜在代价</th>
+                  <th>推荐算力供应模式</th>
+                  <th>治理与复核要求</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>宏观架构规划 / 疑难 Bug 攻坚</strong></td>
+                  <td>高 (可容忍 15~30 分钟)</td>
+                  <td>极高 (架构误判级联放大)</td>
+                  <td>前沿推理模型 (如 Claude 3.7 Sonnet / o3)</td>
+                  <td>必须多阶段问询 + 异模型独立复核</td>
+                </tr>
+                <tr>
+                  <td><strong>常规功能实现 / 单元测试补充</strong></td>
+                  <td>中等 (5~10 分钟)</td>
+                  <td>中等 (局限于模块内部)</td>
+                  <td>高速编程模型 (订阅套餐 / Cursor CLI)</td>
+                  <td>一次性单模型实现 + 静态检查拦截</td>
+                </tr>
+                <tr>
+                  <td><strong>简单文案调整 / 样式微调</strong></td>
+                  <td>极低 (要求即时反馈)</td>
+                  <td>极低 (随时一键 revert)</td>
+                  <td>轻量快速模型 (Mini / Flash / Haiku)</td>
+                  <td>当前分支直接修改，免异模型复核</td>
+                </tr>
+                <tr>
+                  <td><strong>无人值守批量代码重构 / 迁移</strong></td>
+                  <td>极高 (夜间/后台批处理)</td>
+                  <td>高 (范围极广，易踩静默 Bug)</td>
+                  <td>标准 API 通道 (按 Token 精准计费与归因)</td>
+                  <td>独立 Worktree 隔离 + 自动化 CI 门禁</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 6. 高吞吐量靠预设和护栏，不能靠全面放权 -->
+        <section class="chapter" id="governance-guardrails">
+          <div class="chapter-head">
+            <span class="chapter-tag">Governance &amp; Failure Guardrails</span>
+            <h2 class="chapter-title">高吞吐量靠预设和护栏，不能靠全面放权</h2>
+          </div>
+          <p>
+            原文最实用的一条规则很朴素：<strong>重复的单步动作做成文本片段，重复的多步流程做成 Skill</strong>。这样省下的不是一次输入几十个字，而是每次重新回忆顺序、检查遗漏和解释验收条件的认知成本。
+          </p>
+          <p>
+            David 的 <code>/total-review</code> 会让两个不同模型审查同一批改动，再去重成一份问题清单；<code>/ask-then-build</code> 在实现前逐项询问重要选择。他同时反对递归审查：要求模型“再找五个问题”，模型往往会努力凑满五个，即使剩下的只是想象出来的 Bug。复核应该由改动规模和失败代价触发，并有明确停止条件。
+          </p>
+          <p>
+            权限也要服从同一套分级。David 用短别名直接启动权限绕过模式，这在隔离、可重建、没有敏感凭据的环境里确实省步骤。Pi 的官方安全文档明确提醒，它不是沙箱。把这种配置复制到日常主机或生产环境，速度收益没有变化，错误命令的影响面却完全不同。
+          </p>
+
+          <div class="callout qa">
+            <div class="callout-title">
+              <span>💡</span> 原文核心问答：任务规模和失败代价上升时，应该增加哪些控制？
+            </div>
+            <div class="callout-content">
+              <p>
+                <strong>控制阶梯：</strong>低风险小改可在当前分支快速完成；中型功能增加计划和一次异模型复核；并行大任务使用 Worktree 隔离；生产数据和发布只给最小权限、只读访问与单写者锁。
+              </p>
+            </div>
+          </div>
+
+          <p>
+            <strong>Worktree</strong> 解决并行修改互相踩踏；<strong>ADR</strong> 保存无法从代码反推出的架构理由；<strong>生产数据库只读角色</strong>让 Agent 能核实现实数据，又不能直接改写；<strong>单写者发布锁</strong>则把合并、验证、推送、CI、部署和健康检查串成一条受控出口。这些做法共同完成一件事：让 Agent 获得完成任务所需的权限，同时拿不到与任务无关的破坏能力。
+          </p>
+          <p>
+            测试也适用分级。要求每次小改都补齐单元、集成和端到端测试，会让仓库膨胀；完全禁止测试又会失去回归证据。应该从风险和现有测试策略出发，补能阻止同类失败再次发生的最小证据，而不是按测试文件数量衡量认真程度。
+          </p>
+
+          <!-- 推导抽屉 4: USL 通用可扩展性与写偏序推导 -->
+          <details class="proof-drawer" id="proof-usl-math">
+            <summary>
+              <span>📐 形式化推导：通用可扩展性定律 (USL) 与跨 Agent 语义写偏序雪崩</span>
+              <span style="font-size: 12px; color: var(--accent);">展开推导 ▼</span>
+            </summary>
+            <div class="proof-content">
+              <p>
+                为什么同时启动 30 个 Agent 往往产出反而暴跌？系统工程中的<strong>通用可扩展性定律 (Universal Scalability Law, Neil Gunther)</strong> 给出了终极解释。
+                设单 Agent 基础生产力为基准 1，当系统并行运行 <i>N</i> 个 Agent 时，整体有效交付吞吐能力为：
+              </p>
+              <div class="math-block">
+                <i>C</i>(<i>N</i>) = 
+                <span class="mfrac">
+                  <span class="num"><i>N</i></span>
+                  <span class="den">1 + <i>σ</i>(<i>N</i> − 1) + <i>κ</i><i>N</i>(<i>N</i> − 1)</span>
+                </span>
+              </div>
+              <p>
+                其中各参数物理含义极其严谨：
+              </p>
+              <ul>
+                <li><strong><i>σ</i> (Contention, 串行争抢系数)：</strong>人类评审通道独占、单写者发布排队、本机 CPU/IO 争抢。</li>
+                <li><strong><i>κ</i> (Coherency, 一致性协同损耗系数)：</strong>跨 Agent 依赖交叉污染、Git 冲突、语义写偏序（Write-Skew）与合并返工。</li>
+              </ul>
+              <p>
+                当 <span class="math-inline"><i>κ</i> &gt; 0</span> 时，分母中出现 <span class="math-inline"><i>N</i><sup>2</sup></span> 项，意味着当并发规模超过拐点时，<strong>系统总产出将出现单调倒挂（Retrograde Scalability）</strong>。对 <i>C</i>(<i>N</i>) 求导令其为 0，反解系统理论最优并发度：
+              </p>
+              <div class="math-block">
+                <i>N</i><sup>*</sup> = 
+                <span class="msqrt">
+                  <span class="radicand">
+                    <span class="mfrac">
+                      <span class="num">1 − <i>σ</i></span>
+                      <span class="den"><i>κ</i></span>
+                    </span>
+                  </span>
+                </span>
+              </div>
+              <p>
+                <strong>有效参数膨胀现象：</strong>在纯理论模型中，若 <span class="math-inline"><i>σ</i> = 0.05, <i>κ</i> = 0.005</span>，拐点 <span class="math-inline"><i>N</i><sup>*</sup> ≈ 13.8</span>。
+                然而在软件工程实操中，随着并发上升，由于未决任务缺乏有效上下文对齐，<strong>返工率呈现指数激增</strong>。实测测得的“有效协同损耗” <span class="math-inline"><i>κ</i><sub>eff</sub></span> 通常比静态估计高出 2~3 倍，使得真实世界中个人开发者的吞吐拐点迅速萎缩至 <strong><i>N</i><sup>*</sup> ≈ 7 ~ 8 个</strong>。超过 8 个 Agent 并行，人类将彻底陷入“解冲突-修代码-重跑 CI”的负收益泥潭。
+              </p>
+            </div>
+          </details>
+
+          <!-- 失败代价分级控制矩阵 -->
+          <div class="table-wrap" id="failure-control-matrix">
+            <table>
+              <thead>
+                <tr>
+                  <th>风险等级</th>
+                  <th>典型任务场景</th>
+                  <th>代码隔离机制</th>
+                  <th>审查门槛</th>
+                  <th>权限与环境约束</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>P1 (极低风险)</strong></td>
+                  <td>文案润色、本地日志补充、文档修正</td>
+                  <td>当前分支直接处理</td>
+                  <td>单模型直接采纳</td>
+                  <td>免沙箱，本地直接执行</td>
+                </tr>
+                <tr>
+                  <td><strong>P2 (中度风险)</strong></td>
+                  <td>独立工具函数、非核心页面组件重构</td>
+                  <td>临时 feature 分支</td>
+                  <td>一次异模型独立复核</td>
+                  <td>普通受限容器执行</td>
+                </tr>
+                <tr>
+                  <td><strong>P3 (高度风险)</strong></td>
+                  <td>跨模块 API 演进、并发架构优化</td>
+                  <td>独立 Git Worktree 隔离</td>
+                  <td>双模型交叉去重 (<code>/total-review</code>)</td>
+                  <td>严格无网络写入，单写者发布锁</td>
+                </tr>
+                <tr>
+                  <td><strong>P4 (灾难级风险)</strong></td>
+                  <td>生产数据库 DDL、鉴权逻辑变更、核心交易链路</td>
+                  <td>多重 Worktree + ADR 留痕</td>
+                  <td>多模型交叉审阅 + 人类逐行验收</td>
+                  <td>只读数据角色，强制人工部署与密钥签名</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 7. 普通人可以从一主一辅的工作台开始 -->
+        <section class="chapter" id="minimal-workbench">
+          <div class="chapter-head">
+            <span class="chapter-tag">Pragmatic Adoption</span>
+            <h2 class="chapter-title">普通人可以从一主一辅的工作台开始</h2>
+          </div>
+          <p>
+            David 同时运行二三十个 Agent 的配置服务于他的工作量和订阅容量。多数人一上来复制这个规模，只会更快地耗尽额度，并把注意力撕成碎片。可以先搭一个更小的闭环：
+          </p>
+          <ol>
+            <li><strong>一主一辅。</strong>主 Agent 负责实施；只有中大型改动才让不同模型做一次独立复核。先观察复核是否稳定发现会改变交付结果的问题。</li>
+            <li><strong>一个隔离工作树。</strong>并行任务可能碰同一批文件时再开 Worktree。小项目和单一修改留在当前分支，减少搬运成本。</li>
+            <li><strong>一组结果趋势。</strong>记录 Agent 会话、用户提示和 Git 提交可以观察习惯变化，但三者都是代理指标。再加上返工次数、合并后故障、交付周期或真实用户结果，才能判断效率是否提高。</li>
+          </ol>
+          <p>
+            当这套小系统的等待时间、冲突率或本机资源确实成为瓶颈，再加状态面板、VPS 或商业云 Agent。扩容的顺序由已经出现的问题决定，不由工具目录决定。
+          </p>
+          <p>
+            这份 2000 小时配置留下的耐用品，是一张工程分工图：<strong>入口负责降低切换成本，调度负责管理注意力，环境负责持续执行，治理负责把速度变成可接受的结果</strong>。下一代模型会换，套餐会换，今天最火的客户端也会换；这四项工作不会跟着消失。
+          </p>
+
+          <!-- 阶段跃迁路线 -->
+          <div class="arch-layer-grid" id="evolution-phases">
+            <div class="arch-layer-card">
+              <h4>阶段 1：一主一辅微循环 (Baseline)</h4>
+              <p>1 个主力编程 Agent 实施，关键节点调用异构模型单次审计；单分支作业，建立个人常用 Prompt 片段。</p>
+            </div>
+            <div class="arch-layer-card">
+              <h4>阶段 2：工作树与环境隔离 (Isolation)</h4>
+              <p>多任务并行引入 Git Worktree 防踩踏；敏感操作配置生产只读隔离，多步流程提炼为工程 Skill。</p>
+            </div>
+            <div class="arch-layer-card">
+              <h4>阶段 3：全态 Fleet 调度 (Fleet Orchestration)</h4>
+              <p>引入 Herdr/Corral 实施状态跟踪与 CONWIP 准入控制；自建 VPS 托管长程任务，多模型分级路由。</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8. 专著级深度互动体验区：四大工程交互沙盘 -->
+        <section class="chapter" id="interactive-sandbox">
+          <div class="chapter-head">
+            <span class="chapter-tag">Interactive Physics Sandboxes</span>
+            <h2 class="chapter-title">专著级深度互动体验区：四大工程交互沙盘</h2>
+          </div>
+          <p>
+            为彻底告别定性隐喻与空洞数据，本白皮书将前述数学推导与架构治理逻辑完全封装为纯前端响应式沙盘。所有数值均由物理与运筹学公式实时反解，断网完全自包含运行：
+          </p>
+
+          <!-- 沙盘 1: 任务装配沙盘 -->
+          <div class="sandbox-container" id="sandbox-assembly">
+            <div class="sandbox-head">
+              <div class="sandbox-title-group">
+                <h3>沙盘 1：四层架构任务装配与路由仿真 (Task Assembly Sandbox)</h3>
+                <p>选择不同工程任务类别，观察其在统一入口、调度状态、执行环境与工程治理中的动态穿透路径</p>
+              </div>
+              <span class="sandbox-badge">Architecture Routing</span>
+            </div>
+
+            <div class="control-grid">
+              <div class="control-item">
+                <div class="control-label">
+                  <span>选择待装配的任务类别 (Task Archetype)</span>
+                </div>
+                <select class="custom-select" id="taskTypeSelect">
+                  <option value="bugfix">微小缺陷修复与文案调整 (Quick Bugfix)</option>
+                  <option value="feature">常规模块功能演进 (Standard Feature)</option>
+                  <option value="exploratory">探索性架构原型与技术选型 (Exploratory / Spike)</option>
+                  <option value="release">核心交易发布与生产 DDL (Critical Release)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="dashboard-grid">
+              <div class="dash-box">
+                <div class="dash-box-label">推荐入口层形态</div>
+                <div class="dash-box-val accent" id="val-task-entry">Local Ghostty / bb</div>
+                <div class="dash-box-desc">即开即走平铺窗格</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">调度优先级定级</div>
+                <div class="dash-box-val" id="val-task-sched">P4 (最低干扰)</div>
+                <div class="dash-box-desc">不抢占人类注意力</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">执行环境匹配</div>
+                <div class="dash-box-val" id="val-task-env">本机进程 (Localhost)</div>
+                <div class="dash-box-desc">秒级反馈闭环</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">治理防御机制</div>
+                <div class="dash-box-val bull" id="val-task-gov">当前分支直提</div>
+                <div class="dash-box-desc">无需复杂审查隔离</div>
+              </div>
+            </div>
+
+            <div class="callout info" style="margin-top: 20px;">
+              <div class="callout-title">
+                <span>📋</span> 架构编排实操建议与风险提示
+              </div>
+              <div class="callout-content" id="val-task-rec">
+                对于微小文案与日志修复，严禁过度工程化！使用当前分支直接交付，避免多开 Worktree 引入无谓的文件切换摩擦。
+              </div>
+            </div>
+          </div>
+
+          <!-- 沙盘 2: 排队论雪崩沙盘 -->
+          <div class="sandbox-container" id="sandbox-queue">
+            <div class="sandbox-head">
+              <div class="sandbox-title-group">
+                <h3>沙盘 2：排队论注意力雪崩与 CONWIP 准入模拟器 (Attention Queue Simulator)</h3>
+                <p>调整人类评审时间、并发 Agent 数量与认知切换惩罚，观测服务负荷与雪崩临界点</p>
+              </div>
+              <span class="sandbox-badge">Queuing Theory</span>
+            </div>
+
+            <div class="control-grid">
+              <div class="control-item">
+                <div class="control-label">
+                  <span>单任务人类纯评审基准时间 <i>T</i></span>
+                  <span class="control-val"><span id="val-sim-t">25</span> 分钟</span>
+                </div>
+                <input type="range" id="simReviewTime" min="5" max="60" value="25" step="1">
+              </div>
+
+              <div class="control-item">
+                <div class="control-label">
+                  <span>活跃并发 Agent 数量 <i>N</i></span>
+                  <span class="control-val"><span id="val-sim-n">8</span> 个</span>
+                </div>
+                <input type="range" id="simAgentCount" min="1" max="30" value="8" step="1">
+              </div>
+
+              <div class="control-item">
+                <div class="control-label">
+                  <span>多会话上下文切换惩罚 <i>γ</i></span>
+                  <span class="control-val"><span id="val-sim-gamma">0.06</span></span>
+                </div>
+                <input type="range" id="simSwitchCost" min="0.00" max="0.20" value="0.06" step="0.01">
+              </div>
+            </div>
+
+            <div class="dashboard-grid">
+              <div class="dash-box">
+                <div class="dash-box-label">任务有效到达率 (λ)</div>
+                <div class="dash-box-val" id="val-sim-arrival">1.60 个/时</div>
+                <div class="dash-box-desc">每 Agent 产出到达速率</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">人类有效处理率 (μ_eff)</div>
+                <div class="dash-box-val" id="val-sim-service">1.69 个/时</div>
+                <div class="dash-box-desc">受上下文切换损耗衰减</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">系统排队利用率 (ρ)</div>
+                <div class="dash-box-val accent" id="val-sim-rho">0.95</div>
+                <div class="dash-box-desc">ρ &ge; 1 即进入雪崩</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">系统雪崩临界并发 (N_crit)</div>
+                <div class="dash-box-val bull" id="val-sim-ncrit">8.3 个</div>
+                <div class="dash-box-desc">当前参数下的人类承载极值</div>
+              </div>
+            </div>
+
+            <div class="callout warn" style="margin-top: 20px;">
+              <div class="callout-title">
+                <span>🚨</span> 状态判定：<span id="val-sim-status">临界饱和 (Near Capacity)</span>
+              </div>
+              <div class="callout-content" id="val-sim-action">
+                系统当前处于严重排队临界区！建议立即启动 CONWIP 限流机制，停止向 Fleet 派发新任务，优先消化堆积在审阅队列中的代码。
+              </div>
+            </div>
+          </div>
+
+          <!-- 沙盘 3: USL 动态并发沙盘 -->
+          <div class="sandbox-container" id="sandbox-usl">
+            <div class="sandbox-head">
+              <div class="sandbox-title-group">
+                <h3>沙盘 3：USL 通用可扩展性动态并发曲线 (Universal Scalability Sandbox)</h3>
+                <p>调整串行争抢系数与协同损耗系数，实时重绘系统总吞吐曲线并反解理论最优并发度</p>
+              </div>
+              <span class="sandbox-badge">USL Scalability</span>
+            </div>
+
+            <div class="control-grid">
+              <div class="control-item">
+                <div class="control-label">
+                  <span>串行争抢系数 <i>σ</i> (Contention)</span>
+                  <span class="control-val" id="val-usl-sigma">0.05</span>
+                </div>
+                <input type="range" id="uslSigma" min="0.01" max="0.30" value="0.05" step="0.01">
+              </div>
+
+              <div class="control-item">
+                <div class="control-label">
+                  <span>协同写偏序损耗 <i>κ</i> (Coherency)</span>
+                  <span class="control-val" id="val-usl-kappa">0.008</span>
+                </div>
+                <input type="range" id="uslKappa" min="0.001" max="0.050" value="0.008" step="0.001">
+              </div>
+            </div>
+
+            <!-- SVG 动态绘制 USL 曲线 -->
+            <div class="chart-container">
+              <svg viewBox="0 0 640 220" id="uslSvgChart" xmlns="http://www.w3.org/2000/svg">
+                <!-- 背景刻度与网格 -->
+                <line x1="50" y1="20" x2="50" y2="180" stroke="var(--border-subtle)" stroke-width="1.5" />
+                <line x1="50" y1="180" x2="610" y2="180" stroke="var(--border-subtle)" stroke-width="1.5" />
+                
+                <text x="35" y="25" fill="var(--text-tertiary)" font-size="10" font-family="var(--font-mono)" text-anchor="end">C(N)</text>
+                <text x="35" y="100" fill="var(--text-tertiary)" font-size="10" font-family="var(--font-mono)" text-anchor="end">8x</text>
+                <text x="35" y="180" fill="var(--text-tertiary)" font-size="10" font-family="var(--font-mono)" text-anchor="end">0</text>
+                
+                <text x="50" y="200" fill="var(--text-tertiary)" font-size="10" font-family="var(--font-mono)" text-anchor="middle">N=1</text>
+                <text x="190" y="200" fill="var(--text-tertiary)" font-size="10" font-family="var(--font-mono)" text-anchor="middle">N=8</text>
+                <text x="330" y="200" fill="var(--text-tertiary)" font-size="10" font-family="var(--font-mono)" text-anchor="middle">N=15</text>
+                <text x="470" y="200" fill="var(--text-tertiary)" font-size="10" font-family="var(--font-mono)" text-anchor="middle">N=22</text>
+                <text x="610" y="200" fill="var(--text-tertiary)" font-size="10" font-family="var(--font-mono)" text-anchor="middle">N=30</text>
+
+                <!-- 动态曲线与标记 -->
+                <polyline id="uslPolyline" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="50,170 190,70 330,90 470,130 610,165" />
+                <circle id="uslPeakDot" cx="190" cy="70" r="5" fill="var(--color-bull)" stroke="#FFFFFF" stroke-width="2" />
+                <text id="uslPeakText" x="190" y="55" fill="var(--color-bull)" font-size="11" font-family="var(--font-mono)" font-weight="700" text-anchor="middle">N*=8.2</text>
+              </svg>
+            </div>
+
+            <div class="dashboard-grid">
+              <div class="dash-box">
+                <div class="dash-box-label">理论峰值并发度 (N*)</div>
+                <div class="dash-box-val bull" id="val-usl-npeak">10.9 个</div>
+                <div class="dash-box-desc">超过此值吞吐单调倒挂</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">系统理论极限吞吐倍数</div>
+                <div class="dash-box-val accent" id="val-usl-cpeak">5.82x</div>
+                <div class="dash-box-desc">相对于单 Agent 产能</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">实测有效并发度 (考虑返工)</div>
+                <div class="dash-box-val" id="val-usl-neff">7.1 个</div>
+                <div class="dash-box-desc">κ 膨胀后的实际安全作业区间</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">当前并发返工风险评估</div>
+                <div class="dash-box-val" id="val-usl-rework">中度写偏序 (Normal)</div>
+                <div class="dash-box-desc">建议采用独立 Worktree 隔离</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 沙盘 4: 预发送期权决策器 -->
+          <div class="sandbox-container" id="sandbox-preprompt">
+            <div class="sandbox-head">
+              <div class="sandbox-title-group">
+                <h3>沙盘 4：预发送（投机执行）实物期权决策器 (Speculative Pre-prompting Calculator)</h3>
+                <p>调整方案置信度、推翻重构代价与等待时间，反解净收益期望与安全预发排队深度</p>
+              </div>
+              <span class="sandbox-badge">Real Options Decision</span>
+            </div>
+
+            <div class="control-grid">
+              <div class="control-item">
+                <div class="control-label">
+                  <span>对任务下一步方案的置信度 (<i>p</i>)</span>
+                  <span class="control-val"><span id="val-pf-acc">75</span>%</span>
+                </div>
+                <input type="range" id="pfAccuracy" min="40" max="99" value="75" step="1">
+              </div>
+
+              <div class="control-item">
+                <div class="control-label">
+                  <span>方案错误时的回滚重构代价 (<i>C</i><sub>rollback</sub>)</span>
+                  <span class="control-val"><span id="val-pf-rb">45</span> 分钟</span>
+                </div>
+                <input type="range" id="pfRollbackCost" min="10" max="120" value="45" step="5">
+              </div>
+
+              <div class="control-item">
+                <div class="control-label">
+                  <span>预排成功挽回的等待时延 (<i>V</i><sub>time</sub>)</span>
+                  <span class="control-val"><span id="val-pf-ts">15</span> 分钟</span>
+                </div>
+                <input type="range" id="pfTimeSaved" min="5" max="30" value="15" step="1">
+              </div>
+            </div>
+
+            <div class="dashboard-grid">
+              <div class="dash-box">
+                <div class="dash-box-label">临界保本胜率 (p*)</div>
+                <div class="dash-box-val" id="val-pf-critp">75.0%</div>
+                <div class="dash-box-desc">低于此置信度严禁预排</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">单步投机净期望收益</div>
+                <div class="dash-box-val bull" id="val-pf-ev">+0.00 分钟</div>
+                <div class="dash-box-desc">E[ΔW] 数学期望净得</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">建议最大预发深度 (k_safe)</div>
+                <div class="dash-box-val accent" id="val-pf-maxmsg">1 条</div>
+                <div class="dash-box-desc">防止微小误判级联放大</div>
+              </div>
+              <div class="dash-box">
+                <div class="dash-box-label">策略战术判定</div>
+                <div class="dash-box-val" id="val-pf-advice">保本持平 (Neutral)</div>
+                <div class="dash-box-desc">仅推荐在实施细节上预排</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 9. 术语表与延伸阅读 -->
+        <section class="chapter" id="glossary">
+          <div class="chapter-head">
+            <span class="chapter-tag">Reference &amp; Appendix</span>
+            <h2 class="chapter-title">关键术语表与工程延伸阅读 (Glossary)</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>核心术语</th>
+                  <th>全称 / 来源</th>
+                  <th>工程定义与在 Fleet 中的核心作用</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Harness</strong></td>
+                  <td>Agent Execution Harness</td>
+                  <td>连接模型与底层文件、工具执行循环的外壳。如 Pi（极简可控）、Cursor CLI（多模型与预发送）、Hermes/Prime（自演化 Skill 沉淀）。</td>
+                </tr>
+                <tr>
+                  <td><strong>cmux</strong></td>
+                  <td>Terminal / Canvas Multiplexer</td>
+                  <td>平铺多窗格观察台，支持在单屏中同时监视多个异构 Agent CLI 运行输出与浏览器环境。</td>
+                </tr>
+                <tr>
+                  <td><strong>Herdr &amp; Corral</strong></td>
+                  <td>State &amp; Priority Queue</td>
+                  <td>状态跟踪与优先级排队器。Herdr 监视 working/blocked/idle；Corral 按 P1~P4 进行注意力排序。</td>
+                </tr>
+                <tr>
+                  <td><strong>Git Worktree</strong></td>
+                  <td>Git Multi-Working-Tree</td>
+                  <td>允许多个 Agent 同时检出不同分支进行物理写操作，彻底杜绝在单一工作目录下的并发代码踩踏。</td>
+                </tr>
+                <tr>
+                  <td><strong>CONWIP</strong></td>
+                  <td>Constant Work-In-Process</td>
+                  <td>排队运筹学中的“恒定在制品”准入协议。在人类审阅负荷饱和前主动掐断任务分派，防止注意力雪崩。</td>
+                </tr>
+                <tr>
+                  <td><strong>USL</strong></td>
+                  <td>Universal Scalability Law</td>
+                  <td>通用可扩展性定律，定量描述由串行争抢（σ）与跨 Agent 协同偏序（κ）导致的系统吞吐倒挂现象。</td>
+                </tr>
+                <tr>
+                  <td><strong>WSJF</strong></td>
+                  <td>Weighted Shortest Job First</td>
+                  <td>加权最短作业优先算法：以“延误成本 (Cost of Delay) / 作业耗时”计算排队权重，避免低价值任务抢占窗口。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info">
+            <div class="callout-title">
+              <span>📚</span> 文献引用与数据出处追踪
+            </div>
+            <div class="callout-content">
+              <p>
+                1. David Ondrej, <em>"How I run 20+ AI agents simultaneously without losing my mind"</em>, Vectal Labs 实践复盘, 2026 年 8 月底.
+              </p>
+              <p>
+                2. Neil J. Gunther, <em>"Guerrilla Capacity Planning: A Metric-Driven Approach to Scalability"</em>, Springer-Verlag, 2007 (USL 理论推导根基).
+              </p>
+              <p>
+                3. Cursor Team Official Announcement, <em>"Cloud Agents and Internal PR Metrics"</em>, June 2026 (确证 40%+ 内部 PR 由云端生成).
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- 原生 JavaScript 逻辑：滚动监听、双主题、四大沙盘计算闭环 -->
+  <script>
+    (function() {
+      // 1. 阅读进度条与侧边栏高亮
+      var progressBar = document.getElementById("progressBar");
+      var sidebarLinks = document.querySelectorAll(".sidebar-link");
+      var chapters = document.querySelectorAll(".chapter");
+
+      window.addEventListener("scroll", function() {
+        var winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+        var height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        var scrolled = height > 0 ? (winScroll / height) * 100 : 0;
+        if (progressBar) {
+          progressBar.style.width = scrolled + "%";
+        }
+
+        // 动态侧边高亮
+        var currentId = "";
+        chapters.forEach(function(chap) {
+          var rect = chap.getBoundingClientRect();
+          if (rect.top <= 140 && rect.bottom >= 140) {
+            currentId = chap.id;
+          }
+        });
+
+        if (currentId) {
+          sidebarLinks.forEach(function(link) {
+            var href = link.getAttribute("href");
+            if (href === "#" + currentId) {
+              link.classList.add("active");
+            } else {
+              link.classList.remove("active");
+            }
+          });
+        }
+      });
+
+      // 2. 双主题切换
+      var themeToggleBtn = document.getElementById("themeToggleBtn");
+      var themeBtnText = document.getElementById("themeBtnText");
+
+      function updateThemeUI(theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        if (themeBtnText) {
+          themeBtnText.textContent = theme === "dark" ? "切换浅色模式" : "切换深色模式";
+        }
+        try {
+          localStorage.setItem("doc_theme", theme);
+        } catch (e) {}
+      }
+
+      var savedTheme = "dark";
+      try {
+        savedTheme = localStorage.getItem("doc_theme") || "dark";
+      } catch (e) {}
+      updateThemeUI(savedTheme);
+
+      if (themeToggleBtn) {
+        themeToggleBtn.addEventListener("click", function() {
+          var curr = document.documentElement.getAttribute("data-theme") || "dark";
+          var next = curr === "dark" ? "light" : "dark";
+          updateThemeUI(next);
+        });
+      }
+
+      // 3. 沙盘 1：任务装配与路由仿真
+      var taskTypeSelect = document.getElementById("taskTypeSelect");
+      var valTaskEntry = document.getElementById("val-task-entry");
+      var valTaskSched = document.getElementById("val-task-sched");
+      var valTaskEnv = document.getElementById("val-task-env");
+      var valTaskGov = document.getElementById("val-task-gov");
+      var valTaskRec = document.getElementById("val-task-rec");
+
+      var taskConfigMap = {
+        "bugfix": {
+          entry: "Local Ghostty / bb",
+          sched: "P4 (最低干扰)",
+          env: "本机进程 (Localhost)",
+          gov: "当前分支直提",
+          rec: "对于微小文案与日志修复，严禁过度工程化！使用当前分支直接交付，避免多开 Worktree 引入无谓的文件切换摩擦。"
+        },
+        "feature": {
+          entry: "cmux + Cursor CLI",
+          sched: "P2 (常规推进)",
+          env: "本机 / 隔离容器",
+          gov: "临时 feature 分支",
+          rec: "常规功能开发建议配合单模型自动编写 + 一次性静态测试阻断，完成后经一次快速复查即可合并。"
+        },
+        "exploratory": {
+          entry: "bb + Hermes / Prime",
+          sched: "P3 (后台批处理)",
+          env: "自建 VPS / 云端沙箱",
+          gov: "独立 Worktree + ADR 留痕",
+          rec: "不确定性高的架构攻坚与库选型，务必使用具备 Skill 自愈能力的 Harness 在云端持续运行，严禁在架构未定时盲目预发。"
+        },
+        "release": {
+          entry: "受控终端 + 签名密钥",
+          sched: "P1 (最高优先级审阅)",
+          env: "只读数据库 + 隔离 Runner",
+          gov: "单写者锁 + 双模型交叉审",
+          rec: "核心高风险链路与生产 DDL 发布，必须执行多模型去重总审查（/total-review），并由人类逐行审计通过后单锁提交！"
+        }
+      };
+
+      function updateTaskAssembly() {
+        if (!taskTypeSelect) return;
+        var val = taskTypeSelect.value;
+        var data = taskConfigMap[val] || taskConfigMap["bugfix"];
+        if (valTaskEntry) valTaskEntry.textContent = data.entry;
+        if (valTaskSched) valTaskSched.textContent = data.sched;
+        if (valTaskEnv) valTaskEnv.textContent = data.env;
+        if (valTaskGov) valTaskGov.textContent = data.gov;
+        if (valTaskRec) valTaskRec.textContent = data.rec;
+      }
+
+      if (taskTypeSelect) {
+        taskTypeSelect.addEventListener("change", updateTaskAssembly);
+        updateTaskAssembly();
+      }
+
+      // 4. 沙盘 2：排队论注意力雪崩与 CONWIP 准入
+      var simReviewTime = document.getElementById("simReviewTime");
+      var simAgentCount = document.getElementById("simAgentCount");
+      var simSwitchCost = document.getElementById("simSwitchCost");
+
+      var valSimT = document.getElementById("val-sim-t");
+      var valSimN = document.getElementById("val-sim-n");
+      var valSimGamma = document.getElementById("val-sim-gamma");
+      var valSimArrival = document.getElementById("val-sim-arrival");
+      var valSimService = document.getElementById("val-sim-service");
+      var valSimRho = document.getElementById("val-sim-rho");
+      var valSimNcrit = document.getElementById("val-sim-ncrit");
+      var valSimStatus = document.getElementById("val-sim-status");
+      var valSimAction = document.getElementById("val-sim-action");
+
+      function updateQueueSimulation() {
+        if (!simReviewTime || !simAgentCount || !simSwitchCost) return;
+        var T = parseFloat(simReviewTime.value);
+        var N = parseFloat(simAgentCount.value);
+        var gamma = parseFloat(simSwitchCost.value);
+
+        if (valSimT) valSimT.textContent = T.toFixed(0);
+        if (valSimN) valSimN.textContent = N.toFixed(0);
+        if (valSimGamma) valSimGamma.textContent = gamma.toFixed(2);
+
+        // 每 Agent 稳态产出：假设单 Agent 每 5 小时交付一个需审阅的 PR 单元 (lambda_i = 0.20/hr)
+        var lambda_i = 0.20;
+        var lambda = N * lambda_i;
+
+        // 人类有效处理能力 mu_eff = 60 / (T * (1 + gamma * (N - 1)))
+        var mu_eff = 60.0 / (T * (1.0 + gamma * (N - 1.0)));
+        var rho = lambda / mu_eff;
+
+        // 反解 N_crit
+        var n_crit = Math.sqrt(60.0 / (lambda_i * T * (gamma > 0.001 ? gamma : 0.001)));
+
+        if (valSimArrival) valSimArrival.textContent = lambda.toFixed(2) + " 个/时";
+        if (valSimService) valSimService.textContent = mu_eff.toFixed(2) + " 个/时";
+        if (valSimRho) {
+          valSimRho.textContent = rho.toFixed(2);
+          if (rho >= 1.0) {
+            valSimRho.className = "dash-box-val bear";
+          } else if (rho >= 0.8) {
+            valSimRho.className = "dash-box-val accent";
+          } else {
+            valSimRho.className = "dash-box-val bull";
+          }
+        }
+        if (valSimNcrit) valSimNcrit.textContent = n_crit.toFixed(1) + " 个";
+
+        if (valSimStatus && valSimAction) {
+          if (rho >= 1.0) {
+            valSimStatus.textContent = "排队雪崩 (Queue Avalanche)";
+            valSimStatus.style.color = "var(--color-bear)";
+            valSimAction.textContent = "系统已发生严重排队雪崩！到达率远超人类有效吞吐，审阅队列正无限膨胀。必须立即激活 CONWIP 硬阻断，暂停派发新任务！";
+          } else if (rho >= 0.78) {
+            valSimStatus.textContent = "临界饱和 (Near Capacity)";
+            valSimStatus.style.color = "var(--accent)";
+            valSimAction.textContent = "系统处于高负荷饱和区。请严控新增并发，优先采用 Corral 的 WSJF 算法先消费低延迟、高价值代码。";
+          } else {
+            valSimStatus.textContent = "稳态运行 (Healthy Flow)";
+            valSimStatus.style.color = "var(--color-bull)";
+            valSimAction.textContent = "系统在制品流动顺畅，人类决策利用率健康，无需强制限流。";
+          }
+        }
+      }
+
+      if (simReviewTime) simReviewTime.addEventListener("input", updateQueueSimulation);
+      if (simAgentCount) simAgentCount.addEventListener("input", updateQueueSimulation);
+      if (simSwitchCost) simSwitchCost.addEventListener("input", updateQueueSimulation);
+      updateQueueSimulation();
+
+      // 5. 沙盘 3：USL 通用可扩展性动态并发曲线
+      var uslSigma = document.getElementById("uslSigma");
+      var uslKappa = document.getElementById("uslKappa");
+
+      var valUslSigma = document.getElementById("val-usl-sigma");
+      var valUslKappa = document.getElementById("val-usl-kappa");
+      var valUslNpeak = document.getElementById("val-usl-npeak");
+      var valUslCpeak = document.getElementById("val-usl-cpeak");
+      var valUslNeff = document.getElementById("val-usl-neff");
+      var valUslRework = document.getElementById("val-usl-rework");
+
+      var uslPolyline = document.getElementById("uslPolyline");
+      var uslPeakDot = document.getElementById("uslPeakDot");
+      var uslPeakText = document.getElementById("uslPeakText");
+
+      function updateUslCalculation() {
+        if (!uslSigma || !uslKappa) return;
+        var s = parseFloat(uslSigma.value);
+        var k = parseFloat(uslKappa.value);
+
+        if (valUslSigma) valUslSigma.textContent = s.toFixed(2);
+        if (valUslKappa) valUslKappa.textContent = k.toFixed(3);
+
+        // USL 峰值 N* = sqrt((1 - s) / k)
+        var n_star = Math.sqrt(Math.max(0.001, (1.0 - s) / k));
+        // 峰值 C_max
+        var c_max = n_star / (1.0 + s * (n_star - 1.0) + k * n_star * (n_star - 1.0));
+
+        // 考虑实战中由于未决上下文导致的有效损耗膨胀 2.2 倍
+        var k_eff = k * 2.2;
+        var n_eff = Math.sqrt(Math.max(0.001, (1.0 - s) / k_eff));
+
+        if (valUslNpeak) valUslNpeak.textContent = n_star.toFixed(1) + " 个";
+        if (valUslCpeak) valUslCpeak.textContent = c_max.toFixed(2) + "x";
+        if (valUslNeff) valUslNeff.textContent = n_eff.toFixed(1) + " 个";
+
+        if (valUslRework) {
+          if (k >= 0.02) {
+            valUslRework.textContent = "重度冲突风险 (High Coherency Penalty)";
+            valUslRework.className = "dash-box-val bear";
+          } else if (k >= 0.008) {
+            valUslRework.textContent = "中度偏序冲突 (Normal Penalty)";
+            valUslRework.className = "dash-box-val accent";
+          } else {
+            valUslRework.textContent = "轻度偏序损耗 (Low Penalty)";
+            valUslRework.className = "dash-box-val bull";
+          }
+        }
+
+        // 重绘 SVG 曲线点
+        // viewBox: 0 0 640 220. 坐标范围: x in [50, 610] (对应 N in [1, 30]), y in [20, 180] (对应 C in [0, 10])
+        var x0 = 50, x1 = 610, y0 = 180, yTop = 25;
+        var maxN = 30.0;
+        var maxCScale = Math.max(10.0, c_max * 1.25);
+
+        var pts = [];
+        for (var ni = 1; ni <= 30; ni++) {
+          var ci = ni / (1.0 + s * (ni - 1.0) + k * ni * (ni - 1.0));
+          var px = x0 + ((ni - 1.0) / (maxN - 1.0)) * (x1 - x0);
+          var py = y0 - (ci / maxCScale) * (y0 - yTop);
+          if (py < yTop) py = yTop;
+          if (py > y0) py = y0;
+          pts.push(px.toFixed(1) + "," + py.toFixed(1));
+        }
+
+        if (uslPolyline) {
+          uslPolyline.setAttribute("points", pts.join(" "));
+        }
+
+        // 更新峰值圆点位置
+        var peakPx = x0 + ((Math.min(30.0, Math.max(1.0, n_star)) - 1.0) / (maxN - 1.0)) * (x1 - x0);
+        var peakPy = y0 - (c_max / maxCScale) * (y0 - yTop);
+        if (peakPy < yTop) peakPy = yTop;
+
+        if (uslPeakDot) {
+          uslPeakDot.setAttribute("cx", peakPx.toFixed(1));
+          uslPeakDot.setAttribute("cy", peakPy.toFixed(1));
+        }
+        if (uslPeakText) {
+          uslPeakText.setAttribute("x", peakPx.toFixed(1));
+          uslPeakText.setAttribute("y", (peakPy - 12).toFixed(1));
+          uslPeakText.textContent = "N*=" + n_star.toFixed(1);
+        }
+      }
+
+      if (uslSigma) uslSigma.addEventListener("input", updateUslCalculation);
+      if (uslKappa) uslKappa.addEventListener("input", updateUslCalculation);
+      updateUslCalculation();
+
+      // 6. 沙盘 4：预发送期权决策器
+      var pfAccuracy = document.getElementById("pfAccuracy");
+      var pfRollbackCost = document.getElementById("pfRollbackCost");
+      var pfTimeSaved = document.getElementById("pfTimeSaved");
+
+      var valPfAcc = document.getElementById("val-pf-acc");
+      var valPfRb = document.getElementById("val-pf-rb");
+      var valPfTs = document.getElementById("val-pf-ts");
+      var valPfCritp = document.getElementById("val-pf-critp");
+      var valPfEv = document.getElementById("val-pf-ev");
+      var valPfMaxmsg = document.getElementById("val-pf-maxmsg");
+      var valPfAdvice = document.getElementById("val-pf-advice");
+
+      function updatePrepromptOption() {
+        if (!pfAccuracy || !pfRollbackCost || !pfTimeSaved) return;
+        var p = parseFloat(pfAccuracy.value) / 100.0;
+        var Crb = parseFloat(pfRollbackCost.value);
+        var Vts = parseFloat(pfTimeSaved.value);
+
+        if (valPfAcc) valPfAcc.textContent = (p * 100).toFixed(0);
+        if (valPfRb) valPfRb.textContent = Crb.toFixed(0);
+        if (valPfTs) valPfTs.textContent = Vts.toFixed(0);
+
+        // 临界保本胜率 p* = Crb / (Vts + Crb)
+        var p_crit = Crb / (Vts + Crb);
+        // 单步期望收益 E[ΔW] = p * Vts - (1 - p) * Crb
+        var ev = p * Vts - (1.0 - p) * Crb;
+
+        // 最大推荐预发深度: 若 p >= p_crit, 随着级联推移胜率按 p^k 衰减，求 p^k >= p_crit
+        var maxK = 0;
+        if (p > p_crit && p > 0) {
+          maxK = Math.floor(Math.log(p_crit) / Math.log(p));
+          if (maxK < 1) maxK = 1;
+          if (maxK > 6) maxK = 6;
+        }
+
+        if (valPfCritp) valPfCritp.textContent = (p_crit * 100).toFixed(1) + "%";
+        if (valPfEv) {
+          valPfEv.textContent = (ev >= 0 ? "+" : "") + ev.toFixed(2) + " 分钟";
+          valPfEv.className = ev >= 0 ? "dash-box-val bull" : "dash-box-val bear";
+        }
+        if (valPfMaxmsg) {
+          valPfMaxmsg.textContent = maxK + " 条";
+        }
+
+        if (valPfAdvice) {
+          if (p < p_crit) {
+            valPfAdvice.textContent = "禁止预发送 (Strictly Blocked)";
+            valPfAdvice.className = "dash-box-val bear";
+          } else if (p >= 0.85) {
+            valPfAdvice.textContent = "安全预排 (High Confidence)";
+            valPfAdvice.className = "dash-box-val bull";
+          } else {
+            valPfAdvice.textContent = "仅限单步预排 (Single Step Only)";
+            valPfAdvice.className = "dash-box-val accent";
+          }
+        }
+      }
+
+      if (pfAccuracy) pfAccuracy.addEventListener("input", updatePrepromptOption);
+      if (pfRollbackCost) pfRollbackCost.addEventListener("input", updatePrepromptOption);
+      if (pfTimeSaved) pfTimeSaved.addEventListener("input", updatePrepromptOption);
+      updatePrepromptOption();
+
+    })();
+  </script>
+</body>
+</html>

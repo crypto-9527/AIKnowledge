@@ -1,0 +1,2688 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="EaPJac8ZcTMtjBghulKVn5">
+<head data-page-node-id="SlwIkD5eq5Sfia79SsV0vZ">
+  <meta charset="utf-8" data-page-node-id="zFFPw5xhrwBb4j0CykTul4">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="yOS73EU2knvMxu2rP5nsx3">
+  <title>Claude Fable 5.1 提示指南：16 条提示词建议 一份 Agent 运行时迁移清单</title>
+  <style>
+    /* ==========================================================================
+       1. 设计令牌与深浅双主题系统 (Theme & Tokens)
+       ========================================================================== */
+    :root {
+      /* 核心色彩：Anthropic Terracotta 经典陶土红与工程语义色 */
+      --accent: #D97757;
+      --accent-hover: #E08769;
+      --accent-subtle: rgba(217, 119, 87, 0.15);
+      --accent-border: rgba(217, 119, 87, 0.35);
+
+      --emerald: #10B981;
+      --emerald-subtle: rgba(16, 185, 129, 0.15);
+      --rose: #F43F5E;
+      --rose-subtle: rgba(244, 63, 94, 0.15);
+      --amber: #F59E0B;
+      --amber-subtle: rgba(245, 158, 11, 0.15);
+      --cyan: #06B6D4;
+      --cyan-subtle: rgba(6, 182, 212, 0.15);
+      --purple: #8B5CF6;
+      --purple-subtle: rgba(139, 92, 246, 0.15);
+
+      /* 圆角与阴影 */
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --radius-xl: 22px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.12);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.18);
+      --shadow-lg: 0 10px 30px rgba(0,0,0,0.25);
+
+      /* 动画时间 */
+      --transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* 黑曜石深色主题 (Dark Theme - 默认) */
+    html[data-theme="dark"] {
+      --bg-canvas: #121210;
+      --bg-surface: #1A1916;
+      --bg-surface-elevated: #24221E;
+      --bg-surface-active: #2D2B26;
+      --border-subtle: #2D2B26;
+      --border-strong: #3F3C35;
+
+      --text-primary: #EDEAE4;
+      --text-secondary: #B5B0A6;
+      --text-muted: #807B70;
+
+      --code-bg: #141412;
+      --code-border: #2B2925;
+      --pre-bg: #161513;
+
+      --toc-active-bg: rgba(217, 119, 87, 0.18);
+    }
+
+    /* 羊皮纸浅色主题 (Light Theme) */
+    html[data-theme="light"] {
+      --bg-canvas: #FAF7F2;
+      --bg-surface: #FFFFFF;
+      --bg-surface-elevated: #F3EFE8;
+      --bg-surface-active: #EAE5DC;
+      --border-subtle: #E6E1D6;
+      --border-strong: #D5CFC2;
+
+      --text-primary: #2C2824;
+      --text-secondary: #5A544C;
+      --text-muted: #8C8478;
+
+      --code-bg: #F4EFE6;
+      --code-border: #DDD6C8;
+      --pre-bg: #22201D;
+
+      --toc-active-bg: rgba(217, 119, 87, 0.12);
+    }
+
+    /* ==========================================================================
+       2. 基础重置与系统字体降级栈
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+      line-height: 1.68;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      transition: background-color 0.3s ease, color 0.3s ease;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      font-family: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      color: var(--text-primary);
+      font-weight: 700;
+      line-height: 1.35;
+      letter-spacing: -0.01em;
+    }
+
+    h1 { font-size: 2.25rem; margin-bottom: 1.25rem; }
+    h2 { font-size: 1.65rem; margin-top: 2.5rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 0.5rem; }
+    h3 { font-size: 1.3rem; margin-top: 1.75rem; margin-bottom: 0.75rem; color: var(--text-primary); }
+    h4 { font-size: 1.1rem; margin-top: 1.25rem; margin-bottom: 0.5rem; }
+
+    p { margin-bottom: 1.1rem; color: var(--text-secondary); font-size: 1.02rem; }
+    strong { color: var(--text-primary); font-weight: 600; }
+    em { font-style: italic; color: var(--accent); }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      transition: var(--transition);
+      border-bottom: 1px dashed var(--accent-border);
+    }
+    a:hover {
+      color: var(--accent-hover);
+      border-bottom-style: solid;
+    }
+
+    ul, ol {
+      margin-bottom: 1.25rem;
+      padding-left: 1.5rem;
+      color: var(--text-secondary);
+    }
+    li { margin-bottom: 0.45rem; }
+
+    /* ==========================================================================
+       3. 顶部导航与阅读进度条 (Header & Reading Progress)
+       ========================================================================== */
+    .progress-bar-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: transparent;
+      z-index: 1000;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), #F59E0B, #10B981);
+      transition: width 0.1s ease;
+    }
+
+    .top-nav {
+      position: sticky;
+      top: 0;
+      width: 100%;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      z-index: 990;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .top-nav-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .brand-badge {
+      font-size: 0.75rem;
+      background: var(--accent-subtle);
+      color: var(--accent);
+      padding: 0.2rem 0.55rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--accent-border);
+      font-family: ui-monospace, monospace;
+      font-weight: 600;
+    }
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+    .btn-icon {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      padding: 0.45rem 0.85rem;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-size: 0.88rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: var(--transition);
+      font-family: inherit;
+    }
+    .btn-icon:hover {
+      background: var(--bg-surface-active);
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+    .btn-icon.active {
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border-color: var(--accent-border);
+    }
+
+    /* ==========================================================================
+       4. 整体双栏栅格布局 (Sidebar TOC + Main Content)
+       ========================================================================== */
+    .layout-wrapper {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem 1.5rem;
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 2.5rem;
+      flex: 1;
+      width: 100%;
+    }
+
+    /* 侧边栏 TOC */
+    .sidebar-toc {
+      position: sticky;
+      top: 5rem;
+      max-height: calc(100vh - 6rem);
+      overflow-y: auto;
+      padding-right: 0.75rem;
+      font-size: 0.88rem;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-strong) transparent;
+    }
+    .sidebar-toc::-webkit-scrollbar {
+      width: 4px;
+    }
+    .sidebar-toc::-webkit-scrollbar-thumb {
+      background: var(--border-strong);
+      border-radius: 4px;
+    }
+    .toc-title {
+      font-family: inherit;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .toc-list {
+      list-style: none;
+      padding-left: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .toc-item a {
+      display: block;
+      padding: 0.42rem 0.7rem;
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      border-bottom: none;
+      line-height: 1.4;
+      transition: var(--transition);
+    }
+    .toc-item a:hover {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+    }
+    .toc-item.active a {
+      background: var(--toc-active-bg);
+      color: var(--accent);
+      font-weight: 600;
+      border-left: 3px solid var(--accent);
+    }
+    .toc-sublist {
+      list-style: none;
+      padding-left: 1rem;
+      margin: 0.2rem 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+    .toc-sublist a {
+      font-size: 0.82rem;
+      padding: 0.28rem 0.5rem;
+    }
+
+    /* 主文章容器 */
+    .content-area {
+      min-width: 0;
+      max-width: 960px;
+    }
+
+    /* ==========================================================================
+       5. 专著头部与元数据区 (Header & Metadata Card)
+       ========================================================================== */
+    .article-header {
+      margin-bottom: 2.5rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .meta-tags-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      background: var(--bg-surface-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-subtle);
+    }
+    .badge-primary {
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border-color: var(--accent-border);
+    }
+    .badge-emerald {
+      background: var(--emerald-subtle);
+      color: var(--emerald);
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+    .badge-amber {
+      background: var(--amber-subtle);
+      color: var(--amber);
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+    .badge-purple {
+      background: var(--purple-subtle);
+      color: var(--purple);
+      border-color: rgba(139, 92, 246, 0.3);
+    }
+
+    .article-subtitle {
+      font-size: 1.18rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-top: 0.75rem;
+    }
+
+    .source-meta-box {
+      margin-top: 1.5rem;
+      padding: 1rem 1.25rem;
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+      font-size: 0.86rem;
+    }
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+    .meta-label {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .meta-val {
+      color: var(--text-primary);
+      font-weight: 500;
+      word-break: break-all;
+    }
+
+    /* ==========================================================================
+       6. 核心摘要卡片与引用框 (Callouts & Highlights)
+       ========================================================================== */
+    .callout {
+      margin: 1.5rem 0;
+      padding: 1.25rem 1.5rem;
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-left: 4px solid var(--accent);
+      position: relative;
+    }
+    .callout-title {
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--text-primary);
+      margin-bottom: 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .callout-primary {
+      border-left-color: var(--accent);
+      background: rgba(217, 119, 87, 0.04);
+    }
+    .callout-warning {
+      border-left-color: var(--amber);
+      background: rgba(245, 158, 11, 0.04);
+    }
+    .callout-danger {
+      border-left-color: var(--rose);
+      background: rgba(244, 63, 94, 0.04);
+    }
+    .callout-success {
+      border-left-color: var(--emerald);
+      background: rgba(16, 185, 129, 0.04);
+    }
+    .callout-info {
+      border-left-color: var(--cyan);
+      background: rgba(6, 182, 212, 0.04);
+    }
+
+    /* 一分钟速览卡片网格 */
+    .quick-look-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+    .quick-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.15rem;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .quick-card-num {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--accent);
+      font-family: "Newsreader", Georgia, serif;
+    }
+    .quick-card-title {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 0.98rem;
+    }
+    .quick-card-desc {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* 关联文章推荐条 */
+    .related-article-bar {
+      margin: 1.5rem 0;
+      padding: 1rem 1.25rem;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .related-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .related-tag {
+      background: var(--purple-subtle);
+      color: var(--purple);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.2rem 0.5rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      white-space: nowrap;
+    }
+    .related-title {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 0.95rem;
+    }
+
+    /* ==========================================================================
+       7. 建议卡片容器与双语提示词模块 (Suggestion Blocks & Prompts)
+       ========================================================================== */
+    .suggestion-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 1.85rem;
+      margin: 2.25rem 0;
+      box-shadow: var(--shadow-sm);
+      transition: var(--transition);
+      position: relative;
+    }
+    .suggestion-card:hover {
+      border-color: var(--border-strong);
+      box-shadow: var(--shadow-md);
+    }
+    .suggestion-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-subtle);
+      flex-wrap: wrap;
+    }
+    .suggestion-badge-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .suggestion-id {
+      background: var(--accent);
+      color: #FFF;
+      font-weight: 700;
+      font-size: 0.85rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: var(--radius-sm);
+      font-family: ui-monospace, monospace;
+    }
+    .suggestion-plane-badge {
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 0.25rem 0.6rem;
+      border-radius: var(--radius-sm);
+    }
+    .plane-budget { background: var(--amber-subtle); color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .plane-tools { background: var(--cyan-subtle); color: var(--cyan); border: 1px solid rgba(6, 182, 212, 0.3); }
+    .plane-history { background: var(--rose-subtle); color: var(--rose); border: 1px solid rgba(244, 63, 94, 0.3); }
+    .plane-contract { background: var(--emerald-subtle); color: var(--emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .plane-runtime { background: var(--purple-subtle); color: var(--purple); border: 1px solid rgba(139, 92, 246, 0.3); }
+
+    /* 观察与根因对比排版 */
+    .diagnosis-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      margin: 1.25rem 0;
+    }
+    .diag-box {
+      padding: 1rem 1.15rem;
+      border-radius: var(--radius-md);
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+    }
+    .diag-box-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .diag-see { color: var(--amber); }
+    .diag-why { color: var(--cyan); }
+
+    /* 双语提示词卡片 (Bilingual Prompt Container) */
+    .prompt-container {
+      margin: 1.5rem 0;
+      background: var(--code-bg);
+      border: 1px solid var(--code-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    .prompt-header {
+      background: var(--bg-surface-elevated);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.5rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.82rem;
+    }
+    .prompt-tabs {
+      display: flex;
+      gap: 0.35rem;
+    }
+    .prompt-tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.3rem 0.65rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: var(--transition);
+      font-family: inherit;
+    }
+    .prompt-tab-btn:hover {
+      color: var(--text-primary);
+    }
+    .prompt-tab-btn.active {
+      background: var(--bg-surface-active);
+      color: var(--accent);
+    }
+    .prompt-copy-btn {
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      padding: 0.25rem 0.6rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.75rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: var(--transition);
+      font-family: inherit;
+    }
+    .prompt-copy-btn:hover {
+      background: var(--bg-surface-active);
+      color: var(--text-primary);
+    }
+    .prompt-body {
+      padding: 1.1rem 1.25rem;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .prompt-section-title {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ==========================================================================
+       8. 代码块与表格排版 (Code & Tables)
+       ========================================================================== */
+    pre {
+      background: var(--pre-bg);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.15rem 1.35rem;
+      overflow-x: auto;
+      margin: 1.25rem 0;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.88rem;
+      line-height: 1.55;
+      color: #E6EDF3;
+    }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.88em;
+      background: var(--code-bg);
+      border: 1px solid var(--code-border);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: var(--accent);
+    }
+    pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: inherit;
+      font-size: inherit;
+    }
+
+    /* 表格设计 */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      margin: 1.5rem 0;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      text-align: left;
+    }
+    th {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      font-weight: 600;
+      padding: 0.85rem 1.15rem;
+      border-bottom: 1px solid var(--border-strong);
+      white-space: nowrap;
+    }
+    td {
+      padding: 0.85rem 1.15rem;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      vertical-align: top;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr:hover td {
+      background: var(--bg-surface-active);
+    }
+
+    /* ==========================================================================
+       9. 原生 CSS 数学公式系统 (.mfrac, .msqrt, .msum)
+       ========================================================================== */
+    .math-block {
+      margin: 1.25rem 0;
+      padding: 1rem 1.5rem;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      font-family: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      font-size: 1.12rem;
+      overflow-x: auto;
+      text-align: center;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+    }
+    .math-inline {
+      font-family: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      font-style: italic;
+      padding: 0 0.2rem;
+      color: var(--text-primary);
+    }
+    .mfrac {
+      display: inline-flex;
+      flex-direction: column;
+      vertical-align: -0.55em;
+      padding: 0 0.25em;
+      text-align: center;
+      font-size: 0.95em;
+      line-height: 1.1;
+    }
+    .mfrac > .num {
+      border-bottom: 1.5px solid currentColor;
+      padding-bottom: 0.15em;
+      display: block;
+    }
+    .mfrac > .den {
+      padding-top: 0.15em;
+      display: block;
+    }
+    .msqrt {
+      display: inline-flex;
+      align-items: center;
+      vertical-align: -0.1em;
+      padding: 0 0.15em;
+    }
+    .msqrt::before {
+      content: "√";
+      font-size: 1.25em;
+      margin-right: 1px;
+      line-height: 1;
+    }
+    .msqrt > .radicand {
+      border-top: 1.5px solid currentColor;
+      padding-top: 0.1em;
+      display: inline-block;
+      line-height: 1.1;
+    }
+    sup { font-size: 0.72em; vertical-align: super; line-height: 0; }
+    sub { font-size: 0.72em; vertical-align: sub; line-height: 0; }
+
+    /* ==========================================================================
+       10. 交互式沙盘组件 (Interactive Sandboxes)
+       ========================================================================== */
+    .sandbox-panel {
+      margin: 2.5rem 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-lg);
+      padding: 1.85rem;
+      box-shadow: var(--shadow-md);
+      position: relative;
+    }
+    .sandbox-badge {
+      position: absolute;
+      top: -12px;
+      left: 1.5rem;
+      background: var(--accent);
+      color: #FFF;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.2rem 0.7rem;
+      border-radius: 999px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .sandbox-title {
+      font-size: 1.25rem;
+      margin-top: 0.25rem;
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+    }
+    .sandbox-desc {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin-bottom: 1.5rem;
+    }
+
+    .sandbox-controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .control-label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      justify-content: space-between;
+    }
+    .control-val-tag {
+      color: var(--accent);
+      font-family: ui-monospace, monospace;
+    }
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--bg-surface-elevated);
+      outline: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+    select {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.5rem 0.75rem;
+      font-family: inherit;
+      font-size: 0.88rem;
+      outline: none;
+      cursor: pointer;
+    }
+    select:focus {
+      border-color: var(--accent);
+    }
+
+    .sandbox-results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-top: 1.25rem;
+    }
+    .res-card {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1rem;
+      text-align: center;
+    }
+    .res-card-label {
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.35rem;
+    }
+    .res-card-val {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      font-family: ui-monospace, monospace;
+    }
+
+    /* 诊断沙盘选择器 */
+    .diagnostic-select-box {
+      margin-bottom: 1.25rem;
+    }
+    .diagnostic-result-card {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      border-left: 4px solid var(--accent);
+    }
+
+    /* 迁移清单交互式 Checklist */
+    .checklist-container {
+      margin: 1.5rem 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .check-item {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.85rem;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .check-item:hover {
+      background: var(--bg-surface-elevated);
+      border-color: var(--border-strong);
+    }
+    .check-item.done {
+      border-color: rgba(16, 185, 129, 0.3);
+      background: rgba(16, 185, 129, 0.03);
+    }
+    .check-checkbox {
+      width: 18px;
+      height: 18px;
+      margin-top: 3px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .check-content {
+      flex: 1;
+    }
+    .check-title {
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 0.25rem;
+    }
+    .check-desc {
+      font-size: 0.86rem;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+
+    /* 浮动回到顶部 */
+    .back-to-top {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      width: 42px;
+      height: 42px;
+      background: var(--accent);
+      color: #FFF;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-md);
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transition: var(--transition);
+      z-index: 900;
+      border: none;
+    }
+    .back-to-top.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* 移动端菜单切换 */
+    .mobile-menu-btn {
+      display: none;
+    }
+
+    /* ==========================================================================
+       11. 响应式布局与打印样式 (@media print)
+       ========================================================================== */
+    @media (max-width: 1024px) {
+      .layout-wrapper {
+        grid-template-columns: 1fr;
+        padding: 1.5rem 1rem;
+      }
+      .sidebar-toc {
+        display: none;
+        position: fixed;
+        top: 3.5rem;
+        left: 0;
+        width: 280px;
+        height: calc(100vh - 3.5rem);
+        background: var(--bg-surface);
+        border-right: 1px solid var(--border-subtle);
+        padding: 1.5rem;
+        z-index: 950;
+        box-shadow: var(--shadow-lg);
+      }
+      .sidebar-toc.open {
+        display: block;
+      }
+      .mobile-menu-btn {
+        display: inline-flex;
+      }
+      .diagnosis-split {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      h1 { font-size: 1.75rem; }
+      h2 { font-size: 1.35rem; }
+      .suggestion-card { padding: 1.25rem; }
+    }
+
+    @media print {
+      body {
+        background: #FFF !important;
+        color: #000 !important;
+      }
+      .top-nav, .progress-bar-container, .sidebar-toc, .btn-icon, .prompt-copy-btn, .back-to-top, .sandbox-panel {
+        display: none !important;
+      }
+      .layout-wrapper {
+        display: block !important;
+        padding: 0 !important;
+      }
+      .content-area {
+        max-width: 100% !important;
+      }
+      .suggestion-card {
+        border: 1px solid #CCC !important;
+        box-shadow: none !important;
+        page-break-inside: avoid;
+        margin: 1.5rem 0 !important;
+      }
+      pre {
+        border: 1px solid #CCC !important;
+        background: #F8F8F8 !important;
+        color: #000 !important;
+        white-space: pre-wrap !important;
+      }
+    }
+  </style>
+</head>
+<body data-page-node-id="qmuoHu0Qf6eXWIE9KJXZlY">
+
+  <!-- 顶部阅读进度条 -->
+  <div class="progress-bar-container" data-page-node-id="pNtwNIaBTf3qK1V2xBYSK9">
+    <div class="progress-bar-fill" id="val-progress-bar" data-page-node-id="afJfSGmhXd1tu8Ui762ROm"></div>
+  </div>
+
+  <!-- 顶部导航条 -->
+  <header class="top-nav" data-page-node-id="pkPutGJbi1d6HaFVXnAyCI">
+    <div class="top-nav-inner" data-page-node-id="jlRvBkKwlNnGY4JPybJFaV">
+      <div class="nav-brand" data-page-node-id="1JI3Ci0MmylAeRxE9AmqdH">
+        <button class="btn-icon mobile-menu-btn" id="btn-toggle-menu" title="展开目录" data-page-node-id="sH8IGEZl080tQJ1iSCBd01">
+          <span data-page-node-id="MEkZ3SogZaM7RhCC8Ixqiv">☰</span> 目录
+        </button>
+        <span data-page-node-id="mBVP2lxLjedzhGxCDmlo7e">Claude Fable 5.1 提示指南</span>
+        <span class="brand-badge" data-page-node-id="LbG6V0yPBIZqJwU8razExF">Official Guide</span>
+      </div>
+      <div class="nav-controls" data-page-node-id="aRDsf1H9Yu65M4tlhq9faM">
+        <button class="btn-icon" id="btn-toggle-lang" title="切换全文字词双语显示模式" data-page-node-id="XZaILzEDarJbCBYDawztHJ">
+          <span data-page-node-id="YfAGqTb8e0zfN6tLocF9Sj">🌐</span> <span id="val-lang-text" data-page-node-id="RvPG8HGdkbs5wEb636JYfA">双语并排</span>
+        </button>
+        <button class="btn-icon" id="btn-toggle-theme" title="切换深色/浅色主题" data-page-node-id="am1dNvzuFNTURG4lM1KFHw">
+          <span id="val-theme-icon" data-page-node-id="H2A5XM2moGixRMD28JEwYs">🌓</span> <span id="val-theme-text" data-page-node-id="WpwvTsvyDC4qLAlLuRRnTT">羊皮纸浅色</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主栅格布局 -->
+  <div class="layout-wrapper" data-page-node-id="0lKBZ7Bca7Pm4aM7diAuuZ">
+
+    <!-- 侧边目录导航 -->
+    <aside class="sidebar-toc" id="sidebar-toc" data-page-node-id="cBZlK3MsGgYSdFPMAApHtd">
+      <div class="toc-title" data-page-node-id="uSF9NO74xH4m05MP2oOiU9">
+        <span data-page-node-id="RzfiEIo9kW2TUquXXysmWN">目录导航 (Table of Contents)</span>
+        <span style="font-size:0.75rem; color:var(--accent);" data-page-node-id="5VxHhT15e66Zn5UIirANSn">16 建议 + 清单</span>
+      </div>
+      <nav data-page-node-id="FGzGnYqtk0rPNASLA3K3CN">
+        <ul class="toc-list" data-page-node-id="AbgP1vgeb8FQLAedmTq1nu">
+          <li class="toc-item" data-page-node-id="0MD8VrVGcilyyb3f5k9ewu"><a href="#sec-overview" data-page-node-id="wqlmGq9WM5iW583QlL0DX3">一分钟速览</a></li>
+          <li class="toc-item" data-page-node-id="KjQdZUVo83kh6jDYXg4I1i"><a href="#sec-background" data-page-node-id="OHf1Cs3w0E9BEyLXgpkbPV">背景：为什么需要新指南？</a></li>
+          <li class="toc-item" data-page-node-id="Z1eEiAlHSdBEBruNLSB2nF"><a href="#sec-core-planes" data-page-node-id="Jxtw5jPNo1HHChCKzbbWv5">指南核心：四个控制面</a></li>
+          <li class="toc-item" data-page-node-id="9X55SNaeF4Z43bIWFnTPsE"><a href="#sec-sandbox-diagnostic" data-page-node-id="BTnZcjLXksVfpl1GZDiczl">交互沙盘：症状分层诊断</a></li>
+
+          <li class="toc-item" data-page-node-id="yGXP2XVbp9iUnlAu9CIlA1">
+            <a href="#sec-part1" data-page-node-id="zh4vBeG8rvYayj1Y4xbGAr">一、先确定思考档位 (建议 1)</a>
+            <ul class="toc-sublist" data-page-node-id="c81GkDnqmCHRfGLEgKvTTF">
+              <li class="toc-item" data-page-node-id="fmr88Ex4gWqF8DoFY5Ykxv"><a href="#rec-1" data-page-node-id="WxA6rJuWkjCUWSyoqmbMiQ">1. 重测全部 effort 档位</a></li>
+              <li class="toc-item" data-page-node-id="5UiOVlBmAClpJIREb6lCEH"><a href="#sec-sandbox-effort" data-page-node-id="RaK4lp3DxzcYHN9bVLGvhl">交互沙盘：Effort 决策器</a></li>
+            </ul>
+          </li>
+
+          <li class="toc-item" data-page-node-id="CwOBZPOA107zbtTt8Lrx8W">
+            <a href="#sec-part2" data-page-node-id="U1irFTHlKQn1UTw015IkgM">二、修正工具循环 (建议 2—3)</a>
+            <ul class="toc-sublist" data-page-node-id="V79NunzjWGfeRawBhik4co">
+              <li class="toc-item" data-page-node-id="JTEBTDUYRpE48CvWIpZOjh"><a href="#rec-2" data-page-node-id="2Aq0BMaCszyLy137EVVlQz">2. 展示长工具任务进度</a></li>
+              <li class="toc-item" data-page-node-id="RltAEshByPo6GMI8DGvFUg"><a href="#rec-3" data-page-node-id="bvzvST1vlAY8YGvVz4p3L8">3. 独立工具调用同轮批处理</a></li>
+              <li class="toc-item" data-page-node-id="ByQG66B0ORxL2GZtgzJq7a"><a href="#sec-sandbox-tools" data-page-node-id="Z5pCYuq2YPmPB6CA5FjZfW">交互沙盘：批处理收益模拟</a></li>
+            </ul>
+          </li>
+
+          <li class="toc-item" data-page-node-id="pLYOKdJgGTH8GBydEsFjwh">
+            <a href="#sec-part3" data-page-node-id="EocpmAHiQOaWq9OSSUBbqV">三、保护消息历史 (建议 4—7)</a>
+            <ul class="toc-sublist" data-page-node-id="iejdO1jjMAZJJzEUrRqK3c">
+              <li class="toc-item" data-page-node-id="31O5HjFMA0PpcGItNcjmno"><a href="#rec-4" data-page-node-id="jOJz1OLbGgl5VkM8iAzox4">4. 消息历史保持 append-only</a></li>
+              <li class="toc-item" data-page-node-id="o3wETntHNiQfyaVuovN91k"><a href="#rec-5" data-page-node-id="FJfJ8QRL5p1D2HC5Nwoj6e">5. 删除华而不实矫饰表达</a></li>
+              <li class="toc-item" data-page-node-id="dXln7iGSzncpwEOLWGrXil"><a href="#rec-6" data-page-node-id="ClnSUsMSwmMuT3zUoft3fV">6. 按信息结构合理排版</a></li>
+              <li class="toc-item" data-page-node-id="sAYiLQegKxas4E8Sd2Fl3w"><a href="#rec-7" data-page-node-id="kYPDb8A7SvLe5HzY8VGLiP">7. 转述检索结果并短引语</a></li>
+            </ul>
+          </li>
+
+          <li class="toc-item" data-page-node-id="ErNPypksAX2HeZTPJspxjC">
+            <a href="#sec-part4" data-page-node-id="IZZH5FM8Ijzp6G8hu1p0vf">四、长任务收口与限范围 (建议 8—10)</a>
+            <ul class="toc-sublist" data-page-node-id="8cLU1IpX5IjUWpkQSHz6KD">
+              <li class="toc-item" data-page-node-id="rM7QHJt4OeASogHUvaHT4H"><a href="#rec-8" data-page-node-id="bVb63HnlzqukavoIaCoi4w">8. 完整完成，勿停留在预告</a></li>
+              <li class="toc-item" data-page-node-id="IBkzzmVzFqYbFnoYGSPdi9"><a href="#rec-9" data-page-node-id="Drq2pI6H87RcdPa24epN1p">9. 上下文压缩保留合同</a></li>
+              <li class="toc-item" data-page-node-id="F3MarkZ7J04pyLqtR3J82f"><a href="#rec-10" data-page-node-id="7ZDIc5G7ei76ZSuBUhOLxk">10. 明确范围与测试数量控制</a></li>
+            </ul>
+          </li>
+
+          <li class="toc-item" data-page-node-id="dp6I35TLsd15yWn5maEdDD">
+            <a href="#sec-part5" data-page-node-id="4N3JnBD7fd8jAEv5jgUOIW">五、检索、编辑与长输出 (建议 11—14)</a>
+            <ul class="toc-sublist" data-page-node-id="EGvf5uBcYiqfwoFTCYqApd">
+              <li class="toc-item" data-page-node-id="9pEnMtIicYDvfk9KmENpoD"><a href="#rec-11" data-page-node-id="88XlcnFXt3SXW393Zkxkrl">11. low effort 下强制搜索</a></li>
+              <li class="toc-item" data-page-node-id="qjdH1DcQs2W2qHFMwBCFaR"><a href="#rec-12" data-page-node-id="KFAS3XxUHZVyrC03OoewP6">12. 请求措辞减少安全误伤</a></li>
+              <li class="toc-item" data-page-node-id="JsJvOE4tNYeYmSTHqneS9d"><a href="#rec-13" data-page-node-id="ytPJqgOOf7nANgvMCow2Hz">13. 外科手术式局部代码编辑</a></li>
+              <li class="toc-item" data-page-node-id="FbLkGNzO3GQNCzQzoeir5n"><a href="#rec-14" data-page-node-id="X8vunlDaI8kFgxgLdbR2L4">14. xhigh/max 预留 token 空间</a></li>
+            </ul>
+          </li>
+
+          <li class="toc-item" data-page-node-id="yPboZ1SZPd7JrvuIER0pVY">
+            <a href="#sec-part6" data-page-node-id="3LlA0zE9KwAaMT9MdiQz5l">六、子 Agent 并行与视觉 (建议 15—16)</a>
+            <ul class="toc-sublist" data-page-node-id="OVPWibHcEUICuPuE1v1vn8">
+              <li class="toc-item" data-page-node-id="jKAk0BOlLWL76RSOwLeRhB"><a href="#rec-15" data-page-node-id="G7tVtEGrijOGEV3t4YR1EN">15. 子 Agent 启动非阻塞调度</a></li>
+              <li class="toc-item" data-page-node-id="hFD7Cgj2Bb8e30nuZIblvs"><a href="#rec-16" data-page-node-id="P5WroR8lny8VlppzW8YR3J">16. 密集图表 Crop-and-Zoom</a></li>
+            </ul>
+          </li>
+
+          <li class="toc-item" data-page-node-id="G565DcALIOrLQrTg7u6Kc0"><a href="#sec-checklist" data-page-node-id="Rc0BKEA4IHLep8FFnNUy7y">七、按风险排序的迁移清单</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <!-- 主文内容区域 -->
+    <main class="content-area" data-page-node-id="MVTPzXoXQDLEd1VoRLqdeI">
+
+      <!-- 文章头部与元信息 -->
+      <header class="article-header" data-page-node-id="YdABSaxlBKjgFfzdefrj8Y">
+        <div class="meta-tags-row" data-page-node-id="kvum1hI63nxnd60pKKJtpj">
+          <span class="badge badge-primary" data-page-node-id="uGzAhqrpbxgi585i9pAsMq">Anthropic 官方前沿规范</span>
+          <span class="badge badge-emerald" data-page-node-id="XKqF38amLvsctXitsXCKT5">16 条精准建议</span>
+          <span class="badge badge-amber" data-page-node-id="erDKLp2mUjEt5yt7igByIp">4 层控制面</span>
+          <span class="badge badge-purple" data-page-node-id="1DksFCRDTYeenoB5jGH3v7">Agent 运行时迁移</span>
+          <span class="badge" data-page-node-id="tOGGp0nR8SezVG2PMxlPuO">零外部依赖白皮书</span>
+        </div>
+
+        <h1 data-page-node-id="FuRV0YtBjfEo4NDcA7xQqd">Claude Fable 5.1 提示指南：16 条提示词建议 一份 Agent 运行时迁移清单</h1>
+
+        <p class="article-subtitle" data-page-node-id="nLihaU5Grbbach7eyzWByr">
+          从发布背景到 16 条官方建议，逐项解释 effort、工具循环、消息历史、长任务交付与视觉处理，并提供可直接改写使用的中英双语提示词。
+        </p>
+
+        <div class="source-meta-box" data-page-node-id="sbSk9t8BEZJTcehGDxPMxh">
+          <div class="meta-item" data-page-node-id="a59bakK8SGfrzFjrmY64Hq">
+            <span class="meta-label" data-page-node-id="P5G582iLtEjMW10avrpgr5">来源出处</span>
+            <span class="meta-val" data-page-node-id="No3I5V4XnTZ6iQPEuHoWCn">Anthropic Claude Platform Docs</span>
+          </div>
+          <div class="meta-item" data-page-node-id="qXk6lMWBzhJS3usN6rASKd">
+            <span class="meta-label" data-page-node-id="yMguQqRiY8EO9Rn3nu8tc0">原始 URL</span>
+            <span class="meta-val" data-page-node-id="Uxi6TEFbwPY9nGAS8CY2I9"><a href="https://best.xiaohu.ai/article/claude-fable-5-1-prompting-guide/" target="_blank" rel="noopener noreferrer" data-page-node-id="X84RjNKpzCdCqvSIaD57VY">best.xiaohu.ai/article/...</a></span>
+          </div>
+          <div class="meta-item" data-page-node-id="09UkWueXEDGLTSQLbbgUo3">
+            <span class="meta-label" data-page-node-id="eGszvxC1cMBaYV0j244SSa">分类与语言</span>
+            <span class="meta-val" data-page-node-id="GPfWIeU3Hxqwf4mTNhxk0V">工具教程 / 中文 (附带中英双语 Prompt)</span>
+          </div>
+          <div class="meta-item" data-page-node-id="IwcVSUcMDSfRCd9T64iC60">
+            <span class="meta-label" data-page-node-id="YWK6m0lJh5RcbicgEOavrP">适用模型</span>
+            <span class="meta-val" data-page-node-id="nmH5Gz2Z3dYtHhL75zoN9x">Claude Fable 5.1 / Claude Mythos 5.1</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- 一分钟速览 -->
+      <section id="sec-overview" data-page-node-id="gLBzfV38Muf3v8BgqcmLlQ">
+        <h2 data-page-node-id="ijQrIDgN962JUJdHhHSK1B">一分钟速览</h2>
+
+        <div class="quick-look-grid" data-page-node-id="iubh2jkRjwSEEvnAAxBifE">
+          <div class="quick-card" data-page-node-id="5W82L32qB06kNV3K4yYCC4">
+            <div class="quick-card-num" data-page-node-id="Q7dzSf73uVfua49PoZcyH4">01</div>
+            <div class="quick-card-title" data-page-node-id="LRkQDyQNPkXE67NfYIKbf1">Prompt 迁移性与运行时重心</div>
+            <div class="quick-card-desc" data-page-node-id="td7a0PHEcYtchoMApMkPyA">Fable 5 的大多数 Prompt 升到 Claude Fable 5.1 后还能继续用；Anthropic 需要开发者重调的是 5.1 与 Mythos 5.1 的 Agent 运行方式：思考档位、工具循环、消息历史和长任务收尾。</div>
+          </div>
+          <div class="quick-card" data-page-node-id="UPveyfGUNNKyo2F0RsJolj">
+            <div class="quick-card-num" data-page-node-id="yaa7DcQT1vafSiJUW9ydnl">02</div>
+            <div class="quick-card-title" data-page-node-id="BboSOnHXzDvKbYWCBGTVLM">现象的本质是运行时差异</div>
+            <div class="quick-card-desc" data-page-node-id="AFxpeR7vyQ2i7impXVCAwi">16 类场景暴露的是运行时差异：低 effort 会少搜索，高档会拖长生成，工具调用会串行化；这并非再补 16 句 Prompt 就能解决。</div>
+          </div>
+          <div class="quick-card" data-page-node-id="4bdKk9PXpJXukDWRC6Jys2">
+            <div class="quick-card-num" data-page-node-id="wEeSRMBylY7K49tPHmPFGk">03</div>
+            <div class="quick-card-title" data-page-node-id="Wsc9ZDuZqk3oDDQ4sqGNXe">最危险红线：消息历史不可变</div>
+            <div class="quick-card-desc" data-page-node-id="fAyK8CG5jU1R7XPceMLHWF">最危险的一项藏在消息历史：这 16 条建议明确，改动旧消息或工具声明会让已经保存的思考失效，后续请求甚至直接报错。</div>
+          </div>
+          <div class="quick-card" data-page-node-id="CKlEKetaBaPLjIRgutwu7a">
+            <div class="quick-card-num" data-page-node-id="eFAR2Idv1rLS37aoiI13Iz">04</div>
+            <div class="quick-card-title" data-page-node-id="2IZSe7XohvTfh7hC02axN2">日志式追加与长任务契约</div>
+            <div class="quick-card-desc" data-page-node-id="Oz0AecjunqxpWij0jhUWyM">消息历史应保持 append-only；长任务要把进度更新、并行工具、异步子任务、完整收尾和局部代码修改写进运行规则，避免流程悄悄停在半路。</div>
+          </div>
+        </div>
+
+        <p data-page-node-id="zLn2xgVetvgM7P8dqUrH30">Anthropic 发布了最新的 <strong data-page-node-id="O6GBh05H2gfHOUhZ07DM97">Claude Fable 5.1</strong> 和 <strong data-page-node-id="RFHLvIDhmEvXm1Si6ygbm1">Claude Mythos 5.1</strong> 两款旗舰模型。两者使用同一个底层模型，Fable 5.1 面向一般用户，Mythos 5.1 通过受信任访问计划向部分网络安全与生命科学专业人员开放。Fable 5.1 的升级重点包括编程、知识工作、长时间自主执行，以及更低的缓存读取成本。</p>
+
+        <!-- 站内关联推荐 -->
+        <div class="related-article-bar" data-page-node-id="S8njDpBbO3Cr8snkX062hJ">
+          <div class="related-left" data-page-node-id="vgjyt31evDMEk1IhEIghK8">
+            <span class="related-tag" data-page-node-id="9fyPF6kx0EXGTfx0He5r4q">站内已有文章</span>
+            <span class="related-title" data-page-node-id="kIscLsDNsy1xzKHnRrvA2b">Anthropic 发布 Claude Fable 5.1 与 Mythos 5.1：长时间自主执行能力提升 缓存读取降价 75%</span>
+          </div>
+          <a href="https://best.xiaohu.ai/article/claude-fable-5-1-mythos-5-1/" target="_blank" rel="noopener noreferrer" data-page-node-id="IdADUbGDo0JE2aEPJGmCuk">阅读原文 ↗</a>
+        </div>
+      </section>
+
+      <!-- 背景分析 -->
+      <section id="sec-background" data-page-node-id="fTklo3x74KFgcaF3eLS4X6">
+        <h2 data-page-node-id="9d6K2msGIyWpUarR1v0f29">背景：模型升级以后，为什么还需要一份专门的提示指南</h2>
+
+        <p data-page-node-id="CpLExUj5MIRJrOO0zm2hv2">Fable 5.1 的变化不只体现在“回答更聪明”。它更擅长长时间执行复杂任务，<code data-page-node-id="Wy1W0CMPqdGfWr8ssxjWB2">adaptive thinking</code> 始终开启，并允许开发者用 <code data-page-node-id="PcrYnOHkEtrCAn2lfG3m3s">effort</code> 在质量、延迟和成本之间做选择。与此同时，thinking blocks 的会话绑定更严格，工具循环的可观察性、历史消息的组织方式和长输出的 token 分配也随之变得重要。</p>
+
+        <div class="callout callout-warning" data-page-node-id="WjhK60jAbfHsHba0o50zH8">
+          <div class="callout-title" data-page-node-id="c3Df004PKnC0cFYWPdew5t">⚠️ 故障的多层级渗透特征</div>
+          <p data-page-node-id="q46tk4F4WqvD19KhES6FXW">这意味着，同一个故障可能发生在完全不同的层面：</p>
+          <ul style="margin-bottom: 0;" data-page-node-id="G8o8Pzd1PZTsFMCvYTqaTy">
+            <li data-page-node-id="riFD8BZM1nZHmYyJBAioQG"><strong data-page-node-id="XVGzEg8pAFEfrhb8efzCBq">模型没调用搜索</strong>，可能是 <code data-page-node-id="Zf7F2vDkgnLBLUphWEqn8f">low</code> effort 下的行为倾向；</li>
+            <li data-page-node-id="c1oJ5knTgauzJ4DhGrQYRQ"><strong data-page-node-id="alWJB2Pc1gOEyRbWyUvaxD">Agent 长时间没有文字</strong>，可能是客户端没有请求或展示 progress updates；</li>
+            <li data-page-node-id="l5Ve7AEthjC5BdVQ0DVuMl"><strong data-page-node-id="vF0BdHEf8n6FHEPxdUAF51">多轮请求突然报 400</strong>，可能是客户端改写了旧消息，破坏 thinking block 的前缀绑定；</li>
+            <li data-page-node-id="JtdCjeE3c3rhAFK8mqh5g2"><strong data-page-node-id="v9VvlwKLLAZgetiX6U1uCE">主 Agent 等着子 Agent 不再工作</strong>，可能是启动子任务的工具本身被设计成阻塞调用；</li>
+            <li data-page-node-id="PbhAuavHp7CLXdiu9dUWBz"><strong data-page-node-id="KFYoAyrLH90pnkXOsGNKPV">长报告写到一半被截断</strong>，可能是 thinking 和正式回答共同耗尽了 <code data-page-node-id="7VbEEwPlFjiUeC56gghwtF">max_tokens</code>。</li>
+          </ul>
+        </div>
+
+        <p data-page-node-id="x8yU07kQeGzVgiGIy94IRs">所以，这份指南虽然叫“Prompting”，实际覆盖了<strong data-page-node-id="d1g92NL9NkadOjz1Uv1FM3">模型参数、API 配置、消息协议、Agent 调度、代码编辑和前端呈现</strong>。只改 system prompt，解决不了其中一半问题。</p>
+      </section>
+
+      <!-- 指南的核心：四个控制面 -->
+      <section id="sec-core-planes" data-page-node-id="rG4JJO6nt4CLjqgdLUdf8p">
+        <h2 data-page-node-id="0xdqNoAQQeGToJcE4YlgMa">指南的核心：先判断症状属于哪一层，再使用对应修复</h2>
+
+        <p data-page-node-id="4xWFN8jAYGljijCjmPr9nm">官方的 16 条建议采用“看到什么现象，就检查对应章节”的组织方式。把它落到产品里，可以归纳为<strong data-page-node-id="gJfcZeGdjk5nDy9YtdCBJ1">四个控制面</strong>：</p>
+
+        <div class="quick-look-grid" data-page-node-id="KZbBR0GS0ypIa2GubFKVjB">
+          <div class="quick-card" style="border-top: 3px solid var(--amber);" data-page-node-id="dU2apRalQPG34U31YDGKVX">
+            <div class="quick-card-title" data-page-node-id="YXA6vvEz4NucrSF0PEUIbn">1. 思考预算 (Thinking Budget)</div>
+            <div class="quick-card-desc" data-page-node-id="ko27qkc5o33BRo1VBO5TRT">不同任务应该选择什么 effort，什么时候升档或降档；避免过度思考导致延迟激增或低档跳过必要搜索。</div>
+          </div>
+          <div class="quick-card" style="border-top: 3px solid var(--cyan);" data-page-node-id="iYgk29VCFG04nA2tTMZWQM">
+            <div class="quick-card-title" data-page-node-id="xv8EtQGlAGVzzUcjIAu4Fy">2. 工具与界面 (Tools & UI Loop)</div>
+            <div class="quick-card-desc" data-page-node-id="BaoI8sPShqMoT1VOc3hWC8">如何展示进度状态行、批量合并独立读取调用、异步调度子 Agent 避免主流程阻塞。</div>
+          </div>
+          <div class="quick-card" style="border-top: 3px solid var(--rose);" data-page-node-id="AOfgHmdFkBEkTFomm1y6L8">
+            <div class="quick-card-title" data-page-node-id="dHccT84UjvITsf8QDaQAUm">3. 消息历史 (History Protocol)</div>
+            <div class="quick-card-desc" data-page-node-id="zc5fFfMBeVXy0Wu84fnG27">为什么必须严格保持 append-only，如何安全追加临时规则、使用 turn-scoped 提示与无损压缩上下文。</div>
+          </div>
+          <div class="quick-card" style="border-top: 3px solid var(--emerald);" data-page-node-id="p0NxFaYNViYfQrTLBDI6ig">
+            <div class="quick-card-title" data-page-node-id="7QjA8py2pl0DDlwhDYxV2R">4. 交付约束 (Delivery Contract)</div>
+            <div class="quick-card-desc" data-page-node-id="McbHr72iLxe0cGx6Nsp4LK">既要求模型自主完整收口，又严密防止它随意扩大范围、重写整文件或提交过量临时排错测试。</div>
+          </div>
+        </div>
+
+        <div class="callout callout-primary" data-page-node-id="66WDgscwxvl3IeutneQkds">
+          <div class="callout-title" data-page-node-id="MtyVqwIGHtiGvy70uzd45m">💡 Fable 5.1 的 16 个症状分别应该在哪一层修？</div>
+          <p style="margin-bottom: 0;" data-page-node-id="CDd5bHL7oJpoA2YAHjqPVJ">
+            Fable 5.1 调优应分四层：<strong data-page-node-id="gp0wx9wPQDcinCM70v3nNU">effort</strong> 控制思考深度；<strong data-page-node-id="9inJx5gWCx6bhk0tvxM5YX">界面与工具</strong>负责进度显示、批处理和异步；<strong data-page-node-id="xGAAezSqTIizDsC8JE0biz">会话历史</strong>保持 append-only 并管理压缩；<strong data-page-node-id="FcQSxuioFDsBIcuP9N5tKa">交付合同</strong>同时要求做完任务和限制范围。
+          </p>
+        </div>
+
+        <div class="callout callout-danger" data-page-node-id="s7hZfrhW4Qing9fCB1tBRg">
+          <div class="callout-title" data-page-node-id="d0MJBmLnyXbcezIVrZ1DC5">🚨 迁移前检查 (Pre-Migration Checklist)</div>
+          <ul style="margin-bottom: 0;" data-page-node-id="JJgONHUhjGph7qJ2OVScSn">
+            <li data-page-node-id="I3NVUUfJsGcnErWHMY4USH">不再使用 <code data-page-node-id="36DpdeGRfaSFEM6ai9zAj1">tool_choice: "any"</code>，也不要强制指定某个工具；</li>
+            <li data-page-node-id="ep9EEtZhX8T3KABXbUtMDo">不要让较早模型读取 Fable 5.1 生成的 thinking blocks；</li>
+            <li data-page-node-id="kG7f6u89V94LlirheEKC5t">不要编辑会话中已经产生 thinking blocks 的旧消息。</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 交互沙盘 1：16 条建议运行时分层诊断沙盘 -->
+      <section id="sec-sandbox-diagnostic" class="sandbox-panel" data-page-node-id="0IBz3LgHQS7BjjFWqfYbSE">
+        <div class="sandbox-badge" data-page-node-id="ZbtXWbECAFMN8kZDdZxPel">INTERACTIVE DIAGNOSTIC</div>
+        <div class="sandbox-title" data-page-node-id="qtK5xB0Uu3GOvIz7oHx9pa">🛠️ 交互沙盘 1：16 类症状分层快速诊断矩阵</div>
+        <div class="sandbox-desc" data-page-node-id="Slz6yeuGg377BpR6dIybOr">
+          在实际运行中遇到故障现象时，请直接从下方选择症状，沙盘将准确定位其所属运行时控制面，并给出针对性的根因推演与修复锚点。
+        </div>
+
+        <div class="diagnostic-select-box" data-page-node-id="m9ei4Fxq5ySE7XhRhNjsi2">
+          <label class="control-label" for="diag-symptom-select" style="margin-bottom: 0.5rem;" data-page-node-id="PypVMc9hgYGJy7NQ78AWXS">选择你正在观察到的异常现象 (Symptoms)：</label>
+          <select id="diag-symptom-select" style="width: 100%; font-size: 0.95rem; padding: 0.65rem;" data-page-node-id="pSyO7tClFZXkmhL4CCXoC5">
+            <option value="1" data-page-node-id="H2AGc4vPy6den7SI2pwNqq">1. 任务质量尚可，但成本或延迟超过需要，或照搬 Fable 5 effort 配置</option>
+            <option value="2" data-page-node-id="qIP74GWeDCQmAevkAXSB5B">2. Agent 连续调用工具几分钟不说话，用户以为卡死；最终回复无复盘</option>
+            <option value="3" data-page-node-id="eijhCshxwAYXCtAdI8C8ra">3. 环境探索与读取操作，模型一轮只调用一个工具，往返轮数激增</option>
+            <option value="4" data-page-node-id="aPrpkGMhDHDiKuEEAH3Xb6">4. 多轮请求报 400 bound to a different conversation，或服务端丢弃 thinking block</option>
+            <option value="5" data-page-node-id="m8cOnXpX39b18esHk0olCW">5. 句子变长、段落密度上升，出现大量隐喻与矫饰写作者姿态的比喻 (mannered prose)</option>
+            <option value="6" data-page-node-id="aF01OD0xFV10fAhomSAnW8">6. 回复变成密不透风纯文本，复杂比较缺少列表、表格、标题或排版</option>
+            <option value="7" data-page-node-id="TI289pR7NqwqqoCwyuEjZx">7. 总结网页时直接沿用来源措辞且未加引号，无法区分转述与原文</option>
+            <option value="8" data-page-node-id="QcZOHAKmBVLqk4Vpz6CRfT">8. 模型以“接下来我会修改……”预告结束，或对已授权步骤反复询问“需要我继续吗”</option>
+            <option value="9" data-page-node-id="Q8a3iB8fqDPYCPniD3GXXe">9. 长会话压缩后，模型忘记否决过的方案、用户原话或代码标识符，重复提问</option>
+            <option value="10" data-page-node-id="1iqMtc42fVIOuc3YaFXknc">10. 开放编码任务顺手重构邻近文件、修无关旧 Bug，提交大量临时排错测试</option>
+            <option value="11" data-page-node-id="vD1v2T27etEmS3vRIKxvWL">11. 模型凭记忆回答快速变化的 AI 模型、工具或最新事件，答案过时跳过搜索</option>
+            <option value="12" data-page-node-id="Ixr8cdnpZeOSYHMIRvV864">12. 代码合法检查返回 stop_reason: "refusal" 导致安全误伤</option>
+            <option value="13" data-page-node-id="EEYf3V21srApJ11k3a7Wed">13. 只改几十行代码，模型却重新输出整份上千行文件</option>
+            <option value="14" data-page-node-id="Dmsvsx8lK9LFxqGhG30X3m">14. 在 xhigh/max 模式下思考很久，最终长报告、代码文件被 max_tokens 截断</option>
+            <option value="15" data-page-node-id="vUwwSsu3nWC2SBcbxHDnYg">15. 主 Agent 派发了子任务，却阻塞挂起傻等结果，无并发时延收益</option>
+            <option value="16" data-page-node-id="Cxb9kbAURzBCCjKvj7MyEP">16. 能理解图表大意，但读错密集小字、高密度坐标、图例或局部关系</option>
+          </select>
+        </div>
+
+        <div class="diagnostic-result-card" id="diag-result-card" data-page-node-id="V2UDtJocawdRCNRbd1uXFU">
+          <!-- 动态注入诊断结果 -->
+        </div>
+      </section>
+
+      <!-- 一、先确定思考档位 -->
+      <section id="sec-part1" data-page-node-id="7qbApJcEBY0CZrdiuVfO1t">
+        <h2 data-page-node-id="AyL6hz5jnYuLLguJtMcVWx">一、先确定思考档位（建议 1）</h2>
+
+        <div class="suggestion-card" id="rec-1" data-page-node-id="vNyoDrDLy12CdkUJhiPkyk">
+          <div class="suggestion-header" data-page-node-id="1zCPe2c8nbvgnjE3qPDGiE">
+            <div class="suggestion-badge-group" data-page-node-id="EDs8bAd9DIqMgFYuFPz61e">
+              <span class="suggestion-id" data-page-node-id="IJNlWwnG1JOmI22VTklPh4">建议 1</span>
+              <span class="suggestion-plane-badge plane-budget" data-page-node-id="HhAsBtqizmeyqHh0JNwKg8">控制面：思考预算</span>
+            </div>
+            <h3 data-page-node-id="TZEnFHWjrnCEMiFbIG6Qv7">不要沿用旧模型的 effort 结论，重新测试全部档位</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="B5EY3cBliIozwSqv1qHC3y">
+            <div class="diag-box" data-page-node-id="WZky3Pnli9y7lHtMczeoIU">
+              <div class="diag-box-label diag-see" data-page-node-id="VAGBUC3CJwmqBBO3tbCUka">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="k6xFWJtolYRr242pauQ7GJ">任务质量不错，但延迟或成本超过需要；或者团队直接把 Fable 5 的 effort 配置照搬到 5.1。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="24IFOdCOZJamN8BT1kVVCT">
+              <div class="diag-box-label diag-why" data-page-node-id="ScD91n7EpCMtmbc19MJIz1">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="EDTgr84j3ZYOumxEAo344A">同样叫 <code data-page-node-id="FZsm8HYJVHbsTivta5G4PS">medium</code> 或 <code data-page-node-id="eho3GykeSNtKLcS0kmGfLI">high</code>，不同模型实际使用的思考量并不相同。Fable 5.1 的能力提升覆盖各个档位，高档位增益更明显，但不是每个任务都需要高档。</p>
+            </div>
+          </div>
+
+          <p data-page-node-id="A1ImiFTn9om8j69JWuV8MQ">Anthropic 建议从默认的 <code data-page-node-id="OALzANGE6FkzIRc80uXwS9">high</code> 开始，然后用自己的评测依次测试 <code data-page-node-id="CdsWyRNf5K7EkIqvNOtXir">low</code>、<code data-page-node-id="ZyvKBmx6sxi77LduEn97h6">medium</code>、<code data-page-node-id="BMMy2U22R8G88fRpBR1mxb">xhigh</code> 和 <code data-page-node-id="3gnkvEViz4srU0ctsF36V1">max</code>。官方观察是：<code data-page-node-id="iDyF6PUcKhFnD8I3POSecK">medium</code> 的结果大致可与 Fable 5 相当，成本更低；<code data-page-node-id="iDMdCYn7IK5gIWMO1tkBM5">low</code> 在一些任务上具有很强的单任务成本竞争力，因此也应该和较小模型的高 effort 方案一起比较。</p>
+
+          <p data-page-node-id="mXyYABag683EMJM1fQvvrD">这里不能把结论写成“low 普遍胜过 Opus 和 Sonnet”。官方使用的是 <code data-page-node-id="JwU3kaAu9laOKAdUym14hi">roughly</code>、<code data-page-node-id="AJdgngZ4gXS7kmCDbHLP6U">often</code> 和 <code data-page-node-id="RY6xPLHH75KMKZrYLChMas">competitive</code> 这样的限定语。生产决策必须记录真实任务的成功率、总 token、工具调用轮数、墙钟时间、搜索触发率和返工率。</p>
+
+          <div class="table-container" data-page-node-id="F6Cl7oVaqTZWFTBa48hDGG">
+            <table data-page-node-id="421aExI9zqoLrM838ptr8u">
+              <thead data-page-node-id="jGwGFCBeON49XJ0UvdmsXF">
+                <tr data-page-node-id="BIuEyzAJe7a6FIeHCo55d7">
+                  <th data-page-node-id="dy2UXHzWBPXkhcqJD0pQhO">档位 (Effort)</th>
+                  <th data-page-node-id="wbQYh7FHcubTI4sd5CPam1">适合先测的任务</th>
+                  <th data-page-node-id="jEheOdhYrutARsQFVXLycD">需要额外观察的风险</th>
+                </tr>
+              </thead>
+              <tbody data-page-node-id="phoal09OiYcF6oXjFjCxd8">
+                <tr data-page-node-id="8a9lwewJOWdsIslJdl8kGz">
+                  <td data-page-node-id="A6BqdZ5FvB07QEF7zQFAel"><code data-page-node-id="9sgmFjY0Zdp2dY7ffjYmDB">low</code></td>
+                  <td data-page-node-id="FZs6A7kdQtGj1tNZoxBLgv">分类、抽取、常规子步骤</td>
+                  <td data-page-node-id="u50M0JiVWdgJRbiwADJf34">更少主动搜索，容易凭记忆回答</td>
+                </tr>
+                <tr data-page-node-id="qSKjDdD5YYOSAdIZJmVcoA">
+                  <td data-page-node-id="vdd83feEXPYuL9YWuvbXQ6"><code data-page-node-id="8rb7aScy9BRJpqGNd0jxPM">medium</code></td>
+                  <td data-page-node-id="dE0vu36UDmZWqU1nxPEHOP">批量工作、质量已经稳定的任务</td>
+                  <td data-page-node-id="GYMvQc2I1RLbl1Op5WOKlF">仍需验证复杂边界是否退化</td>
+                </tr>
+                <tr data-page-node-id="28gvbPIBRhlFb8EoqcY5rg">
+                  <td data-page-node-id="Vs9FPHRLzShMHJYEQZMt7t"><code data-page-node-id="sRHcsMgCxW5Wl5OFZZ19En">high</code></td>
+                  <td data-page-node-id="pREK3HkmAuphTtGcKaaE2E">复杂编码、研究和多步 Agent；<strong data-page-node-id="iXb32kgrKBsJkQL9kNjmOw">官方推荐起点</strong></td>
+                  <td data-page-node-id="kGc2rOFt12UDQwdq84Ikap">成本和延迟可能超过简单任务需要</td>
+                </tr>
+                <tr data-page-node-id="nEdHdiApfHUk31FkO3xyCV">
+                  <td data-page-node-id="Qb3gAat40HW9tIxvDQEefD"><code data-page-node-id="cYx2UFDY4PTwRly7u2s5sC">xhigh</code> / <code data-page-node-id="gFVMA9jQEHxVKnqLJCAwLJ">max</code></td>
+                  <td data-page-node-id="Hj50y64obxsSResdBn3zhg">只有实测出现额外质量收益的难题</td>
+                  <td data-page-node-id="lPRj56PDJeOn7DYFQ57Yd5">思考时间长，长成品更容易触及输出上限</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p style="font-size:0.9rem; color:var(--text-muted);" data-page-node-id="SFxH0rbKWJpgMg6E7Zl3ZG">
+            <em data-page-node-id="hli2JCdD2EiAeNH4m3ZFzK">说明：这条建议主要靠评测和路由实现，不需要给模型增加一段固定 Prompt。</em>
+          </p>
+        </div>
+      </section>
+
+      <!-- 交互沙盘 2：Effort 决策器 -->
+      <section id="sec-sandbox-effort" class="sandbox-panel" data-page-node-id="tnii5Lfq8RTHBfGzOSqL2S">
+        <div class="sandbox-badge" data-page-node-id="Zlq3Ckx4LG1uYEpZ7eA7V9">EFFORT CALCULATOR</div>
+        <div class="sandbox-title" data-page-node-id="w6u41PsPLlAAIcedfkfGqE">🎛️ 交互沙盘 2：Fable 5.1 思考档位 (Effort) 性能·成本·风险决策沙盘</div>
+        <div class="sandbox-desc" data-page-node-id="aF4NDnZp34qZyGtceFYwf8">
+          选择你的业务任务类别并滑动档位，实时评估延迟膨胀系数、Token 消耗倍率、搜索漏查风险及生产配置建议。
+        </div>
+
+        <div class="sandbox-controls-grid" data-page-node-id="7LVZ4hA6UEX26LBgyUpUCT">
+          <div class="control-group" data-page-node-id="tT8C3lAMfbFjAmHdLaVSM6">
+            <label class="control-label" for="sim-task-type" data-page-node-id="6WU3qGBCGc288ynVLv0wCU">目标任务类别 (Task Type)：</label>
+            <select id="sim-task-type" data-page-node-id="4jMFtkLqVImwWj5zGHljON">
+              <option value="extract" data-page-node-id="ELju0MzNjGSNBX37vPXvQ7">实体抽取 / 分类 / 结构化解析</option>
+              <option value="batch" data-page-node-id="4lhRQtpykJVxPQ1WdKtvSq">批量固定格式生成 / 中等逻辑处理</option>
+              <option value="coding" selected data-page-node-id="4QYoUsGndRZPj20C6NRKgH">复杂编码 / 多步 Agent / 架构设计</option>
+              <option value="frontier" data-page-node-id="zZrozqwR5TsmncT8EGzNEQ">极难数学物理推演 / 极限竞赛解题</option>
+            </select>
+          </div>
+          <div class="control-group" data-page-node-id="xidkWfXsy8f4qzAKGTOgoq">
+            <label class="control-label" data-page-node-id="pQ98bvn9sTRv30jeFwYa4G">
+              <span data-page-node-id="PgccpeFSa9rSj14kiBM3AH">思考档位 (Effort)：</span>
+              <span class="control-val-tag" id="val-effort-label" data-page-node-id="cHbBGfaHPLq2iBRXwCGkru">high (默认)</span>
+            </label>
+            <input type="range" id="sim-effort-slider" min="1" max="5" step="1" value="3" data-page-node-id="viele2H6jOe2ZAi6VH0RFi">
+            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-muted); margin-top:4px;" data-page-node-id="qjemw75QwbKxO1FDvQaV37">
+              <span data-page-node-id="1jalVNXmXfCIyDGCfONHVn">low</span><span data-page-node-id="IIyEgwwn9UglJaThulScwn">medium</span><span data-page-node-id="OtuMpYJeQgldkeByuCvFNQ">high</span><span data-page-node-id="lIybBWxEkHgXdgXfg5LHzH">xhigh</span><span data-page-node-id="nDzidp4JHGOLXAe9kwPeGs">max</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sandbox-results-grid" data-page-node-id="0xK0dPGKcNGEuhZEBVdPDm">
+          <div class="res-card" data-page-node-id="IkfrIBN1obFHemMWEmt5df">
+            <div class="res-card-label" data-page-node-id="xqKm8rXjHi7Dytz8b3SdQF">相对延迟基准</div>
+            <div class="res-card-val" id="val-latency-mult" data-page-node-id="zwpuB51b9cdn4fVSNhzOgc">1.8x</div>
+          </div>
+          <div class="res-card" data-page-node-id="M29hwwPS2i6KiFvI9pCwE9">
+            <div class="res-card-label" data-page-node-id="onItKfie5AshnejzyseTgh">相对思考 Token 开销</div>
+            <div class="res-card-val" id="val-token-cost" data-page-node-id="BWeaj88Ld9PFazEd25mu3T">2.5x</div>
+          </div>
+          <div class="res-card" data-page-node-id="YB1pxMAK0pxLc0sKzBjdKm">
+            <div class="res-card-label" data-page-node-id="kwWe3SJmeLj1XLw95aFIXy">搜索主动触发倾向</div>
+            <div class="res-card-val" id="val-search-prob" style="color:var(--emerald);" data-page-node-id="narELZGg7uur01CFHYOwwj">极高 (安全)</div>
+          </div>
+          <div class="res-card" data-page-node-id="JFznbYevKxsJsdvTWijMMU">
+            <div class="res-card-label" data-page-node-id="zWksEDlC5OaUrQCDR1ENmK">综合适配度评价</div>
+            <div class="res-card-val" id="val-fit-grade" style="color:var(--accent);" data-page-node-id="tVFScMXic9quRDJ3amSDzH">最佳起点 ★★★★★</div>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top:1.25rem; margin-bottom:0;" id="val-effort-advice" data-page-node-id="WBmoB6k96Zaw1IOwyTtQSM">
+          <strong data-page-node-id="ndBUxZ1h77y7EGzIAVaMLY">架构调优建议：</strong>作为复杂多步 Agent 的基准起点，保持 high 档位并配套 turn-scoped 批处理；若成本敏感，可尝试评测降档至 medium。
+        </div>
+      </section>
+
+      <!-- 二、修正工具循环 -->
+      <section id="sec-part2" data-page-node-id="HHUFs5Of2VY3zjAf5YMkMZ">
+        <h2 data-page-node-id="osUVYwr7JQz4VgACN0BqPK">二、修正工具循环（建议 2—3）</h2>
+
+        <!-- 建议 2 -->
+        <div class="suggestion-card" id="rec-2" data-page-node-id="n6HNjPXtf9FZqPfzmeteHo">
+          <div class="suggestion-header" data-page-node-id="vGM6KiAcCB1lVJu5D4AGQk">
+            <div class="suggestion-badge-group" data-page-node-id="xxvHdqglhB5l5znV5ssk7r">
+              <span class="suggestion-id" data-page-node-id="BDn0gWA6uUOaPU8Rbmi2WS">建议 2</span>
+              <span class="suggestion-plane-badge plane-tools" data-page-node-id="GA0xB8v3ILABoJ5dNhkUe0">控制面：工具与界面</span>
+            </div>
+            <h3 data-page-node-id="9ybrcTPYbtoMGmEZHTo6FZ">让用户看见长工具任务的进度</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="194shdpRBy1vxGPHAFagWI">
+            <div class="diag-box" data-page-node-id="hLPrOOtZn3MtvdwDrHceYy">
+              <div class="diag-box-label diag-see" data-page-node-id="rZE1NhrfYcgJNXdznquaCv">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="EG3h9bamBsm011uKdBsMLP">Agent 连续调用工具时几分钟不说话，用户以为任务卡死；最终回复又只解释最后一步，没有完整复盘。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="dFi8dgtziI9iBUMhieaYKH">
+              <div class="diag-box-label diag-why" data-page-node-id="Ty36oD1hR0HyfTcnT5O1RK">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="9o4dfMljFIHnaCm7ClYbfm">Fable 5.1 会把简短进度放在 progress-update <code data-page-node-id="iCg6KGWYslxrrYmQNBRhRI">thinking</code> blocks 中，但默认的 <code data-page-node-id="3wNunghMLvFKcqoZpCVSeb">thinking.display</code> 是 <code data-page-node-id="yFcINqBRnzKeeVnjevIfH7">"omitted"</code>，这些 block 的内容会是空的。模型可能已经产生进度，客户端却根本没有请求或展示它。</p>
+            </div>
+          </div>
+
+          <p data-page-node-id="2tl2yyPVWglNZUixxVqLOO"><strong data-page-node-id="xcsTxVkA90EOtfft2it1Ti">第一步：先修改 API 请求开启进度更新 beta</strong></p>
+          <pre data-page-node-id="sillKHvm35uKl03zGufrhm"><code data-page-node-id="B4hIyBbddOiv74lzaCGjx8">{
+  "thinking": {
+    "type": "adaptive",
+    "display": "updates"
+  },
+  "betas": [
+    "thinking-display-updates-2026-08-18"
+  ]
+}</code></pre>
+
+          <p data-page-node-id="IWUXCtizUwa26pl7H0RsF6">客户端应把非空 thinking block 渲染成短状态行。如果需要同时获得经过汇总的 reasoning，可以使用 <code data-page-node-id="cPTDOKgyRncDS6lsR1TUR1">display: "summarized"</code>。这些内容是面向用户的进度摘要，不是原始思维链，也不是可靠的执行回执；任务是否真正开始和完成，仍应由调度器的 attempt、run ID、工具结果和错误状态证明。</p>
+
+          <p data-page-node-id="AcavJP6wVG3CTPRbUhpNw4">如果产品还需要更稳定的文字进度，或者前端会隐藏命令输出，可以把两项约束放在一起：</p>
+
+          <div class="prompt-container" data-page-node-id="Sogb6umVhGDBSOGWess5Yi">
+            <div class="prompt-header" data-page-node-id="xr3EcCFSzLcbdHgmS3C5bN">
+              <div class="prompt-tabs" data-page-node-id="TrxC8SjElKwKICD8S2EJK3">
+                <button class="prompt-tab-btn active" data-target="p2-all" data-page-node-id="7yANC5zsQIjeB9SSVOigFD">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p2-zh" data-page-node-id="6ZBJrbnAEBA0Dz6MdNG1uc">中文 Prompt</button>
+                <button class="prompt-tab-btn" data-target="p2-en" data-page-node-id="Q6wQnZbh3hRbf9LG8VA3vf">English</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p2" data-page-node-id="c9jrfZmDcVZ2p7y1uF8Vxo">📋 复制提示词</button>
+            </div>
+            <div class="prompt-body" id="p2-content" data-page-node-id="4gE9TdFRCdQpqoXBDI1Dhf">
+<div class="prompt-sec-en" data-page-node-id="VvIPMJhGKjrQUvKwsC7JOw"><div class="prompt-section-title" data-page-node-id="szEA04JNoBFKoqDKuin68T">English</div>Before starting, state in one sentence what you are about to do. During longer tasks, give brief updates on what you just found and what you are doing. End with a self-contained recap covering the findings, the work actually completed, and anything still outstanding.
+
+Only you can see the full output of this command; the user interface shows at most a few lines. Put anything the user needs to read in your reply.</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="p1yyO0DEWE6LtayQnv0yFY"><div class="prompt-section-title" data-page-node-id="ps9Ajzx0YrDlagU296VDBL">中文</div>开始工作前，用一句话说明你将要做什么。执行较长任务时，用简短更新说明刚刚发现了什么、正在做什么。结束时给出一份可以独立阅读的简要复盘，包括发现、实际完成的工作和仍需处理的事项。
+
+这条命令的完整输出只有你能看到，用户界面最多显示其中几行。凡是用户需要阅读的信息，都必须写进你的回复。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 建议 3 -->
+        <div class="suggestion-card" id="rec-3" data-page-node-id="EfRek3eNY1NSnh52JKERIF">
+          <div class="suggestion-header" data-page-node-id="rn2f2zm8OrQ5glpFAxVa4l">
+            <div class="suggestion-badge-group" data-page-node-id="XirfHMEdyTLSyVp8CVNOty">
+              <span class="suggestion-id" data-page-node-id="6quNU58NdiNUfCVoCV5mo8">建议 3</span>
+              <span class="suggestion-plane-badge plane-tools" data-page-node-id="hojMHQyQsSiNHJb3WrPcBs">控制面：工具与界面</span>
+            </div>
+            <h3 data-page-node-id="oCVj1Sy584fx7heJFmNl2k">把互不依赖的工具调用放进同一轮</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="KkqPAVlqNjPf0EARVYi3K3">
+            <div class="diag-box" data-page-node-id="mwYMrSc5qL0A8wfAWy7vm2">
+              <div class="diag-box-label diag-see" data-page-node-id="xvCC7Az8hrgu52hjWP1mB0">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="YEneqvhEfAp09lhkaqtLsE">用户明确要求查 A、B、C 时，模型通常会并行；但在编码或 computer-use 循环中，模型自己推导出来的下一批读取操作，经常一轮只调用一个工具。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="BwMINDENfm8zRCcteVSR9Z">
+              <div class="diag-box-label diag-why" data-page-node-id="DvCCF54TCPnJOqqSJS0ICm">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="19En4kD8MQAMZK8Rmz2c0g">显式并列任务容易识别，隐含在环境探索中的独立请求需要模型先规划。每增加一轮，就会增加一次模型调用、上下文 token 和网络往返时间。</p>
+            </div>
+          </div>
+
+          <div class="prompt-container" data-page-node-id="8iNBy6bBJIhKuNYpbJhs6h">
+            <div class="prompt-header" data-page-node-id="ORbdNzVhN30C16pHnTnFwq">
+              <div class="prompt-tabs" data-page-node-id="JmkS4x9AwdeMFl56sSmm9D">
+                <button class="prompt-tab-btn active" data-target="p3-all" data-page-node-id="TG2keuzqT9YZnDO8S6b1AT">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p3-zh" data-page-node-id="ZrtiC0pLMm77Jl0jal59Kj">中文 Prompt</button>
+                <button class="prompt-tab-btn" data-target="p3-en" data-page-node-id="e0tSe5iZZ6iNA00RvpLVAB">English</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p3" data-page-node-id="RaKeH94eG64xNQHZCxbIPb">📋 复制提示词</button>
+            </div>
+            <div class="prompt-body" id="p3-content" data-page-node-id="8TVlogo3As45FYAQTY5NZq">
+<div class="prompt-sec-en" data-page-node-id="EOoWlBja9T3q7TrMcMseqN"><div class="prompt-section-title" data-page-node-id="LkQ2Xyz88P5mdhDzD1pyJK">English</div>First list privately what information you need next. Then request every independent item in this turn, leaving only genuinely dependent requests for a later turn.</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="YJLfJ9N0oez1UucEQ8hByw"><div class="prompt-section-title" data-page-node-id="Bod6t4Me3eU55YdPzs6A2f">中文</div>先在内部列出下一步需要取得的信息；然后在这一轮中一次性请求所有互不依赖的项目。只有确实依赖前一个结果的请求才留到下一轮。</div>
+            </div>
+          </div>
+
+          <p data-page-node-id="pBBTRFUtP5dPAvpaAGVM8R">这条提醒适合在每次返回 <code data-page-node-id="rGzbjVgyDnTAh0xHE0ZHqo">tool_result</code> 后重新追加。可使用 <strong data-page-node-id="ZujT5Rja1yFN8S7O6EOXwn">turn-scoped system message</strong>：</p>
+
+          <pre data-page-node-id="c4HQddaFS15asjbZYdr2Pu"><code data-page-node-id="5QOG2vMlPMt8DoRUuNhiaE">{
+  "role": "system",
+  "content": "Batch independent calls.",
+  "clear_at": "next_user_message"
+}</code></pre>
+
+          <p data-page-node-id="bBryKaKQBhyBscGAPJqm2h">它需要 beta header <code data-page-node-id="bClatkerPn2USl8Dap95nb">mid-conversation-system-clear-at-2026-08-21</code>。每轮追加新副本，但不要删除或改写旧副本；后续用户消息出现后，API 会让旧的 turn-scoped 提醒对模型不可见。</p>
+        </div>
+      </section>
+
+      <!-- 交互沙盘 3：批处理工具循环与时延收益模拟沙盘 -->
+      <section id="sec-sandbox-tools" class="sandbox-panel" data-page-node-id="WSJqJE247iHD4aG3PSqrBi">
+        <div class="sandbox-badge" data-page-node-id="geBBpYaxRfOj3Mk8FGcU4l">LATENCY SIMULATOR</div>
+        <div class="sandbox-title" data-page-node-id="RItFI8TuWWsOguUuFxErY4">⚡ 交互沙盘 3：批处理工具调用与 RTT 延迟收益模拟沙盘</div>
+        <div class="sandbox-desc" data-page-node-id="Toy39WwHKErVzkTqrol5G7">
+          模拟在探索环境或读取文件时，串行单工具调用 vs 建议 3 的批处理（Batching）在网络 RTT、模型推理与总耗时上的鲜明对比。
+        </div>
+
+        <div class="sandbox-controls-grid" data-page-node-id="CQ8Q4d6qQloVDPtX9buE1y">
+          <div class="control-group" data-page-node-id="6IAEdYjmvJhvqHIzqR73ra">
+            <label class="control-label" data-page-node-id="5QfnfJQGGAa6IzvbR6ZCNi">
+              <span data-page-node-id="rMDcN5Jrv5N0dU4d8Q9Wy0">独立工具调用数 (K)：</span>
+              <span class="control-val-tag" id="val-k-calls" data-page-node-id="K5dMGEMEPn57B1Ix0ZyvLb">4 个</span>
+            </label>
+            <input type="range" id="sim-k-calls" min="2" max="8" step="1" value="4" data-page-node-id="thDrWBVB7mUtZQ2Tun93T4">
+          </div>
+          <div class="control-group" data-page-node-id="Daz0ogLPifOjakkRUiIWi5">
+            <label class="control-label" data-page-node-id="lB50JxV2TVEpYd41RvDuHr">
+              <span data-page-node-id="TJnc15VLoOZzyb8ZaoS4Yy">单次思考推理耗时 (T_model)：</span>
+              <span class="control-val-tag" id="val-t-model" data-page-node-id="wWfJAZHcc9gZ3YkdSYpSRv">2.5 秒</span>
+            </label>
+            <input type="range" id="sim-t-model" min="1.0" max="6.0" step="0.5" value="2.5" data-page-node-id="i2mkCy4oOAdAxn8i6AKvGz">
+          </div>
+          <div class="control-group" data-page-node-id="Eqzl2aGqQZe3ESRVSUqI5K">
+            <label class="control-label" data-page-node-id="t03qX1c9Ouky54QTdfGeDd">
+              <span data-page-node-id="7FlNmw8a5xLF0trouWPiGr">网络单程往返 RTT：</span>
+              <span class="control-val-tag" id="val-rtt" data-page-node-id="V8C1NqFfl7PX8eXyGYt5Dn">150 毫秒</span>
+            </label>
+            <input type="range" id="sim-rtt" min="50" max="500" step="25" value="150" data-page-node-id="KevSmehNcLXM9uud2WGenV">
+          </div>
+        </div>
+
+        <!-- 纯原生 CSS/HTML 时延进度对比条 -->
+        <div style="background:var(--bg-surface-elevated); padding:1.25rem; border-radius:var(--radius-md); border:1px solid var(--border-subtle); margin:1rem 0;" data-page-node-id="y9DMaSDYCuusMrFWzCnRBf">
+          <div style="margin-bottom:1rem;" data-page-node-id="0GWH7XQ5ITkd0eMqWwRtEZ">
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.35rem;" data-page-node-id="YvyFsO6GiTbP7ZK1lMhKmB">
+              <span data-page-node-id="VqaYdzdwtopYok3TSMY0KT">传统串行轮次耗时 (Sequential)</span>
+              <span id="val-seq-total" style="font-weight:700; color:var(--rose);" data-page-node-id="qtBNtfV3IviLAVQkRBCBkr">12.40 秒</span>
+            </div>
+            <div style="background:var(--bg-surface-active); height:12px; border-radius:6px; overflow:hidden;" data-page-node-id="qYIcgGuUiciGV4TB3Bg4Qe">
+              <div id="sim-bar-seq" style="background:var(--rose); height:100%; width:100%; transition:width 0.3s;" data-page-node-id="A2k3v5FbvrxqyzhlC1nDJr"></div>
+            </div>
+          </div>
+          <div data-page-node-id="DFoMrUQlJQgzmzi82uFtkL">
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.35rem;" data-page-node-id="jqn1b7OjlbdGAoB6DIvuHy">
+              <span data-page-node-id="oCv7meRpWIoABmqkDc5LSH">5.1 批处理同轮耗时 (Turn-Scoped Batching)</span>
+              <span id="val-batch-total" style="font-weight:700; color:var(--emerald);" data-page-node-id="chk44jRW06u984bYMFJrQx">3.80 秒</span>
+            </div>
+            <div style="background:var(--bg-surface-active); height:12px; border-radius:6px; overflow:hidden;" data-page-node-id="h6c9c8g3T9eK1JEHFwFC3I">
+              <div id="sim-bar-batch" style="background:var(--emerald); height:100%; width:30.6%; transition:width 0.3s;" data-page-node-id="DxW7b4194VGV4pMyFt2HQM"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sandbox-results-grid" data-page-node-id="5BKLzQ0A68WZ6ya99Q5KYt">
+          <div class="res-card" data-page-node-id="bvrRRBVwANwa7YheehFOZ6">
+            <div class="res-card-label" data-page-node-id="gDptuvuIYOKXRaJMpHYu9u">节约等待墙钟时延</div>
+            <div class="res-card-val" id="val-time-saved" style="color:var(--emerald);" data-page-node-id="8isD4HXQrdUjCVjlg2uCeU">8.60 秒</div>
+          </div>
+          <div class="res-card" data-page-node-id="H5WjfIecsOboXc3d0iGr9W">
+            <div class="res-card-label" data-page-node-id="OpWLMkoxAgUmVSB575KjJL">总体时延缩减比例</div>
+            <div class="res-card-val" id="val-time-pct" style="color:var(--cyan);" data-page-node-id="oJhuspBIfAZF8OxF75a6HD">-69.4%</div>
+          </div>
+          <div class="res-card" data-page-node-id="9LtTRgHqWUC6o4d6VnSA2y">
+            <div class="res-card-label" data-page-node-id="g4kQGAYYhk0vgMiEEDDH6T">减少 API 往返轮数</div>
+            <div class="res-card-val" id="val-turns-saved" data-page-node-id="4yrYFQBcPh0ZJweB78RLbJ">3 轮</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 三、保护消息历史并控制表达 -->
+      <section id="sec-part3" data-page-node-id="jO3NL9sm2NP6TPduGNrgTQ">
+        <h2 data-page-node-id="ojSyky3eEkBNOaRpBbjGT8">三、保护消息历史并控制表达（建议 4—7）</h2>
+
+        <!-- 建议 4 -->
+        <div class="suggestion-card" id="rec-4" data-page-node-id="X8Oz9j3OhcSQWC9k5AnGrX">
+          <div class="suggestion-header" data-page-node-id="O5v9ZNgkISIY8diAnRpq58">
+            <div class="suggestion-badge-group" data-page-node-id="IcXmLXg5HELBiixpycwOft">
+              <span class="suggestion-id" data-page-node-id="XDH5Jyb7ovwj28wB6bbP10">建议 4</span>
+              <span class="suggestion-plane-badge plane-history" data-page-node-id="8Urdeta88ettpJWfz5a5hU">控制面：消息历史</span>
+            </div>
+            <h3 data-page-node-id="zVasdTQrkhefjvoJ4emgVF">保持消息历史 append-only</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="IvmzMvZp07NIJvewARVCNg">
+            <div class="diag-box" data-page-node-id="5U6jZHRnpEawkPQyjfts63">
+              <div class="diag-box-label diag-see" data-page-node-id="SuqBbhvyZ4kiLppF4DFWD8">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="5iYwFm6NhlcLsNksUKFyWl">多轮请求报 <code data-page-node-id="SoHMIYkMFYcN0uwKL6hP51">400 bound to a different conversation</code>；或者开启测试配置后，服务端丢弃了早先的 thinking blocks。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="QckrVeeTkntbnBmV8dpAuY">
+              <div class="diag-box-label diag-why" data-page-node-id="JJRJALnYAG9KvFTevOMWgv">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="F65ar5DxeHfapluPdF6NEL">Fable 5.1 的 thinking block 会绑定生成它时的精确会话前缀，包括顶层 <code data-page-node-id="28PjWkaOVDIYW4pV3Hrlwa">system</code>、工具列表和此前消息。对 2026 年 8 月 31 日 00:00 UTC 及以后创建的新账号，这项校验默认生效。</p>
+            </div>
+          </div>
+
+          <div class="callout callout-danger" data-page-node-id="Ch9WtaWtKgenwWMX6e6yXO">
+            <div class="callout-title" data-page-node-id="ar5XDThR7FnBhOnVZ1EWlR">🚨 为什么尾部追加合法，而修改旧消息会让 thinking block 失效？</div>
+            <p style="margin-bottom:0;" data-page-node-id="CY2q9DxXgyiZTya3rHLQll">
+              会话应像<strong data-page-node-id="oaSRDTZSusMXfah0djpwBE">事件日志 (Event Sourcing)</strong> 一样只向尾部追加。thinking block 绑定此前的工具、系统提示和消息；在尾部新增消息不改变绑定，编辑、删除或重排旧消息会触发 prefix mismatch。
+            </p>
+          </div>
+
+          <p data-page-node-id="CdNVViwSzq6bUMrV8ZOFee">正确做法是把会话当成只追加日志：assistant 返回什么，就把该轮连同 thinking blocks 原样放回历史；新的用户消息、工具结果和规则继续添加在末尾。不要编辑、重排或删除旧消息，也不要直接替换顶层 <code data-page-node-id="DIKiwyp45RKjF0GxP3C1OV">system</code> 或已经参与会话的 <code data-page-node-id="4bxzsQeniMLXXTCkYx1zIa">tools</code>。</p>
+
+          <p data-page-node-id="OsQvXzv8Tmxx9agmWB7mvy">需要中途改变规则时，追加 mid-conversation system message；需要临时单轮提醒时，使用带 <code data-page-node-id="7vgMc3J6HvrAfW0CIs7SGk">clear_at: "next_user_message"</code> 的 turn-scoped system message；需要裁剪上下文时，优先使用服务端 compaction 或 context editing。</p>
+
+          <p data-page-node-id="9qbz8g0DDoCc6v0pZDCMxB">客户端自定义压缩时，最简单的安全做法是启动一段新历史，只放完整摘要和最新用户指令，不再回放旧 thinking blocks。可以在测试环境把 <code data-page-node-id="IeumpknMN9f3oEf3CaxfoL">prefix_mismatch_behavior</code> 设为 <code data-page-node-id="DLICOPRdYwraTOaQC9ZYDQ">"drop_block"</code>，再检查 <code data-page-node-id="J5sDHXicpzAgAZaAQCl8P2">input_transformations</code>，用来找出集成中哪些旧消息被改动。</p>
+        </div>
+
+        <!-- 建议 5 -->
+        <div class="suggestion-card" id="rec-5" data-page-node-id="pgWJHeuJw51zPBSUO55VjC">
+          <div class="suggestion-header" data-page-node-id="P6RjQFOzyGVkhqR2Vpsdf0">
+            <div class="suggestion-badge-group" data-page-node-id="bBw9u6VPUsLV1F4BDZM1GF">
+              <span class="suggestion-id" data-page-node-id="X9j5NA4R7cEYoYmgGBFixu">建议 5</span>
+              <span class="suggestion-plane-badge plane-history" data-page-node-id="hyvSiAze95wP2PhVytYvNS">控制面：表达与文风</span>
+            </div>
+            <h3 data-page-node-id="xT8rK4EOhDPVvcLlvqiPmB">删除华而不实的 mannered prose</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="0nJh03ZSdJMEKgvG2kQlSb">
+            <div class="diag-box" data-page-node-id="uBpIQZMFAANpSwVRFZiDr4">
+              <div class="diag-box-label diag-see" data-page-node-id="axnuE7Cnmpy04DXnuXbb5g">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="JGAsxfv5bN7W8BXLkRutFn">句子变长、段落密度上升，本来可以直接说明的内容被换成展示写作者姿态的比喻。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="xIz2nQ9L00KuTnaz4MuWuG">
+              <div class="diag-box-label diag-why" data-page-node-id="84ZSJ3IEmZBdZoNRQx9oHU">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="EycfWThFh8pLgVncAGflHP">Fable 5.1 的整体写作质量有所提升，但某些任务仍会用修辞替代精确表达。官方称这种反模式为 <strong data-page-node-id="orsgKOCDtmYu72Swjx05E4">mannered prose</strong>。</p>
+            </div>
+          </div>
+
+          <div class="prompt-container" data-page-node-id="f7gZE2SSfdODwNc39vjghe">
+            <div class="prompt-header" data-page-node-id="EUHDeK1aJEEyUMuFipBzHA">
+              <div class="prompt-tabs" data-page-node-id="7GBLLEIGVMJWVX4RTmsQ2I">
+                <button class="prompt-tab-btn active" data-target="p5-all" data-page-node-id="4qXBxQzOGgu44wdw5tGuNj">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p5-zh" data-page-node-id="YkCsGhnbVkEqJo8Ohb0Xsm">中文 Prompt</button>
+                <button class="prompt-tab-btn" data-target="p5-en" data-page-node-id="ui4NeGGmxp7456L8coQDWQ">English</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p5" data-page-node-id="ashgsXUYnRXxJE6CHFXGDf">📋 复制提示词</button>
+            </div>
+            <div class="prompt-body" id="p5-content" data-page-node-id="UMriOEDIStEvD0sKf2ODBf">
+<div class="prompt-sec-en" data-page-node-id="ABRBbGXxZPF476hQWc3BHR"><div class="prompt-section-title" data-page-node-id="98aVzCjNIgwZkEekL5Xesz">English</div>Remove all mannered prose. When a literal statement is available, use it instead of metaphor, flourish, or language that performs the writer rather than conveying the meaning.</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="XRVuLRbJ4CDtgwBST9BuH4"><div class="prompt-section-title" data-page-node-id="oXQBNdlmmMFugzfP02aJmx">中文</div>删除所有矫饰性表达。能直接说明时就直接说明，不要用隐喻、漂亮话或写作者姿态替代准确含义。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 建议 6 -->
+        <div class="suggestion-card" id="rec-6" data-page-node-id="BjKpIFX6PmgHHKDHMQFOfc">
+          <div class="suggestion-header" data-page-node-id="NglcmAeAs8mtqkcqn4RHRi">
+            <div class="suggestion-badge-group" data-page-node-id="H8TLifKMEBrLczJO2IGdCh">
+              <span class="suggestion-id" data-page-node-id="AVzOEnSdWK0oOn3kGJS8Vr">建议 6</span>
+              <span class="suggestion-plane-badge plane-history" data-page-node-id="RU5DTi4tDbiqRGACMRj429">控制面：排版结构</span>
+            </div>
+            <h3 data-page-node-id="OMUrvOt2uucUSqbGHT0yCA">按信息结构使用排版，不要继续沿用过强的“禁格式”规则</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="YdNCpX9J6cNm1qU7KOJxSl">
+            <div class="diag-box" data-page-node-id="qaQdMXE5YCK6rz6nt8gMFG">
+              <div class="diag-box-label diag-see" data-page-node-id="1Cb1r96gbgrSBTj9HjhoXE">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="kcZAYE0CjdThVl1GfRllCm">回复变成密不透风的纯文本，复杂比较没有列表、标题、表格或引号。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="UEUHYKCM2NVjB680oXqibW">
+              <div class="diag-box-label diag-why" data-page-node-id="BtGQlGhDPm3UCzFNJ6PvHT">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="Y4UyEXlfsF6LTGu5EkqKDc">早期模型容易滥用粗体和列表，很多旧 system prompt 因此写了全面禁止格式的规则。Fable 5.1 本身更少主动使用结构化排版，两者叠加就会损害可读性。</p>
+            </div>
+          </div>
+
+          <div class="prompt-container" data-page-node-id="prNg73EAZhLHcTX2AWinMY">
+            <div class="prompt-header" data-page-node-id="XrikG9BqDuTGWAr914SmwX">
+              <div class="prompt-tabs" data-page-node-id="LFkrDk0XyhmScD9OCgiyiV">
+                <button class="prompt-tab-btn active" data-target="p6-all" data-page-node-id="vbFKR8RL8kxwQf1be4xZJ7">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p6-zh" data-page-node-id="aJxG5Btcvq2937Fy5owsBj">中文 Prompt</button>
+                <button class="prompt-tab-btn" data-target="p6-en" data-page-node-id="mHKlmj8sVNdHZKd5oVOTRv">English</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p6" data-page-node-id="PXwvinBlSxHFsgEr3SkWmb">📋 复制提示词</button>
+            </div>
+            <div class="prompt-body" id="p6-content" data-page-node-id="GsQ5EdCHLlGRhmK8SMCVDh">
+<div class="prompt-sec-en" data-page-node-id="ngQ4VNldRnAXYgDYFOlFHQ"><div class="prompt-section-title" data-page-node-id="MsTznNvogNJoR0XxprrZ89">English</div>Use lists, headings, or tables when the content has multiple parallel aspects, steps, or exact comparisons and the structure improves clarity. Use plain paragraphs for ordinary conversation, and follow explicit requests for minimal formatting.</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="FYNbzutnQ6fwG5yAPqr7G5"><div class="prompt-section-title" data-page-node-id="JHLzAeVVNVXHOqRGup4NhA">中文</div>当内容包含多个并列方面、步骤或精确比较时，使用列表、标题或表格提高可读性。普通对话保持自然段；用户明确要求极简格式时，遵从该要求。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 建议 7 -->
+        <div class="suggestion-card" id="rec-7" data-page-node-id="oqZNNXN5Eng61KcUkhgZF3">
+          <div class="suggestion-header" data-page-node-id="rDFIvi10CdppLwh7y36o2r">
+            <div class="suggestion-badge-group" data-page-node-id="7MShAdpbtyKx72cZCVorsM">
+              <span class="suggestion-id" data-page-node-id="D4SagJ5Unb22N7nZ6K0Hvw">建议 7</span>
+              <span class="suggestion-plane-badge plane-history" data-page-node-id="PU7yejNGDyZE6B3gqAbmYR">控制面：信息转述</span>
+            </div>
+            <h3 data-page-node-id="T5JFWZsS3Z1NVDGGiDhPSe">用自己的话转述检索结果，只保留少量明确标记的短引语</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="b3FN4hAGodAExiovcmityq">
+            <div class="diag-box" data-page-node-id="PXgI1hDDOz399Kl4Ema4cc">
+              <div class="diag-box-label diag-see" data-page-node-id="Np1S43sNcbf017163ut5Rl">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="GM4y0vDHyVfo7FfpUlNmjW">模型总结网页时直接沿用来源措辞，却没有加引号，读者无法区分转述与原文。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="eAgEByU3Tx1BrlFMKUEHtK">
+              <div class="diag-box-label diag-why" data-page-node-id="osEyNtrsCigIsj4I7Fhanc">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="KEU0Xhzm8V3zhUE44uw98n">单独写一句“不要抄原文”不够具体。官方建议在 system prompt 中给一个完整 few-shot：用户问题、检索动作、合格回答和 <code data-page-node-id="Rp0GG0071JqD2fLYIrwMM3">&lt;rationale&gt;</code>，让模型看见正确的比较与转述方式。</p>
+            </div>
+          </div>
+
+          <div class="prompt-container" data-page-node-id="qeX7DtxAdvwGf2FcvQ7FVI">
+            <div class="prompt-header" data-page-node-id="PiCmucuPCknymyETVtBvC6">
+              <div class="prompt-tabs" data-page-node-id="ZNJPEMN2v3z0kM4KTuKrDe">
+                <button class="prompt-tab-btn active" data-target="p7-all" data-page-node-id="FgUBdXwNUr1r2j3IKEz3Hz">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p7-zh" data-page-node-id="YwJpPPxXHQEkxCaDuyggfJ">中文 Few-shot</button>
+                <button class="prompt-tab-btn" data-target="p7-en" data-page-node-id="l19e7zKowONZ7aEaN6ifEN">English Few-shot</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p7" data-page-node-id="KwUMVBTpVEUVdZ6qpPsMiB">📋 复制 Few-shot</button>
+            </div>
+            <div class="prompt-body" id="p7-content" data-page-node-id="iFOrWLE51F829gyJIQREcE">
+<div class="prompt-sec-en" data-page-node-id="l70NKmVqRdaRd3vmxKmUUR"><div class="prompt-section-title" data-page-node-id="ELzQkWUzOrHQbz2YOTib8x">English Template</div>&lt;example&gt;
+&lt;user&gt;Retrieve Source A and Source B on the same event and compare them.&lt;/user&gt;
+&lt;response&gt;State the facts both sources confirm in your own words, then compare what each emphasizes. Keep at most one necessary short phrase verbatim and mark it with quotation marks; paraphrase everything else.&lt;/response&gt;
+&lt;rationale&gt;The answer is organized around agreement and difference rather than walking through each article. Source views are reported indirectly, and the only verbatim phrase is clearly marked.&lt;/rationale&gt;
+&lt;/example&gt;</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="oFSxFFfWRqEHnKhZHDzMeH"><div class="prompt-section-title" data-page-node-id="4kbnj0csGnQSDySZmpdh1m">中文模板</div>&lt;example&gt;
+&lt;user&gt;检索来源 A 和来源 B 对同一事件的报道，并比较两者。&lt;/user&gt;
+&lt;response&gt;先用自己的话说明两者共同确认的事实，再比较各自强调的角度。只保留一个确有必要的短语原文，并明确加引号；其余内容全部转述。&lt;/response&gt;
+&lt;rationale&gt;回答按共同点与差异组织，没有逐篇复述；来源观点使用间接引语，唯一的原文短语有明确引号。&lt;/rationale&gt;
+&lt;/example&gt;</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 四、让长任务完整收口，同时限制范围 -->
+      <section id="sec-part4" data-page-node-id="ExCHW5YQGiQvWSftBR8Skn">
+        <h2 data-page-node-id="7PgJqtWkk3ursJfpjugnu9">四、让长任务完整收口，同时限制范围（建议 8—10）</h2>
+
+        <!-- 建议 8 -->
+        <div class="suggestion-card" id="rec-8" data-page-node-id="Z2YaiEcxywqzSUdurulE69">
+          <div class="suggestion-header" data-page-node-id="EykcgQMYCB4Y5g9QXy0NZl">
+            <div class="suggestion-badge-group" data-page-node-id="FrCWJpGn6hDgrSqP8BAlBD">
+              <span class="suggestion-id" data-page-node-id="qE6Ywt24f92sC992CFHijC">建议 8</span>
+              <span class="suggestion-plane-badge plane-contract" data-page-node-id="Q2DO3qjAgU1ZTZBWE45joi">控制面：交付契约</span>
+            </div>
+            <h3 data-page-node-id="oF363xiDjWwMblW93cZDdq">要求模型完成整个任务，不要停在行动预告</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="UxkCGlCre89DD12ghmfe1t">
+            <div class="diag-box" data-page-node-id="jJ96R17HtrJaaPieHmyPyq">
+              <div class="diag-box-label diag-see" data-page-node-id="7ku3nszAaBHrgI6Cm00W1X">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="FuqUQPABsK0J5zLBVeeCrX">模型以“接下来我会修改……”结束，却没有真的修改；或者对原请求已经包含的步骤反复询问“需要我继续吗”。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="EuVJGVFn4qbCvZY4lz5gWU">
+              <div class="diag-box-label diag-why" data-page-node-id="JDYr6ARS3XTTCoYtvm6FjO">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="d9e2Lx36PwEbhELKPy3t6D">长任务中的一次 turn 可能被模型误解成阶段汇报。解决办法是明确自主执行边界，同时保留破坏性操作和真实范围变化的停点。</p>
+            </div>
+          </div>
+
+          <div class="prompt-container" data-page-node-id="og7Ylw47y8UHQmiXKik7V7">
+            <div class="prompt-header" data-page-node-id="PoYLVZfmQD7FYiDt0pq9sX">
+              <div class="prompt-tabs" data-page-node-id="ix2WdZrI1uxPB8IYOdGwod">
+                <button class="prompt-tab-btn active" data-target="p8-all" data-page-node-id="wa88GfczLdLNADUqnVQqf9">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p8-zh" data-page-node-id="IxLQ32YRNndSe26MZe7OML">中文 Prompt</button>
+                <button class="prompt-tab-btn" data-target="p8-en" data-page-node-id="sIRl5i8CXylC69eHnvxmtz">English</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p8" data-page-node-id="vc97vRLaNjUHfdFFxk0MIa">📋 复制提示词</button>
+            </div>
+            <div class="prompt-body" id="p8-content" data-page-node-id="8YN5FA2iiEK3KQKo2dJIIc">
+<div class="prompt-sec-en" data-page-node-id="rcijQUkgkgiAqm7LOqh2Xi"><div class="prompt-section-title" data-page-node-id="hMY28CPOuXvsRYzxcMC9we">English</div>You are operating autonomously. The user is not watching in real time and cannot answer repeated confirmations during execution. Proceed with every reversible step already authorized by the request and consistent with its intent. Stop only for destructive actions or genuine scope changes that require the user's decision.
+
+Before ending, inspect your final paragraph. If it is still a plan, a question, a list of next steps, or a promise of unfinished work, keep using tools and complete the in-scope work. End only when the task is complete or blocked on information only the user can provide.</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="24B9jLLOq9JEZUjcffyvyY"><div class="prompt-section-title" data-page-node-id="8mGDmdX5fUtq54qxHlRAzN">中文</div>你在自主执行任务。用户不会实时守在电脑前，不能回答执行途中的重复确认。凡是原请求已经授权、符合原意且可逆的步骤，直接执行；只有破坏性操作或必须由用户决定的真实范围变化才停下询问。
+
+结束前检查最后一段：如果它仍是计划、问题、下一步清单，或承诺尚未完成的工作，就继续使用工具把范围内的工作做完。只有任务完成，或确实缺少只有用户才能提供的信息时，才结束本轮。</div>
+            </div>
+          </div>
+
+          <p data-page-node-id="DeVQvOQxLJq8EEksHlHs1o"><strong data-page-node-id="JMIfNxVr2amL2dWgr5rNog">关键例外规约：</strong>当用户只是提问、描述问题或要求诊断时，交付物是分析报告，不代表可以自动实施修复。</p>
+        </div>
+
+        <!-- 建议 9 -->
+        <div class="suggestion-card" id="rec-9" data-page-node-id="5VA7U2Ht4CqVdQqjKMHK9L">
+          <div class="suggestion-header" data-page-node-id="p7RxV7zjONVigY1KKzPKMt">
+            <div class="suggestion-badge-group" data-page-node-id="F097DvsnEkGhOxZkgCKaHo">
+              <span class="suggestion-id" data-page-node-id="ekmy4htaYkXDzrdpL3Gx4K">建议 9</span>
+              <span class="suggestion-plane-badge plane-contract" data-page-node-id="7zcvd94lGkdGoNC2TVDVg3">控制面：上下文压缩</span>
+            </div>
+            <h3 data-page-node-id="nBIdIn0c8RDf9ytXcRe6uF">告诉上下文压缩器必须保留什么</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="JQhojQ3Wcxqm0pLLdWbDx8">
+            <div class="diag-box" data-page-node-id="4mBa8K12u4TWDVM7AbMJk5">
+              <div class="diag-box-label diag-see" data-page-node-id="oUClkqAQCbwlUb1uH9xnFO">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="HSZOZnjGW545jupgdVujGX">长会话压缩后，模型忘记已经否决的方案、用户原话、当前完成边界或精确代码标识符，又从头调查或重复提问。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="VzOHxE8zDFFiW8rnAjDZA5">
+              <div class="diag-box-label diag-why" data-page-node-id="IT3qVNwhx6OxRPPIpQH35p">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="jh0ZtZNO8W8MJPEZKVfRdb">“总结一下对话”只要求压短，没有定义哪些信息丢失后会破坏后续执行。服务端 compaction 已经针对这一点优化；自己做客户端摘要时必须给出保存合同。</p>
+            </div>
+          </div>
+
+          <div class="prompt-container" data-page-node-id="3EnX8jziI0ZBSffSXub2oA">
+            <div class="prompt-header" data-page-node-id="W6WITB2jESBRoB1yaMBrck">
+              <div class="prompt-tabs" data-page-node-id="BPaHznFA6REcIAoKxwR9Up">
+                <button class="prompt-tab-btn active" data-target="p9-all" data-page-node-id="bgxfKE51eB71ajbHE1H3FI">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p9-zh" data-page-node-id="2fb7rumwHLJMfMrgLKH2Gj">中文 Prompt</button>
+                <button class="prompt-tab-btn" data-target="p9-en" data-page-node-id="0zNdsCbPBbHujLj3FwVhKt">English</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p9" data-page-node-id="UwptN36A3IlRSmUm3Qx9ez">📋 复制提示词</button>
+            </div>
+            <div class="prompt-body" id="p9-content" data-page-node-id="jO3lEnU7uuEN0lMO9quPFa">
+<div class="prompt-sec-en" data-page-node-id="p8jsptGXgXW6Ae2oKJxzyK"><div class="prompt-section-title" data-page-node-id="Lk8Sx388T2Ifp3DIActSpP">English</div>Create a summary that a new context window can use to continue the work. Preserve completely: (1) obstacles and how they were resolved; (2) approaches proposed, tried, or rejected and why; (3) the user's explicit preferences, constraints, decisions, and boundaries, keeping their wording where possible; (4) the exact current state and completed scope; (5) unresolved, promised, or required next work; and (6) hard-to-reconstruct details such as names, numbers, dates, exact wording, links, and code identifiers.
+
+Prefer completeness over brevity for these items. Compress the assistant's explanations and reasoning to their conclusions and produced results.</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="SGIrtFHFUWE9AP1q5UghMe"><div class="prompt-section-title" data-page-node-id="ZJcIVaKHIDZZ9xAOOjJDYj">中文</div>请生成一份可供新上下文继续执行的摘要。必须完整保留：
+1. 已遇到的阻碍及处理结果；
+2. 提出、尝试或否决过的方案及原因；
+3. 用户明确提出或确定的偏好、限制、决定与边界，尽量保留原话；
+4. 当前具体进展和已经完成的范围；
+5. 仍未解决、已经承诺或下一步必须处理的事项；
+6. 难以重建的精确细节，包括名称、数值、日期、原句、链接和代码标识符。
+
+上述内容宁可写长也不要遗漏；助手自己的解释和推理只保留最终结论与产出。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 建议 10 -->
+        <div class="suggestion-card" id="rec-10" data-page-node-id="lLrzK1iisNsP8lP7q6KdU9">
+          <div class="suggestion-header" data-page-node-id="5FU0ICBf06bohkCsBAjwXN">
+            <div class="suggestion-badge-group" data-page-node-id="oAUkacZ0pDDGI8eD3HLP8I">
+              <span class="suggestion-id" data-page-node-id="CowQPAggKxCqBE6vemgruF">建议 10</span>
+              <span class="suggestion-plane-badge plane-contract" data-page-node-id="AKdbppG0Ty51xzZs9XbLC9">控制面：范围控制</span>
+            </div>
+            <h3 data-page-node-id="xYT6luJfuRhkDcu5nLlhon">只实现请求要求的功能，并控制永久测试数量</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="j1k7wH5rPrJGsZODhXsc4o">
+            <div class="diag-box" data-page-node-id="hDgC1Cd6IRz5GfqcPR6Yd2">
+              <div class="diag-box-label diag-see" data-page-node-id="IeO41kVJLbfwuuAcRASfBH">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="gXNV4sT0KGDrWkuKCR2jO7">开放式编码任务完成了目标，却顺手重构邻近文件、修旧 Bug、扩展未要求的行为，并提交许多只为临时排错写的测试。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="3tEqAnG6kUbraJaKDZDgTa">
+              <div class="diag-box-label diag-why" data-page-node-id="tAba2Ke8BRpWPEPQh1sYT7">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="CE50oSbHfK3UcoiGd4HGC2">“完整完成”如果没有范围约束，容易被解释成把所有相关问题一起解决。官方测试表明，明确限制额外工作，可以显著减少无关修改，而不会降低请求本身的成功率。</p>
+            </div>
+          </div>
+
+          <div class="prompt-container" data-page-node-id="AUB82fO2q7KAA2r8EsQTfG">
+            <div class="prompt-header" data-page-node-id="G8vSm4hXr79a0milm4EA39">
+              <div class="prompt-tabs" data-page-node-id="vXTQMJRYLM740FNXoa92Fq">
+                <button class="prompt-tab-btn active" data-target="p10-all" data-page-node-id="GzwNneoDdPyauSeHt3S133">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p10-zh" data-page-node-id="OO0LcSY5PsNPbMqquGKZs0">中文 Prompt</button>
+                <button class="prompt-tab-btn" data-target="p10-en" data-page-node-id="HLP1DqXBv2LSFzXKqAC4JL">English</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p10" data-page-node-id="tfVB6HDAbCbgnzO0DmcTyC">📋 复制提示词</button>
+            </div>
+            <div class="prompt-body" id="p10-content" data-page-node-id="5ZlaHMNS8yEtT7baQhuZ2l">
+<div class="prompt-sec-en" data-page-node-id="d15vRpJjX4ZGUGsasEvFpr"><div class="prompt-section-title" data-page-node-id="bLrseNF24JafgkGh0CzVh2">English</div>Implement only the behavior explicitly required by this task. If you find an unrelated pre-existing bug, performance concern, cleanup opportunity, or extension, do not change it here; report it as a follow-up. Use the interpretation most directly supported by the request and surrounding code instead of implementing every possible reading.
+
+Use scratch scripts and quick checks as needed, but do not automatically commit them as permanent tests. Add focused tests only when the task asks for them or the repository already keeps tests for this kind of change, sized like neighboring tests. Implement every requested behavior completely.</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="qsMFYWGOHAUDcmdtyCtgk9"><div class="prompt-section-title" data-page-node-id="76y2oC8TtdG5IasXGPrGzS">中文</div>只实现本任务明确要求的行为。如果发现与本任务无关的旧 Bug、性能问题、清理机会或功能扩展，不要在本次修改中处理；在最终总结中列为后续建议。采用最符合请求文字和现有代码的解释，不要同时为其他可能解释也构建一套实现。
+
+可以使用临时脚本和快速检查验证工作，但不要自动把它们提交为永久测试。只有任务明确要求，或仓库已经为同类改动保留测试时，才按相邻测试文件的规模增加聚焦测试。必须完整实现请求中的全部行为。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 五、提高检索、编辑与长输出的可靠性 -->
+      <section id="sec-part5" data-page-node-id="Gs7JiPTUg4pwcGWN5xn0O9">
+        <h2 data-page-node-id="qXYQVaM0m9IIR50yWIDOwZ">五、提高检索、编辑与长输出的可靠性（建议 11—14）</h2>
+
+        <!-- 建议 11 -->
+        <div class="suggestion-card" id="rec-11" data-page-node-id="SCnwv5tKLofH3RWS1LCBBa">
+          <div class="suggestion-header" data-page-node-id="vM7VALebZ47XjdwYCWuJGs">
+            <div class="suggestion-badge-group" data-page-node-id="qwV9i7wYiXxnu3WkCuIMsH">
+              <span class="suggestion-id" data-page-node-id="p4HEpWfExdPEfnPEp7Zowg">建议 11</span>
+              <span class="suggestion-plane-badge plane-runtime" data-page-node-id="qhSChgpgulUXYkRAyb3DMD">控制面：信息检索</span>
+            </div>
+            <h3 data-page-node-id="7xay68JQkxeD2Fle4UmOPC">在 low effort 下明确触发搜索</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="G4gDyUsPINoNDWTmcGFAH2">
+            <div class="diag-box" data-page-node-id="dzGony0pnAAHrxR4YNqDEK">
+              <div class="diag-box-label diag-see" data-page-node-id="rHzYIeQn287v4cD6KSTBwd">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="NsFqPGUJZ8M5v52cVn0go1">模型认识一个名称，就直接凭记忆回答；但名称来自快速变化的 AI 模型、开发工具或当前事件，答案已经过时。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="Awz1YSULlLyT2Z96GvNFKq">
+              <div class="diag-box-label diag-why" data-page-node-id="MXbbTHs5TbMqxxDxo0V5BI">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="z1vU7bo0B2VpA2HS8uSglg">Fable 5.1 在 <code data-page-node-id="jl5sXSPXAojHTF2LW3POyH">low</code> effort 下比 Fable 5 更少调用搜索和检索工具。有时只把受影响的 turn 升到更高 effort 就能解决；也可以明确规定哪些信息必须验证。</p>
+            </div>
+          </div>
+
+          <div class="prompt-container" data-page-node-id="IEJVVfGMCKZaanLqze0yzP">
+            <div class="prompt-header" data-page-node-id="CpuPRmgZwKt2m3369dC1oT">
+              <div class="prompt-tabs" data-page-node-id="BamEB8720RSrprcbSloG8B">
+                <button class="prompt-tab-btn active" data-target="p11-all" data-page-node-id="4zHgeMqA83tMQuzhlY2Yjx">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p11-zh" data-page-node-id="aYfVlWyXiTYQzq69kqKS1p">中文 Prompt</button>
+                <button class="prompt-tab-btn" data-target="p11-en" data-page-node-id="JjmJUllr8jDIuzcCNDKLxl">English</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p11" data-page-node-id="ZKaXiqUG2TEaQmcbljw2Lr">📋 复制提示词</button>
+            </div>
+            <div class="prompt-body" id="p11-content" data-page-node-id="j926xXfzHzkm3lkmEgS35f">
+<div class="prompt-sec-en" data-page-node-id="5BIlClAWSR88A2Gn5lxzKv"><div class="prompt-section-title" data-page-node-id="GViVEkp2HsnBDmK6Dd73HL">English</div>When a query centers on a name you do not confidently recognize, or on a fast-moving area such as AI models, developer tools, prices, or current status, search before answering. Include the name exactly as the user wrote it in at least one query. Partial familiarity is not a reason to skip verification.</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="l8u2mWK7Nk3U7cq0ehMOE2"><div class="prompt-section-title" data-page-node-id="lGa2ZNxvwC1MXFx1GvDEWI">中文</div>当问题围绕你不能确信认识的名称，或来自数月内就可能变化的领域，例如 AI 模型、开发工具、价格和当前状态时，先检索再回答。至少一次搜索必须包含用户输入的名称原文。对名称有部分印象不是跳过搜索的理由。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 建议 12 -->
+        <div class="suggestion-card" id="rec-12" data-page-node-id="u9NYecciJcsA8avCnAV6Xr">
+          <div class="suggestion-header" data-page-node-id="bsFvNykAVgR9s56BrLlIiS">
+            <div class="suggestion-badge-group" data-page-node-id="zPRZpolS9XwRGhhMWrUYar">
+              <span class="suggestion-id" data-page-node-id="FpJfgEaTZkb3jglN3n1bhZ">建议 12</span>
+              <span class="suggestion-plane-badge plane-runtime" data-page-node-id="aEDqhl2nRseAFMyMT7WYAt">控制面：安全与防御</span>
+            </div>
+            <h3 data-page-node-id="kkaXF13Im86DRnLlDzQDyW">通过请求措辞和工具输出减少安全误伤</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="arA4QTzkBerze1ozUvUJrM">
+            <div class="diag-box" data-page-node-id="CmyQhyes9YMUC0RRs3K9wl">
+              <div class="diag-box-label diag-see" data-page-node-id="vgFb1TSfH2IOOP1QvFI4DW">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="GAUTexMI8dcusaLgDli1Hp">允许的代码检查返回 <code data-page-node-id="NF4DvfL51uAyJ1lmTC4c2X">stop_reason: "refusal"</code>。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="AakbQeHpZwHRKQcIX7AQAE">
+              <div class="diag-box-label diag-why" data-page-node-id="hoC53z5zgVct18aNImHmle">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="mG6CxNafUnftZX6Fx19pqE">Fable 5.1 的安全分类器仍可能被某些提问方式、缺少语法背景的冷门语言，以及工具直接写入上下文的 Base64 数据触发。</p>
+            </div>
+          </div>
+
+          <p data-page-node-id="BYBdkK3lMjsI333er5PmRD"><strong data-page-node-id="3CeY9bDEYsTGLTyAuOECEW">官方典型改写对照：</strong></p>
+          <div class="prompt-container" data-page-node-id="9NIKAnUEbHeCtC9Yhotkkw">
+            <div class="prompt-header" data-page-node-id="mv6EicC4WmK06EafYNCHEi">
+              <div class="prompt-tabs" data-page-node-id="CPq0LDFOKkBbt4aLgJ3qG1">
+                <button class="prompt-tab-btn active" data-target="p12-all" data-page-node-id="btlHAVyghxWBteIy0DDbgy">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p12-zh" data-page-node-id="j1ySIaUfUou9v5KPGNje6s">中文对照</button>
+                <button class="prompt-tab-btn" data-target="p12-en" data-page-node-id="ENEoA5h3LFA7fA01gWuYVH">English</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p12" data-page-node-id="OQsMlHRMBnmn0vutqBMbCd">📋 复制改写示范</button>
+            </div>
+            <div class="prompt-body" id="p12-content" data-page-node-id="wz6BYM0QrcMpTnCsVEPh1i">
+<div class="prompt-sec-en" data-page-node-id="2Aqbt5Mi6W47pkqD8yQjew"><div class="prompt-section-title" data-page-node-id="NsSR8BnQxTQyC3yrtixEaI">English</div>Avoid: Does this program compile and run without errors?
+Prefer: Are there any bugs in this program? Identify their locations and causes.</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="quPe685c76Lc0TqvcPEJao"><div class="prompt-section-title" data-page-node-id="oDbdnZ89MCRC1b47qmfORX">中文</div>不推荐：这段程序能否无错误地编译运行？
+推荐：这段程序是否存在 Bug？请指出位置和原因。</div>
+            </div>
+          </div>
+
+          <p data-page-node-id="Fb4SKz6dxNDdgcDwuvKPWc">对冷门语言，应给模型该语言的官方语法或文档背景。工具输出中的原始 Base64 应从模型上下文移除，改成文件引用、MIME 类型、尺寸、哈希或其他受控元数据；仅在外层增加标签并不能解决问题。客户端还必须解析 <code data-page-node-id="4qFE38W7oBFJp6briolaSD">stop_reason</code>，不能把 HTTP 200 当成任务成功。</p>
+        </div>
+
+        <!-- 建议 13 -->
+        <div class="suggestion-card" id="rec-13" data-page-node-id="fFJXdVBC0AkLLyeghAcoN0">
+          <div class="suggestion-header" data-page-node-id="H2kq5un0k4IoJnlCiUKW8V">
+            <div class="suggestion-badge-group" data-page-node-id="ySwC5bTWXqi6CBJqfHkCqR">
+              <span class="suggestion-id" data-page-node-id="0TJdgr90SITGKPlBCr7Zbh">建议 13</span>
+              <span class="suggestion-plane-badge plane-runtime" data-page-node-id="LsHkBLPnsJTnwSOepg7sJ5">控制面：代码编辑</span>
+            </div>
+            <h3 data-page-node-id="bbnotQ4Q7DI9eLYJJZdvvF">小改动优先局部编辑，不要重写整份文件</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="EzQi0ryYA230V5NFznvCdt">
+            <div class="diag-box" data-page-node-id="qPeJHdF2iKvttjDwVFsfBA">
+              <div class="diag-box-label diag-see" data-page-node-id="SG3SboW9M0rGHEY0BzHEIB">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="DGaExyVCpCnXGbBCAHBxbE">只改几十行，模型却重新输出上千行文件，导致输出 token、耗时和冲突风险一起增加。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="XCA0RvvRFaLQAf1d5UOE6K">
+              <div class="diag-box-label diag-why" data-page-node-id="1VAO4LEYzN2COdmuhjieVW">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="l3r4LfaSGboHALQ470ju8G">Fable 5.1 比 Fable 5 更倾向于对文本文件进行整文件重写，即使最终内容基本相同。</p>
+            </div>
+          </div>
+
+          <div class="prompt-container" data-page-node-id="zCLtbZbyJTC5atF2LmF9eD">
+            <div class="prompt-header" data-page-node-id="sNZ7JuiniCf3oiwtEzF8u1">
+              <div class="prompt-tabs" data-page-node-id="nGUORxD0amugkLxcKbrQ1L">
+                <button class="prompt-tab-btn active" data-target="p13-all" data-page-node-id="BV7UW9HnRW8xXZfoMpP3p4">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p13-zh" data-page-node-id="CpLBdjg0kuNhEbmJEhQuh0">中文 Prompt</button>
+                <button class="prompt-tab-btn" data-target="p13-en" data-page-node-id="HisOIDREFXnCKFHlTS3Hz6">English</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p13" data-page-node-id="QH1wGGft3dzCAppO64mD6f">📋 复制提示词</button>
+            </div>
+            <div class="prompt-body" id="p13-content" data-page-node-id="rIlPx510xfFqFju3NAm54Y">
+<div class="prompt-sec-en" data-page-node-id="3dFuGhOwBuluohSL6CkzfA"><div class="prompt-section-title" data-page-node-id="CdICIvpUcTZfsuLScintyr">English</div>Minimize the tokens used to edit files when doing so does not affect the result. Prefer surgical, targeted edits for small changes. Rewrite the whole file only when it is short or most of its contents must change.</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="5L8B6IVGf1lQ3Jd7yKPgfb"><div class="prompt-section-title" data-page-node-id="IDWJknUnar939pFxQxbZCI">中文</div>在不影响最终结果的前提下，尽量减少编辑文件所需的 token。小范围改动优先采用外科手术式的局部修改；只有文件很短或大部分内容都需要变化时，才重写整份文件。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 建议 14 -->
+        <div class="suggestion-card" id="rec-14" data-page-node-id="xy4hZcGSGhZtDzhUskmnXu">
+          <div class="suggestion-header" data-page-node-id="M9GRmOmtbwcpxAHdT4WoQ9">
+            <div class="suggestion-badge-group" data-page-node-id="UTE9qjyjxVOthMj4a3tWW4">
+              <span class="suggestion-id" data-page-node-id="lbIp5v3MRyZprBPbCdKwa3">建议 14</span>
+              <span class="suggestion-plane-badge plane-runtime" data-page-node-id="nXcLlUeF1uDrJuCdzuRn9A">控制面：长输出 Token 预算</span>
+            </div>
+            <h3 data-page-node-id="8hAkDnty2hDQICUbYvM5YL">为 xhigh 和 max 的长输出预留完整 token 空间</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="aAt2Klq29DDmWhiV4AEZxR">
+            <div class="diag-box" data-page-node-id="u6bBKjLwjV0wSBzZG3QsFA">
+              <div class="diag-box-label diag-see" data-page-node-id="fwF33fyLxpgZ2CuUzqHz9G">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="x3kNuRIdbdUEYPWK3Xfq1X">模型在正式回答前等待很久，最终长报告、代码文件或大表格又被 <code data-page-node-id="I8JELCmbO55kkA02BiRNhC">max_tokens</code> 截断。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="c5KPtGMUDx3fYquEl7lHMv">
+              <div class="diag-box-label diag-why" data-page-node-id="FGQP9MduHSUsr6pHRx1i2J">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="QkTHlc263G9EmZaUGAKTYO">在 <code data-page-node-id="Kzr8LrykJDmEv4hCOBRT7x">xhigh</code>，尤其是 <code data-page-node-id="qIfrXvXW4VSy7Ph2tGWi4G">max</code>，模型可能先在 thinking 中起草大量成品，再在正式回复中重新写一遍。thinking 和 reply 共同占用一次响应的输出上限。</p>
+            </div>
+          </div>
+
+          <p data-page-node-id="bdUmhrLDDv9oNqzEi4Kk90">首选办法是让长成品从 <code data-page-node-id="trBNLL1xASzsbMNgKs3KVS">high</code> 开始，只有评测证明升档能提高质量时才使用 <code data-page-node-id="1zHHdibbcj7pTZ8cxFcMc6">xhigh/max</code>。确实需要高档位时，设置足够的 <code data-page-node-id="X3tQsbAVZFKUqrwibj4A7C">max_tokens</code>，并在用户消息末尾加入下面的边界。</p>
+
+          <div class="prompt-container" data-page-node-id="YdR4N8hb4RRt67SEr5IqpG">
+            <div class="prompt-header" data-page-node-id="8QJaR1ywrxaXRfCk6W8Hk0">
+              <div class="prompt-tabs" data-page-node-id="KlftFyjXAnul7dKmIsAUC4">
+                <button class="prompt-tab-btn active" data-target="p14-all" data-page-node-id="gfoJBGpIIZtcBDAnuDU3pH">双语对照</button>
+                <button class="prompt-tab-btn" data-target="p14-zh" data-page-node-id="mB82ieT9VBs8pSsFHH5eGB">中文 Prompt</button>
+                <button class="prompt-tab-btn" data-target="p14-en" data-page-node-id="mJ3zr1mn35mQwTmoQjR5l1">English</button>
+              </div>
+              <button class="prompt-copy-btn" data-clipboard="p14" data-page-node-id="IhE8mCk5X2ptEBAOmQWwNH">📋 复制提示词</button>
+            </div>
+            <div class="prompt-body" id="p14-content" data-page-node-id="GUVZF99FwnWYZ7wXiUQu20">
+<div class="prompt-sec-en" data-page-node-id="BM7ofVBKEwxuWsNFoCUEHQ"><div class="prompt-section-title" data-page-node-id="sLRfzW5BmEGhH5dCs9fvmG">English</div>Reasoning, drafting, and the final reply all count toward a total limit of about [max_tokens] tokens in this turn. Use reasoning to analyze inputs, verify dependencies, settle the structure, and resolve difficult decisions. Write the complete article, code, or table only once in the final reply. Do not draft the full deliverable in reasoning and then repeat it in the answer.</div>
+<div class="prompt-sec-zh" style="margin-top:1rem; padding-top:1rem; border-top:1px dashed var(--border-subtle);" data-page-node-id="qynHFJjHZlFmAOD47ZmdsN"><div class="prompt-section-title" data-page-node-id="Vz2cbPmzAw3RNGlRUm2vMP">中文</div>本轮 reasoning、草稿和最终回复共同计入约 [max_tokens] token 的总上限。请在 reasoning 中分析输入、核对依据、确定结构并解决困难决策；完整文章、代码或表格只在最终回复中写一次。不要先在 reasoning 中全文起草，再在回复中重复一遍。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 六、让子 Agent 真正并行，并为视觉任务提供放大工具 -->
+      <section id="sec-part6" data-page-node-id="emgVBuUrvYFgy1khZD5EZt">
+        <h2 data-page-node-id="4FgVMadjBUFWZ36XjaAcEp">六、让子 Agent 真正并行，并为视觉任务提供放大工具（建议 15—16）</h2>
+
+        <!-- 建议 15 -->
+        <div class="suggestion-card" id="rec-15" data-page-node-id="zaqZcFhqDbVisDkie99jWy">
+          <div class="suggestion-header" data-page-node-id="GFBx4nSml2jagtJes0WseK">
+            <div class="suggestion-badge-group" data-page-node-id="QgdrrUGezgH09pSRJkC5HB">
+              <span class="suggestion-id" data-page-node-id="NWvHmsomHvMVEFLyWoddqM">建议 15</span>
+              <span class="suggestion-plane-badge plane-runtime" data-page-node-id="HuVgviFQ4YSHcs9w0DnlLw">控制面：子任务并行调度</span>
+            </div>
+            <h3 data-page-node-id="66wgiCfjKPNTpDZP1GdiP1">子 Agent 运行时，主 Agent 不要被启动工具阻塞</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="YcLl03gWyWJD8rdstYVmHY">
+            <div class="diag-box" data-page-node-id="7oPBjQdVbXaml0H4v7AP9G">
+              <div class="diag-box-label diag-see" data-page-node-id="LloS61chUy8VLFTCjPBwAz">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="nRuEGBnoqx1R5XGoMUZjEF">主 Agent 分配了子任务，却停在那里等结果，所谓并行并没有缩短完成时间。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="8E2fFp2UBKKVfsNysExgHZ">
+              <div class="diag-box-label diag-why" data-page-node-id="EFGbB8M1Chzozl0PGEZNdE">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="mDGwiwWawqDlcWIj9OGlZw">如果“启动子 Agent”的工具调用一直挂起，直到子任务完成才返回，那么模型没有机会继续处理其他工作。Prompt 中写“并行执行”也改变不了阻塞的工具接口。</p>
+            </div>
+          </div>
+
+          <div class="callout callout-success" data-page-node-id="avnS1lU14jpc7kmWwUtowB">
+            <div class="callout-title" data-page-node-id="ez2Q7HBimsEDhdNkuGBan5">🛠️ 正确的非阻塞调度架构三要素</div>
+            <ol style="margin-bottom:0;" data-page-node-id="yJsbUWhQbtscCXgJMh0djM">
+              <li data-page-node-id="keHxUC4b1x10HIMdci7d9b"><strong data-page-node-id="TxLT6vbaCV7klsVs6uKlIW">启动子 Agent 的工具立即返回任务句柄 (Task Handle)</strong>；</li>
+              <li data-page-node-id="xvUEcQQoSHRRVZst9DNvyS"><strong data-page-node-id="OyGkgOH5HGEJ41NnPzVVPH">主 Agent 继续完成所有不依赖该结果的工作</strong>；</li>
+              <li data-page-node-id="reaaVXOHVRGleKtCkwf4c1"><strong data-page-node-id="Rgm12wv0BFUCs3T07Ph3AB">子 Agent 完成后，通过后续 user message 把结果注入主 Agent</strong>；另提供一个只有确实需要时才调用的显式等待工具。</li>
+            </ol>
+          </div>
+
+          <p data-page-node-id="EhS5KPYsHrZWLlDjOYJvfR">官方观察是：模型有时仍会主动选择等待，但只要启动接口非阻塞，那些继续工作的运行就能获得真实的墙钟时间收益，平均质量、token 和成本基本相近。</p>
+        </div>
+
+        <!-- 建议 16 -->
+        <div class="suggestion-card" id="rec-16" data-page-node-id="5sny0T83yE0F0mtrB1ERXr">
+          <div class="suggestion-header" data-page-node-id="YZbJqdADOsKfUPlXqJ4R2S">
+            <div class="suggestion-badge-group" data-page-node-id="Bio2iDmf2wWyDdAefnZ8Bx">
+              <span class="suggestion-id" data-page-node-id="5xKwE6sJGMq3Fu1Ei8lxHI">建议 16</span>
+              <span class="suggestion-plane-badge plane-runtime" data-page-node-id="nKUxYRAyxerEZM2QfOJTHj">控制面：高密度视觉感知</span>
+            </div>
+            <h3 data-page-node-id="SNyqCgXhH9YWuoTFfRrM0k">密集图表和细节图需要 crop-and-zoom 工具回路</h3>
+          </div>
+
+          <div class="diagnosis-split" data-page-node-id="GbcDa5DOE6HS427HBbBBXC">
+            <div class="diag-box" data-page-node-id="yup0KYEiPIy0NywhqBUfgK">
+              <div class="diag-box-label diag-see" data-page-node-id="YNRgu2eg1GS3wLQm1L6mr1">👀 你会看到什么</div>
+              <p style="margin-bottom:0;" data-page-node-id="fDP5P7O0wRQgWSGzRBxi64">模型能理解图片大意，却读错密集图表的小字、坐标、图例或局部关系。</p>
+            </div>
+            <div class="diag-box" data-page-node-id="LR11Ru1BW6LOlkR8RnCpaj">
+              <div class="diag-box-label diag-why" data-page-node-id="iL0XtwDKZf88DEYCERx0ZO">🔍 为什么会这样</div>
+              <p style="margin-bottom:0;" data-page-node-id="ir3PkRgmuOG3U7KR1B9POe">把整张高密度图压进一次视觉输入，会让有限的视觉 token 同时承担全局布局和局部细节。Fable 5.1 更适合迭代观察：先看全景，判断需要核对的区域，再裁剪、放大、复读，最后回到全图确认位置关系。</p>
+            </div>
+          </div>
+
+          <p data-page-node-id="m8YlfOcEDW7XkmC87SmWwa">完整方案是给视觉 Agent 一个容器，提供原始图像以及 PIL、OpenCV 等基础图像处理库。成本更低的方案是只提供 crop 工具：模型提交坐标，工具返回放大后的局部区域。关键在于让模型根据第一次观察，自主决定第二次应该查看哪个区域。</p>
+        </div>
+      </section>
+
+      <!-- 七、把 16 条建议落地：一份按风险排序的迁移清单 -->
+      <section id="sec-checklist" data-page-node-id="11K9A3eKDRAwS9jLmFYjAC">
+        <h2 data-page-node-id="fFSDyYzgexQxED8ScSaZqZ">把 16 条建议落地：一份按风险排序的迁移清单</h2>
+
+        <p data-page-node-id="ozeaC1Prc9i3dI1EeeWUXP">如果直接把所有双语 Prompt 拼进 system prompt，规则会很长，也很难知道是哪一条产生了效果。更稳妥的迁移顺序如下：</p>
+
+        <div class="checklist-container" data-page-node-id="vLj0nhFo1OhPUbiduMw9sS">
+          <div class="check-item" data-step="1" data-page-node-id="Rsze3uk5UFZYW4aelmahFn">
+            <input type="checkbox" class="check-checkbox" id="chk-step-1" data-page-node-id="a6ho9434LJKKEYduijEism">
+            <div class="check-content" data-page-node-id="KIwPvqf0vsOhF0LiP6GkiH">
+              <div class="check-title" data-page-node-id="AsGJSCYUj96KaRYBeE6xuO">第 1 步：先检查接口兼容性 (API Compatibility)</div>
+              <div class="check-desc" data-page-node-id="14dngnuutNhWUwiDB7hhgM">移除强制 <code data-page-node-id="1dCYBoxAhyFjmEtT60HjeW">tool_choice: "any"</code>，验证 thinking block 的读取方向和 fallback 处理，确认不支持旧模型反向读取 5.1 的 thinking block。</div>
+            </div>
+          </div>
+
+          <div class="check-item" data-step="2" data-page-node-id="ZgYYKOnEZxCi42fWkFxSC9">
+            <input type="checkbox" class="check-checkbox" id="chk-step-2" data-page-node-id="4Kc3xTjFuOgoyFLZNeOTeS">
+            <div class="check-content" data-page-node-id="pK3S7zoVdKPC14HzDif2uT">
+              <div class="check-title" data-page-node-id="KlzNnE0fK7RZOTLB8dO4tL">第 2 步：再检查消息前缀 (Message Prefix Immutability)</div>
+              <div class="check-desc" data-page-node-id="aQ05XN1WavxvwzWY2BsIk0">连续记录几轮真实请求，确认旧 <code data-page-node-id="HjvtuJShBqXKbfqq8V5CkW">system</code>、<code data-page-node-id="Sn38I6WslapEjSkUSNi67c">tools</code> 和历史消息没有被编辑、截断或重排；开启 prefix mismatch 测试。</div>
+            </div>
+          </div>
+
+          <div class="check-item" data-step="3" data-page-node-id="cGQoqmg0jqoKOasLyAJpOY">
+            <input type="checkbox" class="check-checkbox" id="chk-step-3" data-page-node-id="75lxVkr5CYb9Kms5f8gGjA">
+            <div class="check-content" data-page-node-id="f1MTskClEC6Ah5CvIGUrMF">
+              <div class="check-title" data-page-node-id="O4zVvyDmDK5eCtBUwqsMO6">第 3 步：建立 effort 评测 (Benchmarking & Routing)</div>
+              <div class="check-desc" data-page-node-id="BJboc1Z9LAN7q4KCcZW5MI">按任务族（抽取、分类、编码、研究）比较成功率、成本、延迟、搜索触发和返工率；确定 low/medium/high 的具体边界。</div>
+            </div>
+          </div>
+
+          <div class="check-item" data-step="4" data-page-node-id="zVaG5CfCrYB2l1eMNZkVdk">
+            <input type="checkbox" class="check-checkbox" id="chk-step-4" data-page-node-id="GG6JjefRaMTY9fDAp0zNwt">
+            <div class="check-content" data-page-node-id="t7Qhg7DalkZbhlgt5bvOda">
+              <div class="check-title" data-page-node-id="PQC6MJ29IbQXALYPXVsDKl">第 4 步：修复可观察性 (Observability & Progress)</div>
+              <div class="check-desc" data-page-node-id="z3S3kCndlUzlcdwGQNNBze">打开 <code data-page-node-id="hcH7dJSuDGAMMxTdkWCgRH">thinking.display: "updates"</code>，渲染状态行；同时用调度器的 attempt、run ID 与工具结果证明任务真实执行。</div>
+            </div>
+          </div>
+
+          <div class="check-item" data-step="5" data-page-node-id="oMyoGNeN7ssQlguxs1LSyZ">
+            <input type="checkbox" class="check-checkbox" id="chk-step-5" data-page-node-id="59TDPODgwjVS5rHEfPFbvd">
+            <div class="check-content" data-page-node-id="tStN6j2Z0DBCP3v7CIN8Vf">
+              <div class="check-title" data-page-node-id="34t7f1lUlTjSLyibUP6QTV">第 5 步：优化工具循环 (Tool Loop Optimization)</div>
+              <div class="check-desc" data-page-node-id="OL1yBtezLt5wkGCwijbLWR">添加批处理提醒（turn-scoped system message），将子 Agent 启动接口重构成非阻塞 handle 模式，消除阻塞傻等。</div>
+            </div>
+          </div>
+
+          <div class="check-item" data-step="6" data-page-node-id="cgzGiS7xZUx47xCrtzAknT">
+            <input type="checkbox" class="check-checkbox" id="chk-step-6" data-page-node-id="2nFZD3ArDG4wueN6bZvhfr">
+            <div class="check-content" data-page-node-id="SSHcAIg95PDAv2xfqORDpV">
+              <div class="check-title" data-page-node-id="2FSxOj7d3Ww2orbIVkWnmW">第 6 步：成对设置交付规则 (Paired Delivery Rules)</div>
+              <div class="check-desc" data-page-node-id="mGMLqHyqtUegxJzJwfEsJx">一边要求模型自主完整收口（拒绝停在行动预告），一边严格限制范围漂移、禁止无关重构与整文件重写，控制测试数量。</div>
+            </div>
+          </div>
+
+          <div class="check-item" data-step="7" data-page-node-id="Th2JIF1uL52HF5gVv3aqUF">
+            <input type="checkbox" class="check-checkbox" id="chk-step-7" data-page-node-id="BYV9Od9zHBOzK6xn5lswvQ">
+            <div class="check-content" data-page-node-id="Co5ZYRUXgnMgRr0yrPlLDO">
+              <div class="check-title" data-page-node-id="15VsGosTNEZ4RExfLo9Oqv">第 7 步：最后处理输出质量 (Quality & Fine-Tuning)</div>
+              <div class="check-desc" data-page-node-id="qwBEC4YF0z9e7tYQVEQYhb">加入文风矫饰清除、信息结构排版、检索转述 Few-shot、low 档强制搜索触发、长输出 token 边界与视觉 Crop-and-Zoom 回路。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-primary" style="margin-top:2rem;" data-page-node-id="nLOw2j2DJG7OAn17PSzWmu">
+          <div class="callout-title" data-page-node-id="jlnftP8LOEHuFc7dfsQkI4">🎯 最终评估黄金法则</div>
+          <p style="margin-bottom:0;" data-page-node-id="SXZTzBjO4AKbMVWoOAk8ua">
+            最终评测不要只看回答是否“更像 5.1”。应该比较<strong data-page-node-id="eaLm8K83HfxIru0MwDAk6b">同一任务是否更少失败、更少空等、更少无效工具轮次；历史压缩后是否仍能继续；长成品是否完整；模型是否做完了全部授权范围，同时没有修改范围外的东西</strong>。
+          </p>
+        </div>
+
+        <p style="margin-top:1.5rem;" data-page-node-id="sawDFuVev3tWVP6kLjfhDM">
+          这就是这份指南的核心：<strong data-page-node-id="RjxzurWt5Gg3yZDgrzFtyA">Fable 5.1 的 Prompt 依然重要，但 Prompt 已经只是 Agent 运行时的一部分。先修接口与消息协议，再用针对具体症状的提示词做最后一层校正，才能真正得到稳定、可解释、可评测的迁移结果。</strong>
+        </p>
+      </section>
+
+      <!-- 底部版权与元数据区 -->
+      <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border-subtle); color: var(--text-muted); font-size: 0.85rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem;" data-page-node-id="p7nZo7u8xQquPlEZ0NlIx8">
+        <div data-page-node-id="dCGTngNCNXezFIdACT6Vd7">基于 Anthropic 官方平台技术文档 | 单文件自包含零依赖架构</div>
+        <div data-page-node-id="LMtFG0Kq5EuKreLlW13JfQ">本地渲染环境：WorkBuddy AI Systems Architect | UTF-8 编码交付</div>
+      </footer>
+
+    </main>
+  </div>
+
+  <!-- 返回顶部浮动按钮 -->
+  <button class="back-to-top" id="btn-back-to-top" title="返回顶部" data-page-node-id="glHX3E8HMys5j8SqZm9CsS">↑</button>
+
+  <!-- 原生 JavaScript 交互核心 -->
+  <script>
+    (function() {
+      // 1. 主题切换与持久化 (Theme Toggle)
+      var themeBtn = document.getElementById("btn-toggle-theme");
+      var themeIcon = document.getElementById("val-theme-icon");
+      var themeText = document.getElementById("val-theme-text");
+      var currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+
+      function applyTheme(theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        if (theme === "dark") {
+          themeIcon.textContent = "🌓";
+          themeText.textContent = "羊皮纸浅色";
+        } else {
+          themeIcon.textContent = "☀️";
+          themeText.textContent = "黑曜石深色";
+        }
+      }
+      applyTheme(currentTheme);
+
+      themeBtn.addEventListener("click", function() {
+        var now = document.documentElement.getAttribute("data-theme");
+        var next = (now === "dark") ? "light" : "dark";
+        applyTheme(next);
+      });
+
+      // 2. 阅读进度条与返回顶部 (Reading Progress & Back to Top)
+      var progressBar = document.getElementById("val-progress-bar");
+      var backTopBtn = document.getElementById("btn-back-to-top");
+
+      window.addEventListener("scroll", function() {
+        var scrollTop = window.scrollY || document.documentElement.scrollTop;
+        var scrollHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        var pct = 0;
+        if (scrollHeight > 0) {
+          pct = (scrollTop / scrollHeight) * 100;
+        }
+        progressBar.style.width = pct + "%";
+
+        if (scrollTop > 350) {
+          backTopBtn.classList.add("show");
+        } else {
+          backTopBtn.classList.remove("show");
+        }
+      });
+
+      backTopBtn.addEventListener("click", function() {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+
+      // 3. 移动端目录折叠 (Mobile TOC Drawer)
+      var mobileBtn = document.getElementById("btn-toggle-menu");
+      var sidebar = document.getElementById("sidebar-toc");
+      if (mobileBtn && sidebar) {
+        mobileBtn.addEventListener("click", function() {
+          sidebar.classList.toggle("open");
+        });
+      }
+
+      // 4. 目录平滑滚动与动态高亮 (ScrollSpy)
+      var tocLinks = document.querySelectorAll(".sidebar-toc a");
+      var sections = [];
+      tocLinks.forEach(function(link) {
+        var href = link.getAttribute("href");
+        if (href && href.startsWith("#")) {
+          var target = document.getElementById(href.substring(1));
+          if (target) {
+            sections.push({ id: href.substring(1), elem: target, link: link.parentElement });
+          }
+        }
+      });
+
+      window.addEventListener("scroll", function() {
+        var scrollPos = (window.scrollY || document.documentElement.scrollTop) + 120;
+        for (var i = sections.length - 1; i >= 0; i--) {
+          if (sections[i].elem.offsetTop <= scrollPos) {
+            tocLinks.forEach(function(l) { l.parentElement.classList.remove("active"); });
+            sections[i].link.classList.add("active");
+            break;
+          }
+        }
+      });
+
+      // 5. 双语展示模式切换 (Global Language Mode Toggle)
+      var langBtn = document.getElementById("btn-toggle-lang");
+      var langText = document.getElementById("val-lang-text");
+      var langMode = "all"; // 'all', 'zh', 'en'
+
+      langBtn.addEventListener("click", function() {
+        if (langMode === "all") {
+          langMode = "zh";
+          langText.textContent = "仅看中文";
+          document.querySelectorAll(".prompt-sec-en").forEach(function(el) { el.style.display = "none"; });
+          document.querySelectorAll(".prompt-sec-zh").forEach(function(el) { el.style.display = "block"; });
+        } else if (langMode === "zh") {
+          langMode = "en";
+          langText.textContent = "English Only";
+          document.querySelectorAll(".prompt-sec-en").forEach(function(el) { el.style.display = "block"; });
+          document.querySelectorAll(".prompt-sec-zh").forEach(function(el) { el.style.display = "none"; });
+        } else {
+          langMode = "all";
+          langText.textContent = "双语并排";
+          document.querySelectorAll(".prompt-sec-en").forEach(function(el) { el.style.display = "block"; });
+          document.querySelectorAll(".prompt-sec-zh").forEach(function(el) { el.style.display = "block"; });
+        }
+      });
+
+      // 6. 局部提示词卡片 Tab 切换与一键复制 (Tabs & Copy)
+      document.querySelectorAll(".prompt-tabs").forEach(function(tabGroup) {
+        var btns = tabGroup.querySelectorAll(".prompt-tab-btn");
+        var container = tabGroup.closest(".prompt-container");
+        var secEn = container.querySelector(".prompt-sec-en");
+        var secZh = container.querySelector(".prompt-sec-zh");
+
+        btns.forEach(function(btn) {
+          btn.addEventListener("click", function() {
+            btns.forEach(function(b) { b.classList.remove("active"); });
+            btn.classList.add("active");
+            var target = btn.getAttribute("data-target");
+            if (target.endsWith("-all")) {
+              if (secEn) secEn.style.display = "block";
+              if (secZh) secZh.style.display = "block";
+            } else if (target.endsWith("-zh")) {
+              if (secEn) secEn.style.display = "none";
+              if (secZh) secZh.style.display = "block";
+            } else if (target.endsWith("-en")) {
+              if (secEn) secEn.style.display = "block";
+              if (secZh) secZh.style.display = "none";
+            }
+          });
+        });
+      });
+
+      document.querySelectorAll(".prompt-copy-btn").forEach(function(copyBtn) {
+        copyBtn.addEventListener("click", function() {
+          var container = copyBtn.closest(".prompt-container");
+          var body = container.querySelector(".prompt-body");
+          if (body) {
+            navigator.clipboard.writeText(body.innerText).then(function() {
+              var old = copyBtn.textContent;
+              copyBtn.textContent = "✓ 已复制到剪贴板";
+              setTimeout(function() { copyBtn.textContent = old; }, 2000);
+            });
+          }
+        });
+      });
+
+      // 7. 交互沙盘 1：16 类症状快速诊断选择器
+      var symptomSelect = document.getElementById("diag-symptom-select");
+      var diagResultCard = document.getElementById("diag-result-card");
+
+      var diagDatabase = {
+        "1": {
+          rec: "建议 1", plane: "思考预算 (Thinking Budget)", anchor: "rec-1",
+          rootCause: "Fable 5.1 adaptive thinking 行为与 Fable 5 差异明显，高档位耗时可能过剩，而低档位思考量较少。",
+          fix: "从默认的 high 开始，用企业自身基准评测 low / medium / high。medium 常可匹敌旧版，成本大幅降低。"
+        },
+        "2": {
+          rec: "建议 2", plane: "工具与界面 (Tools & UI Loop)", anchor: "rec-2",
+          rootCause: "默认配置下 thinking.display 为 'omitted'，客户端未启用 progress updates 导致无法接收简短状态流。",
+          fix: "开启 beta 'thinking-display-updates-2026-08-18'，并在 prompt 中要求模型执行前说明意图、执行中汇报发现、结束时完整复盘。"
+        },
+        "3": {
+          rec: "建议 3", plane: "工具与界面 (Tools & UI Loop)", anchor: "rec-3",
+          rootCause: "模型推导环境探索时习惯单步串行，引发模型调用、Token 和网络 RTT 往返膨胀。",
+          fix: "在每个 tool_result 后追加带 clear_at: 'next_user_message' 的 turn-scoped 提醒，指示模型私下列出所需信息并在单轮中请求所有互不依赖项。"
+        },
+        "4": {
+          rec: "建议 4", plane: "消息历史 (History Protocol)", anchor: "rec-4",
+          rootCause: "客户端编辑、删除或修改了旧消息/工具声明，破坏了 thinking block 的前缀绑定哈希，导致 400 报错。",
+          fix: "会话历史必须严格 append-only。新规则中途插入采用 mid-conversation 消息，单轮用 turn-scoped，裁剪使用服务端 compaction。"
+        },
+        "5": {
+          rec: "建议 5", plane: "表达与文风 (Style & Tone)", anchor: "rec-5",
+          rootCause: "Fable 5.1 部分任务倾向于使用隐喻、华丽句式和写作者姿态的比喻（mannered prose）替代直接叙述。",
+          fix: "在 System Prompt 加入‘删除所有矫饰性表达’规则，强制在有直接事实时直截了当说明。"
+        },
+        "6": {
+          rec: "建议 6", plane: "排版结构 (Formatting)", anchor: "rec-6",
+          rootCause: "沿用了旧版过度禁止 Markdown 格式的规则，导致 5.1 输出密不透风的纯段落文本。",
+          fix: "移除全面禁格式指令，要求在多并列维度、步骤与比较时主动使用列表、标题与表格，普通对话保持自然段。"
+        },
+        "7": {
+          rec: "建议 7", plane: "信息转述 (Grounding & Paraphrase)", anchor: "rec-7",
+          rootCause: "仅写‘不要抄袭’缺乏具体执行标准，模型直接复制来源网页措辞却不标记引用。",
+          fix: "提供包含 user、response、rationale 的标准 XML Few-shot 示例，明确要求自己转述核心事实，原句必须加引号。"
+        },
+        "8": {
+          rec: "建议 8", plane: "交付契约 (Delivery Contract)", anchor: "rec-8",
+          rootCause: "模型将中途 turn 误判为阶段性汇报，结束于计划或询问用户‘是否继续’。",
+          fix: "注入自主执行规则：用户非实时在线，已授权且可逆的步骤直接全部执行；结束前检查最后一段，若仍是计划则继续调用工具完工。"
+        },
+        "9": {
+          rec: "建议 9", plane: "上下文压缩 (Compaction Contract)", anchor: "rec-9",
+          rootCause: "客户端上下文压缩缺乏保护合同，丢弃了已否决方案、精确代码标识符与用户原话。",
+          fix: "明确定义 6 项必须保留要素（障碍与解法、尝试/否决方案及原因、用户原话限制、进展边界、待办事项、精确标识符）。"
+        },
+        "10": {
+          rec: "建议 10", plane: "范围控制 (Scope Guardrails)", anchor: "rec-10",
+          rootCause: "‘做完整’被模型发散解释为把周边所有代码问题一并解决，顺带增加大量临时排错测试。",
+          fix: "明确只实现任务直接要求的行为；无关 Bug 列为后续建议；禁止自动将调试脚本固化为永久测试。"
+        },
+        "11": {
+          rec: "建议 11", plane: "信息检索 (Search Grounding)", anchor: "rec-11",
+          rootCause: "在 low effort 档位下，模型对稍微熟悉的名称容易凭记忆作答，跳过联网检索。",
+          fix: "升档或追加强制搜索规则：凡涉及快速变化的模型、工具、价格或未确信名称，至少一次查询必须包含用户输入原文。"
+        },
+        "12": {
+          rec: "建议 12", plane: "安全防御 (Refusal Mitigation)", anchor: "rec-12",
+          rootCause: "提问措辞不当（如‘能否运行’）或直接在上下文拼接未过滤的 Base64 触发分类器误伤。",
+          fix: "改写提问为‘是否存在 Bug，请指出位置’；将工具 Base64 转化为文件元数据；客户端正确解析 stop_reason。"
+        },
+        "13": {
+          rec: "建议 13", plane: "代码编辑 (Surgical Edits)", anchor: "rec-13",
+          rootCause: "Fable 5.1 比 5 更倾向于对文本文件整文件重写，导致 token 消耗与冲突剧增。",
+          fix: "注入局部编辑约束：小范围改动优先采用外科手术式针对性修改，仅短文件或大面积变动时才重写。"
+        },
+        "14": {
+          rec: "建议 14", plane: "Token 预算 (Max Tokens Management)", anchor: "rec-14",
+          rootCause: "在 xhigh/max 档位下，模型在 reasoning 中全文起草并在正式回答中重复起草，双重消耗达到 max_tokens 上限。",
+          fix: "在 high 起步；必须使用高档时预留充足 max_tokens，并约束模型在 reasoning 中仅推导分析，正式输出仅写一次。"
+        },
+        "15": {
+          rec: "建议 15", plane: "子任务调度 (Sub-Agent Concurrency)", anchor: "rec-15",
+          rootCause: "子 Agent 启动工具被设计成阻塞调用，主 Agent 挂起直到子任务结束，失去并发加速意义。",
+          fix: "重构成非阻塞调度：启动工具立即返回任务 handle；主 Agent 推进无依赖任务；子任务完成后以 user 消息回传结果。"
+        },
+        "16": {
+          rec: "建议 16", plane: "高密度视觉 (Crop-and-Zoom)", anchor: "rec-16",
+          rootCause: "高密度图表在全局一次性缩放中丢失细节小字与坐标信息，视觉 token 不足。",
+          fix: "构建两阶段视觉观察回路：先看全局布局，再由模型框选区域调用 crop 工具放大局部精读。"
+        }
+      };
+
+      function updateDiagnosis() {
+        var val = symptomSelect.value;
+        var data = diagDatabase[val];
+        if (!data) return;
+
+        diagResultCard.innerHTML =
+          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem; flex-wrap:wrap; gap:0.5rem;">' +
+            '<div style="font-weight:700; color:var(--text-primary); font-size:1.05rem;">' + data.rec + ' 诊断报告</div>' +
+            '<span class="suggestion-plane-badge plane-runtime">' + data.plane + '</span>' +
+          '</div>' +
+          '<p style="margin-bottom:0.5rem;"><strong style="color:var(--rose);">根因定位：</strong>' + data.rootCause + '</p>' +
+          '<p style="margin-bottom:0.75rem;"><strong style="color:var(--emerald);">修复路径：</strong>' + data.fix + '</p>' +
+          '<a href="#' + data.anchor + '" class="btn-icon" style="display:inline-flex; border-color:var(--accent-border); color:var(--accent); font-weight:600;">' +
+            '👉 跳转至 ' + data.rec + ' 详细规约与 Prompt' +
+          '</a>';
+      }
+
+      symptomSelect.addEventListener("change", updateDiagnosis);
+      updateDiagnosis();
+
+      // 8. 交互沙盘 2：Effort 决策器计算逻辑
+      var simTaskType = document.getElementById("sim-task-type");
+      var simEffortSlider = document.getElementById("sim-effort-slider");
+      var valEffortLabel = document.getElementById("val-effort-label");
+      var valLatencyMult = document.getElementById("val-latency-mult");
+      var valTokenCost = document.getElementById("val-token-cost");
+      var valSearchProb = document.getElementById("val-search-prob");
+      var valFitGrade = document.getElementById("val-fit-grade");
+      var valEffortAdvice = document.getElementById("val-effort-advice");
+
+      var effortNames = ["low", "medium", "high", "xhigh", "max"];
+
+      function updateEffortSandbox() {
+        var effortIdx = parseInt(simEffortSlider.value, 10) - 1;
+        var effortName = effortNames[effortIdx];
+        valEffortLabel.textContent = effortName + (effortName === "high" ? " (默认)" : "");
+
+        var task = simTaskType.value;
+        var lat = [1.0, 1.35, 1.8, 2.7, 3.8][effortIdx];
+        var tok = [1.0, 1.6, 2.5, 4.2, 6.0][effortIdx];
+
+        valLatencyMult.textContent = lat.toFixed(1) + "x";
+        valTokenCost.textContent = tok.toFixed(1) + "x";
+
+        // 搜索倾向
+        if (effortIdx === 0) {
+          valSearchProb.textContent = "偏低 (需规则兜底)";
+          valSearchProb.style.color = "var(--rose)";
+        } else if (effortIdx === 1) {
+          valSearchProb.textContent = "中等 (平稳)";
+          valSearchProb.style.color = "var(--amber)";
+        } else {
+          valSearchProb.textContent = "极高 (主动充分)";
+          valSearchProb.style.color = "var(--emerald)";
+        }
+
+        // 评级与建议
+        var grade = "适用";
+        var advice = "";
+        if (task === "extract") {
+          if (effortIdx <= 1) {
+            grade = "高性价比首选 ★★★★★";
+            advice = "该类任务结构清晰，low 或 medium 足以完成，单任务成本大幅优化。注意若是最新动态实体需结合建议 11 触发搜索。";
+          } else {
+            grade = "算力过剩 ★★☆☆☆";
+            advice = "结构抽取使用 high 以上档位会导致延迟与 token 溢出，建议降档至 low/medium。";
+          }
+        } else if (task === "batch") {
+          if (effortIdx === 1) {
+            grade = "最佳甜点位 ★★★★★";
+            advice = "官方实测 medium 质量大致与 Fable 5 相当且成本更低，是批量工作流的理想配置。";
+          } else if (effortIdx === 2) {
+            grade = "高质量基准 ★★★★☆";
+            advice = "high 适合作为基线参照组验证复杂边界是否退化。";
+          } else {
+            grade = "边缘配置 ★★☆☆☆";
+            advice = "low 容易退化格式，xhigh 容易超出时间预算。";
+          }
+        } else if (task === "coding") {
+          if (effortIdx === 2) {
+            grade = "官方推荐起点 ★★★★★";
+            advice = "复杂编程与多步 Agent 的默认起点。配合建议 3 批处理工具调用，可兼顾全局架构设计与代码质量。";
+          } else if (effortIdx === 1) {
+            grade = "经济型候选 ★★★☆☆";
+            advice = "需严格验证深层逻辑与边缘测试用例，在部分项目中具备竞争力。";
+          } else {
+            grade = "特殊需求备选 ★★★☆☆";
+            advice = "仅在遇到极难编译错误或复杂并发重构时才尝试升档到 xhigh。";
+          }
+        } else { // frontier
+          if (effortIdx >= 3) {
+            grade = "难题破局必备 ★★★★★";
+            advice = "极限攻坚场景。必须依据建议 14 预留足够 max_tokens，并约束模型在 reasoning 中只推导不写重复草稿。";
+          } else {
+            grade = "推理深度不足 ★★☆☆☆";
+            advice = "前沿推演与复杂理论证明在低档位容易过早得出粗糙结论。";
+          }
+        }
+
+        valFitGrade.textContent = grade;
+        valEffortAdvice.innerHTML = "<strong>架构调优建议：</strong>" + advice;
+      }
+
+      simTaskType.addEventListener("change", updateEffortSandbox);
+      simEffortSlider.addEventListener("input", updateEffortSandbox);
+      updateEffortSandbox();
+
+      // 9. 交互沙盘 3：批处理时延收益计算
+      var simKCalls = document.getElementById("sim-k-calls");
+      var simTModel = document.getElementById("sim-t-model");
+      var simRtt = document.getElementById("sim-rtt");
+
+      var valKCalls = document.getElementById("val-k-calls");
+      var valTModel = document.getElementById("val-t-model");
+      var valRtt = document.getElementById("val-rtt");
+
+      var valSeqTotal = document.getElementById("val-seq-total");
+      var valBatchTotal = document.getElementById("val-batch-total");
+      var simBarSeq = document.getElementById("sim-bar-seq");
+      var simBarBatch = document.getElementById("sim-bar-batch");
+
+      var valTimeSaved = document.getElementById("val-time-saved");
+      var valTimePct = document.getElementById("val-time-pct");
+      var valTurnsSaved = document.getElementById("val-turns-saved");
+
+      function updateToolsSandbox() {
+        var k = parseInt(simKCalls.value, 10);
+        var tm = parseFloat(simTModel.value);
+        var rttSec = parseFloat(simRtt.value) / 1000.0;
+        var tTool = 0.6; // 单次工具平均执行时间 600ms
+
+        valKCalls.textContent = k + " 个";
+        valTModel.textContent = tm.toFixed(1) + " 秒";
+        valRtt.textContent = simRtt.value + " 毫秒";
+
+        // 串行单工具模型：K 轮往返，每轮 tm + tTool + 2*RTT
+        var tSeq = k * (tm + tTool + 2 * rttSec);
+
+        // 批处理合并模型：1 轮模型思考 + 并行 K 个工具 (取 max) + 1 轮往返
+        var tBatch = tm + (tTool + 0.1) + 2 * rttSec;
+
+        valSeqTotal.textContent = tSeq.toFixed(2) + " 秒";
+        valBatchTotal.textContent = tBatch.toFixed(2) + " 秒";
+
+        var saved = tSeq - tBatch;
+        var pct = (saved / tSeq) * 100.0;
+
+        valTimeSaved.textContent = saved.toFixed(2) + " 秒";
+        valTimePct.textContent = "-" + pct.toFixed(1) + "%";
+        valTurnsSaved.textContent = (k - 1) + " 轮往返";
+
+        // 比例更新
+        simBarSeq.style.width = "100%";
+        var batchWidthPct = Math.min(100, Math.max(5, (tBatch / tSeq) * 100.0));
+        simBarBatch.style.width = batchWidthPct + "%";
+      }
+
+      simKCalls.addEventListener("input", updateToolsSandbox);
+      simTModel.addEventListener("input", updateToolsSandbox);
+      simRtt.addEventListener("input", updateToolsSandbox);
+      updateToolsSandbox();
+
+      // 10. 迁移清单 Checkbox 交互
+      var chkSteps = ["chk-step-1", "chk-step-2", "chk-step-3", "chk-step-4", "chk-step-5", "chk-step-6", "chk-step-7"];
+      chkSteps.forEach(function(stepId) {
+        var chk = document.getElementById(stepId);
+        if (chk) {
+          chk.addEventListener("change", function() {
+            var item = chk.closest(".check-item");
+            if (item) {
+              if (chk.checked) {
+                item.classList.add("done");
+              } else {
+                item.classList.remove("done");
+              }
+            }
+          });
+        }
+      });
+
+      document.querySelectorAll(".check-item").forEach(function(item) {
+        var chk = item.querySelector(".check-checkbox");
+        item.addEventListener("click", function(e) {
+          if (e.target !== chk && chk) {
+            chk.checked = !chk.checked;
+            chk.dispatchEvent(new Event("change"));
+          }
+        });
+      });
+
+    })();
+  </script>
+</body>
+</html>
