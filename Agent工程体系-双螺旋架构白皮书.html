@@ -1,0 +1,1508 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>从微观 JIT 动态编译到宏观 Fleet 治理：AI 软件工程双螺旋架构白皮书</title>
+<meta name="description" content="融合 JIT-Agent 论文（arXiv:2608.25593）与 2000 小时 Agentic Engineering 实战的架构白皮书，含四个可交互沙盘。"/>
+<style>
+/* ================================================================
+   DESIGN TOKENS · 零外部依赖 · 双主题 · 五色语义体系
+   ================================================================ */
+:root{
+  /* Light · Warm Paper */
+  --bg-base:#FBF9F5; --bg-surface:#FFFFFF; --bg-subtle:#F3EFE6; --bg-muted:#E8E2D5;
+  --bg-glass:rgba(251,249,245,.88);
+  --border-subtle:#E5DFC9; --border-medium:#D0C7B2;
+
+  --accent:#C84B26; --accent-hover:#AE3E1D; --accent-soft:rgba(200,75,38,.08); --accent-border:rgba(200,75,38,.25);
+  --cyan:#0E7490; --cyan-soft:rgba(14,116,144,.08); --cyan-border:rgba(14,116,144,.25);
+  --emerald:#0F766E; --emerald-soft:rgba(15,118,110,.08); --emerald-border:rgba(15,118,110,.25);
+  --amber:#B45309; --amber-soft:rgba(180,83,9,.08); --amber-border:rgba(180,83,9,.25);
+  --rose:#BE123C; --rose-soft:rgba(190,18,60,.08); --rose-border:rgba(190,18,60,.25);
+
+  --text-title:#1A1815; --text-body:#423E37; --text-muted:#736C60; --text-ghost:#A69E90;
+
+  --shadow-sm:0 1px 3px rgba(0,0,0,.04),0 1px 2px rgba(0,0,0,.02);
+  --shadow-md:0 4px 16px -2px rgba(0,0,0,.06),0 2px 6px -1px rgba(0,0,0,.03);
+
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --font-serif:"Newsreader","Noto Serif SC","Source Han Serif SC","Songti SC",Georgia,serif;
+  --font-mono:ui-monospace,SFMono-Regular,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+
+  --radius-sm:6px; --radius-md:10px; --radius-lg:16px; --radius-full:9999px;
+  --t-fast:.15s cubic-bezier(.4,0,.2,1); --t-normal:.25s cubic-bezier(.4,0,.2,1);
+}
+[data-theme="dark"]{
+  /* Dark · Obsidian & Mineral Slate */
+  --bg-base:#0D0F12; --bg-surface:#14171D; --bg-subtle:#1C2028; --bg-muted:#272C38;
+  --bg-glass:rgba(13,15,18,.88);
+  --border-subtle:#232834; --border-medium:#32394A;
+
+  --accent:#FF6B4A; --accent-hover:#FF856B; --accent-soft:rgba(255,107,74,.12); --accent-border:rgba(255,107,74,.32);
+  --cyan:#38BDF8; --cyan-soft:rgba(56,189,248,.12); --cyan-border:rgba(56,189,248,.30);
+  --emerald:#34D399; --emerald-soft:rgba(52,211,153,.12); --emerald-border:rgba(52,211,153,.30);
+  --amber:#FBBF24; --amber-soft:rgba(251,191,36,.12); --amber-border:rgba(251,191,36,.30);
+  --rose:#FB7185; --rose-soft:rgba(251,113,133,.12); --rose-border:rgba(251,113,133,.30);
+
+  --text-title:#F3F4F6; --text-body:#C9CED8; --text-muted:#8E98A8; --text-ghost:#586174;
+
+  --shadow-sm:0 1px 3px rgba(0,0,0,.3); --shadow-md:0 4px 20px rgba(0,0,0,.45);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;font-size:16px;scroll-padding-top:88px;-webkit-text-size-adjust:100%}
+body{background:var(--bg-base);color:var(--text-body);font-family:var(--font-sans);
+  line-height:1.78;letter-spacing:-.01em;text-rendering:optimizeLegibility;
+  -webkit-font-smoothing:antialiased;
+  transition:background-color var(--t-normal),color var(--t-normal)}
+
+#reading-progress{position:fixed;top:0;left:0;height:3px;width:0;
+  background:linear-gradient(90deg,var(--accent),var(--cyan));z-index:9999;transition:width .1s linear}
+.skip{position:absolute;left:-9999px;top:0;z-index:9999;background:var(--accent);color:#fff;
+  padding:8px 16px;border-radius:var(--radius-sm);font-size:13px}
+.skip:focus{left:12px;top:12px}
+
+/* ---------- Header ---------- */
+.site-header{position:sticky;top:0;z-index:1000;background:var(--bg-glass);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border-subtle);height:62px;
+  display:flex;align-items:center;justify-content:space-between;padding:0 2rem;gap:1rem}
+.header-brand{display:flex;align-items:center;gap:.7rem;font-weight:700;font-size:1rem;
+  color:var(--text-title);text-decoration:none;min-width:0}
+.header-brand-badge{padding:.2rem .6rem;background:var(--accent-soft);color:var(--accent);
+  border:1px solid var(--accent-border);border-radius:var(--radius-full);font-size:.68rem;
+  font-family:var(--font-mono);font-weight:600;letter-spacing:.05em;white-space:nowrap}
+.header-brand-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-theme-toggle{background:var(--bg-subtle);border:1px solid var(--border-medium);
+  color:var(--text-body);padding:.4rem .8rem;border-radius:var(--radius-md);font-size:.82rem;
+  font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:.4rem;
+  transition:all var(--t-fast);font-family:inherit;white-space:nowrap}
+.btn-theme-toggle:hover{background:var(--bg-muted);color:var(--text-title);border-color:var(--accent)}
+
+/* ---------- Layout ---------- */
+.layout-container{max-width:1360px;margin:0 auto;padding:2.5rem 2rem 6rem;
+  display:grid;grid-template-columns:270px minmax(0,1fr);gap:3.25rem;align-items:start}
+.sidebar-toc-wrapper{position:sticky;top:86px;max-height:calc(100vh - 110px);
+  overflow-y:auto;padding-right:.75rem}
+.sidebar-toc-wrapper::-webkit-scrollbar{width:4px}
+.sidebar-toc-wrapper::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:4px}
+.toc-card{background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-lg);padding:1.25rem 1.1rem;box-shadow:var(--shadow-sm)}
+.toc-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--text-ghost);margin-bottom:.9rem;display:flex;justify-content:space-between}
+.toc-list{list-style:none;display:flex;flex-direction:column;gap:.3rem}
+.toc-item a{display:block;font-size:.85rem;color:var(--text-muted);text-decoration:none;
+  padding:.4rem .6rem;border-radius:var(--radius-sm);border-left:2px solid transparent;
+  transition:all var(--t-fast);line-height:1.4}
+.toc-item a:hover{color:var(--text-title);background:var(--bg-subtle)}
+.toc-item a.active{color:var(--accent);background:var(--accent-soft);
+  border-left-color:var(--accent);font-weight:600}
+.toc-badge{font-family:var(--font-mono);font-size:.7rem;opacity:.65;margin-right:.3rem}
+.main-article{max-width:880px;min-width:0}
+
+/* ---------- Hero ---------- */
+.doc-hero{margin-bottom:3.25rem;padding-bottom:2.25rem;border-bottom:1px solid var(--border-subtle)}
+.doc-meta-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:1.1rem;
+  font-size:.8rem;color:var(--text-muted);font-family:var(--font-mono)}
+.doc-title{font-size:clamp(1.9rem,3.6vw,2.7rem);font-weight:800;line-height:1.22;
+  color:var(--text-title);letter-spacing:-.025em;margin-bottom:1.1rem}
+.doc-subtitle{font-family:var(--font-serif);font-size:1.22rem;line-height:1.6;
+  color:var(--text-muted);margin-bottom:1.6rem;font-weight:400}
+.doc-lead-box{background:var(--bg-surface);border:1px solid var(--border-medium);
+  border-left:4px solid var(--accent);border-radius:var(--radius-md);padding:1.3rem 1.5rem;
+  box-shadow:var(--shadow-sm);font-size:.95rem;line-height:1.7;color:var(--text-title)}
+.doc-lead-box strong{color:var(--accent)}
+
+/* ---------- Section ---------- */
+.doc-section{margin-bottom:3.75rem;scroll-margin-top:88px}
+.section-header{margin-bottom:1.6rem;padding-bottom:.7rem;border-bottom:1px solid var(--border-subtle)}
+.section-tag{display:inline-block;font-family:var(--font-mono);font-size:.73rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:.3rem}
+.section-title{font-size:1.7rem;font-weight:700;color:var(--text-title);
+  letter-spacing:-.02em;line-height:1.3}
+.section-desc{margin-top:.45rem;font-size:.97rem;color:var(--text-muted);line-height:1.6}
+
+p{margin-bottom:1.15rem}
+p:last-child{margin-bottom:0}
+h3.sub-title{font-size:1.24rem;font-weight:700;color:var(--text-title);margin:1.9rem 0 .8rem;
+  letter-spacing:-.015em;display:flex;align-items:center;gap:.5rem}
+h3.sub-title::before{content:"";display:inline-block;width:5px;height:17px;
+  background:var(--accent);border-radius:3px;flex:none}
+h4.mini-title{font-size:1rem;font-weight:700;color:var(--text-title);margin:1.4rem 0 .5rem}
+strong{color:var(--text-title);font-weight:600}
+em{font-style:italic;color:var(--text-title)}
+dfn{font-style:normal;color:var(--text-title);font-weight:600;
+  border-bottom:1px dashed var(--accent);cursor:help}
+code{font-family:var(--font-mono);font-size:.85em;padding:.15em .4em;background:var(--bg-subtle);
+  border:1px solid var(--border-subtle);border-radius:4px;color:var(--accent)}
+.note{font-size:.86rem;color:var(--text-muted);line-height:1.65}
+.caption{font-size:.83rem;color:var(--text-muted);margin-top:.75rem;line-height:1.65;
+  padding-left:.8rem;border-left:2px solid var(--border-medium)}
+
+/* ---------- Callout ---------- */
+.callout{border-radius:var(--radius-md);padding:1.15rem 1.3rem;margin:1.35rem 0;
+  border:1px solid transparent;display:flex;gap:.9rem;font-size:.92rem;line-height:1.68}
+.callout-icon{flex:none;font-size:1.1rem;line-height:1.3}
+.callout-content{flex:1;min-width:0}
+.callout-title{font-weight:700;margin-bottom:.3rem;color:var(--text-title)}
+.callout p+p{margin-top:.5rem}
+.callout.insight{background:var(--accent-soft);border-color:var(--accent-border)}
+.callout.insight .callout-title{color:var(--accent)}
+.callout.info{background:var(--cyan-soft);border-color:var(--cyan-border)}
+.callout.info .callout-title{color:var(--cyan)}
+.callout.warning{background:var(--amber-soft);border-color:var(--amber-border)}
+.callout.warning .callout-title{color:var(--amber)}
+.callout.danger{background:var(--rose-soft);border-color:var(--rose-border)}
+.callout.danger .callout-title{color:var(--rose)}
+.callout.emerald{background:var(--emerald-soft);border-color:var(--emerald-border)}
+.callout.emerald .callout-title{color:var(--emerald)}
+
+/* ---------- Cards ---------- */
+.card-grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:1.1rem;margin:1.35rem 0}
+.card-grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  gap:1rem;margin:1.35rem 0}
+.arch-card{background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);padding:1.25rem;box-shadow:var(--shadow-sm);
+  transition:transform var(--t-fast),border-color var(--t-fast)}
+.arch-card:hover{transform:translateY(-2px);border-color:var(--border-medium)}
+.arch-card-tag{display:inline-block;font-family:var(--font-mono);font-size:.7rem;
+  font-weight:600;padding:.15rem .5rem;border-radius:var(--radius-sm);
+  background:var(--bg-subtle);color:var(--text-muted);margin-bottom:.7rem}
+.arch-card-title{font-size:1.02rem;font-weight:700;color:var(--text-title);margin-bottom:.45rem}
+.arch-card-text{font-size:.87rem;color:var(--text-body);line-height:1.55}
+
+/* ---------- Flow ---------- */
+.flow-diagram-container{background:var(--bg-subtle);border:1px solid var(--border-medium);
+  border-radius:var(--radius-lg);padding:1.5rem 1.3rem;margin:1.5rem 0}
+.flow-diagram-title{font-size:.76rem;font-family:var(--font-mono);font-weight:700;
+  text-transform:uppercase;color:var(--text-ghost);margin-bottom:1.1rem;
+  display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+.flow-steps{display:flex;align-items:stretch;gap:.6rem}
+.flow-step-box{flex:1;background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);padding:.9rem .8rem;display:flex;flex-direction:column;min-width:0}
+.flow-step-box.highlight{border-color:var(--accent);background:var(--accent-soft)}
+.flow-step-num{font-family:var(--font-mono);font-size:.67rem;font-weight:700;
+  color:var(--accent);margin-bottom:.3rem}
+.flow-step-title{font-size:.9rem;font-weight:700;color:var(--text-title);margin-bottom:.3rem}
+.flow-step-desc{font-size:.76rem;color:var(--text-muted);line-height:1.45;margin-top:auto}
+.flow-arrow{display:flex;align-items:center;justify-content:center;color:var(--text-ghost);
+  font-size:1.1rem;padding:0 .1rem;flex:none}
+
+/* ---------- Table ---------- */
+.table-wrapper{background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);overflow-x:auto;margin:1.5rem 0;box-shadow:var(--shadow-sm)}
+.data-table{width:100%;border-collapse:collapse;font-size:.87rem;text-align:left;min-width:560px}
+.data-table th{background:var(--bg-subtle);color:var(--text-title);font-weight:700;
+  padding:.8rem 1rem;border-bottom:1px solid var(--border-medium);font-family:var(--font-mono);
+  font-size:.76rem;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+.data-table td{padding:.8rem 1rem;border-bottom:1px solid var(--border-subtle);
+  vertical-align:top;line-height:1.55}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:var(--bg-subtle)}
+.data-table caption{caption-side:bottom;text-align:left;font-size:.8rem;color:var(--text-muted);
+  padding:.7rem 1rem;line-height:1.6}
+td.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.badge-tag{display:inline-block;padding:.15rem .45rem;border-radius:4px;font-size:.71rem;
+  font-family:var(--font-mono);font-weight:600;white-space:nowrap}
+.badge-tag.bad{background:var(--rose-soft);color:var(--rose);border:1px solid var(--rose-border)}
+.badge-tag.good{background:var(--emerald-soft);color:var(--emerald);border:1px solid var(--emerald-border)}
+.badge-tag.warn{background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber-border)}
+.badge-tag.info{background:var(--cyan-soft);color:var(--cyan);border:1px solid var(--cyan-border)}
+.badge-tag.neutral{background:var(--bg-muted);color:var(--text-muted)}
+
+/* ---------- Formula ---------- */
+.eq{font-family:var(--font-mono);font-size:.83rem;line-height:1.95;background:var(--bg-subtle);
+  border:1px solid var(--border-subtle);border-left:3px solid var(--accent);
+  border-radius:var(--radius-sm);padding:.9rem 1.1rem;margin:1.1rem 0;overflow-x:auto;
+  color:var(--text-title);white-space:pre}
+
+/* ---------- Sandbox ---------- */
+.interactive-sandbox{background:var(--bg-surface);border:1.5px solid var(--accent-border);
+  border-radius:var(--radius-lg);padding:1.5rem;margin:1.6rem 0;box-shadow:var(--shadow-md)}
+.sandbox-header{display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+  margin-bottom:1.1rem;padding-bottom:.7rem;border-bottom:1px solid var(--border-subtle);flex-wrap:wrap}
+.sandbox-title{font-size:1rem;font-weight:700;color:var(--text-title)}
+.sandbox-note{font-size:.78rem;color:var(--text-muted);margin-top:-.6rem;margin-bottom:1rem;
+  line-height:1.6;font-family:var(--font-mono)}
+.sandbox-tabs{display:flex;gap:.45rem;margin-bottom:1.1rem;flex-wrap:wrap}
+.sandbox-tab-btn{background:var(--bg-subtle);border:1px solid var(--border-medium);
+  color:var(--text-muted);padding:.4rem .8rem;border-radius:var(--radius-sm);font-size:.8rem;
+  font-weight:600;cursor:pointer;transition:all var(--t-fast);font-family:inherit}
+.sandbox-tab-btn.active{background:var(--accent);color:#FFFFFF;border-color:var(--accent)}
+.sandbox-display-panel{background:var(--bg-subtle);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);padding:1.1rem}
+.quad-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.75rem;
+  margin-bottom:.9rem}
+.quad{background:var(--bg-surface);padding:.8rem .85rem;border-radius:var(--radius-sm);
+  border:1px solid var(--border-subtle)}
+.quad-k{font-size:.68rem;font-family:var(--font-mono);font-weight:700;margin-bottom:.3rem}
+.quad-v{font-size:.81rem;color:var(--text-body);line-height:1.5}
+.quad-foot{font-size:.82rem;font-weight:600;color:var(--accent);background:var(--accent-soft);
+  padding:.5rem .8rem;border-radius:var(--radius-sm);border:1px solid var(--accent-border)}
+
+.sim-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.1rem;
+  margin-bottom:1.3rem}
+.sim-slider-group{display:flex;flex-direction:column;gap:.4rem}
+.sim-slider-label{display:flex;justify-content:space-between;gap:.5rem;font-size:.83rem;
+  font-weight:600;color:var(--text-title)}
+.sim-slider-val{font-family:var(--font-mono);color:var(--accent);font-variant-numeric:tabular-nums}
+.sim-slider{width:100%;accent-color:var(--accent);cursor:pointer}
+.sim-hint{font-size:.72rem;color:var(--text-ghost);line-height:1.4}
+.sim-metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+  gap:.85rem;margin-bottom:1.1rem}
+.sim-metric-card{background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);padding:.85rem .7rem;text-align:center}
+.sim-metric-num{font-size:1.3rem;font-weight:800;font-family:var(--font-mono);
+  margin-top:.2rem;font-variant-numeric:tabular-nums}
+.sim-metric-desc{font-size:.68rem;text-transform:uppercase;color:var(--text-ghost);
+  font-weight:600;letter-spacing:.04em;line-height:1.35}
+.sim-verdict-box{padding:.8rem 1rem;border-radius:var(--radius-sm);font-size:.86rem;
+  line-height:1.55;border-left:4px solid transparent}
+.sim-verdict-box.safe{background:var(--emerald-soft);color:var(--emerald);border-left-color:var(--emerald)}
+.sim-verdict-box.warn{background:var(--amber-soft);color:var(--amber);border-left-color:var(--amber)}
+.sim-verdict-box.danger{background:var(--rose-soft);color:var(--rose);border-left-color:var(--rose)}
+
+/* ---------- Accordion ---------- */
+details.accordion-item{background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-md);margin-bottom:.75rem;overflow:hidden;
+  transition:border-color var(--t-fast)}
+details.accordion-item[open]{border-color:var(--border-medium);box-shadow:var(--shadow-sm)}
+summary.accordion-trigger{padding:.9rem 1.1rem;font-size:.93rem;font-weight:700;
+  color:var(--text-title);cursor:pointer;list-style:none;display:flex;
+  align-items:center;justify-content:space-between;gap:1rem;user-select:none}
+summary.accordion-trigger::-webkit-details-marker{display:none}
+summary.accordion-trigger::after{content:"+";font-family:var(--font-mono);font-size:1.1rem;
+  color:var(--text-muted);transition:transform var(--t-fast);flex:none}
+details.accordion-item[open] summary.accordion-trigger::after{content:"−";color:var(--accent)}
+.accordion-body{padding:0 1.1rem 1.1rem;font-size:.89rem;line-height:1.68;color:var(--text-body);
+  border-top:1px solid var(--border-subtle);padding-top:.9rem}
+
+/* ---------- Checklist ---------- */
+.checklist-container{background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-lg);padding:1.4rem;margin:1.5rem 0}
+.checklist-item{display:flex;align-items:flex-start;gap:.75rem;padding:.7rem 0;
+  border-bottom:1px solid var(--border-subtle);font-size:.9rem;cursor:pointer}
+.checklist-item:last-of-type{border-bottom:none}
+.checklist-item input[type="checkbox"]{margin-top:.25rem;accent-color:var(--accent);
+  width:16px;height:16px;cursor:pointer;flex:none}
+.checklist-label{flex:1}
+.checklist-score-bar{margin-top:1.1rem;padding-top:1.1rem;border-top:1px dashed var(--border-medium);
+  display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+
+/* ---------- Figure ---------- */
+figure{margin:1.4rem 0}
+figure svg{display:block;width:100%;height:auto}
+
+/* ---------- Footer ---------- */
+.doc-footer{margin-top:4.5rem;padding-top:1.8rem;border-top:1px solid var(--border-subtle);
+  font-size:.83rem;color:var(--text-muted);line-height:1.75}
+.doc-footer b{color:var(--text-title)}
+.doc-footer p+p{margin-top:.7rem}
+
+/* ---------- Responsive ---------- */
+@media (max-width:1024px){
+  .layout-container{grid-template-columns:1fr;gap:1.75rem}
+  .sidebar-toc-wrapper{position:static;max-height:none;padding-right:0}
+}
+@media (max-width:640px){
+  .site-header{padding:0 1rem}
+  .layout-container{padding:1.5rem 1rem 4rem}
+  .flow-steps{flex-direction:column}
+  .flow-arrow{transform:rotate(90deg);padding:.4rem 0}
+  .doc-subtitle{font-size:1.05rem}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *{transition-duration:.01ms!important;animation-duration:.01ms!important}
+}
+
+/* ---------- Print ---------- */
+@media print{
+  body{background:#FFFFFF!important;color:#000000!important;font-size:10.5pt;line-height:1.6}
+  #reading-progress,.site-header,.sidebar-toc-wrapper,.btn-theme-toggle,.sandbox-tabs,.skip{display:none!important}
+  .layout-container{display:block!important;max-width:100%!important;padding:0!important;margin:0!important}
+  .main-article{max-width:100%!important}
+  .doc-section{page-break-inside:auto;margin-bottom:1.6rem!important}
+  .section-title,h3.sub-title{page-break-after:avoid}
+  .arch-card,.table-wrapper,.interactive-sandbox,.flow-diagram-container,figure,.callout{
+    page-break-inside:avoid;box-shadow:none!important;border:1px solid #CCC!important}
+  details.accordion-item{border:1px solid #DDD!important}
+  details.accordion-item .accordion-body{display:block!important}
+  a{color:#000!important;text-decoration:none!important}
+  .doc-title{font-size:22pt}
+}
+</style>
+</head>
+<body>
+
+<div id="reading-progress"></div>
+<a class="skip" href="#main">跳到正文</a>
+
+<header class="site-header">
+  <div class="header-brand">
+    <span class="header-brand-badge">Whitepaper 2026</span>
+    <span class="header-brand-text">AGENT ARCHITECTURE MONOGRAPH</span>
+  </div>
+  <button class="btn-theme-toggle" id="themeToggleBtn" type="button">
+    <span id="themeIcon">🌓</span><span id="themeText">切换主题</span>
+  </button>
+</header>
+
+<div class="layout-container">
+
+  <aside class="sidebar-toc-wrapper">
+    <nav class="toc-card">
+      <div class="toc-title"><span>目录导航</span><span>CONTENT</span></div>
+      <ul class="toc-list" id="tocList">
+        <li class="toc-item"><a href="#sec-bg"><span class="toc-badge">01</span>背景与问题定义</a></li>
+        <li class="toc-item"><a href="#sec-core"><span class="toc-badge">02</span>核心概念与双螺旋模型</a></li>
+        <li class="toc-item"><a href="#sec-layers"><span class="toc-badge">03</span>关键要点分层展开</a></li>
+        <li class="toc-item"><a href="#sec-causality"><span class="toc-badge">04</span>对比与因果推导</a></li>
+        <li class="toc-item"><a href="#sec-pitfalls"><span class="toc-badge">05</span>典型陷阱与防御</a></li>
+        <li class="toc-item"><a href="#sec-conclusions"><span class="toc-badge">06</span>结论与演进建议</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="main-article" id="main">
+
+    <header class="doc-hero">
+      <div class="doc-meta-bar">
+        <span>📅 2026-09</span><span>·</span>
+        <span>🔬 理论: JIT-Agent (arXiv:2608.25593)</span><span>·</span>
+        <span>🛠️ 实证: 2000h Agentic Engineering</span>
+      </div>
+      <h1 class="doc-title">从微观 JIT 动态编译到宏观 Fleet 治理：<br/>AI 软件工程双螺旋架构</h1>
+      <p class="doc-subtitle">
+        微观上像 JIT 编译器一样为任务动态特化最小运行时；宏观上像操作系统一样对多 Agent
+        进行隔离、调度与串行化出关。两条链互相独立，又共享同一条演化反馈。
+      </p>
+      <div class="doc-lead-box">
+        <strong>核心摘要：</strong> 效率瓶颈已从「模型生成速度」转移到两处——
+        <strong>微观的上下文与工具装配失配</strong>（Intra-Agent）与
+        <strong>宏观的人类审核带宽雪崩</strong>（Inter-Agent）。
+        微观的解法是四模块协议的即时编译，宏观的解法是准入控制与单写者串行化。
+        但两者拼接处存在一道断层：<strong>演化依赖「可自动判分的奖励」，而真实工程任务给不出这个奖励</strong>。
+        本文所有模型参数均标注来源，示意性假设与论文实测数据严格区分。
+      </div>
+    </header>
+
+    <!-- ============ 01 ============ -->
+    <section id="sec-bg" class="doc-section">
+      <div class="section-header">
+        <span class="section-tag">Chapter 01</span>
+        <h2 class="section-title">背景与问题定义：生产力的两次迁移</h2>
+        <p class="section-desc">为什么模型越来越快，交付却越来越容易失控？瓶颈不在智力，在系统架构。</p>
+      </div>
+
+      <p>
+        过去数年 AI 编码的主流范式是<strong>「大模型 + 静态脚手架 + 交互式 Copilot」</strong>。
+        当工程师试图扩展到多 Agent 并发与长流程自主编码时，会系统性地撞上两堵墙——
+        它们分属两个不同的层级，却经常被混为一谈。
+      </p>
+
+      <div class="card-grid-2">
+        <div class="arch-card">
+          <span class="arch-card-tag" style="color:var(--rose);background:var(--rose-soft)">微观困境 · INTRA-AGENT</span>
+          <h4 class="arch-card-title">静态脚手架的适配失配</h4>
+          <p class="arch-card-text">
+            一套固定的 System Prompt 要覆盖所有任务类型，只能把全量工具定义与历史记忆都塞进去。
+            不同任务需要的先验<strong>不只是参数不同，而是结构不同</strong>——广度搜索要并行展开证据，
+            终端操作要精简串行循环，代码任务天然由文件系统管理补丁与测试。用一套结构覆盖，只能处处妥协。
+          </p>
+        </div>
+        <div class="arch-card">
+          <span class="arch-card-tag" style="color:var(--amber);background:var(--amber-soft)">宏观困境 · INTER-AGENT</span>
+          <h4 class="arch-card-title">审核带宽雪崩</h4>
+          <p class="arch-card-text">
+            多个 Agent 并发产出（到达率 λ），而人类的审查吞吐是有限且<strong>会随压力下降</strong>的（服务率 μ）。
+            当负荷率 ρ = λ/μ &gt; 1 时，队列单调发散，引发分支漂移与合并冲突。
+            更隐蔽的是：ρ 接近 1 之前系统看起来一切正常，越过之后没有任何预警地崩塌。
+          </p>
+        </div>
+      </div>
+
+      <div class="callout insight">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <div class="callout-title">问题迁移的完整路径</div>
+          <p>瓶颈经历了两次迁移：<strong>模型能力 → 执行框架 → 人的注意力</strong>。
+          第一次迁移由论文用数据完成，第二次迁移由工程实践揭示。</p>
+          <p>第一次迁移的证据是硬的：同一底座只换框架，18 组配对全面提升，规划类任务最高 +24.8 分，
+          而成本平均<em>下降</em> 36%——这个量级以往只有换一代模型才做得到。</p>
+        </div>
+      </div>
+
+      <div class="card-grid-3">
+        <div class="arch-card"><div class="arch-card-tag">实测</div>
+          <div class="arch-card-title" style="font-size:1.5rem;color:var(--emerald)">18 / 18</div>
+          <div class="arch-card-text">同一底座、只换框架，全部提升，无一例外</div></div>
+        <div class="arch-card"><div class="arch-card-tag">实测</div>
+          <div class="arch-card-title" style="font-size:1.5rem;color:var(--emerald)">−36.0%</div>
+          <div class="arch-card-text">对 6 组成熟固定框架，单题成本全部最低</div></div>
+        <div class="arch-card"><div class="arch-card-tag">实测</div>
+          <div class="arch-card-title" style="font-size:1.5rem;color:var(--emerald)">+24.8</div>
+          <div class="arch-card-text">DeepPlanning-Shopping，59.1 → 83.9</div></div>
+      </div>
+      <p class="note">
+        数据来源：JIT-Agent 论文（arXiv:2608.25593v1）。跨 3 模型家族 6 底座 24 组迁移同样全部为正，平均 +7.6 分。
+      </p>
+    </section>
+
+    <!-- ============ 02 ============ -->
+    <section id="sec-core" class="doc-section">
+      <div class="section-header">
+        <span class="section-tag">Chapter 02</span>
+        <h2 class="section-title">核心概念与双螺旋系统模型</h2>
+        <p class="section-desc">先对齐语言。六个术语 + 四模块协议，构成后面所有论证的坐标系。</p>
+      </div>
+
+      <div class="flow-diagram-container">
+        <div class="flow-diagram-title">
+          <span>双螺旋协作拓扑（MICRO JIT COMPILER ⟷ MACRO FLEET OS）</span>
+          <span>SYSTEM TOPOLOGY</span>
+        </div>
+        <div class="flow-steps">
+          <div class="flow-step-box">
+            <div class="flow-step-num">01 · INTERACTION</div>
+            <div class="flow-step-title">交互平面</div>
+            <div class="flow-step-desc">统一入口，任务协议解析与意图分流</div>
+          </div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step-box highlight">
+            <div class="flow-step-num">02 · CONTROL &amp; JIT</div>
+            <div class="flow-step-title">控制平面 + JIT 编译器</div>
+            <div class="flow-step-desc">提取任务特征，动态装配 Harness，准入控制</div>
+          </div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step-box">
+            <div class="flow-step-num">03 · EXECUTION</div>
+            <div class="flow-step-title">执行平面</div>
+            <div class="flow-step-desc">独立 Worktree，物理隔离，云端常驻</div>
+          </div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step-box">
+            <div class="flow-step-num">04 · GOVERNANCE</div>
+            <div class="flow-step-title">治理平面</div>
+            <div class="flow-step-desc">评审门禁，MRSW 单写者锁串行出关</div>
+          </div>
+        </div>
+      </div>
+      <p class="caption">
+        注意 Harness 横跨入口与执行两层，不属于治理层——这是常见的一处归类错误。
+      </p>
+
+      <h3 class="sub-title">核心术语</h3>
+      <div class="card-grid-2">
+        <div class="arch-card">
+          <h4 class="arch-card-title">1. <dfn title="Just-In-Time Harness Compiler">JIT Harness 编译器</dfn></h4>
+          <p class="arch-card-text">
+            在任务到达的运行时，根据具体任务描述与仓库拓扑，动态生成 Memory 格式、Planning 策略、
+            工具最小子集与验证断言的轻量运行时容器。<strong>对应论文的 27B 元模型</strong>。
+          </p>
+        </div>
+        <div class="arch-card">
+          <h4 class="arch-card-title">2. <dfn title="Git Worktree as Virtual Address Space">Worktree 即虚拟地址空间</dfn></h4>
+          <p class="arch-card-text">
+            把 Git Worktree 抽象为 Agent 进程的物理隔离「虚拟内存空间」。每个 Agent 在专属分支与独立目录运行，
+            彻底消除文件写入竞态。<strong>它提供的是快照隔离，不是串行化</strong>——见第五章陷阱 01。
+          </p>
+        </div>
+        <div class="arch-card">
+          <h4 class="arch-card-title">3. <dfn title="Attention Scheduling">注意力调度</dfn></h4>
+          <p class="arch-card-text">
+            把人类审查决策建模为有限服务台资源，按优先级排队。
+            <strong>关键修正：调度器的主职能是准入控制（限流），不是排序。</strong>
+            只排序不限流，队列仍会发散。
+          </p>
+        </div>
+        <div class="arch-card">
+          <h4 class="arch-card-title">4. <dfn title="Multiple Readers, Single Writer">MRSW 单写者锁</dfn></h4>
+          <p class="arch-card-text">
+            多个 Agent 可并发只读分析、单测推导与分支构建；但合入主干与部署时强制获取单写者锁串行执行。
+            <strong>真正的串行点在合并（merge），不在部署</strong>——merge 才是写入共享真值的唯一入口。
+          </p>
+        </div>
+        <div class="arch-card">
+          <h4 class="arch-card-title">5. <dfn title="Harness Intelligence">Harness 智能</dfn></h4>
+          <p class="arch-card-text">
+            构建与优化执行框架的能力，三属性：<strong>适应性</strong>（匹配任务与底座）、
+            <strong>可靠性</strong>（可稳定执行、失败可修复）、<strong>可演化性</strong>（把执行反馈转成更强的未来框架）。
+          </p>
+        </div>
+        <div class="arch-card">
+          <h4 class="arch-card-title">6. <dfn title="到达率与服务率">λ、μ 与 ρ</dfn></h4>
+          <p class="arch-card-text">
+            λ 是 Agent 任务完成速率，μ 是人类评审速率，ρ = λ/μ 是负荷率。
+            <strong>μ 不是常数</strong>——它随在制品数量上升而下降（上下文切换开销），
+            因此系统比朴素排队论预测得更早崩塌。
+          </p>
+        </div>
+      </div>
+
+      <h3 class="sub-title">四模块协议：把程序压成坐标</h3>
+      <p>
+        要让模型学会生成框架，第一步必须把它从「一坨自由发挥的工程代码」变成「有固定结构、机器可生成的产物」。
+        论文把任意框架冻结成四元组 <code>h = (M, P, A, F)</code>，运行时按 <strong>M → P → F → A</strong> 协作：
+      </p>
+
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr><th>模块</th><th>职责</th><th>为什么必须独立</th></tr></thead>
+          <tbody>
+            <tr><td><strong>M</strong> · Memory</td><td>历史如何压缩、工作上下文如何组织</td><td>决定模型「看得见什么」，是精度的上游约束</td></tr>
+            <tr><td><strong>P</strong> · Planning</td><td>如何拆解、下一步做什么、如何应对意外</td><td>决定搜索形状：串行、并行，还是递归委托</td></tr>
+            <tr><td><strong>F</strong> · Capability</td><td>在哪个节点暴露哪个工具或技能</td><td>决定每步动作空间大小，直接影响 token 消耗</td></tr>
+            <tr><td><strong>A</strong> · Action</td><td>动作格式、回传结构、出错如何恢复</td><td>决定能否稳定执行，以及失败时能否局部修复</td></tr>
+          </tbody>
+          <caption>这套协议的表达能力已被验证：三种截然不同的经典框架都能写成同一个坐标系里的点。</caption>
+        </table>
+      </div>
+
+      <div class="eq">ReAct             = ( M_full ,       P_∅ ,      A_react , F_all   )
+Codex / OpenCode  = ( M_compact ,    P_todo ,   A_react , F_all   )
+ROMA / AOrchestra = ( M_subproblem , P_decomp , A_rec ,   F_route )</div>
+
+      <div class="callout emerald">
+        <div class="callout-icon">✓</div>
+        <div class="callout-content">
+          <div class="callout-title">这一步真正的价值：搜索空间降维</div>
+          <p>差异被归约成四个维度上的具体选择，意味着搜索空间从<strong>程序空间</strong>降到了<strong>配置空间</strong>。
+          配套地，作者用 HarnessFactory 在统一协议下重实现了 13 个代表性框架作为种子库——
+          所以生成是<em>在协议约束下装配可执行模块</em>，不是从零合成自由代码。这是整件事能成立的工程前提。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 03 ============ -->
+    <section id="sec-layers" class="doc-section">
+      <div class="section-header">
+        <span class="section-tag">Chapter 03</span>
+        <h2 class="section-title">关键要点分层展开</h2>
+        <p class="section-desc">微观装配、宏观调度、以及两者之间的断层。每层配一个可交互沙盘。</p>
+      </div>
+
+      <h3 class="sub-title">维度一 · 微观：JIT 动态装配沙盘</h3>
+      <p>
+        切换任务类型，观察同一个四模块协议会装配出<strong>结构完全不同</strong>的框架。这正是 JIT 与 AOT 的根本差异：
+        AOT 只能给出一个「对所有任务都次优」的折中解。
+      </p>
+
+      <div class="interactive-sandbox">
+        <div class="sandbox-header">
+          <div class="sandbox-title">⚡ JIT Harness 即时装配沙盘</div>
+          <span class="badge-tag good">四模块协议推演</span>
+        </div>
+        <div class="sandbox-note">
+          说明：四个象限的内容是<strong>按四模块协议对任务特征的推演示意</strong>，用于展示「同一协议如何生成不同结构」，
+          非论文原始数据。论文实测数字见本页上方卡片。
+        </div>
+        <div class="sandbox-tabs">
+          <button class="sandbox-tab-btn active" type="button" onclick="switchJITTab('p0bug',this)">高危线上故障</button>
+          <button class="sandbox-tab-btn" type="button" onclick="switchJITTab('refactor',this)">跨模块重构</button>
+          <button class="sandbox-tab-btn" type="button" onclick="switchJITTab('feature',this)">业务功能开发</button>
+          <button class="sandbox-tab-btn" type="button" onclick="switchJITTab('research',this)">深度调研</button>
+        </div>
+        <div class="sandbox-display-panel" id="jitDisplayPanel"></div>
+      </div>
+
+      <h3 class="sub-title">微观：三阶段训练如何支撑这套装配</h3>
+      <details class="accordion-item" open>
+        <summary class="accordion-trigger">阶段 I · Customization 定制</summary>
+        <div class="accordion-body">
+          <p>用更强的冻结教师模型，针对每个任务从种子库采样 3 个参考框架，生成合规框架作为监督数据。
+          除 SFT 外加了偏好学习：同一底座、同一评测种子下两两比较候选，<strong>只有「得分更高、且时延和成本都不变差」才记为偏好对</strong>。</p>
+          <p class="note">它学到的不只是结构合规，还有「又有效又省」——这解释了后面成本降 36% 从何而来，不是副作用，是设计目标。</p>
+        </div>
+      </details>
+      <details class="accordion-item">
+        <summary class="accordion-trigger">阶段 II · Repairing 修复</summary>
+        <div class="accordion-body">
+          <p>第一阶段被过滤掉的失败生成<strong>不丢弃</strong>，而是转成修复监督：失败框架带上诊断报告
+          （编译错误、接口不匹配、工具调用失败、运行时异常），教师模型在<strong>最多两轮内</strong>给出局部补丁。</p>
+          <p class="note">学到的是「拿到执行反馈后做少量高杠杆修改」，而不是一次性重写。失败样本是最贵的数据，
+          多数流水线在这里把它们扔掉了。</p>
+        </div>
+      </details>
+      <details class="accordion-item">
+        <summary class="accordion-trigger">阶段 III · Evo-GDPO 演化</summary>
+        <div class="accordion-body">
+          <p>把测试时的演化本身变成可训练能力。采样候选与库中前沿在同一任务、同一底座、同一预算下对比，
+          只有超越前沿才保留；奖励、时延、成本三个信号<strong>分组解耦归一化后合并</strong>，避免量纲互相压制。</p>
+          <p class="note">部署后模型参数冻结、只有框架库继续演化——这就是「越用越强」的机制来源。
+          但请注意：这个机制有一个前提，见本页「维度三」。</p>
+        </div>
+      </details>
+
+      <h3 class="sub-title">维度二 · 宏观：排队论与注意力雪崩沙盘</h3>
+      <p>
+        这里做一处<strong>关键修正</strong>：朴素排队论把 μ 当常数。实际上人在队列压力下要频繁切换上下文，
+        每次切换都要重建心智模型，因此 μ 随并发数上升而下降。下面的沙盘同时给出两种算法，你可以直接看到差异。
+      </p>
+
+      <div class="interactive-sandbox">
+        <div class="sandbox-header">
+          <div class="sandbox-title">📊 Agent 集群排队论仿真沙盘</div>
+          <span class="badge-tag bad">含上下文切换惩罚</span>
+        </div>
+        <div class="sandbox-note">
+          模型：λ = N / T_agent × 60；μ_eff = 60 / (T_review × (1 + γ(N−1)))；ρ = λ / μ_eff。
+          γ 为每增加一个并发流带来的审查效率损失。所有参数均为<strong>示意性假设</strong>，请替换为你自己的实测值。
+        </div>
+        <div class="sim-controls">
+          <div class="sim-slider-group">
+            <div class="sim-slider-label"><span>并发 Agent 数 N</span><span class="sim-slider-val" id="agentCountVal">6</span></div>
+            <input type="range" min="1" max="24" value="6" class="sim-slider" id="agentCountSlider" oninput="runQueueSim()">
+            <span class="sim-hint">单 Agent 平均 35 分钟产出一个 PR</span>
+          </div>
+          <div class="sim-slider-group">
+            <div class="sim-slider-label"><span>单次审查耗时 T (分钟)</span><span class="sim-slider-val" id="reviewTimeVal">15</span></div>
+            <input type="range" min="3" max="45" value="15" class="sim-slider" id="reviewTimeSlider" oninput="runQueueSim()">
+            <span class="sim-hint">γ = 0 时 μ = 60/T</span>
+          </div>
+          <div class="sim-slider-group">
+            <div class="sim-slider-label"><span>上下文切换惩罚 γ</span><span class="sim-slider-val" id="gammaVal">6%</span></div>
+            <input type="range" min="0" max="20" value="6" class="sim-slider" id="gammaSlider" oninput="runQueueSim()">
+            <span class="sim-hint">γ &gt; 0 时 μ 随 N 上升而下降</span>
+          </div>
+        </div>
+        <div class="sim-metrics-grid">
+          <div class="sim-metric-card"><div class="sim-metric-desc">生成率 λ</div>
+            <div class="sim-metric-num" id="simLambda" style="color:var(--cyan)">—</div></div>
+          <div class="sim-metric-card"><div class="sim-metric-desc">有效审查率 μ_eff</div>
+            <div class="sim-metric-num" id="simMu" style="color:var(--amber)">—</div></div>
+          <div class="sim-metric-card"><div class="sim-metric-desc">实际负荷 ρ</div>
+            <div class="sim-metric-num" id="simRho" style="color:var(--rose)">—</div></div>
+          <div class="sim-metric-card"><div class="sim-metric-desc">朴素 ρ（γ=0）</div>
+            <div class="sim-metric-num" id="simRhoNaive" style="color:var(--text-ghost)">—</div></div>
+          <div class="sim-metric-card"><div class="sim-metric-desc">可持续并发上限</div>
+            <div class="sim-metric-num" id="simNmax" style="color:var(--emerald)">—</div></div>
+        </div>
+        <div class="sim-verdict-box" id="simVerdict">—</div>
+      </div>
+
+      <div class="callout warning">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content">
+          <div class="callout-title">被误判的调度器职能</div>
+          <p>实践中的状态面板 + 优先级队列能<strong>看见</strong>队列、能<strong>排序</strong>队列，
+          但不能<strong>阻止</strong>队列增长——它只给已完成的任务排优先级，对并发数量没有任何约束。</p>
+          <p>因此「限制在制品」不是优化项，是<strong>缺口项</strong>。做法（CONWIP）：完成一个才准入一个，
+          配合 <code>优先级 = 延迟成本 / 任务时长</code> 排序——分母的存在让高影响的小任务自动插队，
+          从而压低队列长度本身，而不只是重排队列。</p>
+        </div>
+      </div>
+
+      <h3 class="sub-title">维度三 · 断层：演化闭环在哪里断掉</h3>
+      <p>
+        这是两份材料拼接后才看得见的问题，也是全篇最重要的一节。
+        微观的演化能力是被<strong>可自动计算的奖励</strong>喂养的：Evo-GDPO 的三个信号（奖励/时延/成本）全部可自动测量，
+        Streaming 模式的进步靠累计准确率曲线证明——这要求每题结束就有真值标签。
+      </p>
+      <p>
+        而论文的 9 个基准<strong>全部是短程、单次、可自动判分的任务</strong>，
+        没有一个是「跨 2000 小时的仓库演化」。宏观面对的恰恰是后者。
+      </p>
+
+      <figure>
+        <svg viewBox="0 0 760 320" role="img" aria-label="对比图：JIT 场景下演化闭环可自动完成，Fleet 场景下反馈回路在人类评审处断裂">
+          <title>演化闭环与断裂的反馈回路</title>
+          <g font-family="-apple-system,BlinkMacSystemFont,PingFang SC,sans-serif">
+            <text x="185" y="18" font-size="13" font-weight="700" fill="var(--emerald)" text-anchor="middle">JIT 场景 · 闭环</text>
+            <rect x="20" y="40" width="330" height="40" rx="7" fill="var(--bg-subtle)" stroke="var(--border-medium)" stroke-width="1"/>
+            <text x="185" y="65" font-size="13" fill="var(--text-title)" text-anchor="middle">任务</text>
+            <rect x="20" y="95" width="330" height="40" rx="7" fill="var(--bg-subtle)" stroke="var(--border-medium)" stroke-width="1"/>
+            <text x="185" y="120" font-size="13" fill="var(--text-title)" text-anchor="middle">JIT 框架生成</text>
+            <rect x="20" y="150" width="330" height="40" rx="7" fill="var(--bg-subtle)" stroke="var(--border-medium)" stroke-width="1"/>
+            <text x="185" y="175" font-size="13" fill="var(--text-title)" text-anchor="middle">执行</text>
+            <rect x="20" y="205" width="330" height="40" rx="7" fill="var(--emerald-soft)" stroke="var(--emerald-border)" stroke-width="1"/>
+            <text x="185" y="230" font-size="13" font-weight="700" fill="var(--emerald)" text-anchor="middle">自动判分（有真值）</text>
+            <path d="M20 225 L4 225 L4 115 L20 115" fill="none" stroke="var(--emerald)" stroke-width="1.8" stroke-linejoin="round"/>
+            <text x="14" y="175" font-size="10.5" fill="var(--emerald)" transform="rotate(-90 14 175)">回灌档案库</text>
+            <text x="185" y="268" font-size="11.5" fill="var(--text-muted)" text-anchor="middle">奖励可自动计算 → 可持续累积</text>
+
+            <text x="575" y="18" font-size="13" font-weight="700" fill="var(--amber)" text-anchor="middle">Fleet 场景 · 半开环</text>
+            <rect x="410" y="40" width="330" height="40" rx="7" fill="var(--bg-subtle)" stroke="var(--border-medium)" stroke-width="1"/>
+            <text x="575" y="65" font-size="13" fill="var(--text-title)" text-anchor="middle">任务</text>
+            <rect x="410" y="95" width="330" height="40" rx="7" fill="var(--bg-subtle)" stroke="var(--border-medium)" stroke-width="1"/>
+            <text x="575" y="120" font-size="13" fill="var(--text-title)" text-anchor="middle">Agent Fleet 执行</text>
+            <rect x="410" y="150" width="330" height="40" rx="7" fill="var(--bg-subtle)" stroke="var(--border-medium)" stroke-width="1"/>
+            <text x="575" y="175" font-size="13" fill="var(--text-title)" text-anchor="middle">产出</text>
+            <rect x="410" y="205" width="330" height="40" rx="7" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1" stroke-dasharray="5 4"/>
+            <text x="575" y="230" font-size="13" font-weight="700" fill="var(--amber)" text-anchor="middle">无自动真值 → 需人类评审</text>
+            <path d="M740 225 L756 225 L756 178" fill="none" stroke="var(--amber)" stroke-width="1.8" stroke-dasharray="5 4"/>
+            <path d="M756 152 L756 115 L740 115" fill="none" stroke="var(--text-ghost)" stroke-width="1.8" stroke-dasharray="5 4"/>
+            <g stroke="var(--rose)" stroke-width="2.2" stroke-linecap="round">
+              <line x1="748" y1="170" x2="764" y2="154"/><line x1="764" y1="170" x2="748" y2="154"/>
+            </g>
+            <text x="774" y="182" font-size="10.5" fill="var(--rose)" transform="rotate(-90 774 182)" text-anchor="start">回灌缓慢且稀疏</text>
+            <text x="575" y="268" font-size="11.5" fill="var(--text-muted)" text-anchor="middle">奖励不可自动计算 → 人是最慢环节</text>
+          </g>
+        </svg>
+        <figcaption class="caption">
+          同一个演化机制，在两种奖励可得性下呈现完全不同的闭环质量。
+          JIT 的「越用越强」<strong>不能</strong>默认迁移到 Fleet 层。
+        </figcaption>
+      </figure>
+
+      <div class="callout info">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content">
+          <div class="callout-title">三条应对路径（按可行性排序）</div>
+          <p><strong>① 可验证性工程（最现实）</strong>——把验收标准从「人看代码」转成可执行判据：属性测试、契约测试、回归基线、不变式检查。</p>
+          <p><strong>② 评审信号结构化（中等）</strong>——让人类评审不只产出通过/驳回，而是结构化标签（假设错误 / 实现偏差 / 遗漏边界 / 风格问题）。</p>
+          <p><strong>③ 代理奖励模型（风险最高）</strong>——训练评审模型替代人类打分。风险是奖励劫持，且在 Fleet 规模下偏差会被放大 N 倍、极难察觉。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 04 ============ -->
+    <section id="sec-causality" class="doc-section">
+      <div class="section-header">
+        <span class="section-tag">Chapter 04</span>
+        <h2 class="section-title">对比与因果推导</h2>
+        <p class="section-desc">把方案摆在一起对照，并拆出两条因果链——理解「为什么」优先于记住「是什么」。</p>
+      </div>
+
+      <h3 class="sub-title">架构范式三维对比</h3>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr><th>维度</th><th>传统 Copilot 辅助</th><th>经典 Agent Swarm（静态）</th><th>JIT + Fleet 治理</th></tr></thead>
+          <tbody>
+            <tr><td><strong>运行环境隔离</strong></td>
+              <td><span class="badge-tag bad">无隔离</span> 当前工作区污染</td>
+              <td><span class="badge-tag warn">弱隔离</span> 共享分支竞态</td>
+              <td><span class="badge-tag good">强隔离</span> Worktree + 串行化出关</td></tr>
+            <tr><td><strong>上下文装配</strong></td>
+              <td>全量代码直接注入</td>
+              <td>通用静态 Prompt</td>
+              <td><span class="badge-tag good">动态编译</span> 按任务装配四模块</td></tr>
+            <tr><td><strong>并发治理</strong></td>
+              <td>人类逐行交互等待</td>
+              <td>无界并发，直接轰炸 PR 列表</td>
+              <td><span class="badge-tag good">准入控制</span> 限流 + 优先级排序</td></tr>
+            <tr><td><strong>主干发布</strong></td>
+              <td>人工 Commit / Push</td>
+              <td>多 Agent 并发写入冲突</td>
+              <td><span class="badge-tag good">MRSW 锁</span> 合并串行化</td></tr>
+            <tr><td><strong>演化能力</strong></td>
+              <td>无持久演化</td>
+              <td>手动微调 Prompt</td>
+              <td><span class="badge-tag good">档案库累积</span>（前提见 4.2）</td></tr>
+            <tr><td><strong>成本表现</strong></td>
+              <td>基准</td><td>随并发线性上升</td>
+              <td><span class="badge-tag good">实测 −36%</span> 更短更精准的执行</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sub-title">因果链一：为什么扩容会变成负收益</h3>
+      <div class="eq">并发 N 上升 → 等待与协调成本上升 → 单 Agent 效率下降 → 总产出越过峰值后回落
+
+C(N) = N / ( 1 + σ(N−1) + κ·N(N−1) )
+N*   = √((1−σ)/κ)
+
+σ = 竞争成本（评审队列 · 单写者锁 · 本机资源争抢）
+κ = 一致性成本（上下文同步 · 语义冲突 · 集成测试交互面）</div>
+
+      <div class="interactive-sandbox">
+        <div class="sandbox-header">
+          <div class="sandbox-title">📈 可扩展性曲线沙盘</div>
+          <span class="badge-tag info">USL 模型</span>
+        </div>
+        <div class="sandbox-note">
+          σ 与 κ 为示意参数。定性结论可从模型解析求导得到、不依赖具体参数：
+          <strong>只要 κ &gt; 0，有效产出必然在 N* 处见顶后回落。</strong>
+        </div>
+        <div class="sim-controls">
+          <div class="sim-slider-group">
+            <div class="sim-slider-label"><span>σ 竞争成本</span><span class="sim-slider-val" id="uslSVal">0.080</span></div>
+            <input type="range" min="0" max="40" value="8" class="sim-slider" id="uslSSlider" oninput="runUslSim()">
+            <span class="sim-hint">串行化等待：评审队列、锁、本机资源争抢</span>
+          </div>
+          <div class="sim-slider-group">
+            <div class="sim-slider-label"><span>κ 一致性成本</span><span class="sim-slider-val" id="uslKVal">0.0050</span></div>
+            <input type="range" min="0" max="30" value="5" class="sim-slider" id="uslKSlider" oninput="runUslSim()">
+            <span class="sim-hint">跨 Agent 协调：上下文同步与语义冲突</span>
+          </div>
+        </div>
+
+        <figure style="margin-top:.5rem">
+          <svg viewBox="0 0 760 300" role="img" aria-label="有效产出随并发 Agent 数量变化的曲线，峰值由 N* 决定">
+            <title>USL 可扩展性曲线</title>
+            <g font-family="-apple-system,BlinkMacSystemFont,PingFang SC,sans-serif">
+              <line x1="46" y1="240" x2="740" y2="240" stroke="var(--border-medium)" stroke-width="1"/>
+              <line x1="46" y1="30" x2="46" y2="240" stroke="var(--border-medium)" stroke-width="1"/>
+              <g stroke="var(--border-subtle)" stroke-width="1">
+                <line x1="46" y1="198" x2="740" y2="198"/><line x1="46" y1="156" x2="740" y2="156"/>
+                <line x1="46" y1="114" x2="740" y2="114"/><line x1="46" y1="72" x2="740" y2="72"/>
+                <line x1="46" y1="30" x2="740" y2="30"/>
+              </g>
+              <g font-size="10.5" fill="var(--text-ghost)" text-anchor="end">
+                <text x="38" y="202">1</text><text x="38" y="160">2</text><text x="38" y="118">3</text>
+                <text x="38" y="76">4</text><text x="38" y="34">5</text>
+              </g>
+              <g font-size="10.5" fill="var(--text-ghost)" text-anchor="middle">
+                <text x="46" y="260">1</text><text x="142" y="260">5</text><text x="261" y="260">10</text>
+                <text x="381" y="260">15</text><text x="501" y="260">20</text><text x="620" y="260">25</text><text x="740" y="260">30</text>
+              </g>
+              <text x="393" y="282" font-size="11" fill="var(--text-muted)" text-anchor="middle">并发 Agent 数量 N</text>
+              <text x="14" y="135" font-size="11" fill="var(--text-muted)" text-anchor="middle" transform="rotate(-90 14 135)">有效产出倍数</text>
+              <line x1="46" y1="198" x2="142" y2="30" stroke="var(--text-ghost)" stroke-width="1.5" stroke-dasharray="5 4"/>
+              <text x="148" y="24" font-size="10.5" fill="var(--text-ghost)">理想线性（N=5 处已超出坐标）</text>
+              <polyline id="uslPolyline" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" points=""/>
+              <line id="uslPeakLine" x1="0" y1="0" x2="0" y2="0" stroke="var(--accent)" stroke-width="1" stroke-dasharray="3 3"/>
+              <circle id="uslPeakDot" cx="-99" cy="-99" r="5.5" fill="var(--accent)"/>
+              <text id="uslPeakLabel" x="-99" y="-99" font-size="11.5" font-weight="700" fill="var(--accent)"></text>
+              <circle id="uslEndDot" cx="-99" cy="-99" r="4.5" fill="none" stroke="var(--rose)" stroke-width="2"/>
+              <text id="uslEndLabel" x="740" y="96" font-size="10.5" fill="var(--rose)" text-anchor="end"></text>
+            </g>
+          </svg>
+        </figure>
+
+        <div class="sim-metrics-grid">
+          <div class="sim-metric-card"><div class="sim-metric-desc">峰值并发 N*</div>
+            <div class="sim-metric-num" id="uslNstar" style="color:var(--accent)">—</div></div>
+          <div class="sim-metric-card"><div class="sim-metric-desc">峰值产出 C(N*)</div>
+            <div class="sim-metric-num" id="uslPeakVal" style="color:var(--accent)">—</div></div>
+          <div class="sim-metric-card"><div class="sim-metric-desc">建议 WIP 上限</div>
+            <div class="sim-metric-num" id="uslCap" style="color:var(--emerald)">—</div></div>
+          <div class="sim-metric-card"><div class="sim-metric-desc">30 个时产出</div>
+            <div class="sim-metric-num" id="uslC30" style="color:var(--rose)">—</div></div>
+        </div>
+        <div class="sim-verdict-box" id="uslVerdict">—</div>
+      </div>
+
+      <div class="callout danger">
+        <div class="callout-icon">🔥</div>
+        <div class="callout-content">
+          <div class="callout-title">这条曲线最重要的一句话</div>
+          <p>在默认参数下，<strong>30 个 Agent 的有效产出（3.91×）低于 14 个（4.75×）</strong>。
+          盲目扩容是负收益——而这在扩容之前无法凭感觉察觉，因为每个 Agent 单看都「在正常干活」。</p>
+        </div>
+      </div>
+
+      <h3 class="sub-title">因果链二：为什么演化闭环会断</h3>
+      <div class="eq">任务长程且不可自动判分 → 奖励需要人来给 → 反馈延迟从分钟变成小时/天
+→ 框架库无法累积 → 不会越用越强</div>
+      <p>
+        链条的起点是<strong>任务性质</strong>，不是技术能力。这也解释了为什么「先上 Agent」通常是错误顺序——
+        在验收标准不可执行的前提下，加 Agent 只会加快产生未经验证的产出。
+      </p>
+
+      <h3 class="sub-title">五个可计算模型</h3>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr><th>模型</th><th>公式 / 判据</th><th>回答</th><th>关键结论</th></tr></thead>
+          <tbody>
+            <tr><td><strong>① 可扩展性</strong></td><td class="num">C(N)=N/(1+σ(N−1)+κN(N−1))</td>
+              <td>该开几个</td><td>κ&gt;0 时必有峰值，越过即负收益</td></tr>
+            <tr><td><strong>② 排序</strong></td><td class="num">优先级 = 延迟成本 / 任务时长</td>
+              <td>先处理谁</td><td>分母让小任务插队，压低队列长度本身</td></tr>
+            <tr><td><strong>③ 准入</strong></td><td class="num">μ = μ(WIP)；CONWIP</td>
+              <td>限多少</td><td>提高 μ 天花板极低，限 WIP 才是杠杆</td></tr>
+            <tr><td><strong>④ 摊销</strong></td><td class="num">Streaming 累计 ≤ AOT 的首个 n</td>
+              <td>值不值得建库</td><td>盈亏平衡点第 <strong>11</strong> 次；Static 永远最贵</td></tr>
+            <tr><td><strong>⑤ 投机</strong></td><td class="num">p·T_save·C_agent &gt; (1−p)·C_waste·N_msg</td>
+              <td>该不该预发送</td><td>取决于误判是否传染，而非等待时长</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="interactive-sandbox">
+        <div class="sandbox-header">
+          <div class="sandbox-title">🎲 预发送（投机执行）决策沙盘</div>
+          <span class="badge-tag warn">实物期权模型</span>
+        </div>
+        <div class="sandbox-note">
+          不是 CPU 流水线：分支预测错误的冲刷代价固定且极小，而 Agent 的错误假设会向下游传染。
+          放大倍数取预排消息条数——实践观察是「架构未定时预排六条消息，会把一个早期误判放大六次」。
+        </div>
+        <div class="sim-controls">
+          <div class="sim-slider-group">
+            <div class="sim-slider-label"><span>假设正确概率 p</span><span class="sim-slider-val" id="pfPVal">0.75</span></div>
+            <input type="range" min="5" max="99" value="75" class="sim-slider" id="pfPSlider" oninput="runPrefetchSim()">
+            <span class="sim-hint">可由同类任务历史通过率估计</span>
+          </div>
+          <div class="sim-slider-group">
+            <div class="sim-slider-label"><span>节省等待 T_save (h)</span><span class="sim-slider-val" id="pfTVal">0.5</span></div>
+            <input type="range" min="1" max="60" value="5" class="sim-slider" id="pfTSlider" oninput="runPrefetchSim()">
+            <span class="sim-hint">Agent 等待人类输入期间的空闲时间</span>
+          </div>
+          <div class="sim-slider-group">
+            <div class="sim-slider-label"><span>预排消息条数</span><span class="sim-slider-val" id="pfNVal">6</span></div>
+            <input type="range" min="1" max="12" value="6" class="sim-slider" id="pfNSlider" oninput="runPrefetchSim()">
+            <span class="sim-hint">误判传染的放大倍数</span>
+          </div>
+        </div>
+        <div class="sim-metrics-grid">
+          <div class="sim-metric-card"><div class="sim-metric-desc">期望收益</div>
+            <div class="sim-metric-num" id="pfGain" style="color:var(--emerald)">—</div></div>
+          <div class="sim-metric-card"><div class="sim-metric-desc">期望损失</div>
+            <div class="sim-metric-num" id="pfLoss" style="color:var(--rose)">—</div></div>
+          <div class="sim-metric-card"><div class="sim-metric-desc">临界正确率 p*</div>
+            <div class="sim-metric-num" id="pfPth" style="color:var(--amber)">—</div></div>
+          <div class="sim-metric-card"><div class="sim-metric-desc">最多可预排</div>
+            <div class="sim-metric-num" id="pfMaxN" style="color:var(--cyan)">—</div></div>
+        </div>
+        <div class="sim-verdict-box" id="pfVerdict">—</div>
+      </div>
+    </section>
+
+    <!-- ============ 05 ============ -->
+    <section id="sec-pitfalls" class="doc-section">
+      <div class="section-header">
+        <span class="section-tag">Chapter 05</span>
+        <h2 class="section-title">典型陷阱与防御</h2>
+        <p class="section-desc">每条都有「表现 + 防御」两栏。前四条来自工程实践，后两条来自数据核验。</p>
+      </div>
+
+      <div class="card-grid-2">
+        <div class="arch-card" style="border-left:4px solid var(--rose)">
+          <span class="badge-tag bad">PITFALL 01</span>
+          <h4 class="arch-card-title">把快照隔离当成串行化</h4>
+          <p class="arch-card-text">
+            <strong>表现：</strong>认为开了 Worktree 就安全了。但两个 Agent 分别改 <code>auth.py</code>
+            与 <code>session.py</code>，文本零冲突、合并成功，系统却崩溃——一个把校验改成异步，另一个假设它同步。
+            <br><strong>防御：</strong>Worktree 只是快照隔离。补上 merge queue + 合并后全量验证（可串行化检查），
+            并对跨文件语义冲突保持人工警觉——这一层目前没有成熟工具覆盖。
+          </p>
+        </div>
+
+        <div class="arch-card" style="border-left:4px solid var(--rose)">
+          <span class="badge-tag bad">PITFALL 02</span>
+          <h4 class="arch-card-title">单一模型自审盲区 · 与递归审查</h4>
+          <p class="arch-card-text">
+            <strong>表现：</strong>让写代码的同一模型自我审查，倾向维护自身逻辑盲区。
+            更隐蔽的是递归审查——要求模型「再找五个问题」，它往往会<strong>努力凑满五个</strong>，
+            即使剩下的是想象出来的 Bug。
+            <br><strong>防御：</strong>异构模型交叉核验；复核由<strong>改动规模与失败代价</strong>触发，
+            必须有明确停止条件，而非「越多越好」。
+          </p>
+        </div>
+
+        <div class="arch-card" style="border-left:4px solid var(--amber)">
+          <span class="badge-tag warn">PITFALL 03</span>
+          <h4 class="arch-card-title">全量工具挂载 · Tool Bloat</h4>
+          <p class="arch-card-text">
+            <strong>表现：</strong>一次性挂载全部接口工具，模型在决策树上注意力发散，选错参数的概率上升，
+            token 也被工具定义大量消耗。
+            <br><strong>防御：</strong>由 JIT 编译器依据任务特征裁剪工具子集。
+            论文的对照组显示，更精准的执行能把 token 从 52.7 万压到 21.2 万而性能反升——
+            <strong>增益来自更短的执行，不是更长的轨迹</strong>。
+          </p>
+        </div>
+
+        <div class="arch-card" style="border-left:4px solid var(--amber)">
+          <span class="badge-tag warn">PITFALL 04</span>
+          <h4 class="arch-card-title">未编译的提示词替代 SOP</h4>
+          <p class="arch-card-text">
+            <strong>表现：</strong>用自然语言一段段写长指令，每次执行方差巨大，偶发遗漏关键步骤。
+            省下的不是打字时间，而是每次重新回忆顺序、检查遗漏的认知成本。
+            <br><strong>防御：</strong><code>Skill ≈ Compiled SOP</code>，把多步流程编译为带确定性断言的流程。
+            <strong>但编译产物会位衰减</strong>——必须配重编译触发条件（依赖变更 / API 签名变更 / 连续失败率上升）。
+          </p>
+        </div>
+
+        <div class="arch-card" style="border-left:4px solid var(--cyan)">
+          <span class="badge-tag info">PITFALL 05</span>
+          <h4 class="arch-card-title">拿结构参数当可用并发</h4>
+          <p class="arch-card-text">
+            <strong>表现：</strong>用理论上的协调成本推算最优并发。但真实数据里返工率几乎总是随并发上升，
+            拟合出的<strong>「有效 σ/κ」会系统性放大</strong>——实测为 σ ×2.14、κ ×2.74，
+            最优并发从 13.6 掉到 7.8，<strong>结构参数会高估可用并发约 75%</strong>。
+            <br><strong>防御：</strong>用实测数据拟合，且<strong>只依据 N* 决策</strong>——
+            σ 与 κ 单独辨识度不高，可以互相补偿，但组合量 (1−σ)/κ 稳定得多。
+          </p>
+        </div>
+
+        <div class="arch-card" style="border-left:4px solid var(--cyan)">
+          <span class="badge-tag info">PITFALL 06</span>
+          <h4 class="arch-card-title">代理指标被劫持</h4>
+          <p class="arch-card-text">
+            <strong>表现：</strong>用 Agent 会话数、提交数、Token 量、评审问题条数衡量效率。
+            这些<strong>每一个都存在被优化的路径</strong>——要求找五个问题，就会得到五个问题。
+            <br><strong>防御：</strong>跟踪真实指标：返工次数、合并后故障率、交付周期、Skill 命中率与失效率。
+            验收指标必须可被外部真值校验，而非自报数量。
+          </p>
+        </div>
+      </div>
+
+      <div class="callout danger">
+        <div class="callout-icon">🔓</div>
+        <div class="callout-content">
+          <div class="callout-title">一条被当作成功案例记录的权限逃逸</div>
+          <p>在「十分钟搭完远程环境」的成功演示里，原文同时记录了：Agent
+          <strong>从本机找到了 API 密钥，并在远端取得完整 root 权限</strong>。
+          这是两个独立失效——凭据以明文存在于 Agent 可读路径，以及 Agent 拿到了远超任务需要的权限。</p>
+          <p>值得警惕的是叙事 framing：速度与控制权是<strong>同一套自动化的一体两面</strong>。
+          个人实验可以接受这种交换；连接生产仓库和真实密钥后，运维能力本身就变成了产品的一部分。
+          在一个 Agent 能拿到 root 的体系里，<strong>不可被 Agent 篡改的审计日志是唯一还能追溯发生了什么的东西</strong>。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 06 ============ -->
+    <section id="sec-conclusions" class="doc-section">
+      <div class="section-header">
+        <span class="section-tag">Chapter 06</span>
+        <h2 class="section-title">结论与演进建议</h2>
+        <p class="section-desc">先给结论分级，再给路线图。把不同可信度的结论同等对待，是当前最大的误读风险。</p>
+      </div>
+
+      <h3 class="sub-title">证据强度分级</h3>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr><th>层次</th><th>主张</th><th>证据</th><th>强度</th><th>怎么用</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Intra-Agent</strong><br/><span class="note">单个 Agent</span></td>
+              <td>框架可被即时生成并演化</td>
+              <td>18/18 配对提升、24/24 跨模型迁移为正、成本平均 −36%</td>
+              <td><span class="badge-tag good">强</span></td><td>可直接采信</td></tr>
+            <tr><td><strong>Inter-Agent</strong><br/><span class="note">Agent 集群</span></td>
+              <td>Fleet 需要调度、隔离与治理</td>
+              <td>单人 2000 小时经验，<strong>无对照组</strong></td>
+              <td><span class="badge-tag warn">中</span></td><td>方向可信，参数须自测</td></tr>
+            <tr><td><strong>Human-Agent</strong><br/><span class="note">人机组织</span></td>
+              <td>人与 Agent 如何组成组织</td>
+              <td>纯推测，无可验证答案</td>
+              <td><span class="badge-tag bad">弱</span></td><td>不作为行动依据</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sub-title">四阶段演进路线图</h3>
+      <div class="flow-diagram-container">
+        <div class="flow-diagram-title"><span>FOUR-STAGE ADOPTION ROADMAP</span><span>EVOLUTION PHASES</span></div>
+        <div class="flow-steps">
+          <div class="flow-step-box">
+            <div class="flow-step-num">LEVEL 1</div>
+            <div class="flow-step-title">单体助手</div>
+            <div class="flow-step-desc">单 Agent 交互，建立 SOP 片段库，记录基线指标</div>
+          </div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step-box">
+            <div class="flow-step-num">LEVEL 2</div>
+            <div class="flow-step-title">物理隔离</div>
+            <div class="flow-step-desc">Worktree 隔离 + merge queue 串行化出关</div>
+          </div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step-box highlight">
+            <div class="flow-step-num">LEVEL 3</div>
+            <div class="flow-step-title">准入与度量</div>
+            <div class="flow-step-desc">CONWIP 限流 + 真实指标 + 可执行验收判据</div>
+          </div>
+          <div class="flow-arrow">➔</div>
+          <div class="flow-step-box">
+            <div class="flow-step-num">LEVEL 4</div>
+            <div class="flow-step-title">自主演化</div>
+            <div class="flow-step-desc">框架档案库持续累积，越用越强</div>
+          </div>
+        </div>
+      </div>
+      <p class="note">
+        门槛条件：<strong>L1→L2</strong> 连续 2 周合并通过率 &gt; 80%；
+        <strong>L2→L3</strong> 在制品不增长（ρ ≤ 1 持续成立）；
+        <strong>L3→L4</strong> 验收判据已可执行、且档案库有失效检测；
+        <strong>停止扩容</strong>的判据是「加一个 Agent 的产出增量为负」，不是「跑不动了」。
+      </p>
+
+      <h3 class="sub-title">成熟度交互自测</h3>
+      <div class="checklist-container">
+        <p class="note" style="margin-bottom:.9rem">
+          勾选团队已落地的能力，系统实时给出等级与建议。权重按「对产出的杠杆大小」分配。
+        </p>
+
+        <label class="checklist-item">
+          <input type="checkbox" onchange="calculateScore()" class="chk-item" data-score="15">
+          <span class="checklist-label"><strong>[隔离]</strong> One Agent · One Worktree · One Branch，
+          且合并经 merge queue + 合并后全量验证串行出关。</span>
+        </label>
+        <label class="checklist-item">
+          <input type="checkbox" onchange="calculateScore()" class="chk-item" data-score="20">
+          <span class="checklist-label"><strong>[准入]</strong> 有显式的在制品上限（CONWIP），
+          并按「延迟成本 / 任务时长」排序，而非只按完成时间。</span>
+        </label>
+        <label class="checklist-item">
+          <input type="checkbox" onchange="calculateScore()" class="chk-item" data-score="25">
+          <span class="checklist-label"><strong>[验收]</strong> 验收标准已转成可执行判据
+          （属性/契约/回归测试与不变式检查），而非依赖人肉看代码。</span>
+        </label>
+        <label class="checklist-item">
+          <input type="checkbox" onchange="calculateScore()" class="chk-item" data-score="20">
+          <span class="checklist-label"><strong>[度量]</strong> 跟踪真实指标（返工率、合并后故障率、交付周期），
+          而非会话数、提交数、Token 量等代理指标。</span>
+        </label>
+        <label class="checklist-item">
+          <input type="checkbox" onchange="calculateScore()" class="chk-item" data-score="20">
+          <span class="checklist-label"><strong>[演化]</strong> 框架 / Skill 资产库可持续累积，
+          且配有失效（位衰减）检测与重编译触发条件。</span>
+        </label>
+
+        <div class="checklist-score-bar">
+          <div>
+            <span class="note">当前成熟度：</span>
+            <strong id="chkScoreVal" style="font-size:1.3rem;color:var(--accent);font-family:var(--font-mono)">0 / 100</strong>
+          </div>
+          <div id="chkGradeBadge" class="badge-tag bad">LEVEL 0：起点</div>
+        </div>
+        <div id="chkAdviceText" class="note" style="margin-top:.7rem">
+          建议从 Worktree 隔离与串行出关开始，先解决基础并发竞态。
+        </div>
+      </div>
+
+      <div class="callout insight">
+        <div class="callout-icon">🎯</div>
+        <div class="callout-content">
+          <div class="callout-title">最终该带走的三样东西</div>
+          <p><strong>① 一个可测量的规模模型。</strong>它把「该开几个 Agent」从感觉变成参数，并预言盲目扩容是负收益。</p>
+          <p><strong>② 一个准入控制纪律。</strong>调度器的主职能是限流，不是排序——你可能已经有现成的 WIP 上限了：
+          订阅套餐的并发限制。</p>
+          <p><strong>③ 一条演化闭环的前提。</strong>在奖励不可自动判分的场景里，先做的不是上 Agent，
+          而是把验收标准转成可执行判据。这一条不成立，其余都会退化为「更快地产生未经验证的产出」。</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="doc-footer">
+      <p>
+        <b>来源核验</b> · JIT-Agent：arXiv:2608.25593v1，2026-08-26 提交，新加坡国立大学 LV-NUS Lab，
+        16 位作者，一作 Guibin Zhang；元模型为 27B（Qwen3.6-27B 底座）；开源见 github.com/bingreeky/JIT。
+        工程实践部分来源为中文分析稿（best.xiaohu.ai），底本为 David Ondrej 的 X Article，部分图片在抓取时已缺失。
+      </p>
+      <p>
+        <b>参数声明</b> · 沙盘中的 σ、κ、T_agent=35min、T_review、γ、以及 JIT 成本参数
+        （首次生成 0.60 / 下界 0.21 / 首次执行 0.64 / 下界 0.50，衰减常数 6 与 8）
+        <b>均为示意性假设</b>，仅用于展示模型形态与决策方法，非实测值，请替换为你自己的数据。
+        文中标注「实测」的数字（18/18、−36.0%、+24.8、+7.6 等）已逐条比对论文原文。
+        JIT 装配沙盘的四象限内容为按四模块协议对任务特征的推演示意，非论文原始数据。
+      </p>
+      <p>
+        <b>数据口径提示</b> · 「云端 Agent 占内部 PR 近 60%」<b>不可引用</b>：官方 2026-06 公布的是 &gt;40% 且增长，
+        60% 那张图在抓取时已缺失。订阅价格、模型排名、语音输入提速倍数同理，均绑定特定时点。
+      </p>
+      <p><b>配套工具</b> · <code>fleetlab.py</code>（USL 拟合 / 盈亏平衡 / 投机决策，纯标准库）可将本文模型代入真实运行记录。</p>
+    </footer>
+
+  </main>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ================= 主题 ================= */
+var root = document.documentElement;
+function setTheme(t){
+  root.setAttribute('data-theme', t);
+  document.getElementById('themeIcon').textContent = (t === 'dark') ? '🌙' : '☀️';
+  document.getElementById('themeText').textContent = (t === 'dark') ? '深色模式' : '浅色模式';
+  try { localStorage.setItem('doc-theme', t); } catch(e) {}
+}
+var saved = null;
+try { saved = localStorage.getItem('doc-theme'); } catch(e) {}
+setTheme(saved || 'dark');
+document.getElementById('themeToggleBtn').addEventListener('click', function(){
+  setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+
+/* ================= 进度条 + 目录高亮 ================= */
+var bar = document.getElementById('reading-progress');
+var sections = [].slice.call(document.querySelectorAll('.doc-section'));
+var navLinks = [].slice.call(document.querySelectorAll('#tocList a'));
+var ticking = false;
+
+function onScroll(){
+  var y = window.pageYOffset || document.documentElement.scrollTop;
+  var h = document.documentElement.scrollHeight - window.innerHeight;
+  bar.style.width = (h > 0 ? Math.min(100, y / h * 100) : 0) + '%';
+
+  var active = null;
+  for (var i = 0; i < sections.length; i++){
+    if (sections[i].getBoundingClientRect().top - 140 <= 0) active = sections[i];
+  }
+  if (!active && sections.length) active = sections[0];
+  var id = active ? active.getAttribute('id') : null;
+  navLinks.forEach(function(a){
+    a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+  });
+  ticking = false;
+}
+window.addEventListener('scroll', function(){
+  if (!ticking){ ticking = true; window.requestAnimationFrame(onScroll); }
+}, { passive: true });
+window.addEventListener('resize', onScroll);
+onScroll();
+
+/* ================= 沙盘 1 · JIT 装配 ================= */
+var jitConfigs = {
+  p0bug: {
+    title: '高危线上故障修复',
+    m: '栈帧快照 + 近 3 次相关提交 diff + 错误拓扑，裁剪无关历史',
+    p: '反向因果追溯，严格线性验证，禁止发散探索',
+    f: 'AST 精确查找 · 最小单测运行器 · 运行时诊断器',
+    a: '强门禁：异构模型交叉审查 + 灰度单测 100% 通过断言',
+    foot: '结构特征：窄搜索、深验证。上下文与工具都被大幅裁剪，验证门禁最重。'
+  },
+  refactor: {
+    title: '跨模块重构',
+    m: '全局依赖拓扑图 + 架构决策记录（ADR）',
+    p: '多路径推演，支持分支回溯与反思',
+    f: '语义重命名器 · 依赖环检测 · 全量回归套件',
+    a: '接口兼容性契约测试，零破坏性变更断言',
+    foot: '结构特征：宽搜索、状态重。Planning 需要回溯能力，Memory 依赖全局拓扑。'
+  },
+  feature: {
+    title: '业务功能开发',
+    m: '接口 Schema + 组件规范 + 关联 Mock 数据',
+    p: '三段式推进：契约解析 → 模板生成 → 对齐校验',
+    f: '代码写入器 · 类型校验器 · 本地渲染快照',
+    a: '类型检查零警告 + 自动化视觉回归比对',
+    foot: '结构特征：线性流程、模板化。路径明确，确定性最高——也最适合流水线化。'
+  },
+  research: {
+    title: '深度调研',
+    m: '证据网格：按线索 × 来源二维组织，保留引用出处',
+    p: '动态分解子问题，递归委托子 Agent',
+    f: '检索 · 抽取 · 交叉验证；子 Agent 只回传结构化事实',
+    a: '覆盖率检查 + 矛盾检测 + 引用完整性断言',
+    foot: '结构特征：递归委托、工作记忆重。子 Agent 独立记忆，主流程不继承完整轨迹。'
+  }
+};
+
+function renderJIT(key){
+  var d = jitConfigs[key];
+  var panel = document.getElementById('jitDisplayPanel');
+  var q = function(label, color, val){
+    return '<div class="quad"><div class="quad-k" style="color:' + color + '">' + label +
+           '</div><div class="quad-v">' + val + '</div></div>';
+  };
+  panel.innerHTML =
+    '<div style="font-weight:700;color:var(--text-title);margin-bottom:.8rem;font-size:.98rem">' +
+      '装配目标：' + d.title + '</div>' +
+    '<div class="quad-grid">' +
+      q('1 · MEMORY 上下文', 'var(--accent)', d.m) +
+      q('2 · PLANNING 规划', 'var(--cyan)', d.p) +
+      q('3 · CAPABILITY 工具', 'var(--emerald)', d.f) +
+      q('4 · ACTION 动作与门禁', 'var(--amber)', d.a) +
+    '</div>' +
+    '<div class="quad-foot">' + d.foot + '</div>';
+}
+window.switchJITTab = function(key, btn){
+  var btns = document.querySelectorAll('.sandbox-tab-btn');
+  for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+  btn.classList.add('active');
+  renderJIT(key);
+};
+renderJIT('p0bug');
+
+/* ================= 沙盘 2 · 排队论 ================= */
+var T_AGENT = 35; // 单 Agent 平均产出间隔（分钟），示意参数
+
+function sustainableN(T, gamma){
+  // 解 ρ=1：TγN² + T(1−γ)N − T_AGENT = 0
+  var a = T * gamma;
+  var b = T * (1 - gamma);
+  var c = -T_AGENT;
+  if (Math.abs(a) < 1e-9) return T_AGENT / T;
+  var disc = b * b - 4 * a * c;
+  if (disc < 0) return 0;
+  return (-b + Math.sqrt(disc)) / (2 * a);
+}
+
+window.runQueueSim = function(){
+  var N  = parseInt(document.getElementById('agentCountSlider').value, 10);
+  var T  = parseInt(document.getElementById('reviewTimeSlider').value, 10);
+  var g  = parseInt(document.getElementById('gammaSlider').value, 10) / 100;
+
+  document.getElementById('agentCountVal').textContent = N;
+  document.getElementById('reviewTimeVal').textContent = T;
+  document.getElementById('gammaVal').textContent = Math.round(g * 100) + '%';
+
+  var lambda = N / T_AGENT * 60;                 // PR / 小时
+  var muNaive = 60 / T;                          // 无惩罚
+  var muEff = 60 / (T * (1 + g * (N - 1)));      // 含上下文切换惩罚
+  var rho = lambda / muEff;
+  var rhoNaive = lambda / muNaive;
+  var nMax = sustainableN(T, g);
+
+  document.getElementById('simLambda').textContent   = lambda.toFixed(1);
+  document.getElementById('simMu').textContent       = muEff.toFixed(1);
+  document.getElementById('simRho').textContent      = rho.toFixed(2);
+  document.getElementById('simRhoNaive').textContent = rhoNaive.toFixed(2);
+  document.getElementById('simNmax').textContent     = Math.max(0, Math.floor(nMax));
+
+  var v = document.getElementById('simVerdict');
+  if (rho > 1.05){
+    v.className = 'sim-verdict-box danger';
+    v.innerHTML = '⚠️ <strong>注意力雪崩（ρ = ' + rho.toFixed(2) + ' &gt; 1）</strong>：' +
+      '生成速率超过审核极限，未审产出将持续积压。' +
+      '注意朴素算法给出 ρ = ' + rhoNaive.toFixed(2) + '，<strong>低估了 ' +
+      ((rho - rhoNaive) / rhoNaive * 100).toFixed(0) + '%</strong>——' +
+      '因为 μ 会随并发上升而下降。正确做法是<strong>限流</strong>（当前可持续上限约 ' +
+      Math.max(0, Math.floor(nMax)) + ' 个），而不是催人看快一点。';
+  } else if (rho >= 0.75){
+    v.className = 'sim-verdict-box warn';
+    v.innerHTML = '⚡ <strong>高负荷临界（ρ = ' + rho.toFixed(2) + '）</strong>：系统接近饱和，' +
+      '队列延迟开始非线性上升。建议把在制品上限钉在 ' + Math.max(1, Math.floor(nMax)) +
+      ' 个，并推进验收标准可执行化。';
+  } else {
+    v.className = 'sim-verdict-box safe';
+    v.innerHTML = '✅ <strong>稳态可控（ρ = ' + rho.toFixed(2) + ' &lt; 0.75）</strong>：' +
+      '审核带宽充裕。此时扩容的边际收益仍为正，但也别一次加太多——' +
+      '可持续上限约 ' + Math.max(0, Math.floor(nMax)) + ' 个。';
+  }
+};
+runQueueSim();
+
+/* ================= 沙盘 3 · USL 可扩展性 ================= */
+function uslC(n, s, k){ return n / (1 + s * (n - 1) + k * n * (n - 1)); }
+function uslX(n){ return 46 + (n - 1) / 29 * 694; }
+function uslY(c){ return 240 - c * 42; }
+
+window.runUslSim = function(){
+  var s = parseInt(document.getElementById('uslSSlider').value, 10) / 100;
+  var k = parseInt(document.getElementById('uslKSlider').value, 10) / 1000;
+
+  document.getElementById('uslSVal').textContent = s.toFixed(3);
+  document.getElementById('uslKVal').textContent = k.toFixed(4);
+
+  var pts = [];
+  for (var n = 1; n <= 30; n++){
+    pts.push(uslX(n).toFixed(1) + ',' + uslY(uslC(n, s, k)).toFixed(1));
+  }
+  document.getElementById('uslPolyline').setAttribute('points', pts.join(' '));
+
+  var ns = (k <= 1e-9 || s >= 1) ? null : Math.sqrt((1 - s) / k);
+  var peakDot = document.getElementById('uslPeakDot');
+  var peakLine = document.getElementById('uslPeakLine');
+  var peakLabel = document.getElementById('uslPeakLabel');
+
+  if (ns && ns <= 30){
+    var px = uslX(ns), py = uslY(uslC(ns, s, k));
+    peakDot.setAttribute('cx', px.toFixed(1)); peakDot.setAttribute('cy', py.toFixed(1));
+    peakLine.setAttribute('x1', px.toFixed(1)); peakLine.setAttribute('x2', px.toFixed(1));
+    peakLine.setAttribute('y1', py.toFixed(1)); peakLine.setAttribute('y2', '18');
+    peakLabel.setAttribute('x', (px + 8).toFixed(1)); peakLabel.setAttribute('y', '22');
+    peakLabel.textContent = 'N* ≈ ' + ns.toFixed(1) + '　峰值 ' + uslC(ns, s, k).toFixed(2) + '×';
+  } else {
+    peakDot.setAttribute('cx', '-99'); peakDot.setAttribute('cy', '-99');
+    peakLine.setAttribute('x1', '0'); peakLine.setAttribute('x2', '0');
+    peakLine.setAttribute('y1', '0'); peakLine.setAttribute('y2', '0');
+    peakLabel.textContent = '';
+  }
+
+  var c30 = uslC(30, s, k);
+  document.getElementById('uslEndDot').setAttribute('cx', uslX(30).toFixed(1));
+  document.getElementById('uslEndDot').setAttribute('cy', uslY(c30).toFixed(1));
+  document.getElementById('uslEndLabel').textContent = '30 个 → ' + c30.toFixed(2) + '×';
+
+  document.getElementById('uslNstar').textContent   = ns ? ns.toFixed(1) : '无峰值';
+  document.getElementById('uslPeakVal').textContent = ns ? uslC(ns, s, k).toFixed(2) + '×' : '—';
+  document.getElementById('uslCap').textContent     = ns ? Math.max(1, Math.floor(0.7 * ns)) : '—';
+  document.getElementById('uslC30').textContent     = c30.toFixed(2) + '×';
+
+  var v = document.getElementById('uslVerdict');
+  if (!ns){
+    v.className = 'sim-verdict-box safe';
+    v.innerHTML = 'κ ≈ 0，产出随并发单调饱和，<strong>不存在「越开越差」的区间</strong>。' +
+      '但这在真实团队中很少见——若你的数据拟合出 κ = 0，先怀疑并发度覆盖不够或样本太少。';
+  } else if (ns < 30){
+    v.className = 'sim-verdict-box danger';
+    v.innerHTML = '⚠️ <strong>盲目扩容是负收益。</strong>峰值在 N* = ' + ns.toFixed(1) +
+      '（产出 ' + uslC(ns, s, k).toFixed(2) + '×），而 30 个时回落到 ' + c30.toFixed(2) +
+      '×。建议 WIP 上限 ' + Math.max(1, Math.floor(0.7 * ns)) + '（取 0.7·N* 留安全边际）。';
+  } else {
+    v.className = 'sim-verdict-box warn';
+    v.innerHTML = '峰值在 30 以外（N* = ' + ns.toFixed(1) + '），当前范围尚未撞墙，' +
+      '但边际增益已在收敛——继续扩容前请先测量。';
+  }
+};
+runUslSim();
+
+/* ================= 沙盘 4 · 预发送决策 ================= */
+window.runPrefetchSim = function(){
+  var p = parseInt(document.getElementById('pfPSlider').value, 10) / 100;
+  var t = parseInt(document.getElementById('pfTSlider').value, 10) / 10;
+  var nm = parseInt(document.getElementById('pfNSlider').value, 10);
+  var cAgent = 1.0, cWaste = 1.0; // 归一化的示意成本
+
+  document.getElementById('pfPVal').textContent = p.toFixed(2);
+  document.getElementById('pfTVal').textContent = t.toFixed(1);
+  document.getElementById('pfNVal').textContent = nm;
+
+  var gain = p * t * cAgent;
+  var loss = (1 - p) * cWaste * nm;
+  var pth = (cWaste * nm) / (t * cAgent + cWaste * nm);
+  var maxN = ((1 - p) * cWaste) > 1e-9 ? (p * t * cAgent) / ((1 - p) * cWaste) : Infinity;
+
+  document.getElementById('pfGain').textContent = gain.toFixed(2);
+  document.getElementById('pfLoss').textContent = loss.toFixed(2);
+  document.getElementById('pfPth').textContent  = pth.toFixed(3);
+  document.getElementById('pfMaxN').textContent = isFinite(maxN) ? Math.floor(maxN) + ' 条' : '不限';
+
+  var v = document.getElementById('pfVerdict');
+  if (gain > loss){
+    v.className = 'sim-verdict-box safe';
+    v.innerHTML = '✅ <strong>可以预发送。</strong>p = ' + p.toFixed(2) + ' 高于临界值 p* = ' +
+      pth.toFixed(3) + '。但注意结论对「误判是否传染」极敏感——把预排条数提高，p* 会迅速上升并翻转结论。';
+  } else {
+    v.className = 'sim-verdict-box danger';
+    v.innerHTML = '⛔ <strong>应插入人工检查点。</strong>p = ' + p.toFixed(2) + ' 未达临界值 p* = ' +
+      pth.toFixed(3) + '。要让它值得，需把等待节省提高到 ' +
+      (((1 - p) * cWaste * nm) / (p * cAgent)).toFixed(1) + ' 小时以上，或把预排条数压到 ' +
+      (maxN < 1 ? '0' : Math.floor(maxN)) + ' 条以内。';
+  }
+};
+runPrefetchSim();
+
+/* ================= 成熟度自测 ================= */
+window.calculateScore = function(){
+  var boxes = document.querySelectorAll('.chk-item');
+  var score = 0;
+  for (var i = 0; i < boxes.length; i++){
+    if (boxes[i].checked) score += parseInt(boxes[i].getAttribute('data-score'), 10);
+  }
+  document.getElementById('chkScoreVal').textContent = score + ' / 100';
+  var badge = document.getElementById('chkGradeBadge');
+  var advice = document.getElementById('chkAdviceText');
+
+  if (score >= 85){
+    badge.className = 'badge-tag good'; badge.textContent = 'LEVEL 4：自主演化';
+    advice.textContent = '已具备完整的可执行验收、真实度量与资产库演化能力。' +
+      '下一步关注点从「产能」转向「奖励质量」——代理指标是否被劫持、档案库是否位衰减。';
+  } else if (score >= 60){
+    badge.className = 'badge-tag good'; badge.textContent = 'LEVEL 3：准入与度量';
+    advice.textContent = '已解决大部分并发与审查瓶颈。下一步推进验收标准可执行化，' +
+      '这是让演化闭环真正成立的唯一开关。';
+  } else if (score >= 35){
+    badge.className = 'badge-tag warn'; badge.textContent = 'LEVEL 2：物理隔离';
+    advice.textContent = '基础隔离已就绪。建议尽快引入显式在制品上限与真实指标，' +
+      '避免队列在 ρ 越过 1 时无声崩塌。';
+  } else {
+    badge.className = 'badge-tag bad'; badge.textContent = 'LEVEL 0–1：起点';
+    advice.textContent = '建议从 Worktree 隔离与串行出关开始，先解决基础并发竞态，' +
+      '再谈扩容——顺序反了会把问题放大。';
+  }
+};
+
+/* ================= 打印时展开折叠块 ================= */
+var preOpen = null;
+window.addEventListener('beforeprint', function(){
+  preOpen = [];
+  var ds = document.querySelectorAll('details');
+  for (var i = 0; i < ds.length; i++){ preOpen[i] = ds[i].open; ds[i].open = true; }
+});
+window.addEventListener('afterprint', function(){
+  if (!preOpen) return;
+  var ds = document.querySelectorAll('details');
+  for (var i = 0; i < ds.length; i++){ if (typeof preOpen[i] === 'boolean') ds[i].open = preOpen[i]; }
+  preOpen = null;
+});
+
+})();
+</script>
+</body>
+</html>

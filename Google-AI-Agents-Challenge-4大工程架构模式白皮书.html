@@ -1,0 +1,2012 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="1WNlkgoKfesZvzhDcE57Gt">
+<head data-page-node-id="1DSWKHG6Pj9jgkD27yomXF">
+<meta charset="utf-8" data-page-node-id="TtERtNBVecBXbo31But3lA"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="xGCjGEbxBgEMBeTFkSZ70S"/>
+<title>从 Prompt 串联到生产级软件工程：Google AI Agents Challenge 4 大架构模式深度拆解与落地白皮书</title>
+<meta name="description" content="深度拆解 Google Developers Blog 2026年9月2日发布的技术复盘：双向 MCP、事件驱动并发、同标准降级与分层路由四大核心工程模式，附可计算数学模型与四大动态交互沙盘。" data-page-node-id="hJ0Aa6U6G9wpO3rsEnCqAX"/>
+<style>
+/* ================================================================
+   DESIGN TOKENS · 零外部依赖 · 深浅双主题 · 五色语义系统
+   ================================================================ */
+:root {
+  /* Light · Warm Paper (暖羊皮纸) */
+  --bg-base: #FBF9F5;
+  --bg-surface: #FFFFFF;
+  --bg-subtle: #F3EFE6;
+  --bg-muted: #E8E2D5;
+  --bg-glass: rgba(251, 249, 245, 0.92);
+  --border-subtle: #E5DFC9;
+  --border-medium: #D0C7B2;
+
+  --accent: #C84B26;
+  --accent-hover: #AE3E1D;
+  --accent-soft: rgba(200, 75, 38, 0.08);
+  --accent-border: rgba(200, 75, 38, 0.25);
+
+  --cyan: #0E7490;
+  --cyan-soft: rgba(14, 116, 144, 0.08);
+  --cyan-border: rgba(14, 116, 144, 0.25);
+
+  --emerald: #0F766E;
+  --emerald-soft: rgba(15, 118, 110, 0.08);
+  --emerald-border: rgba(15, 118, 110, 0.25);
+
+  --amber: #B45309;
+  --amber-soft: rgba(180, 83, 9, 0.08);
+  --amber-border: rgba(180, 83, 9, 0.25);
+
+  --rose: #BE123C;
+  --rose-soft: rgba(190, 18, 60, 0.08);
+  --rose-border: rgba(190, 18, 60, 0.25);
+
+  --text-title: #1A1815;
+  --text-body: #423E37;
+  --text-muted: #736C60;
+  --text-ghost: #A69E90;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+  --shadow-md: 0 4px 16px -2px rgba(0,0,0,0.06), 0 2px 6px -1px rgba(0,0,0,0.03);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: "Newsreader", "Noto Serif SC", "Source Han Serif SC", "Songti SC", Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+  --t-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --t-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] {
+  /* Dark · Obsidian & Mineral Slate (黑曜石矿物) */
+  --bg-base: #0D0F12;
+  --bg-surface: #14171D;
+  --bg-subtle: #1C2028;
+  --bg-muted: #272C38;
+  --bg-glass: rgba(13, 15, 18, 0.92);
+  --border-subtle: #232834;
+  --border-medium: #32394A;
+
+  --accent: #FF6B4A;
+  --accent-hover: #FF856B;
+  --accent-soft: rgba(255, 107, 74, 0.12);
+  --accent-border: rgba(255, 107, 74, 0.32);
+
+  --cyan: #38BDF8;
+  --cyan-soft: rgba(56, 189, 248, 0.12);
+  --cyan-border: rgba(56, 189, 248, 0.30);
+
+  --emerald: #34D399;
+  --emerald-soft: rgba(52, 211, 153, 0.12);
+  --emerald-border: rgba(52, 211, 153, 0.30);
+
+  --amber: #FBBF24;
+  --amber-soft: rgba(251, 191, 36, 0.12);
+  --amber-border: rgba(251, 191, 36, 0.30);
+
+  --rose: #FB7185;
+  --rose-soft: rgba(251, 113, 133, 0.12);
+  --rose-border: rgba(251, 113, 133, 0.30);
+
+  --text-title: #F3F4F6;
+  --text-body: #C9CED8;
+  --text-muted: #8E98A8;
+  --text-ghost: #586174;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 20px rgba(0,0,0,0.45);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; font-size: 16px; scroll-padding-top: 84px; -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg-base);
+  color: var(--text-body);
+  font-family: var(--font-sans);
+  line-height: 1.78;
+  letter-spacing: -0.01em;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color var(--t-normal), color var(--t-normal);
+}
+
+#reading-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--cyan));
+  z-index: 9999;
+  transition: width 0.1s linear;
+}
+
+/* ---------- Header ---------- */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2rem;
+  gap: 1rem;
+}
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 700;
+  font-size: 0.96rem;
+  color: var(--text-title);
+  text-decoration: none;
+}
+.header-badge {
+  padding: 0.2rem 0.6rem;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-full);
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.btn-theme-toggle {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-medium);
+  color: var(--text-body);
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all var(--t-fast);
+  font-family: inherit;
+  white-space: nowrap;
+}
+.btn-theme-toggle:hover {
+  background: var(--bg-muted);
+  color: var(--text-title);
+  border-color: var(--accent);
+}
+
+/* ---------- Layout Grid ---------- */
+.layout-container {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem 6rem;
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 3.25rem;
+  align-items: start;
+}
+.sidebar-toc-wrapper {
+  position: sticky;
+  top: 86px;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  padding-right: 0.75rem;
+}
+.sidebar-toc-wrapper::-webkit-scrollbar { width: 4px; }
+.sidebar-toc-wrapper::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 4px; }
+.toc-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.1rem;
+  box-shadow: var(--shadow-sm);
+}
+.toc-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-ghost);
+  margin-bottom: 0.9rem;
+  display: flex;
+  justify-content: space-between;
+}
+.toc-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.toc-item a {
+  display: block;
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 0.38rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border-left: 2px solid transparent;
+  transition: all var(--t-fast);
+  line-height: 1.4;
+}
+.toc-item a:hover {
+  color: var(--text-title);
+  background: var(--bg-subtle);
+}
+.toc-item a.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+.toc-badge {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  opacity: 0.65;
+  margin-right: 0.35rem;
+}
+.main-article {
+  max-width: 890px;
+  min-width: 0;
+}
+
+/* ---------- Typography & Hero ---------- */
+.doc-hero {
+  margin-bottom: 3.25rem;
+  padding-bottom: 2.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.doc-meta-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.1rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.doc-title {
+  font-size: clamp(1.85rem, 3.5vw, 2.65rem);
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text-title);
+  letter-spacing: -0.025em;
+  margin-bottom: 1.1rem;
+}
+.doc-subtitle {
+  font-family: var(--font-serif);
+  font-size: 1.18rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 1.6rem;
+  font-weight: 400;
+}
+.doc-lead-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 1.3rem 1.5rem;
+  box-shadow: var(--shadow-sm);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--text-title);
+}
+.doc-lead-box strong { color: var(--accent); }
+
+/* ---------- Sections ---------- */
+.doc-section {
+  margin-bottom: 4rem;
+  scroll-margin-top: 84px;
+}
+.section-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.section-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-bottom: 0.35rem;
+}
+.section-title {
+  font-size: 1.62rem;
+  font-weight: 750;
+  color: var(--text-title);
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+.section-desc {
+  font-size: 0.92rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+}
+h3.sub-title {
+  font-size: 1.22rem;
+  font-weight: 700;
+  color: var(--text-title);
+  margin: 2.25rem 0 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+h4.sub-sub-title {
+  font-size: 1.02rem;
+  font-weight: 650;
+  color: var(--text-title);
+  margin: 1.5rem 0 0.6rem;
+}
+p {
+  margin-bottom: 1.15rem;
+  color: var(--text-body);
+}
+strong { color: var(--text-title); font-weight: 650; }
+
+/* ---------- Callouts & Cards ---------- */
+.callout {
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.3rem;
+  margin: 1.4rem 0;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+.callout-title {
+  font-weight: 700;
+  font-size: 0.88rem;
+  margin-bottom: 0.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.callout-accent { border-left: 4px solid var(--accent); }
+.callout-accent .callout-title { color: var(--accent); }
+.callout-cyan { border-left: 4px solid var(--cyan); }
+.callout-cyan .callout-title { color: var(--cyan); }
+.callout-emerald { border-left: 4px solid var(--emerald); }
+.callout-emerald .callout-title { color: var(--emerald); }
+.callout-amber { border-left: 4px solid var(--amber); }
+.callout-amber .callout-title { color: var(--amber); }
+.callout-rose { border-left: 4px solid var(--rose); }
+.callout-rose .callout-title { color: var(--rose); }
+
+/* ---------- Comparison Tables ---------- */
+.table-responsive {
+  overflow-x: auto;
+  margin: 1.5rem 0 2rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+table.tech-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  text-align: left;
+}
+table.tech-table th {
+  background: var(--bg-subtle);
+  color: var(--text-title);
+  font-weight: 700;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-medium);
+  font-family: var(--font-sans);
+}
+table.tech-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-body);
+  vertical-align: top;
+  line-height: 1.6;
+}
+table.tech-table tr:last-child td { border-bottom: none; }
+table.tech-table tr:hover td { background: var(--bg-subtle); }
+
+/* ---------- Code & Terminal Blocks ---------- */
+pre.code-block {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  margin: 1.25rem 0 1.6rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  line-height: 1.65;
+  color: var(--text-title);
+}
+code.inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.18em 0.4em;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent);
+}
+
+/* ================================================================
+   KaTeX-Free 纯 CSS 数学排版引擎 (Strict Zero Dependencies)
+   ================================================================ */
+.math-block {
+  margin: 1.2rem 0;
+  padding: 1rem 1.4rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  overflow-x: auto;
+  text-align: center;
+  color: var(--text-title);
+  box-shadow: var(--shadow-sm);
+}
+.math-inline {
+  font-family: var(--font-serif);
+  font-style: italic;
+  padding: 0 0.25rem;
+  color: var(--text-title);
+}
+.mfrac {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: -0.55em;
+  padding: 0 0.3em;
+  text-align: center;
+  font-size: 0.95em;
+  line-height: 1.15;
+}
+.mfrac > .num {
+  border-bottom: 1.5px solid currentColor;
+  padding-bottom: 0.18em;
+  display: block;
+}
+.mfrac > .den {
+  padding-top: 0.18em;
+  display: block;
+}
+.msqrt {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: -0.1em;
+  padding: 0 0.2em;
+}
+.msqrt::before {
+  content: "√";
+  font-size: 1.28em;
+  margin-right: 1px;
+  line-height: 1;
+}
+.msqrt > .radicand {
+  border-top: 1.5px solid currentColor;
+  padding-top: 0.1em;
+  display: inline-block;
+  line-height: 1.15;
+}
+sup { font-size: 0.72em; vertical-align: super; line-height: 0; }
+sub { font-size: 0.72em; vertical-align: sub; line-height: 0; }
+
+/* ================================================================
+   INTERACTIVE SANDBOXES · 交互沙盘系统
+   ================================================================ */
+.sandbox-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem;
+  margin: 2rem 0;
+  box-shadow: var(--shadow-md);
+}
+.sandbox-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.4rem;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0.9rem;
+}
+.sandbox-badge {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-full);
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  border: 1px solid var(--cyan-border);
+}
+.sandbox-title {
+  font-size: 1.18rem;
+  font-weight: 700;
+  color: var(--text-title);
+}
+.sandbox-desc {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+.sandbox-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.75rem;
+  margin-bottom: 1.4rem;
+}
+@media (max-width: 768px) {
+  .sandbox-grid { grid-template-columns: 1fr; }
+  .layout-container { grid-template-columns: 1fr; gap: 2rem; }
+  .sidebar-toc-wrapper { display: none; }
+}
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.control-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  color: var(--text-body);
+}
+.control-val {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent);
+}
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-muted);
+  border-radius: 3px;
+  outline: none;
+  -webkit-appearance: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 0 3px var(--bg-surface);
+  transition: transform var(--t-fast);
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.kpi-board {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.85rem;
+}
+.kpi-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.95rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.kpi-label {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.25rem;
+}
+.kpi-num {
+  font-family: var(--font-mono);
+  font-size: 1.38rem;
+  font-weight: 750;
+  color: var(--text-title);
+  line-height: 1.2;
+}
+.kpi-unit { font-size: 0.8rem; font-weight: 400; color: var(--text-muted); margin-left: 0.2rem; }
+
+.chart-wrapper {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 220px;
+}
+svg.viz-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* ---------- Checklist & Steps ---------- */
+.step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin: 1.5rem 0;
+}
+.step-item {
+  display: flex;
+  gap: 1.1rem;
+  align-items: flex-start;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.3rem;
+}
+.step-num {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+.step-content { flex: 1; min-width: 0; }
+.step-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text-title);
+  margin-bottom: 0.35rem;
+}
+.step-text {
+  font-size: 0.88rem;
+  color: var(--text-body);
+  line-height: 1.6;
+}
+
+/* ---------- Details / Accordion ---------- */
+details.fold-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin: 1rem 0;
+  overflow: hidden;
+}
+details.fold-card summary {
+  padding: 0.9rem 1.25rem;
+  cursor: pointer;
+  font-weight: 650;
+  color: var(--text-title);
+  background: var(--bg-subtle);
+  user-select: none;
+  font-size: 0.92rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+details.fold-card summary:hover { background: var(--bg-muted); }
+details.fold-card .fold-content {
+  padding: 1.25rem;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ---------- Print Media ---------- */
+@media print {
+  body { background: #fff !important; color: #000 !important; font-size: 10pt; }
+  .site-header, .sidebar-toc-wrapper, #reading-progress, .btn-theme-toggle { display: none !important; }
+  .layout-container { max-width: 100% !important; margin: 0 !important; padding: 0 !important; grid-template-columns: 1fr !important; }
+  .main-article { max-width: 100% !important; }
+  .sandbox-card, pre.code-block, table.tech-table { break-inside: avoid; }
+  .math-block { border: 1px solid #ccc !important; }
+}
+</style>
+</head>
+<body data-page-node-id="lW9RLhcVof2bIlUh9rEvoW">
+
+<div id="reading-progress" data-page-node-id="8UqkS271Z3y9aJGpvT2Ic0"></div>
+
+<!-- Site Header -->
+<header class="site-header" data-page-node-id="m0TmEGazpxqqh0bAGbyHNY">
+  <div class="header-brand" data-page-node-id="W9LSQcLaTafQeRVxysR1vx">
+    <span class="header-badge" data-page-node-id="wi1wWgtIyF0dL0einAR5mj">ENGINEERING WHITE PAPER</span>
+    <span style="font-size:0.92rem;font-weight:700;" data-page-node-id="bq0InHH319yLwVM2iviqzR">AI Agents Architecture Digest</span>
+  </div>
+  <button type="button" class="btn-theme-toggle" id="theme-toggle" data-page-node-id="b2vlG2FYMnHtfR9qjRfQOi">
+    <span id="theme-toggle-icon" data-page-node-id="jE3B5tlwVpJ4XkoRrcusCD">◐</span>
+    <span id="theme-toggle-label" data-page-node-id="bo8qWUIcmxDRAK3C8e3gAb">切换主题</span>
+  </button>
+</header>
+
+<div class="layout-container" data-page-node-id="n1D29xcUoQmCS5RZAiSNN5">
+  <!-- Sticky Sidebar Navigation -->
+  <aside class="sidebar-toc-wrapper" data-page-node-id="T3FFqNPN7LAwChyvke8XYC">
+    <div class="toc-card" data-page-node-id="xVDfsNZOREt1txnxCTe3Je">
+      <div class="toc-title" data-page-node-id="2gv1VZAMe0tgUxGdaHhCFX">
+        <span data-page-node-id="R17RVOZyoneEaxIPJvj4G0">架构白皮书大纲</span>
+        <span style="font-family:var(--font-mono);font-size:0.68rem;" data-page-node-id="7r0ktpb0E1Vvlk5fWBEIYv">SEC 1-7</span>
+      </div>
+      <ul class="toc-list" data-page-node-id="gMGA9UV0n1YbQ69vkZJxnz">
+        <li class="toc-item" data-page-node-id="ojcCi2YYJrG7QcqDLNrJCx"><a href="#sec-exec" data-page-node-id="vDAkna9AmN9fluG6NJXkXM"><span class="toc-badge" data-page-node-id="jNFovDsxZR9GuGaSk5AVCE">01</span>执行摘要与溯源</a></li>
+        <li class="toc-item" data-page-node-id="PRqJU58bVMqLMBm0vJhzAy"><a href="#sec-paradigm" data-page-node-id="tYvqVxSA5A0Ru2dZxblBvH"><span class="toc-badge" data-page-node-id="qPmVYuRKUCQa4OGZG0349U">02</span>单模型伪装批判</a></li>
+        <li class="toc-item" data-page-node-id="GvJUD4PChft4bCIqZ1nHpo"><a href="#sec-mcp" data-page-node-id="ZuZVmXeX3o9ASqFlke3ICC"><span class="toc-badge" data-page-node-id="kTUfdBXk4KRenS6G1XFnuE">03</span>模式一：双向 MCP</a></li>
+        <li class="toc-item" data-page-node-id="Gl1ahGGRV1ymhocLIfmCnb"><a href="#sec-event" data-page-node-id="fssz49J9xULwbVBiwcdHmo"><span class="toc-badge" data-page-node-id="JeultZdPvGdXLWVEp8DGE2">04</span>模式二：事件驱动并发</a></li>
+        <li class="toc-item" data-page-node-id="HQJqY8zdM2qGKKOokuK7at"><a href="#sec-fallback" data-page-node-id="vCbLF9rUbvNAthvQ4zBe43"><span class="toc-badge" data-page-node-id="S0Qvylib8W2K12mIdBhwCZ">05</span>模式三：同标准回退</a></li>
+        <li class="toc-item" data-page-node-id="C6O0dJ9C9hHtygDWlCjGgG"><a href="#sec-routing" data-page-node-id="scwoH35XEVPigsWnBN2ZnT"><span class="toc-badge" data-page-node-id="hEaFAuEITDUgLXfp8GvvGv">06</span>模式四：分层级联路由</a></li>
+        <li class="toc-item" data-page-node-id="N51SAJQzYm1fHCUxVZXdsP"><a href="#sec-playbook" data-page-node-id="limyCT6LOrqdSfazZGyWsJ"><span class="toc-badge" data-page-node-id="z5AoMrGAJgXLn9WI7adeYK">07</span>工业级落地手册</a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- Main Technical Digest Content -->
+  <main class="main-article" data-page-node-id="N81FeJ8laOuPyqBdQymhPU">
+
+    <!-- Document Hero -->
+    <header class="doc-hero" id="sec-exec" data-page-node-id="trTNCnyA8yjnp5GtcYX28F">
+      <div class="doc-meta-bar" data-page-node-id="jnx9QMlTkBko7DRJC6ZmyF">
+        <span data-page-node-id="a6LnqXlBUHsRPko6j4EsvK">SOURCE: Google Developers Blog</span>
+        <span data-page-node-id="YfLOBAvj5yW2Gacjp2kdpe">•</span>
+        <span data-page-node-id="FqGEm2B894U8CMNVruOTRf">DATE: 2026-09-02</span>
+        <span data-page-node-id="SDq6KhmHzUYxwMYsivdDkw">•</span>
+        <span data-page-node-id="wK06RdRDSTBYAuIbe1RM5Y">AUTHOR: Sergio Villani (Google Cloud AI)</span>
+      </div>
+      <h1 class="doc-title" data-page-node-id="qNfuuvFgwbEgwKGWqXJ9dB">从 Prompt 串联到生产级系统工程：Google AI Agents Challenge 4 大架构模式深度拆解与数学推演</h1>
+      <p class="doc-subtitle" data-page-node-id="pEh7DAu9Rw4XRh5BNLOxIF">全面剖析全球数千作品角逐下的架构分水岭：双向 MCP、异步事件总线、单点不可规避校验与三级分层路由</p>
+
+      <div class="doc-lead-box" data-page-node-id="L0G5O9NxtwPmwBs64YXlnn">
+        <strong data-page-node-id="z22Jz9SGiAuxhe1s8hgTtX">核心工程结论：</strong>在 Google for Startups AI Agents Challenge 挑战赛中，成千上万提交作品的败局根源高度趋同——将<strong data-page-node-id="fwBGjQvqUzFjxD5Pfdc9sj">“单模型串联的一组 Prompt”</strong>贴上智能体标签冒充多智能体。而真正脱颖而出的顶级作品展现出了压倒性的经典软件工程思维：<strong data-page-node-id="DsisCSB1gSmYmlq4ko4rUg">以标准化协议解耦跨智能体协作、以异步事件总线消解串行调用时延、以不可规避的强门禁锁死容灾质量红线、以零 Token 级联路由消减 70%+ 推理开销</strong>。本白皮书完成全链路事实核验、可计算数学建模与工业落地沙盘推演。
+      </div>
+    </header>
+
+    <!-- Section 2: Paradigm Critique -->
+    <section class="doc-section" id="sec-paradigm" data-page-node-id="D8Gl8ITbR3nm5goZGZ0QY2">
+      <div class="section-header" data-page-node-id="kvANpNjRhSJNWoXaX9JAHG">
+        <span class="section-tag" data-page-node-id="9wAF3xWGC0EkXP3kkgtt9l">Section 02 · Root Cause Analysis</span>
+        <h2 class="section-title" data-page-node-id="ZyRvff5ubiYFoaw5Bmeo5g">范式批判：单模型串联伪装与生产落地的三大破产时刻</h2>
+        <p class="section-desc" data-page-node-id="bxRXch24q0BnKV0AJNklBF">为什么“看似能跑的 Agent Demo”在遇到真实流量、网络抖动与成本账单时瞬间崩溃？</p>
+      </div>
+
+      <p data-page-node-id="9TTEy4wNPXDonRnlNX6R8S">
+        在 Google AI Agents 挑战赛的初审阶段，评委团队频繁观察到一种高度普遍的设计模式：开发者定义了“规划智能体”、“执行智能体”、“审查智能体”，但在代码实现层面，它们不过是同一个单体大模型（LLM）通过 Python 顺序脚本发起的 3 次阻塞式网络调用：
+      </p>
+
+      <pre class="code-block" data-page-node-id="gCbd6z8oDSasCezasDzKI0"><code data-page-node-id="wEn4AHEdZzn5IYQ3ktgvDf"># 典型的伪多智能体系统（披着 Agent 外衣的阻塞式同步脚本）
+plan = call_llm(planner_prompt, user_query)            # 阻塞 4.2s
+code = call_llm(coder_prompt, plan)                     # 阻塞 6.8s
+review = call_llm(reviewer_prompt, code)                # 阻塞 5.1s
+# 总延迟 T = 4.2 + 6.8 + 5.1 = 16.1s，单点故障概率指数级上升</code></pre>
+
+      <p data-page-node-id="3Bpeet2RHTrhYF3EUUW9Dy">
+        这种设计在受控的 Demo 环境下尚可演示，一旦进入真实生产环境，将必然遭遇三大破产时刻：
+      </p>
+
+      <div class="table-responsive" data-page-node-id="lw1SiBjgPPsdez1y1KC1E8">
+        <table class="tech-table" data-page-node-id="KFGIm5y1Dur0WDtXIZ52Ua">
+          <thead data-page-node-id="lcv2XMVwkLx7AywJe5DtEK">
+            <tr data-page-node-id="P10y42MCuydvEOLK9wiVzd">
+              <th style="width:22%;" data-page-node-id="LHgxCEGd1vaVDfZx9GZw4e">破产维度</th>
+              <th style="width:38%;" data-page-node-id="SGGneOCOCwipEifZ6ra5Wn">伪 Multi-Agent（同步 Prompt 串联）</th>
+              <th style="width:40%;" data-page-node-id="ZZZZnql6wowJL2ARl54AG2">生产级 Agent 架构（顶级优胜方案）</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="YEeNY7ExbrG1q3IEJphUdB">
+            <tr data-page-node-id="wkyjCpa6dLpRsFrJHcJy5C">
+              <td data-page-node-id="C0VHFMLFvklig3sAxT2Cbl"><strong data-page-node-id="hZVf9HIde9G5Idm2xy5OHx">时延与可用性</strong></td>
+              <td data-page-node-id="9G2avYKmhctl6VmFFIP5Q2"><strong data-page-node-id="KFiDt0c32m3CvEB8wi3I2g">串行线性累加</strong>：<span class="math-inline" data-page-node-id="ZHQ8M5bDj9oAanutuDp2MQ"><i data-page-node-id="RMJoHIILXXHCWsghyTgmUK">T</i><sub data-page-node-id="XHXpXYHpqHZ9Aj1l7UAUHt">total</sub> = ∑<i data-page-node-id="2lf8PP66q5mZpOwpebBn0e">T</i><sub data-page-node-id="J9BDe5HeQWBPAYK1MpLA9H"><i data-page-node-id="UF1iD1JVm9kUFm3qFGrIaO">i</i></sub></span>。一旦某环节遭遇慢查询或模型拥塞，整条调用链瞬间挂起，P99 延迟失控。</td>
+              <td data-page-node-id="dFdl1xpSpB5KhsDC2fCcxe"><strong data-page-node-id="nAE5tpaGugOg0uHW3DBDoa">异步事件总线并发</strong>：基于独立 <code class="inline-code" data-page-node-id="4eVJJnbcDDDAq6S8qXRr4b">asyncio.Queue</code> 具名主题分发，多智能体响应同一信号并行吞吐，关键路径收敛至最长独立任务。</td>
+            </tr>
+            <tr data-page-node-id="9dIEXA4TGqRbI3GxRg8uaC">
+              <td data-page-node-id="b7Em84ogJaun5QmqywNjLv"><strong data-page-node-id="JOkEwRrB5FXORmTWyZrDXf">跨 Agent 协同</strong></td>
+              <td data-page-node-id="RQEsXY3Bbfa4canS3XCn2E"><strong data-page-node-id="z0HwELKCGBQkl5szFliMAz">单向工具黑盒</strong>：Agent 仅作为 Client 单向调接口；跨系统协同依赖人类从 Web UI 复制结果或编写胶水代码，拓扑复杂度 <span class="math-inline" data-page-node-id="lCULMVdgEVaL4IeDEh1sU6"><i data-page-node-id="gqvs8BYcAzA8ZSI0y0xgXQ">O</i>(<i data-page-node-id="aQOENrCIVpDWJSx6NlWNRS">K</i><sup data-page-node-id="o4JEPfsArcMgeLw2HrVs6V">2</sup>)</span>。</td>
+              <td data-page-node-id="wu6qurgf714JE2rZYYzKuG"><strong data-page-node-id="Vox3kxliB1CdFt2PONJp7U">双向 MCP（Agent-as-a-Server）</strong>：内部受控检索遥测数据，外部将自身推理能力封装为 MCP Server，供 IDE/终端代码助手无缝自动化调用。</td>
+            </tr>
+            <tr data-page-node-id="VifITkMhTPLC0oXa67vnlH">
+              <td data-page-node-id="UUBRKusMYwMSY2oCpkfNRN"><strong data-page-node-id="3DdHeRCzbBCEOtUN8MBjZ3">容灾降级策略</strong></td>
+              <td data-page-node-id="GsGcxjDV4hHacEg1xvzg2A"><strong data-page-node-id="aZErCDhDp6aw76Fdaq8iLq">宽松放行 / 盲目重试</strong>：主模型遭遇 503 过载时，简单退避重试或降级到轻量模型后“跳过校验直接放行”，造成质量和合规性严重雪崩。</td>
+              <td data-page-node-id="gcHh9bTcTRbahpHkYSk5s3"><strong data-page-node-id="EFGOylg8Y2x4fgGHgQIJFP">同标准回退（Same-bar Fallback）</strong>：架构层单点强制挂载统一强校验函数（如临床指南硬核验证），严禁因降级而降低准入阈值。</td>
+            </tr>
+            <tr data-page-node-id="uni5bFnjDYQqGC5ZqJ1tE7">
+              <td data-page-node-id="4ImprjyUgRLpRZJxH852Hy"><strong data-page-node-id="UJLovJEuFIU4GWbRmS8ar2">成本与 Token 经济</strong></td>
+              <td data-page-node-id="t7FbgMPJhnERwXlaoW0SRc"><strong data-page-node-id="s4NMdsgF1IOEbxtLfTrH9P">全量盲目直通</strong>：简单问候、“我的订单在哪”等确定性常规请求全量灌入昂贵的前沿旗舰模型，算力账单迅速耗尽。</td>
+              <td data-page-node-id="GCDC4FMRF2q47QnnQnskiw"><strong data-page-node-id="qXQWSdzjtGiWCrk0xQDLVk">三层级联路由网关</strong>：L1 本地零 Token 正则拦截 40%+ 确定性请求 → L2 极短 Token 微分类器 → L3 顶尖深度推理模型。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout callout-rose" data-page-node-id="vD4RRqHWOeVPS25fKF4NH2">
+        <div class="callout-title" data-page-node-id="PWGBxV7rOEEHlq7vs30MMR">架构警示：披着多智能体外衣的单线程脆弱系统</div>
+        如果你的系统中多个 Agent 仅仅是排队等待上游 Prompt 的返回结果，并且缺少结构性校验和分流防线，这并非多智能体系统，而是用高昂网络 RPC 和 Token 成本包装的串行脚本。
+      </div>
+    </section>
+
+    <!-- Section 3: Bidirectional MCP -->
+    <section class="doc-section" id="sec-mcp" data-page-node-id="lpwRyRKBLFNPPwhVk0z5kN">
+      <div class="section-header" data-page-node-id="Gr5ssUMIczxAdIb2ysDAnz">
+        <span class="section-tag" data-page-node-id="x7iORMbZwHlI2HpI8ivS37">Section 03 · Architecture Pattern 1</span>
+        <h2 class="section-title" data-page-node-id="4AHBnMjvN69OrjLBkZEcQk">模式一：双向 MCP（Bidirectional MCP / Agent-as-a-Server）</h2>
+        <p class="section-desc" data-page-node-id="k3HVeUQAC6Z1AYlDNAPXmQ">打破单向工具客户端的壁垒：为你自己构建的工具，必须同时作为服务开放给其他智能体</p>
+      </div>
+
+      <h3 class="sub-title" data-page-node-id="ES7wIvPBGsYMcirdp0WfrB">1.1 单向调用的上下文爆炸与架构孤岛</h3>
+      <p data-page-node-id="ZO0LUWhn0Tfy8eT83wL53n">
+        在传统实现中，智能体通常只把 <strong data-page-node-id="eQHcGRMvA0GKd5dpqkKfTg">Model Context Protocol (MCP)</strong> 当作单向数据消费客户端（MCP Client）。例如一个负责遥测分析的 Agent，直接通过 SQL 工具查询数据库。这会直接导致两大致命缺陷：
+      </p>
+      <ul style="margin-left:1.5rem;margin-bottom:1.2rem;" data-page-node-id="rHJ92DLxjaFUUDVnhF1Cgb">
+        <li data-page-node-id="pz2RTMY1UekBpqMmzQznRI"><strong data-page-node-id="mv9uD10vF5CffBBDPB4yXK">上下文爆炸（Context Bloat）</strong>：若 Agent 直接执行原生 SQL 查询遥测表，哪怕简单的关联也会返回数千行原始日志，瞬间吞噬数十万 Token 预算，导致注意力漂移与推理失焦。</li>
+        <li data-page-node-id="SPqGJ1vbQh9K11bP9o3Nwv"><strong data-page-node-id="k7u1ELZ5M0bqoF6ludpxGK">孤岛化与人工中转</strong>：该 Agent 产出的诊断报告只能呈现在人类的 Chat Web 前端，当开发人员在 IDE（如 Claude Code、Gemini CLI、Cursor）中编写代码需要这些诊断指标时，必须由人类手动复制粘贴。</li>
+      </ul>
+
+      <h3 class="sub-title" data-page-node-id="AHVfEyhpeww8JT83zfAdpN">1.2 双向 MCP 的闭环拓扑设计</h3>
+      <p data-page-node-id="b19pkStAJecefJGhd5rcMA">
+        挑战赛中表现最强的性能分析与运维类 Agent 采用了<strong data-page-node-id="R34gAtDNurnFD1aoUh5dZn">双向对称架构（Bidirectional Architecture）</strong>：
+      </p>
+
+      <div class="step-list" data-page-node-id="GNd8LrVJreuJdrRh0sZmIt">
+        <div class="step-item" data-page-node-id="1WeG976fXoCMfdX8HXZAAu">
+          <div class="step-num" data-page-node-id="7kE8CYP9P641myVwcZMp2H">C</div>
+          <div class="step-content" data-page-node-id="5SpRIErkt6JSFSP6yyGz6I">
+            <div class="step-title" data-page-node-id="GEGq847iPZFZ5TUjwKwNtj">内部端（MCP Client）：精细化投影过滤</div>
+            <div class="step-text" data-page-node-id="PsqemLMuiOdyKVifSuQrde">Agent 内部通过定制的 MCP 工具与遥测数据库交互。工具绝不直接 Dump 整张表，而是只返回当前异常调用链的执行计划切片、调用堆栈指纹与时延瓶颈段落，严格将上下文限制在极低 Token 范围内。</div>
+          </div>
+        </div>
+        <div class="step-item" data-page-node-id="gn026FXiiatN4PXqTTxSwK">
+          <div class="step-num" data-page-node-id="NaKXfsW3PUrMyDEVze1ErE">S</div>
+          <div class="step-content" data-page-node-id="Qkcxcs6fxxk0sm3HzHUoyN">
+            <div class="step-title" data-page-node-id="u8Zl0LIDryrt3da7t8BxHq">外部端（MCP Server）：推理能力基础设施化</div>
+            <div class="step-text" data-page-node-id="0DbIssoxtXhcYLj1wZGvc9">该 Agent 将自身沉淀的完整专业分析与推理能力直接封装为一个 <strong data-page-node-id="IS4Te45DhuEeMS6A1edVGS">标准 MCP Server</strong> 暴露出去。外部的 Coding Agent 可以像调用普通的计算器或读文件工具一样，通过协议直接发起调用：<code class="inline-code" data-page-node-id="xkGLIqB9QrCbTkBu4pDISY">analyze_pipeline_bottleneck(task_id="trace-9021")</code>。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mathematical Model: Topology Complexity -->
+      <h3 class="sub-title" data-page-node-id="EmpGHCGXLTvCwHxb7crFGg">1.3 拓扑网络扩展度推导（Topology Scaling Law）</h3>
+      <p data-page-node-id="C6pEt4eOd3P4pEskaEUOD8">
+        设系统中存在 <span class="math-inline" data-page-node-id="FeYAPvb9CIZgAm5BKFkLFr"><i data-page-node-id="74j7R5HDMFjQY9odZQPPoS">K</i></span> 个内部领域专业 Agent（遥测、合规、支付、排障），以及 <span class="math-inline" data-page-node-id="prrlRXvpEjfcq4FMQmt1iy"><i data-page-node-id="njIYifkZHxmMbFtBJreDyW">M</i></span> 个外部消费者（IDE 编程助手、终端 CLI、监控看板、CI 守护进程）。
+      </p>
+      <p data-page-node-id="SPzOK41jwZq5Ft5sHyNIU1">
+        <strong data-page-node-id="QWZ8GAATIKSCCAanJdQxGO">1. 传统 Ad-hoc 点对点集成：</strong>每个外部端和同伴 Agent 均需单独对接私有 HTTP/RPC API 与专用前端界面，跨节点胶水代码与适配接口数呈组合爆炸：
+      </p>
+
+      <div class="math-block" data-page-node-id="8Z6afmVOwOhYUHFuiDlStg">
+        <i data-page-node-id="Pn9pQ8g7PlI41yuHAg92Bt">I</i><sub data-page-node-id="FdkImWlsaDZxCoxm3pjRqA">Ad-hoc</sub> = 
+        <i data-page-node-id="LPz2oldC02fErRHlbVN0qp">K</i> · <i data-page-node-id="kVKqGvDnmfkgvcvtP9wJsB">M</i> + 
+        <span class="mfrac" data-page-node-id="mYJq9lt5yrdR1RFB9dGayV">
+          <span class="num" data-page-node-id="cmEZtF4c7vfmWKi6qR14ZB"><i data-page-node-id="tRtGFvv4drXMP4OZlrc6Zk">K</i>(<i data-page-node-id="z1lnBx1g4Wzm2ZAISqsH9E">K</i> − 1)</span>
+          <span class="den" data-page-node-id="QSH6GnLCCSrNrQZ4LrKuFr">2</span>
+        </span>
+        = <span class="math-inline" data-page-node-id="3FCGOPHt0reA8ZhzuPZvW7"><i data-page-node-id="zMUWwfL8AEaTJTW80KQvfp">O</i>(<i data-page-node-id="Ljjsz2eAeH3iUGPHdIwUrG">K</i><sup data-page-node-id="liFQG1SeZcZyaTgyORAAjE">2</sup> + <i data-page-node-id="YWJx1hqxiwi2bRfRjXPpxS">K</i><i data-page-node-id="YA1hmMTvXoRvtCToRbzQ5s">M</i>)</span>
+      </div>
+
+      <p data-page-node-id="JMkVrAVahwiRBkruE1px86">
+        <strong data-page-node-id="yq1lFoMzvMqLaLNhz0sBxq">2. 双向 MCP 标准化网关：</strong>每个 Agent 对外统一定义一套 MCP Tool Schema，同时作为 Client 挂载通用 MCP 传输协议。跨节点通信降维为星型/总线型拓扑：
+      </p>
+
+      <div class="math-block" data-page-node-id="Dn4PqqCcCNrElbtLcyxwij">
+        <i data-page-node-id="FxLkQO0nBKiVLrGVK3SfTC">I</i><sub data-page-node-id="Sq1FwEmjIqyyljUHF6Rk41">MCP</sub> = <i data-page-node-id="CtPRxrM4bdpBx2owzTKOA2">K</i> + <i data-page-node-id="AXuolqy4tBY09RG2rsE7WL">M</i> = <span class="math-inline" data-page-node-id="5S1OsndAuRwgIJ0lvO0Vad"><i data-page-node-id="OM6rjDv8Wtyv08zFobKATJ">O</i>(<i data-page-node-id="GHg7xqNNg1KxuG8LuTo1jr">K</i> + <i data-page-node-id="PCIY06eZq0G5HWspHjjXa0">M</i>)</span>
+      </div>
+
+      <!-- Interactive Sandbox 4: Topology -->
+      <div class="sandbox-card" data-page-node-id="2aOCR8tpzmnCL7sVKHSGK6">
+        <div class="sandbox-header" data-page-node-id="mqmdMKMA1dwL3IndRjc3at">
+          <div data-page-node-id="4Vkbf1x8antCTVvyIGGXUR">
+            <div class="sandbox-title" data-page-node-id="i2EeuXb0KxwMXx2Y9G2qwM">沙盘一：双向 MCP 拓扑复杂度与接口维护开销计算器</div>
+            <div class="sandbox-desc" data-page-node-id="y7dYcvR6hM3vjqEHdBkPQR">调节专业智能体数量 K 与外部消费端数量 M，观察架构从 Ad-hoc 蛛网向双向 MCP 收敛的工程收益</div>
+          </div>
+          <span class="sandbox-badge" data-page-node-id="2U1tPsKgBtBvFm1baaVfsW">TOPOLOGY MODEL</span>
+        </div>
+
+        <div class="sandbox-grid" data-page-node-id="IWS3J9FOWzW7r4tQl7qfiA">
+          <div class="control-panel" data-page-node-id="ZBIKcFdnHq7G0NxyMMXWM0">
+            <div class="control-group" data-page-node-id="nRyZdRiFps43cwJZfs3UU2">
+              <div class="control-label-row" data-page-node-id="GjzpaSMQSzlPEkrdMD5vTO">
+                <span data-page-node-id="LKDpk9stm0uv3hDLDgr4Hy">专业智能体数量 (K)</span>
+                <span class="control-val" id="val-k-agents" data-page-node-id="Yx63JA167UW5Ih7uAOlmua">4 个</span>
+              </div>
+              <input type="range" id="sim-agents-count" min="2" max="12" value="4" step="1" data-page-node-id="uMGCjCuEgnqHQnkfNfWcFS"/>
+            </div>
+
+            <div class="control-group" data-page-node-id="Wk2JCKT0XUpdnH1ASYjuU5">
+              <div class="control-label-row" data-page-node-id="FMOIX0S5iVDHCyloYqECg8">
+                <span data-page-node-id="VthnthSRAYF3b1ELiJpCHf">外部消费端 / IDE / CLI (M)</span>
+                <span class="control-val" id="val-m-clients" data-page-node-id="Hb0KtfpRRzRzagFYHMeuEL">3 个</span>
+              </div>
+              <input type="range" id="sim-clients-count" min="1" max="8" value="3" step="1" data-page-node-id="KYq5gN01rUYCcRKZIaoLGQ"/>
+            </div>
+
+            <div style="margin-top:0.4rem;" data-page-node-id="crGLwEVGgFyqGqBGKmq4uS">
+              <button type="button" class="btn-theme-toggle" id="btn-toggle-topology" style="width:100%;justify-content:center;" data-page-node-id="4ZryBsuYUiWGVF6qVmegFC">
+                切换展示模式：双向 MCP 总线态
+              </button>
+            </div>
+          </div>
+
+          <div class="kpi-board" data-page-node-id="hzACU0DFAkkLM3v9H1YvEB">
+            <div class="kpi-card" data-page-node-id="ysAaN9YJSHSUhfa8yoc751">
+              <div class="kpi-label" data-page-node-id="IYH3hIlLH2fZZgmeHngnyC">点对点定制接口总数</div>
+              <div class="kpi-num" id="res-adhoc-interfaces" data-page-node-id="KyJcBVxFeN324O5wzVeD1i">18<span class="kpi-unit" data-page-node-id="et084QPbAo5GsR5egYcFMo">条链路</span></div>
+            </div>
+            <div class="kpi-card" data-page-node-id="ZdYhSIQCS5eeu3PEG8r7Oj">
+              <div class="kpi-label" data-page-node-id="lxka481GbPS0PEEfW4purR">双向 MCP 标准端点数</div>
+              <div class="kpi-num" style="color:var(--emerald);" id="res-mcp-interfaces" data-page-node-id="u2guM9VywXWaIFH9qjVmW9">7<span class="kpi-unit" data-page-node-id="uORt07PbFOHnogMbE5zpES">个标准端</span></div>
+            </div>
+            <div class="kpi-card" data-page-node-id="oToeAHYWiIW4b5d7XDLuX9">
+              <div class="kpi-label" data-page-node-id="bt88JKNnJYNASkIgEvtLlQ">接口复杂度降低</div>
+              <div class="kpi-num" style="color:var(--cyan);" id="res-interface-reduction" data-page-node-id="3HtPR8emnDHPQnyvMHgiX0">61.1<span class="kpi-unit" data-page-node-id="E0gSCl0d1HhDh2RVScrCDr">%</span></div>
+            </div>
+            <div class="kpi-card" data-page-node-id="picNBPNiwzWkdISH7lYbob">
+              <div class="kpi-label" data-page-node-id="R4pooDFnfeR2eo5w77Qvh2">预估年维护工时节省</div>
+              <div class="kpi-num" style="color:var(--accent);" id="res-annual-maint-hours" data-page-node-id="uq4AsFx32dM8DA9UBaF7Fo">220<span class="kpi-unit" data-page-node-id="DK3Oes6yZqdbAOTPWnSBUc">小时</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-wrapper" data-page-node-id="73jbf8d08gpHtP6EQd445n">
+          <div id="svg-topology-container" data-page-node-id="HBguQGoLiHBtlPIij1CdmY"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 4: Event-Driven Concurrency -->
+    <section class="doc-section" id="sec-event" data-page-node-id="CxwUAONSumbJ3xELrDH9B4">
+      <div class="section-header" data-page-node-id="ImyeIakEMFC4x0bLEeBeGE">
+        <span class="section-tag" data-page-node-id="NE0QLPG28WIl9p8Oqy62Ad">Section 04 · Architecture Pattern 2</span>
+        <h2 class="section-title" data-page-node-id="5irqGsT3RpI6F9bvl6zfsG">模式二：事件驱动的并发架构（Event-Driven Concurrency）</h2>
+        <p class="section-desc" data-page-node-id="GiowdrMQv2uSFspqWO7S2H">弃用线性调用链，基于独立 asyncio.Queue 与具名主题构建高内聚反应式协同体系</p>
+      </div>
+
+      <h3 class="sub-title" data-page-node-id="xe7spR2uxt9ShcP6l8gDaQ">2.1 临床跌倒预警实战案例（Google 官方复盘核心赛题）</h3>
+      <p data-page-node-id="eDQTAUCmB18yfH1slbO2qG">
+        在挑战赛的医疗健康赛道中，冠军团队实现了一个高严苛度的<strong data-page-node-id="E3RlI0Dc49bSBfBxmLD3da">“步态跌倒风险与实时用药禁忌交叉预警系统”</strong>。该系统必须在传感器捕捉到异常步态到用户行动窗口关闭前的极短时间内，完成多源数据分析、禁忌合规校验、资源调度并下发紧急推送：
+      </p>
+
+      <div class="callout callout-cyan" data-page-node-id="Yh0YRzSHhCmAnNyOPlLGol">
+        <div class="callout-title" data-page-node-id="ieyEJ8b88mhe6363fQND3O">真实技术参数与事件主题流水线</div>
+        <ul style="margin-left:1.2rem;margin-top:0.4rem;" data-page-node-id="NeYkgz6cASkhPedovJebDF">
+          <li data-page-node-id="oCSBrAXredSQw4378bB4kk"><strong data-page-node-id="Qn4OKLpfJgKvzMcVCEsc99">异常触发阈值</strong>：可穿戴传感器连续监测步态，当<strong data-page-node-id="6Y4gy2hd98KQRjBqEmnnTE">步态速度下降幅度 ≥ 15%</strong> 时，即刻触发高危判定。</li>
+          <li data-page-node-id="fnHMrnmMeI4QzLDJvu8QSI"><strong data-page-node-id="AgRh6QDmJD26HimOoXAxGL">发布第一事件</strong>：传感器 Agent 并不阻塞调用后续逻辑，而是向事件总线发布具名事件：<code class="inline-code" data-page-node-id="v1oCK7al7f4zQRlPaROHFj">CLINICAL.ANOMALY_DETECTED</code>。</li>
+          <li data-page-node-id="FZirh34rKoh8RKtpzZY7gW"><strong data-page-node-id="RerhLjJsFVUCiAc45lh6Un">多 Agent 异步响应</strong>：
+            <ul style="margin-left:1.2rem;margin-top:0.2rem;" data-page-node-id="DtV6q7iBvZTYtxHs4bncDM">
+              <li data-page-node-id="Mk8PB608tOFAvFhRHuo1cQ"><strong data-page-node-id="Lya4RsoqLJZiKJGcaqwIQl">合规 Agent（Compliance）</strong>：从自身专用的 <code class="inline-code" data-page-node-id="hAJUtBnPSTjp6r5d9ZbWRv">asyncio.Queue</code> 收到该事件，并发查询外部药物相互作用数据库（耗时约 600~1200ms），核对患者最新处方。核验无误后发射：<code class="inline-code" data-page-node-id="uSv9op3b1Je0Dd6CdH4GN6">CLINICAL.COMPLIANCE_REPORT_READY</code>。</li>
+              <li data-page-node-id="VcRudtMMvbCrTD647Wz6EP"><strong data-page-node-id="ZzzWHSQhLBKClUgeTbP8rj">调度 Agent（Dispatch）</strong>：与合规 Agent <strong data-page-node-id="9AZHOPpkZEgzIdghfBnUbb">完全并行</strong>启动，根据患者 GPS 与医护人员排班预先规划救助路径与最近急救资源。</li>
+              <li data-page-node-id="w9WgHY1SpaNDXKoBUPj0FL"><strong data-page-node-id="Zl0mMGSZwz9z6nuqM62sZy">通知 Agent（Notify）</strong>：待合规报告就绪并融合调度规划后，毫秒级推送结构化带警示指南的预警。</li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Mathematical Model: Amdahl DAG Latency -->
+      <h3 class="sub-title" data-page-node-id="iJ851iaLoSuRIltPYmwGe8">2.2 串行调用链 vs DAG 事件驱动时延模型</h3>
+      <p data-page-node-id="V4sSEn2Y48xnWFPrViPeyi">
+        设系统由 4 个专业组件构成：传感器解析 (<span class="math-inline" data-page-node-id="lGxbgyiYTn2aIagAqcboMI"><i data-page-node-id="b2cKEiHr5e2WdingacJIeO">t</i><sub data-page-node-id="90xD4e9GYNxefH7OuDRxDn">1</sub></span>)、药物合规交叉比对 (<span class="math-inline" data-page-node-id="10fHqeEAsgvdPQqlxZ8156"><i data-page-node-id="Eo8FoPqJ2Ol5KXUzGkE0MB">t</i><sub data-page-node-id="WZ8NXFt0R9pPVlI7lttFlu">2</sub></span>)、急救调度规划 (<span class="math-inline" data-page-node-id="hHhtQuNUAabOidzoutj5gA"><i data-page-node-id="dfxbhRneyBnW5xuWniQMkA">t</i><sub data-page-node-id="W6EFYFcwB4y1KULAUGzvPg">3</sub></span>)、多端消息通知 (<span class="math-inline" data-page-node-id="OpuF55j78Hq54c3XmvuXM4"><i data-page-node-id="5F5NGkinKENsT91iFVHXRb">t</i><sub data-page-node-id="gdOjV0NRF7weGMKVJqRlHO">4</sub></span>)。
+      </p>
+
+      <p data-page-node-id="s8vWGurnx9egx1c6rfmHP5">
+        <strong data-page-node-id="GQtOqGevjfquZtzEgOOtwM">1. 串联阻塞流水线：</strong>总延迟为各阶段耗时之和。当 <span class="math-inline" data-page-node-id="9DNWG6U0jWVn5SQiNxK079"><i data-page-node-id="D1Sn4Rictt3EBUqARtxIVn">t</i><sub data-page-node-id="7nPtgKxKfZoLT9KeAfzhjO">2</sub></span> 发生外部数据库网络抖动时，整个系统进入全阻塞态：
+      </p>
+
+      <div class="math-block" data-page-node-id="wHWwDYOcfHvrKC6xJg5Eva">
+        <i data-page-node-id="4F2KI7vNrROyCGiOzKWvj0">T</i><sub data-page-node-id="XdU2nK75oOXt4t8yELFaA2">serial</sub> = 
+        <i data-page-node-id="QVNN7kiaZD8ebVslpkmUzq">t</i><sub data-page-node-id="30WIfS2MZVuyImksLE2M5N">1</sub> + <i data-page-node-id="WDgX0VuHjHbEKuFWRtpizF">t</i><sub data-page-node-id="Ya92gxzF1tCNAqD699eYqO">2</sub> + <i data-page-node-id="TTc5wuQiMw4WnRm6gzlvxY">t</i><sub data-page-node-id="ejaL7T67mNaMgiG2BZQIsC">3</sub> + <i data-page-node-id="4siBqNc6Bq46OZY3DbDYb9">t</i><sub data-page-node-id="5cUzIb5yGCo5lApBMXIECM">4</sub>
+      </div>
+
+      <p data-page-node-id="nMAQrKvs2dIgrGrGaJUsYH">
+        <strong data-page-node-id="ElrDi3iScdKQL0XGtNbjWO">2. 异步事件总线（Pub/Sub DAG）：</strong>合规比对与调度规划具备数据独立性，在接收到 <code class="inline-code" data-page-node-id="7CQetVf93CbgJBtLpRvBcC">CLINICAL.ANOMALY_DETECTED</code> 后通过独立 Worker 协程并行计算，系统关键路径缩短为最大分支耗时：
+      </p>
+
+      <div class="math-block" data-page-node-id="yNlyc4T49y0txODkEKq0x0">
+        <i data-page-node-id="ScnHdoGgEglKU8ALNNpIZp">T</i><sub data-page-node-id="SuLHbDBloDzljlEVASawrg">event</sub> = 
+        <i data-page-node-id="GpWCfs8u0HHzpmSXw570Ab">t</i><sub data-page-node-id="6DpNZfLen8wcWDNWBrxUnv">1</sub> + 
+        max(<i data-page-node-id="2Z3NB5ERS6AkByqYThpXJl">t</i><sub data-page-node-id="pFMNe7hLeAv2nTXDQykjF8">2</sub>, <i data-page-node-id="IHkfMm5NSD5oVvhZX9xEA1">t</i><sub data-page-node-id="JCaHQ1xBn50ut8sF0B3IyO">3</sub>) + 
+        <i data-page-node-id="Fe1Bfo91lQbBA0ZrmjXnJa">t</i><sub data-page-node-id="KIdY4itpyGmUiqd1ckfuF9">4</sub>
+      </div>
+
+      <p data-page-node-id="OhdsY9ZxGPiWGDcFhl2Q9e">
+        理论系统加速比（Speedup Ratio）定义为：
+      </p>
+
+      <div class="math-block" data-page-node-id="8r4gHVg4joz8gJzu7DdfDY">
+        <i data-page-node-id="jjsX24wVdq4sD5zwW5WkEC">S</i> = 
+        <span class="mfrac" data-page-node-id="XaA55cx14q5Yc4Tln9ersf">
+          <span class="num" data-page-node-id="Gb2eYSc11hqvWp8qTsM82e"><i data-page-node-id="9RpcD8hMCydEEqwiDAb1Ma">t</i><sub data-page-node-id="UsdC5HSziXzjaCWOPL2LQJ">1</sub> + <i data-page-node-id="iPRst2VgpLo9shmuVm72b7">t</i><sub data-page-node-id="CGvEojldA8H42hNWS1k1Fw">2</sub> + <i data-page-node-id="UyYV8rRx6qITRMI6z116NB">t</i><sub data-page-node-id="rAayn13bkh2GQTGgtX92MV">3</sub> + <i data-page-node-id="3HGgqAdURKoIEL2MtmlCkc">t</i><sub data-page-node-id="NXVExlMqGetWkbz1UoJvCv">4</sub></span>
+          <span class="den" data-page-node-id="JyfkRzamizmI8cKGFOl2vj"><i data-page-node-id="yrGlX3IJgqPfWDNWhm76BV">t</i><sub data-page-node-id="yxARWiBdvp04jc0ty06Oth">1</sub> + max(<i data-page-node-id="mGexcQjH4CeDLODe7Uo2QB">t</i><sub data-page-node-id="1kdiM3gJFUiF3ig2FdxpDt">2</sub>, <i data-page-node-id="5OROckfD8Kds1ezrDacgqz">t</i><sub data-page-node-id="GFiBNkznUgUOt3ABZsmEjS">3</sub>) + <i data-page-node-id="k8pydPlloDMXNSrUDEabqJ">t</i><sub data-page-node-id="HjIHCd8tBAFbJe00ZBiTDx">4</sub></span>
+        </span>
+        &gt; 1
+      </div>
+
+      <!-- Interactive Sandbox 2: Event Latency -->
+      <div class="sandbox-card" data-page-node-id="0K7zkd9sVhHlenBqxSOjgK">
+        <div class="sandbox-header" data-page-node-id="UtStyTOCsdlFZjHA1JYsGS">
+          <div data-page-node-id="GgXyqt3GlHU617PONFktJG">
+            <div class="sandbox-title" data-page-node-id="y3AJGJ6VEXGdq68TdKgREy">沙盘二：事件驱动并发 vs 串行阻塞流水线时延对比沙盘</div>
+            <div class="sandbox-desc" data-page-node-id="UfonhIJE3rGp2RZbV1FOBC">调节各个专业 Agent 的执行耗时与网络抖动，实时对比关键路径与并发加速收益</div>
+          </div>
+          <span class="sandbox-badge" data-page-node-id="wOOjGNHVwNVNSviVsewsBR">CONCURRENCY DAG</span>
+        </div>
+
+        <div class="sandbox-grid" data-page-node-id="nmHA5sFr16fiv6DYVEHVLJ">
+          <div class="control-panel" data-page-node-id="qYrUpbZn5h0VZBI6ccS6PZ">
+            <div class="control-group" data-page-node-id="VawqUe8uAAZfg02HjOyuUn">
+              <div class="control-label-row" data-page-node-id="YbHT44BSLD2PpDoVO8ER83">
+                <span data-page-node-id="q9K9GzjZ691pnO8yT5CdO3">t1: 步态异常检测耗时 (ms)</span>
+                <span class="control-val" id="val-t1" data-page-node-id="UXLNlztQJ1xEpjefHIMsSH">150 ms</span>
+              </div>
+              <input type="range" id="sim-t1-sensor" min="50" max="500" value="150" step="10" data-page-node-id="mS6rTiFd2hPqdgP8H82P7u"/>
+            </div>
+
+            <div class="control-group" data-page-node-id="1NnuLcHSCPWvtV268D8f7y">
+              <div class="control-label-row" data-page-node-id="RbOfw0G7WOSXvZujFtQJKk">
+                <span data-page-node-id="IamcX61mkCnkdk8MfVcEmb">t2: 药物相互作用合规比对 (ms)</span>
+                <span class="control-val" id="val-t2" data-page-node-id="XeeGBSxCaiODaPRLKkmfHT">800 ms</span>
+              </div>
+              <input type="range" id="sim-t2-compliance" min="200" max="2000" value="800" step="50" data-page-node-id="E8QRxOteapx9PTxtUGDKpw"/>
+            </div>
+
+            <div class="control-group" data-page-node-id="sLo6Ljz0drBWiMrAIodBIb">
+              <div class="control-label-row" data-page-node-id="ZixdqhTR2nbCG0e0JSucRb">
+                <span data-page-node-id="KnFnByAKnlcdJ7Z4wn7FDq">t3: 急救资源与路线调度规划 (ms)</span>
+                <span class="control-val" id="val-t3" data-page-node-id="Bnp8s4MGbHVhcVfRZnxeBO">600 ms</span>
+              </div>
+              <input type="range" id="sim-t3-dispatch" min="100" max="1500" value="600" step="50" data-page-node-id="QCSnWHWhEuDd1r8SN9c5vG"/>
+            </div>
+
+            <div class="control-group" data-page-node-id="4c889y7iWK5eQWGZzxV3zV">
+              <div class="control-label-row" data-page-node-id="Zqn8a21mMdZcfNcpO1edOD">
+                <span data-page-node-id="q17Dglsb12JF95hDzXGWdu">t4: 多通道终端通知推送 (ms)</span>
+                <span class="control-val" id="val-t4" data-page-node-id="BJJF5AUFYRlpoAYECaUOs8">120 ms</span>
+              </div>
+              <input type="range" id="sim-t4-notify" min="50" max="400" value="120" step="10" data-page-node-id="4oaEXeCHVESpWE4S3UDGUH"/>
+            </div>
+          </div>
+
+          <div class="kpi-board" data-page-node-id="LIDzzb3eQd9N7xymnTtfkO">
+            <div class="kpi-card" data-page-node-id="sJw2tNUaVSPh4E3qL82OLR">
+              <div class="kpi-label" data-page-node-id="nVQoKTAZTDCD5zkkn1m9qP">串行调用链总耗时</div>
+              <div class="kpi-num" style="color:var(--rose);" id="res-serial-lat" data-page-node-id="YsQohFM5A2n6Zm0bLoLbei">1670<span class="kpi-unit" data-page-node-id="n4e0FvacFbUsmTBx6MSIHC">ms</span></div>
+            </div>
+            <div class="kpi-card" data-page-node-id="b7mdc7hqkqCvecHHZv4Ii5">
+              <div class="kpi-label" data-page-node-id="CAPEHyLHvLhRnOTfIhyhI3">事件驱动关键路径耗时</div>
+              <div class="kpi-num" style="color:var(--emerald);" id="res-event-lat" data-page-node-id="cq4pQWaSU8Lyd3mWSCs5mR">1070<span class="kpi-unit" data-page-node-id="QHqPNpE59mi3VXaEUyeaYH">ms</span></div>
+            </div>
+            <div class="kpi-card" data-page-node-id="gcswCqwHUtTD7mQ0ypQ8KP">
+              <div class="kpi-label" data-page-node-id="pWPe7B4eRsOHn1gXjRATpw">系统端到端加速比 S</div>
+              <div class="kpi-num" style="color:var(--cyan);" id="res-speedup" data-page-node-id="NsFsWxaFw7gurTsmxFRieI">1.56<span class="kpi-unit" data-page-node-id="kOgDk3Ten8V8s10yTmT657">x</span></div>
+            </div>
+            <div class="kpi-card" data-page-node-id="8A5njmKur8y4wAjYSOZkFz">
+              <div class="kpi-label" data-page-node-id="GXCBlbCr59MiaZxiHKCaK7">绝对响应窗口节省</div>
+              <div class="kpi-num" style="color:var(--amber);" id="res-time-saved" data-page-node-id="FxWH8leVrjDbIcEuzSDBQ2">600<span class="kpi-unit" data-page-node-id="94al0xalRzjHDYqxcGvBnI">ms</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-wrapper" data-page-node-id="89AJepIES1WLRuSGisOMnc">
+          <div style="font-size:0.75rem;font-family:var(--font-mono);color:var(--text-muted);margin-bottom:0.6rem;" data-page-node-id="BrKx1N3ujAmAGnrf9ryQ4L">
+            甘特图：串行累加流水线 vs 事件驱动并发执行拓扑
+          </div>
+          <svg class="viz-svg" viewBox="0 0 620 120" id="svg-gantt-container" data-page-node-id="ryxFlcZajoAF0ShdkApkmG">
+            <!-- Dynamic Gantt bars injected by JS -->
+            <rect x="0" y="20" width="100" height="24" rx="4" fill="var(--rose)" id="gantt-serial-bar" data-page-node-id="OQqrtQwpCujcWjw939p6ZI"/>
+            <text x="10" y="37" font-size="11" fill="#fff" font-weight="600" data-page-node-id="OL8HUKIbjHGLNBl8Secu10">串行阻塞链</text>
+
+            <rect x="0" y="65" width="40" height="18" rx="3" fill="var(--cyan)" id="gantt-event-t1" data-page-node-id="DD0qNmSFsDVHvN6kmJgAfv"/>
+            <rect x="42" y="55" width="80" height="16" rx="3" fill="var(--emerald)" id="gantt-event-t2" data-page-node-id="vT2aDE1kE68sIiM7OuJTCm"/>
+            <rect x="42" y="75" width="60" height="16" rx="3" fill="var(--amber)" id="gantt-event-t3" data-page-node-id="vge8oWRjGrvRy6mRY0nGf6"/>
+            <rect x="124" y="65" width="30" height="18" rx="3" fill="var(--accent)" id="gantt-event-t4" data-page-node-id="j0tMljoxsWwXuDsCCjbT8E"/>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 5: Same-bar Fallback -->
+    <section class="doc-section" id="sec-fallback" data-page-node-id="il9bnzcnZ8XYBRPJJ2BtL7">
+      <div class="section-header" data-page-node-id="kVRPAp8F7IlXZ97zDjhhli">
+        <span class="section-tag" data-page-node-id="9V0R51LihIwaDX61XneI62">Section 05 · Architecture Pattern 3</span>
+        <h2 class="section-title" data-page-node-id="FREjnZx6GTs7rsV8EUOJ5Q">模式三：同标准回退（Same-Bar Fallback）</h2>
+        <p class="section-desc" data-page-node-id="KXPGBy2DSMSrBXp77Hcf5M">架构层单点锁死：容灾降级可以降低算力开销，但严禁降低输出质量准入阈值</p>
+      </div>
+
+      <h3 class="sub-title" data-page-node-id="NzDwFQ85taYLxYqhnHJBF9">3.1 生产级 503 熔断与“双轨测试漏洞”</h3>
+      <p data-page-node-id="A5UAKgiUOTQmchXTRABK2b">
+        在挑战赛中，参赛系统的主力模型普遍采用具备极高推理能力的 <strong data-page-node-id="4l9rxb1ppQftI6iViFOASo">Gemini 3.1 Pro</strong>。然而在现场突发流量冲击下，团队遭遇了 Google Cloud 返回的 <code class="inline-code" data-page-node-id="WQJ5IyBiBKNOlPpW7YVQxf">HTTP 503 Service Unavailable</code>（服务超载不可用）。
+      </p>
+      <p data-page-node-id="oMVTfbDFs7xbmoTuq0Emcw">
+        许多未入围团队在处理 503 异常时，设计了极其致命的“伪降级逻辑”：
+      </p>
+
+      <pre class="code-block" data-page-node-id="Rv4L4vF1YCOdhEZKOkmVvR"><code data-page-node-id="iDePPjzav3TJl43XKzR2zX"># 常见反模式：降级通道跳过安全校验（致命的双轨系统）
+try:
+    response = call_gemini_3_1_pro(clinical_prompt)
+    return validate_clinical_response(response)   # 主路径有严格质检
+except Overloaded503Exception:
+    # 灾难：降级到轻量模型 Flash 后，开发者往往直接放行以保障“可用性”！
+    response = call_gemini_3_6_flash(clinical_prompt)
+    return response  # 漏洞：轻量模型携带未经校验的医学幻觉直接暴露给终端！</code></pre>
+
+      <div class="callout callout-amber" data-page-node-id="lpN7uCRCl50L3Ws9rKt0AR">
+        <div class="callout-title" data-page-node-id="vBCHkbREdEvClpRz1pGurv">Sergio Villani 架构警告</div>
+        如果你的降级机制在执行时绕过了主路径的验证逻辑，意味着你在只测试、认可了一个系统的情况下，在生产环境秘密上线了两个截然不同、且未受约束的系统！
+      </div>
+
+      <h3 class="sub-title" data-page-node-id="Elf6PEDFhfVJCz7hyj2sFb">3.2 结构性单点强制挂载：Same-bar 准则</h3>
+      <p data-page-node-id="lWTEJfk0cFgD5PSeOFHI19">
+        顶级方案在架构层面彻底消除了这种可能性：<strong data-page-node-id="mdB7x7gvpwGLQrEU2dnIGn">在代码拓扑结构上，让“绕过校验”变成语法或架构上的不可能</strong>。无论上游是主力模型 Gemini 3.1 Pro，还是带指数退避（Exponential Backoff）回退调用的轻量模型 Gemini 3.6 Flash，所有输出必须汇流至同一个单点门禁：
+      </p>
+
+      <pre class="code-block" data-page-node-id="wb83bZ7Tr5Tftg0SMu8hnz"><code data-page-node-id="meDDOVcpQHIYoRDEQLW6mu"># 顶级团队方案：架构级强制单点质量锁死
+async def generate_verified_clinical_advice(patient_data: PatientContext) -> ClinicalReport:
+    raw_output = await dispatch_with_same_bar_fallback(patient_data)
+    # 单点不可规避挂载：必须通过真实临床指南硬核引用校验
+    return validate_clinical_response(raw_output)
+
+async def dispatch_with_same_bar_fallback(data: PatientContext) -> str:
+    try:
+        return await call_gemini_3_1_pro(data)
+    except APIOverloadException:  # HTTP 503
+        logger.warning("Gemini 3.1 Pro 503 过载，触发退避降级至 Gemini 3.6 Flash")
+        await asyncio.sleep(calculate_backoff())
+        return await call_gemini_3_6_flash(data)</code></pre>
+
+      <h3 class="sub-title" data-page-node-id="3g2kXnjLe9g6ipMZ3NXcyT">3.3 贝叶斯缺陷逃逸率模型推导</h3>
+      <p data-page-node-id="Ei1uMjIK5YuKk4jmfLIAZF">
+        设主模型高并发触发 503 的概率为 <span class="math-inline" data-page-node-id="BB0kaEneraVSoY4Nhvts7R"><i data-page-node-id="6fJwSeyEJO0RwzFs6UAHZ9">p</i><sub data-page-node-id="83nKTjfy5QnX08Ef0wO8V3">503</sub></span>。
+        Gemini 3.1 Pro 的内在先验幻觉/违规率为 <span class="math-inline" data-page-node-id="XdnxZU6thPek6KwW95fmjG"><i data-page-node-id="V0SJ9NJyHf13OlwGKg5udt">ϵ</i><sub data-page-node-id="oCV3YlweR194HSWzY7tQrP">pro</sub></span>；Gemini 3.6 Flash 的先验幻觉/违规率较高：<span class="math-inline" data-page-node-id="HQx0MqnIpwJp7ufvnaeOgG"><i data-page-node-id="hWO10vkmDGsVk9w8uS6jmS">ϵ</i><sub data-page-node-id="LIKV4Qv90ovhagKx0AlIJk">flash</sub> &gt; <i data-page-node-id="qYm2xu6DiDjQMfxPaWRnV4">ϵ</i><sub data-page-node-id="VjoBUuoyuobnuE0mmgAMR2">pro</sub></span>。
+        质量校验门禁 <code class="inline-code" data-page-node-id="sXXHwPPFbsTj9GSJaYZ1rp">validate_clinical_response()</code> 对违规响应的拦截召回率为 <span class="math-inline" data-page-node-id="fPayUwLZrauqMyuxnXjGNA"><i data-page-node-id="JMdFey09LdD0lJR4V4P2h8">R</i><sub data-page-node-id="TdcPIMgDvtqbzxhhzJ7ZH1"><i data-page-node-id="1EQHGF4Ypp60fvBkmaiwwC">v</i></sub></span>，对应漏检率（假阴性率）为 <span class="math-inline" data-page-node-id="E5KAMSTq4KbmqSsletEboC"><i data-page-node-id="EjjtVptdXzBX5pazJG6ITi">β</i> = 1 − <i data-page-node-id="jEFrQHSR3D5FyWSBwT9ypV">R</i><sub data-page-node-id="IWSQwPbBsC7MD728d2Frwh"><i data-page-node-id="ClsvtucJuZWFgqU640phCz">v</i></sub></span>。
+      </p>
+
+      <p data-page-node-id="4Mt03bkaY0HOA7e418ZtNG">
+        <strong data-page-node-id="SmSVeL2JCVWsbv0bHkQjlX">1. 伪降级双轨制（Loose Fallback）：</strong>降级分支跳过质检或仅进行微弱的格式检查（漏检率 <span class="math-inline" data-page-node-id="vfEhF47u33ZmVcopLAdJF9"><i data-page-node-id="c0NLn01gEX1cw2Emm5zO45">β</i><sub data-page-node-id="MKI8H9M4N1crgFik533Uhl">loose</sub> ≈ 1.0</span>），系统总逃逸缺陷率为：
+      </p>
+
+      <div class="math-block" data-page-node-id="9Myo8Aki4e5lu3N23cQwDn">
+        Defect<sub data-page-node-id="8GbWehsJtWMCbmnAKv0ZFj">loose</sub> = 
+        (1 − <i data-page-node-id="onPEzzixEqIHitpj0WBY4Z">p</i><sub data-page-node-id="bX36eeX9AbRNhA8qxwHU7D">503</sub>) · <i data-page-node-id="smVK7Wy2yQKA5WHTobD4re">ϵ</i><sub data-page-node-id="4qGwvflRRm4GLJox25c0z4">pro</sub> · <i data-page-node-id="RWfvtNfwWyLNkr4sFCjCbP">β</i> + 
+        <i data-page-node-id="PMpDt2ZuMHmgu8DNiOOlyO">p</i><sub data-page-node-id="FF34WRW87HqTWD8gk5xgPl">503</sub> · <i data-page-node-id="dLI39IfGpRgUHKBiF5gztg">ϵ</i><sub data-page-node-id="0EEsrjsF2HjBpXNhiOd8XT">flash</sub> · <i data-page-node-id="Cq8LBBkn6AD5wtJuul2n2O">β</i><sub data-page-node-id="jrErHONCi1UDNqMePnOudy">loose</sub>
+      </div>
+
+      <p data-page-node-id="bdJ1Z5MTrkm0yh1wr4UcKV">
+        <strong data-page-node-id="gZa77WXphcQ0VE0cFK54kb">2. 同标准降级（Same-bar Fallback）：</strong>架构强行对 Flash 输出施加相同的硬核检验门禁 <span class="math-inline" data-page-node-id="FuUa8QjmzJn3vFiqaZVGLx"><i data-page-node-id="zWe5C3g5JuVGqsP1BWhwDA">β</i></span>，系统总逃逸缺陷率被刚性压制在安全包络线内：
+      </p>
+
+      <div class="math-block" data-page-node-id="jGrsIyX8gDwDSgGZW86Npj">
+        Defect<sub data-page-node-id="uibGrh8qHrcYLwrzFcbDn6">same-bar</sub> = 
+        [(1 − <i data-page-node-id="JApNYkJQ7Cn2AwYRaTTe9e">p</i><sub data-page-node-id="L9ip7r3KAA6yD48Gkx93DF">503</sub>) · <i data-page-node-id="uxsqkjwdchNcrke95trzoR">ϵ</i><sub data-page-node-id="0DPuf0uxy7jG8kIupCH0KH">pro</sub> + <i data-page-node-id="zRyB1ZuvEmUpSk8jQ4eyOc">p</i><sub data-page-node-id="CFJyOspfRgDGGAwBhDZLBp">503</sub> · <i data-page-node-id="sEIRpsvUEd5Iu7PzLhlUmw">ϵ</i><sub data-page-node-id="n2HKvaSVZVV13UTFJZHojy">flash</sub>] · <i data-page-node-id="ohgxipmwzZjax67dckVhwq">β</i>
+      </div>
+
+      <p data-page-node-id="yxb7je3sJO8dDmZMRFX5sf">
+        两者的缺陷压制倍数（Safety Factor Gain）为：
+      </p>
+
+      <div class="math-block" data-page-node-id="4p8PtThau7CHezbaC0RxeN">
+        Gain = 
+        <span class="mfrac" data-page-node-id="wxQAbuYTaizAUUCNBSnt5A">
+          <span class="num" data-page-node-id="cRzJfNx8JagcTo5sxIfxfb">Defect<sub data-page-node-id="O8deyGgXDlEpQbh5Kmwwwd">loose</sub></span>
+          <span class="den" data-page-node-id="u0w2o13ryOVnGm2JoE0fBz">Defect<sub data-page-node-id="uoi4No1hSlGhozglNREr7F">same-bar</sub></span>
+        </span>
+        ≈ 
+        <span class="mfrac" data-page-node-id="uxW47shoRU5GvIWFmrkWf9">
+          <span class="num" data-page-node-id="65eVvaD7aHQGWO484s92uf"><i data-page-node-id="xCItMHKwEjn9Ti7vG3nI9s">p</i><sub data-page-node-id="vNKmx56W0MyDbHZtTxLVhe">503</sub> · <i data-page-node-id="eLlgXlLuc7OtnYKLn8SpUH">ϵ</i><sub data-page-node-id="pzdv2OBxV5GMEBy7Dznw6N">flash</sub></span>
+          <span class="den" data-page-node-id="c2Y73LQ8QgMvuk2GYbESTH">[<i data-page-node-id="DtWHxYNi6ts3TFRA5cOyw7">ϵ</i><sub data-page-node-id="If9v2SsgqlyBVYVAqNKk4U">pro</sub> + <i data-page-node-id="tItEF8g44NjImXChf3Ozh6">p</i><sub data-page-node-id="pAHP8Q3gNdMRED6KCJSmIZ">503</sub>(<i data-page-node-id="GutBtmtBdKp1my8JDACMAX">ϵ</i><sub data-page-node-id="sR6CD9DpZQC8EELrrbStlg">flash</sub> − <i data-page-node-id="vjrjB3DTYDqsOTF3atjA7G">ϵ</i><sub data-page-node-id="J7rEkG9fCmZ8DkAN7e2L5z">pro</sub>)] · (1 − <i data-page-node-id="q776TkiCcYSF9V78U9i8z9">R</i><sub data-page-node-id="Cle5KHFJfwJwRaGhXNpuF9"><i data-page-node-id="VRPxhODUGIj8UR4WABN6rM">v</i></sub>)</span>
+        </span>
+      </div>
+
+      <!-- Interactive Sandbox 3: Same-bar Reliability -->
+      <div class="sandbox-card" data-page-node-id="7Rk1eml4OH9GUZiSjcEgQI">
+        <div class="sandbox-header" data-page-node-id="WUsHF9SFnpT0888RbYbGjI">
+          <div data-page-node-id="zqeIJ96p3ycJs8xWAsDBHD">
+            <div class="sandbox-title" data-page-node-id="C1kNjnqDvu0OB3Pe0zW0rs">沙盘三：同标准降级可靠性与缺陷逃逸沙盘</div>
+            <div class="sandbox-desc" data-page-node-id="Vt4GZPn7YD77wnG9pf4003">观测主力模型 503 概率与 Flash 幻觉率波动下，双轨放行制与同标准单点门禁的质量分水岭</div>
+          </div>
+          <span class="sandbox-badge" data-page-node-id="7pNXuR5jyzB2dVFHvippeK">RELIABILITY GATE</span>
+        </div>
+
+        <div class="sandbox-grid" data-page-node-id="5jHm3K2FMVNL3Jf4PEIoOO">
+          <div class="control-panel" data-page-node-id="RWx8wvNhmwji7qm4EK0Jrt">
+            <div class="control-group" data-page-node-id="kvr7hxjmVvr31RbuJMPbIP">
+              <div class="control-label-row" data-page-node-id="KzdVOBAd2iFaWgFaVsO6yF">
+                <span data-page-node-id="HjB34ViIOVA0pKR764tRJA">Gemini 3.1 Pro 触发 503 概率</span>
+                <span class="control-val" id="val-p503" data-page-node-id="Lu3JEJI6RJ5fau3O0ioABu">15 %</span>
+              </div>
+              <input type="range" id="sim-p503-rate" min="0" max="50" value="15" step="1" data-page-node-id="mmsF4NjSL1stSDid0zdl3Q"/>
+            </div>
+
+            <div class="control-group" data-page-node-id="PiETxYwNAl3QML5keyEO5z">
+              <div class="control-label-row" data-page-node-id="BTykTNvTndgtiVNG1AYRkf">
+                <span data-page-node-id="snyF4PrNPbiNPaw3cmLRG9">Flash 固有先验幻觉/违规率</span>
+                <span class="control-val" id="val-flash-hal" data-page-node-id="1RZFrgJLDsAOqnX5v3y9Ky">18 %</span>
+              </div>
+              <input type="range" id="sim-flash-hallucination" min="5" max="40" value="18" step="1" data-page-node-id="gOgpWOFH3a5RUxhuuCAW5L"/>
+            </div>
+
+            <div class="control-group" data-page-node-id="ZWqQbnRCCi3QtGAQD22OMf">
+              <div class="control-label-row" data-page-node-id="LdidYPZhmMe0KfxLaiBiEM">
+                <span data-page-node-id="L9Nnky2oZAFGgBVIFoeCrF">统一质检函数拦截召回率 Rv</span>
+                <span class="control-val" id="val-gate-recall" data-page-node-id="yxdJ1A7PDeUCEBFA0rS6sa">95 %</span>
+              </div>
+              <input type="range" id="sim-gate-recall" min="80" max="99" value="95" step="1" data-page-node-id="HxzXaI6QYhAKEwFACa6K4G"/>
+            </div>
+          </div>
+
+          <div class="kpi-board" data-page-node-id="LK6HmhEjj4fkgdBqxy4vEk">
+            <div class="kpi-card" data-page-node-id="mCHrsuzCb8PPJpQ0mFPPRX">
+              <div class="kpi-label" data-page-node-id="Z7oYsWcHgT76M66MdL8ABR">宽松双轨制逃逸缺陷率</div>
+              <div class="kpi-num" style="color:var(--rose);" id="res-loose-defect" data-page-node-id="V2kSHBXwGHIO8TnsEFaDFA">2.85<span class="kpi-unit" data-page-node-id="DICF2pxYXeCOqGsR8kdbnr">%</span></div>
+            </div>
+            <div class="kpi-card" data-page-node-id="higvZl1BPy3dcZHnsWEgDL">
+              <div class="kpi-label" data-page-node-id="EIRUGRZ7vuinz434XU6joX">同标准门禁逃逸缺陷率</div>
+              <div class="kpi-num" style="color:var(--emerald);" id="res-samebar-defect" data-page-node-id="DjPZsbBM4JZw8NEz23aW1a">0.24<span class="kpi-unit" data-page-node-id="rV243e5pWiNocX8CjApB4C">%</span></div>
+            </div>
+            <div class="kpi-card" data-page-node-id="B6tn85BSXHK96UooFA4kCq">
+              <div class="kpi-label" data-page-node-id="wpfAcK9QlC0i8hFBjQW8m8">系统安全性提升倍数</div>
+              <div class="kpi-num" style="color:var(--cyan);" id="res-safety-factor" data-page-node-id="0rAD8LAwiP2Rayjrharb2T">11.8<span class="kpi-unit" data-page-node-id="u6Yb64I05PFne575Ai6Nbt">倍</span></div>
+            </div>
+            <div class="kpi-card" data-page-node-id="APUaOSJVSv2jW1DNNAEjd1">
+              <div class="kpi-label" data-page-node-id="6rdRMvu2BGYnRasHwLl9Ok">降级模式二次重试/补偿率</div>
+              <div class="kpi-num" style="color:var(--amber);" id="res-retry-overhead" data-page-node-id="pE6bQ2SjbrofIGUPQdndVs">2.7<span class="kpi-unit" data-page-node-id="HGSBZXRxcDiKxyhxxSQIvo">%</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-wrapper" data-page-node-id="af3K7LdBcSTtFGK2gthJNT">
+          <div style="font-size:0.75rem;font-family:var(--font-mono);color:var(--text-muted);margin-bottom:0.6rem;" data-page-node-id="xbS4pGgtfUPukD77vXDrBI">
+            失真缺陷率曲线对比：随 503 概率递增的系统表现（红线：双轨放行，绿线：同标准门禁）
+          </div>
+          <svg class="viz-svg" viewBox="0 0 600 120" id="svg-fallback-chart" data-page-node-id="hEP06yBGFo531bTvOo3vDb">
+            <line x1="40" y1="100" x2="580" y2="100" stroke="var(--border-medium)" stroke-width="1" data-page-node-id="qYOgXfgJAk13cTa5ZU60cj"/>
+            <line x1="40" y1="20" x2="40" y2="100" stroke="var(--border-medium)" stroke-width="1" data-page-node-id="AsHsLpnt0h7yOAjN3J3bwR"/>
+            <path d="" fill="none" stroke="var(--rose)" stroke-width="2.5" id="curve-loose-path" data-page-node-id="uiEx49vUQCEWH9jhgrDpwQ"/>
+            <path d="" fill="none" stroke="var(--emerald)" stroke-width="2.5" id="curve-samebar-path" data-page-node-id="cp410IpfZFbDimx5TqjiBb"/>
+            <circle cx="0" cy="0" r="4" fill="var(--rose)" id="point-loose" data-page-node-id="CzJsrtsZ3r0GZi5kGMQvmm"/>
+            <circle cx="0" cy="0" r="4" fill="var(--emerald)" id="point-samebar" data-page-node-id="jFFY4lx8K9w3TxvM0enVEf"/>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 6: Tiered Routing -->
+    <section class="doc-section" id="sec-routing" data-page-node-id="gEq4gDl8ij23xTAhjAln3x">
+      <div class="section-header" data-page-node-id="NNdr6icmJh5I1JFlmzZCs4">
+        <span class="section-tag" data-page-node-id="Dh9b2HFwPoty2vIR2fCE2c">Section 06 · Architecture Pattern 4</span>
+        <h2 class="section-title" data-page-node-id="7u0hxxJ2C8nVE4dT9EiCfF">模式四：昂贵调用前的分层路由（Tiered Routing Cascade）</h2>
+        <p class="section-desc" data-page-node-id="UVJZJzGWxJvzMdNElDF7DY">在请求触达前沿大模型前，必须先运行确定性、极低成本的级联过滤门网</p>
+      </div>
+
+      <h3 class="sub-title" data-page-node-id="20zSRkhTTM9uoC4D8oxpNi">4.1 谁在吞噬你的 Token 预算？</h3>
+      <p data-page-node-id="4i0zhBOfXOFM6Gh0JCjr2W">
+        Google Cloud AI 团队的实测流量审计表明：吞噬初创团队巨额推理账单的，往往不是复杂的多步临床诊断或高精算法推演，而是<strong data-page-node-id="69LBJ41Arddn6oioGd3Ht1">“怎么重置密码”、“我的包裹到哪了”、“取消我的预约”</strong>等大量模式固定的日常交互。
+      </p>
+      <p data-page-node-id="eBulhu9NjdLCpsHXA1e2hc">
+        冠军作品构建了<strong data-page-node-id="5FAe6AEiJsN7JErFX2Q0xB">三级漏斗式级联路由分类器（Three-Layer Classifier Cascade）</strong>：
+      </p>
+
+      <div class="table-responsive" data-page-node-id="hBqptSGvAxb5L7CEgWb5A5">
+        <table class="tech-table" data-page-node-id="M5sHmejBl7KuSDuW61u3X5">
+          <thead data-page-node-id="o8qEZVTKhBLnfpRvxeFiUH">
+            <tr data-page-node-id="BZsYCu6FTiluylJJbvz5Nj">
+              <th data-page-node-id="tW0wcga6DD8fGNU5RDVjtm">路由层级</th>
+              <th data-page-node-id="8lipgZI1mwfO4C6ZSd1lwI">实现机制与技术选型</th>
+              <th data-page-node-id="uNrTDE2X1xWSymcyC7ENGf">Token 消耗</th>
+              <th data-page-node-id="CCtclVgXelIXSHqJZDuQ05">P50 延迟</th>
+              <th data-page-node-id="M8Ck6AnhrRJ9i1xNVKztTy">承接任务范围</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="J3u1faWZwkzTC0g8Hd4MBF">
+            <tr data-page-node-id="7ClS4Hg5kyLC1IChFPZ8fr">
+              <td data-page-node-id="UNvYFy8vlAo1leX1h778h0"><strong data-page-node-id="arSCvNblBULEDujbB62yAQ">第 1 层：本地正则网关</strong></td>
+              <td data-page-node-id="51ePrkBGbCtBQzBFTJr2dy">基于 Python 本地的高性能预编译正则词典（Regex Matrix）</td>
+              <td data-page-node-id="FwCziueiYbhVSfLK7cjtHr"><span style="color:var(--emerald);font-weight:700;" data-page-node-id="CySVwogG9Sb4oZvhdoasN5">0 Tokens</span></td>
+              <td data-page-node-id="GqQqRyE2UbG8CQzMEB2Ast">&lt; 0.1 ms</td>
+              <td data-page-node-id="DYewd0an0Ul2ZmenohETHH"><strong data-page-node-id="65pM8ySzIWiFo4C62JHeGf">承接 &gt; 40% 的确定性请求</strong>：状态查询、帮助菜单、页面导航、静态取消。</td>
+            </tr>
+            <tr data-page-node-id="dx8KHxmuLT6wNdpVJMNeRL">
+              <td data-page-node-id="ztS5cPo5fAHIgrVb7thN7m"><strong data-page-node-id="ByZ8vlMpTYHkUsEfHBhh71">第 2 层：微模型分类器</strong></td>
+              <td data-page-node-id="oPl1pJqDvrtd5IWy9y453b">Gemini 3.6 Flash，提示词极简化，限制 <code class="inline-code" data-page-node-id="Da4hjgEsJQjkEpx3iXi31R">temperature = 0.1</code></td>
+              <td data-page-node-id="o1VEBdHUCweoY8I2Eo7AnG"><span style="color:var(--cyan);font-weight:700;" data-page-node-id="W1QJa9uqBK25uTUPlDtlu0">≈ 10 Tokens</span></td>
+              <td data-page-node-id="I6DbPC3epSckMVOUDOd5ld">120 ms</td>
+              <td data-page-node-id="zB47H7UXzNNb7thRJcNWAF"><strong data-page-node-id="fSGPNEDrvnz68Kz8dgSLtq">处理边界歧义输入</strong>：快速判定意图槽位，直接分派至确定性微函数或简单回答。</td>
+            </tr>
+            <tr data-page-node-id="dsdBuI7QWhT4cJSbA6V7JV">
+              <td data-page-node-id="7U1p3VdvhbdRbLAIAkBxE5"><strong data-page-node-id="UESPYi9UjREUYUvvVgS4Od">第 3 层：前沿推理核心</strong></td>
+              <td data-page-node-id="3wPztp4sfVOxsL7N05BLvz">Gemini 3.1 Pro，开启深度上下文感知与多模态临床/算法链</td>
+              <td data-page-node-id="2YGFWLYuvAILUT88cfuADs">完整 Token</td>
+              <td data-page-node-id="Fg6vs0BUFTuQNCaOHJjFWE">1800 ms</td>
+              <td data-page-node-id="8jZTKspBLKvEV9z1JAuidN"><strong data-page-node-id="eHLQzlOjqFqZUE9vBVfcdh">唯有高价值复杂推理请求才可进入本层</strong>：复杂多约束推导、未知长尾异常诊断。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mathematical Model: Cost & Latency Optimization -->
+      <h3 class="sub-title" data-page-node-id="CszHeL6CQjwFVNhxvOOKrp">4.2 级联路由期望成本与加速模型推导</h3>
+      <p data-page-node-id="FFjAhGdj0B4nvsFK6HKCDi">
+        设日均总请求量为 <span class="math-inline" data-page-node-id="CjdU8yKXPomsGMx8zt4NEi"><i data-page-node-id="xJaRUOZDHHbDvlKOhIEkLx">Q</i></span>。
+        第 1 层本地正则拦截率为 <span class="math-inline" data-page-node-id="8Ri316fCvwbJY0q0YIjcIW"><i data-page-node-id="qqEWqpfCxH3FxrwXVSXf6D">α</i><sub data-page-node-id="LXNyICLGkSK15JSGzMQKEA">1</sub></span>（基准实测值 <span class="math-inline" data-page-node-id="u1Sm96sWaGpWIh9LRHQpb5"><i data-page-node-id="OQftQaYf7RYS4Jjysco3Dw">α</i><sub data-page-node-id="hRKDqxdzCxkh77H4eBhGWK">1</sub> ≥ 0.40</span>），其成本 <span class="math-inline" data-page-node-id="7zSyRjGEsXoOXPVUFqELEH"><i data-page-node-id="bc0cAP6UnTfUXKGrNMwz3B">C</i><sub data-page-node-id="qbRtjVs1GmXffBjSFHy0EC">1</sub> = 0</span>；
+        穿透至第 2 层的请求比例为 <span class="math-inline" data-page-node-id="2wGAA2bzXji0l47128m7Dd">1 − <i data-page-node-id="6bEdpK6NNRkV9AMuSEG7xs">α</i><sub data-page-node-id="QePalHD5Erk58e8uXIHFf6">1</sub></span>，分类调用成本为 <span class="math-inline" data-page-node-id="9vJ6bG0xt5YvLDFQuJa7JN"><i data-page-node-id="yNwxYlmLFBWeQkv8jgLB2j">C</i><sub data-page-node-id="hvJ47GSLvJ1EcEHWjXqNae">clf</sub> = 10 · <i data-page-node-id="FArkzqGLTlqFDv1CSlCdlv">P</i><sub data-page-node-id="AR2FUNR7PWOmoR65LtF3rl">flash_token</sub></span>；
+        第 2 层成功消解且直接以轻量模型回答的比例为 <span class="math-inline" data-page-node-id="uj23acsMNQfC22ywDOfSv0"><i data-page-node-id="nXrokS9vTwUEetT01AGBH7">α</i><sub data-page-node-id="ecTh8Dgxn8oRzAIrbM57h2">2</sub></span>（单次成本 <span class="math-inline" data-page-node-id="uwZOKuO7HrdF4xlWkDDrEk"><i data-page-node-id="KhxR6FakXD0PbDQRc8Rl1G">C</i><sub data-page-node-id="MCXuUpVw8p76lXSFyVDQT4">2</sub></span>）；
+        最终穿透至第 3 层 Gemini 3.1 Pro 的高危请求比例为 <span class="math-inline" data-page-node-id="ifg6eQWPBSSvUNFUusENPs"><i data-page-node-id="agSwR6ZcVJTgz5txaiBDbF">α</i><sub data-page-node-id="bMEnqs6onn8NjRp8VloHto">3</sub> = 1 − <i data-page-node-id="0kHGQB5uqxEUsHsqlcE8TR">α</i><sub data-page-node-id="ebzNhRrDKN6tMsffPgB98u">1</sub> − <i data-page-node-id="nIEgAbsuyuUBErNjMC4nsp">α</i><sub data-page-node-id="AOcWyTp4S9iMDjA7I4FEES">2</sub></span>（单次成本 <span class="math-inline" data-page-node-id="vfhEn4Z2IwS2E9kCTQFWvn"><i data-page-node-id="JlPJMmYP2lqkijiRmi8YBI">C</i><sub data-page-node-id="t6GGReLEVdNidXhmCeuqd4">3</sub> ≫ <i data-page-node-id="pCjXESSEL3b2FxrTdkIu4t">C</i><sub data-page-node-id="wB5lb7A41yD6vx58JDeFqU">2</sub></span>）。
+      </p>
+
+      <p data-page-node-id="AhLsbb7G6RFFNcHmws6vxd">
+        单次请求的加权混合期望成本为：
+      </p>
+
+      <div class="math-block" data-page-node-id="df6JnxVSWCyCZddlKtBMs5">
+        E[<i data-page-node-id="Jkl44QoKCMG38evKsJhZva">C</i>] = 
+        (1 − <i data-page-node-id="f6DA542ta3sY0Fjtx52wyw">α</i><sub data-page-node-id="ti1VlspAf12Y4PMiLWIUrD">1</sub>) · <i data-page-node-id="tpu8fv9g78XGtaotH8vTzj">C</i><sub data-page-node-id="6eeBClFEs1jrQUesuFa34A">clf</sub> + 
+        <i data-page-node-id="zwAkQLuWEX058YNq4LmCSN">α</i><sub data-page-node-id="fcdMiRejh68YkbDavi6DSt">2</sub> · <i data-page-node-id="JVggrIYlpcFgR6tbxHcBmB">C</i><sub data-page-node-id="FxB7ohS3GJenF41E0L0guk">2</sub> + 
+        (1 − <i data-page-node-id="cek2Uj0689ykqMlBivtVjI">α</i><sub data-page-node-id="HY1BARNY6TC15qPbe4jZE9">1</sub> − <i data-page-node-id="4ZnrldL1nF7HsR3ukLezZ0">α</i><sub data-page-node-id="7HwWXqn5hupbDMGRb8omKe">2</sub>) · <i data-page-node-id="PVcZZRMjoVFFyfEtRBQG7A">C</i><sub data-page-node-id="lpjdk5o1zAnINg5jBhJj9q">3</sub>
+      </div>
+
+      <p data-page-node-id="tkMr8ZOgHRuhpZGrLiyqTr">
+        相比全量直通前沿旗舰模型（All-in-Pro）方案，系统的相对成本节约率公式为：
+      </p>
+
+      <div class="math-block" data-page-node-id="QOABQ3npqoFrSKoqEICfCh">
+        <i data-page-node-id="XXhDKDczcdRShAkny6HLcG">η</i><sub data-page-node-id="ArElcEnHFG606QERimbKGu">saving</sub> = 
+        1 − 
+        <span class="mfrac" data-page-node-id="YHvmEIUGYA75lhNNKYQG2G">
+          <span class="num" data-page-node-id="hR1O2AeNZ51vpqkOxALT4N">E[<i data-page-node-id="XGpGZRgfeV4NwAbsnL1Wdw">C</i>]</span>
+          <span class="den" data-page-node-id="HJHKc0xaNMgfFOJttHKD2X"><i data-page-node-id="FSAQzFu5xjkiINeeV0upgV">C</i><sub data-page-node-id="QMh9eaDoXHrVcAL5F5wWLu">3</sub></span>
+        </span>
+        = 
+        <i data-page-node-id="46h1f4PbI4fXrnbKeKzKXw">α</i><sub data-page-node-id="1rzDfgy4kJtjJYArTsSjP7">1</sub> + 
+        <i data-page-node-id="jgzGmP7wMS60Y20qy60m2x">α</i><sub data-page-node-id="PBbRejsnPJmaZGU0uEpYvd">2</sub> · 
+        <span class="mfrac" data-page-node-id="88M4B1l0C2SCLWWFdB8k2d">
+          <span class="num" data-page-node-id="45unybFialyC77CaQ37oDD"><i data-page-node-id="BvyTRwlyHdAo1zFu14hNXh">C</i><sub data-page-node-id="qvNNUGzRDoFzz5oRTp5P1I">3</sub> − <i data-page-node-id="GLH6Js0ISzvLZ4ylHEHnSK">C</i><sub data-page-node-id="hobQIBwCtxPMGcF5hbP52B">2</sub></span>
+          <span class="den" data-page-node-id="rUBwYkk7GFK8N2hKIdO7tQ"><i data-page-node-id="RRF5wE6mE8xYY92pougXzi">C</i><sub data-page-node-id="pj5iobzZtOnwAvKXdhGS73">3</sub></span>
+        </span>
+        − 
+        <span class="mfrac" data-page-node-id="tim9OV3Ntu8AiE8JD1ddtN">
+          <span class="num" data-page-node-id="1xBaPY1i1545hbIglIWq4F">(1 − <i data-page-node-id="wulKlEYJP9oLWi9tzGcXlf">α</i><sub data-page-node-id="dH1GS3AA0eopfpKNp5fsg1">1</sub>)<i data-page-node-id="p7yy4dALZlLYAqIe29C4DS">C</i><sub data-page-node-id="VUASOZyV3H9enMyYSDRIEI">clf</sub></span>
+          <span class="den" data-page-node-id="zEOiozGcP4s4U98D317K8r"><i data-page-node-id="FHLBjmJfLBYcMYPEtP0jvA">C</i><sub data-page-node-id="IpAsmfHPc9IYADFqTpfHtn">3</sub></span>
+        </span>
+      </div>
+
+      <!-- Interactive Sandbox 1: Tiered Routing -->
+      <div class="sandbox-card" data-page-node-id="yes0CxS4VxNs6zhyHEgPPB">
+        <div class="sandbox-header" data-page-node-id="6VNOZWbDSd3bwzRcEwrqlw">
+          <div data-page-node-id="BtELCkWrUxiXRSPU7PM9Cl">
+            <div class="sandbox-title" data-page-node-id="j6YGCDg75NiF51YBHWAZgW">沙盘四：三级分层路由成本与时延平衡模拟器</div>
+            <div class="sandbox-desc" data-page-node-id="C54NNpCupe40Qvu0fC7SUl">调整 L1 正则拦截率与 L2 微模型分流比例，反解系统日均账单节约额与 P50 延迟改善</div>
+          </div>
+          <span class="sandbox-badge" data-page-node-id="xA90Macat69nLc6JxxT3J7">ROUTING ECONOMICS</span>
+        </div>
+
+        <div class="sandbox-grid" data-page-node-id="A7nccMqLfj2Kz1SUhCLQUZ">
+          <div class="control-panel" data-page-node-id="EDRs9nsg9dFONMGpz3VbFK">
+            <div class="control-group" data-page-node-id="NZXqLTgH1kf3icn4hVGInF">
+              <div class="control-label-row" data-page-node-id="asXsg6E4KUaI9GnO4ArRIC">
+                <span data-page-node-id="fYFwZX5pHVg8QGghVeZTui">L1 本地零 Token 正则拦截率 (α1)</span>
+                <span class="control-val" id="val-l1-ratio" data-page-node-id="el5CwdgFkG9a6lmECoiX72">40 %</span>
+              </div>
+              <input type="range" id="l1-regex-ratio" min="0" max="70" value="40" step="5" data-page-node-id="7nOanlfacf4n4u9XFmCLHp"/>
+            </div>
+
+            <div class="control-group" data-page-node-id="gysX4mppnCeyBgU9mZpW1G">
+              <div class="control-label-row" data-page-node-id="6IBef93nnnVNdvh95YUNlc">
+                <span data-page-node-id="FnH8jGfUHrFtnIlv1IoJXv">L2 Flash 微分类器解决率 (α2)</span>
+                <span class="control-val" id="val-l2-ratio" data-page-node-id="enGJh8DfY1XExJNRGtMoro">30 %</span>
+              </div>
+              <input type="range" id="l2-flash-ratio" min="0" max="40" value="30" step="5" data-page-node-id="0PyhBLNWy9674R3vMpe2bH"/>
+            </div>
+
+            <div class="control-group" data-page-node-id="YasAz93iRLovMQxDn6QYEt">
+              <div class="control-label-row" data-page-node-id="g0HKh0nmkBlALEIcZxFc1a">
+                <span data-page-node-id="EB9DAZWPrf0flaUBms5jhK">日总交互请求量 (Q)</span>
+                <span class="control-val" id="val-daily-req" data-page-node-id="O3Hvc9ib2aTvUtLfOCeYcg">50,000 次</span>
+              </div>
+              <input type="range" id="daily-requests" min="5000" max="200000" value="50000" step="5000" data-page-node-id="yCFHRqfPEd2me8mmDG0q7F"/>
+            </div>
+
+            <div class="control-group" data-page-node-id="yuZMeeMZcaCJ3dimDNs1AS">
+              <div class="control-label-row" data-page-node-id="u5gr6mOwjFN5E0UbgPFTH7">
+                <span data-page-node-id="zowjrSCgl47C2CaFEsNEic">Pro 旗舰模型单次平均成本 (C3)</span>
+                <span class="control-val" id="val-l3-cost" data-page-node-id="DGV6PJ2qo3XyyTPi4Zj1gq">$0.020</span>
+              </div>
+              <input type="range" id="l3-pro-cost" min="5" max="50" value="20" step="1" data-page-node-id="SWipYlzdNsyN9EhJap2H9A"/>
+            </div>
+          </div>
+
+          <div class="kpi-board" data-page-node-id="Lt9nluNHmwbM2knYeCHiGj">
+            <div class="kpi-card" data-page-node-id="BaeTZ9EK5ZEfep8f8Dy5ss">
+              <div class="kpi-label" data-page-node-id="hbzKRvHu61Mh6DuHXQRHTx">单次加权混合成本</div>
+              <div class="kpi-num" style="color:var(--cyan);" id="res-avg-cost" data-page-node-id="BwvyyEp9lz3kGtOnRFNbe3">$0.0064</div>
+            </div>
+            <div class="kpi-card" data-page-node-id="6edUbdMfWhE7u5DFJ0hGkX">
+              <div class="kpi-label" data-page-node-id="RecVI9QkXruHDQ5NZ3waak">推理算力成本节约率</div>
+              <div class="kpi-num" style="color:var(--emerald);" id="res-cost-saving" data-page-node-id="X1j9hQTTrDYnNYYCnrS42u">68.0<span class="kpi-unit" data-page-node-id="j73DLeBrLHGMgA228CkUk2">%</span></div>
+            </div>
+            <div class="kpi-card" data-page-node-id="dJSLneHxfLF18qHayUC4VI">
+              <div class="kpi-label" data-page-node-id="5SJO9FHq4z9bi4tqBqORwn">每日净节省支出</div>
+              <div class="kpi-num" style="color:var(--accent);" id="res-daily-saved" data-page-node-id="0TOJDtwBGprRkz1i0ohiPR">$680<span class="kpi-unit" data-page-node-id="2yEPFSU11R6sYG4dobiq0d">/天</span></div>
+            </div>
+            <div class="kpi-card" data-page-node-id="qa97HubAbfs0rLyPrC0Qmu">
+              <div class="kpi-label" data-page-node-id="vEVQSPXo8OVcvwH2BdYWlT">加权 P50 延迟水平</div>
+              <div class="kpi-num" style="color:var(--amber);" id="res-avg-latency" data-page-node-id="eSRtZtaSL2lkoEneBiDMeR">576<span class="kpi-unit" data-page-node-id="1kYV9sOrwEuKdC5W9xFd58">ms</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-wrapper" data-page-node-id="Mlx53QwlL8bxdYdAKXPdj7">
+          <div style="font-size:0.75rem;font-family:var(--font-mono);color:var(--text-muted);margin-bottom:0.6rem;" data-page-node-id="cgfkCSzX9m3QvbrcWZNcVw">
+            请求分流流量漏斗堆叠条 (0 Token 拦截 vs Flash 分类 vs Pro 推理)
+          </div>
+          <svg class="viz-svg" viewBox="0 0 600 50" data-page-node-id="PBt94X97NGTh1P9guvy6xS">
+            <rect x="0" y="10" width="240" height="30" rx="4" fill="var(--emerald)" id="svg-bar-l1" data-page-node-id="wyXEmCyjP2DGijk2ZFS5cL"/>
+            <rect x="242" y="10" width="180" height="30" rx="4" fill="var(--cyan)" id="svg-bar-l2" data-page-node-id="0QEQcRCQQWjNHV3yqjILrD"/>
+            <rect x="424" y="10" width="176" height="30" rx="4" fill="var(--accent)" id="svg-bar-l3" data-page-node-id="bmOswIAw9TDvAH3arcUwXp"/>
+            <text x="15" y="30" font-size="11" fill="#fff" font-weight="600" id="svg-label-l1" data-page-node-id="YbJ1U3j8RKFOAEViWEwUZW">L1: 40% (0 Token)</text>
+            <text x="250" y="30" font-size="11" fill="#fff" font-weight="600" id="svg-label-l2" data-page-node-id="7fYtl3B9C9ndnU6UAcZvbJ">L2: 30% (Flash)</text>
+            <text x="435" y="30" font-size="11" fill="#fff" font-weight="600" id="svg-label-l3" data-page-node-id="FlZmv2yrB8p4uRThMOvgnK">L3: 30% (Pro)</text>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 7: Production Playbook -->
+    <section class="doc-section" id="sec-playbook" data-page-node-id="XOaJKP0O8huCMLRbDcIZ0y">
+      <div class="section-header" data-page-node-id="Lx8Mqr06SEA8a09jB8CQNW">
+        <span class="section-tag" data-page-node-id="vp0Sfx44ngCSokuoSMz1CA">Section 07 · Implementation Guide</span>
+        <h2 class="section-title" data-page-node-id="JDnwnZbioDnppxurahDOqz">工业级落地实战手册：四大模式的正交组合实施</h2>
+        <p class="section-desc" data-page-node-id="JbBinIlfRQdVNSbCt1LtuR">从独立设计模式走向协同整体：架构师落地自检 10 问与核心脚手架</p>
+      </div>
+
+      <h3 class="sub-title" data-page-node-id="qgqI33RAJHKBS43HfVbAvm">5.1 顶级优胜方案的“正交组合矩阵”</h3>
+      <p data-page-node-id="2zs3HjJiy8VBVEGyGqn2hs">
+        Google 官方复盘着重强调：单一模式并不能构建绝对壁垒，最惊艳的作品全部是将四大模式进行了<strong data-page-node-id="dNpcGL2spA7ZLCT6dGTReg">正交无缝组合（Orthogonal Composition）</strong>：
+      </p>
+
+      <div class="table-responsive" data-page-node-id="4PLUmDorPdi5XoweKqwvmv">
+        <table class="tech-table" data-page-node-id="yTS4AZ4kd0UbeuLlxulaio">
+          <thead data-page-node-id="6huD1MID45IlB76yLfuSMu">
+            <tr data-page-node-id="XvMTTe2VAuBEK5AzmD4qvI">
+              <th data-page-node-id="Kvv7E2Qt0m2VlIl5EXEarj">组合架构阶段</th>
+              <th data-page-node-id="dtr1qReCOZQA44lTYMatEz">结合模式</th>
+              <th data-page-node-id="ss5NCoEx5r61Nmgs74HDZ0">具体协同机制与职责</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="MUNg6EIV8vMU4SLPRLN6rT">
+            <tr data-page-node-id="rMoYArdrF8t4PtE7i4drjA">
+              <td data-page-node-id="HsIDkACZj1iqQmLFw4Azog"><strong data-page-node-id="9xEIyDC2H224YVvjoGY4TL">入口网关层</strong></td>
+              <td data-page-node-id="0M49RZxTcUF0D1BW398vBN">模式四：分层路由</td>
+              <td data-page-node-id="EecwU48FD1ojvPnyhCYXbM">接收外界请求，本地正则拦截 40% 导航流量；微模型完成快速语义打标。</td>
+            </tr>
+            <tr data-page-node-id="HoLaIG5FqHSfXciU2pxlzl">
+              <td data-page-node-id="lplhjqZQvYTgekwX7vUo6z"><strong data-page-node-id="IAOpkeX1MG9zjVw4aFhBrV">任务派发层</strong></td>
+              <td data-page-node-id="BwZ2qewdeGnCQXgObh2mir">模式二：事件并发</td>
+              <td data-page-node-id="cROYxnKmmK5Lg7quzwn8jf">Root Agent 将复杂任务分解为具名事件，通过 <code class="inline-code" data-page-node-id="7fnZ2BIfR4NrClY600xYDZ">asyncio.Queue</code> 异步广播给专业领域 Worker。</td>
+            </tr>
+            <tr data-page-node-id="PCQ6uiEYnlntoB4aDE2mjU">
+              <td data-page-node-id="0EQVHxPrBUEXfEP3YMOP4n"><strong data-page-node-id="lrxic84FUNU85JfFJHRCCh">服务执行层</strong></td>
+              <td data-page-node-id="scbIdFwYGSnbQfufH2l7UF">模式一：双向 MCP</td>
+              <td data-page-node-id="HnuAOnF7C7mjeVzQPW68ox">每个领域 Worker 内部借助 MCP 访问精简数据；外部同时作为标准 MCP Server，被上游和同伴程序化装配。</td>
+            </tr>
+            <tr data-page-node-id="Vsv9Zhhl8ohz0AYT4B2fHb">
+              <td data-page-node-id="X53JD918hFHDbEgPX6KFER"><strong data-page-node-id="B2coiHzjJksEug6eixS9q5">输出交付层</strong></td>
+              <td data-page-node-id="YlNNPS2Ff9vIVHIoTdYuqZ">模式三：同标准回退</td>
+              <td data-page-node-id="bE5sfPY48DiA0sAGtipLz9">任何 Worker 在遇到高并发 503 时触发 Flash 回退，但所有生成结果必须强制穿透统一质检函数 <code class="inline-code" data-page-node-id="ieIaiL4VhfwttiHT6mbXYE">validate()</code>。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sub-title" data-page-node-id="ONnRMTB392UHxbOE5xBomM">5.2 生产架构师落地自检 10 问 (Architecture Scorecard)</h3>
+      <div class="step-list" data-page-node-id="AfAKXk4q1YCx06p5fsB4RU">
+        <div class="step-item" data-page-node-id="ysH5mjpXVFTTB3C5wt7Rmi">
+          <div class="step-num" data-page-node-id="pR8Y8CgHI4i67Ild2zcuhj">01</div>
+          <div class="step-content" data-page-node-id="CNlq9wmQ5jRrMvqpXL8ZHQ">
+            <div class="step-title" data-page-node-id="Ca3aSEA4Ztj3dpZDJqPeKX">代码调用链是否存在连续 3 个以上的同步阻塞式 LLM 调用？</div>
+            <div class="step-text" data-page-node-id="uAU8BMJuADP1hdcFNm6cOp">若存在，总延迟将是所有调用的和，立即改写为 DAG 异步事件驱动。</div>
+          </div>
+        </div>
+        <div class="step-item" data-page-node-id="DiKFADL0DfC2fPTnJC8E5U">
+          <div class="step-num" data-page-node-id="ajFo0G991in1Ow5TWeGHzh">02</div>
+          <div class="step-content" data-page-node-id="dv1Jk64qY3t52xLxhGfTr3">
+            <div class="step-title" data-page-node-id="w19PWeyzC0ZZXTA1WpeCX9">Agent 查询数据库时，是否直接将原生 SELECT 结果完整灌入 Prompt？</div>
+            <div class="step-text" data-page-node-id="G3cBYRBbXgONHkYGDCPVzU">必须在 MCP Client 层面编写投影收缩过滤逻辑，只返回关键切片，杜绝上下文爆炸。</div>
+          </div>
+        </div>
+        <div class="step-item" data-page-node-id="7Dv0Hi1lNhS8b5Ji1J7vZQ">
+          <div class="step-num" data-page-node-id="iiRfpw3WHNWqBsXsVY1Ypl">03</div>
+          <div class="step-content" data-page-node-id="dBzBlFjEvgVWUrooTHqqnK">
+            <div class="step-title" data-page-node-id="23bGJ0a0h9sQEQCBHZ4wYO">你精心打造的专业 Agent 推理能力，外部 Coding Agent 能否直接调用？</div>
+            <div class="step-text" data-page-node-id="AShpLaFrG2UbwSvIxoF7n9">将其封装为标准 MCP Server，消除“人类在 Web 界面手动搬运数据”的低效环节。</div>
+          </div>
+        </div>
+        <div class="step-item" data-page-node-id="fylY3RHMD2AI72o2JHx8LP">
+          <div class="step-num" data-page-node-id="i93pkS42LJdK6eCNA4fPFV">04</div>
+          <div class="step-content" data-page-node-id="TFp8TueOjvzQKLAzloxuHF">
+            <div class="step-title" data-page-node-id="tBJl8RrLOfPpOyAvzzjfCl">当主力模型返回 503 过载时，降级备用分支是否跳过了主路径的校验函数？</div>
+            <div class="step-text" data-page-node-id="A3R8OA5PbCVGtIb358k44l">坚决推行 Same-bar 准则：单点挂载统一验证，杜绝未经验证的模型幻觉进入生产。</div>
+          </div>
+        </div>
+        <div class="step-item" data-page-node-id="vweMCtIRGOm8UAJbdnRr9A">
+          <div class="step-num" data-page-node-id="Ny2O4WJ5fIGu6fuGIYrf9K">05</div>
+          <div class="step-content" data-page-node-id="WkI2cIhHzjoknjDBOCitfg">
+            <div class="step-title" data-page-node-id="kFTNH5tdyzIhF6yRPuFtXV">简单导航类与静态查询请求是否依然在触达前沿大模型？</div>
+            <div class="step-text" data-page-node-id="Lsaf4nD2RkRYnaodRhWCpa">在网关前置本地 0 Token 正则过滤矩阵，至少拦截 40% 的确定性流量。</div>
+          </div>
+        </div>
+      </div>
+
+      <details class="fold-card" data-page-node-id="FsDvvUXr6DFwXqhUlMrlIP">
+        <summary data-page-node-id="1YTuc3HzCjwIBAAYNNjiZK">
+          <span data-page-node-id="Olmn0C9LxnnVvhaWqEUv5m">展开查看：生产级事件驱动总线与同标准门禁 Python 核心骨架</span>
+          <span style="font-family:var(--font-mono);font-size:0.8rem;color:var(--accent);" data-page-node-id="OwbHAZg39aLy1OWxyw4Rmg">SHOW CODE</span>
+        </summary>
+        <div class="fold-content" data-page-node-id="n72vNNEQwRV9daB8NS3hbM">
+          <pre class="code-block" data-page-node-id="pluh56DXO6y5RR9vrsjlld"><code data-page-node-id="PnCHPbsn546hsdjHydzRxv">import asyncio
+import re
+from typing import Dict, Any, Callable
+
+# 1. 异步类型化事件总线 (Pub/Sub Event Bus)
+class TypedEventBus:
+    def __init__(self):
+        self.queues: Dict[str, list[asyncio.Queue]] = {}
+
+    def subscribe(self, topic: str) -> asyncio.Queue:
+        q = asyncio.Queue()
+        self.queues.setdefault(topic, []).append(q)
+        return q
+
+    async def publish(self, topic: str, payload: Dict[str, Any]):
+        for q in self.queues.get(topic, []):
+            await q.put(payload)
+
+# 2. 同标准回退装饰器 (Same-Bar Fallback Gate)
+def same_bar_gate(validator: Callable[[str], bool]):
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            # 无论内部通过 Pro 还是 Flash 降级，输出必须经过同一道质检
+            raw_result = await func(*args, **kwargs)
+            if not validator(raw_result):
+                raise ValueError("Quality Gate Breached: Response failed same-bar validation!")
+            return raw_result
+        return wrapper
+    return decorator
+
+# 3. 三级分层路由网关 (Tiered Gateway)
+class TieredRouter:
+    def __init__(self):
+        self.regex_routes = {
+            r"^(help|menu|nav|status)$": "LOCAL_STATIC_HANDLER",
+            r"^cancel\s+order\s+(\d+)$": "LOCAL_CANCEL_HANDLER"
+        }
+
+    async def route(self, user_input: str) -> str:
+        # L1: 本地零 Token 正则匹配
+        for pattern, handler in self.regex_routes.items():
+            if re.match(pattern, user_input.strip(), re.IGNORECASE):
+                return f"[L1 Hit: 0 Tokens] Handled by {handler}"
+        
+        # L2: 微分类器 (此处演示为轻量逻辑，实际为 10 Token Gemini Flash 调用)
+        if len(user_input.split()) &lt; 5:
+            return "[L2 Hit: 10 Tokens Flash] Handled by Micro-Agent"
+        
+        # L3: 复杂深度推理
+        return "[L3 Hit: Pro Frontier] Dispatched to Gemini 3.1 Pro"</code></pre>
+        </div>
+      </details>
+    </section>
+
+  </main>
+</div>
+
+<!-- Pure Vanilla JavaScript: Theme, TOC Highlight, and 4 Sandboxes -->
+<script>
+(function() {
+  // 1. Reading Progress & Theme Toggle
+  const progressBar = document.getElementById('reading-progress');
+  const themeToggle = document.getElementById('theme-toggle');
+  const themeLabel = document.getElementById('theme-toggle-label');
+  const themeIcon = document.getElementById('theme-toggle-icon');
+
+  window.addEventListener('scroll', () => {
+    const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const progress = totalHeight > 0 ? (window.scrollY / totalHeight) * 100 : 0;
+    progressBar.style.width = progress + '%';
+  });
+
+  themeToggle.addEventListener('click', () => {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    themeLabel.textContent = nextTheme === 'dark' ? '切换浅色' : '切换深色';
+    themeIcon.textContent = nextTheme === 'dark' ? '◐' : '◑';
+  });
+
+  // 2. Sticky TOC Active State (IntersectionObserver)
+  const navLinks = document.querySelectorAll('.toc-item a');
+  const sections = document.querySelectorAll('.doc-section, .doc-hero');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.getAttribute('id');
+        navLinks.forEach(link => {
+          if (link.getAttribute('href') === '#' + id) {
+            link.classList.add('active');
+          } else {
+            link.classList.remove('active');
+          }
+        });
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(sec => observer.observe(sec));
+
+  // =========================================================================
+  // SANDBOX 1: Tiered Routing Simulator
+  // =========================================================================
+  const inL1 = document.getElementById('l1-regex-ratio');
+  const inL2 = document.getElementById('l2-flash-ratio');
+  const inQ = document.getElementById('daily-requests');
+  const inC3 = document.getElementById('l3-pro-cost');
+
+  const valL1 = document.getElementById('val-l1-ratio');
+  const valL2 = document.getElementById('val-l2-ratio');
+  const valQ = document.getElementById('val-daily-req');
+  const valC3 = document.getElementById('val-l3-cost');
+
+  const resAvgCost = document.getElementById('res-avg-cost');
+  const resCostSaving = document.getElementById('res-cost-saving');
+  const resDailySaved = document.getElementById('res-daily-saved');
+  const resAvgLatency = document.getElementById('res-avg-latency');
+
+  const barL1 = document.getElementById('svg-bar-l1');
+  const barL2 = document.getElementById('svg-bar-l2');
+  const barL3 = document.getElementById('svg-bar-l3');
+  const lblL1 = document.getElementById('svg-label-l1');
+  const lblL2 = document.getElementById('svg-label-l2');
+  const lblL3 = document.getElementById('svg-label-l3');
+
+  function updateTieredRouting() {
+    const a1 = parseFloat(inL1.value) / 100;
+    const a2 = parseFloat(inL2.value) / 100;
+    const Q = parseInt(inQ.value, 10);
+    const c3 = parseFloat(inC3.value) / 1000; // in dollars
+
+    valL1.textContent = (a1 * 100).toFixed(0) + ' %';
+    valL2.textContent = (a2 * 100).toFixed(0) + ' %';
+    valQ.textContent = Q.toLocaleString() + ' 次';
+    valC3.textContent = '$' + c3.toFixed(3);
+
+    // Costs
+    const cClf = 0.0001; // $0.0001 for 10-token flash
+    const c2 = c3 * 0.08; // Flash execution ≈ 8% of Pro cost
+    const a3 = Math.max(0, 1 - a1 - a2);
+
+    // E[C] = (1 - a1)*cClf + a2*c2 + a3*c3
+    const avgCost = (1 - a1) * cClf + a2 * c2 + a3 * c3;
+    const savingPct = Math.max(0, (1 - avgCost / c3) * 100);
+    const dailySaved = (c3 - avgCost) * Q;
+
+    // Latency: L1=0.1ms, L2=120ms, L3=1800ms
+    const avgLat = a1 * 0.1 + a2 * 120 + a3 * 1800;
+
+    resAvgCost.textContent = '$' + avgCost.toFixed(4);
+    resCostSaving.innerHTML = savingPct.toFixed(1) + '<span class="kpi-unit">%</span>';
+    resDailySaved.innerHTML = '$' + Math.round(dailySaved).toLocaleString() + '<span class="kpi-unit">/天</span>';
+    resAvgLatency.innerHTML = Math.round(avgLat) + '<span class="kpi-unit">ms</span>';
+
+    // Update SVG Bars
+    const totalW = 600;
+    const w1 = Math.round(a1 * totalW);
+    const w2 = Math.round(a2 * totalW);
+    const w3 = Math.max(0, totalW - w1 - w2);
+
+    barL1.setAttribute('width', Math.max(0, w1 - 2));
+    barL2.setAttribute('x', w1);
+    barL2.setAttribute('width', Math.max(0, w2 - 2));
+    barL3.setAttribute('x', w1 + w2);
+    barL3.setAttribute('width', Math.max(0, w3));
+
+    lblL1.textContent = 'L1: ' + (a1 * 100).toFixed(0) + '% (0 Token)';
+    lblL2.setAttribute('x', w1 + 10);
+    lblL2.textContent = 'L2: ' + (a2 * 100).toFixed(0) + '% (Flash)';
+    lblL3.setAttribute('x', w1 + w2 + 10);
+    lblL3.textContent = 'L3: ' + (a3 * 100).toFixed(0) + '% (Pro)';
+  }
+
+  [inL1, inL2, inQ, inC3].forEach(input => input.addEventListener('input', updateTieredRouting));
+  updateTieredRouting();
+
+  // =========================================================================
+  // SANDBOX 2: Event-Driven Concurrency DAG
+  // =========================================================================
+  const inT1 = document.getElementById('sim-t1-sensor');
+  const inT2 = document.getElementById('sim-t2-compliance');
+  const inT3 = document.getElementById('sim-t3-dispatch');
+  const inT4 = document.getElementById('sim-t4-notify');
+
+  const valT1 = document.getElementById('val-t1');
+  const valT2 = document.getElementById('val-t2');
+  const valT3 = document.getElementById('val-t3');
+  const valT4 = document.getElementById('val-t4');
+
+  const resSerial = document.getElementById('res-serial-lat');
+  const resEvent = document.getElementById('res-event-lat');
+  const resSpeedup = document.getElementById('res-speedup');
+  const resSaved = document.getElementById('res-time-saved');
+
+  const barSerial = document.getElementById('gantt-serial-bar');
+  const barET1 = document.getElementById('gantt-event-t1');
+  const barET2 = document.getElementById('gantt-event-t2');
+  const barET3 = document.getElementById('gantt-event-t3');
+  const barET4 = document.getElementById('gantt-event-t4');
+
+  function updateEventConcurrency() {
+    const t1 = parseInt(inT1.value, 10);
+    const t2 = parseInt(inT2.value, 10);
+    const t3 = parseInt(inT3.value, 10);
+    const t4 = parseInt(inT4.value, 10);
+
+    valT1.textContent = t1 + ' ms';
+    valT2.textContent = t2 + ' ms';
+    valT3.textContent = t3 + ' ms';
+    valT4.textContent = t4 + ' ms';
+
+    const serialLat = t1 + t2 + t3 + t4;
+    const eventLat = t1 + Math.max(t2, t3) + t4;
+    const speedup = serialLat / eventLat;
+    const timeSaved = serialLat - eventLat;
+
+    resSerial.innerHTML = serialLat + '<span class="kpi-unit">ms</span>';
+    resEvent.innerHTML = eventLat + '<span class="kpi-unit">ms</span>';
+    resSpeedup.innerHTML = speedup.toFixed(2) + '<span class="kpi-unit">x</span>';
+    resSaved.innerHTML = timeSaved + '<span class="kpi-unit">ms</span>';
+
+    // Scale for Gantt SVG (viewBox 0 0 620 120)
+    const maxScale = 3000;
+    const pxPerMs = 580 / maxScale;
+
+    barSerial.setAttribute('width', Math.min(580, serialLat * pxPerMs));
+
+    const xT1 = 20;
+    const wT1 = t1 * pxPerMs;
+    barET1.setAttribute('x', xT1);
+    barET1.setAttribute('width', wT1);
+
+    const xParallel = xT1 + wT1;
+    const wT2 = t2 * pxPerMs;
+    const wT3 = t3 * pxPerMs;
+    barET2.setAttribute('x', xParallel);
+    barET2.setAttribute('width', wT2);
+    barET3.setAttribute('x', xParallel);
+    barET3.setAttribute('width', wT3);
+
+    const xT4 = xParallel + Math.max(wT2, wT3);
+    const wT4 = t4 * pxPerMs;
+    barET4.setAttribute('x', xT4);
+    barET4.setAttribute('width', wT4);
+  }
+
+  [inT1, inT2, inT3, inT4].forEach(input => input.addEventListener('input', updateEventConcurrency));
+  updateEventConcurrency();
+
+  // =========================================================================
+  // SANDBOX 3: Same-Bar Fallback Reliability
+  // =========================================================================
+  const inP503 = document.getElementById('sim-p503-rate');
+  const inFlashHal = document.getElementById('sim-flash-hallucination');
+  const inRecall = document.getElementById('sim-gate-recall');
+
+  const valP503 = document.getElementById('val-p503');
+  const valFlashHal = document.getElementById('val-flash-hal');
+  const valRecall = document.getElementById('val-gate-recall');
+
+  const resLoose = document.getElementById('res-loose-defect');
+  const resSamebar = document.getElementById('res-samebar-defect');
+  const resGain = document.getElementById('res-safety-factor');
+  const resRetry = document.getElementById('res-retry-overhead');
+
+  const pathLoose = document.getElementById('curve-loose-path');
+  const pathSamebar = document.getElementById('curve-samebar-path');
+  const ptLoose = document.getElementById('point-loose');
+  const ptSamebar = document.getElementById('point-samebar');
+
+  function updateFallbackReliability() {
+    const p503 = parseFloat(inP503.value) / 100;
+    const epsFlash = parseFloat(inFlashHal.value) / 100;
+    const Rv = parseFloat(inRecall.value) / 100;
+    const epsPro = 0.03; // Pro baseline hallucination ≈ 3%
+    const betaSame = 1 - Rv;
+    const betaLoose = 0.85; // Loose fallback leaves 85% unchecked
+
+    valP503.textContent = (p503 * 100).toFixed(0) + ' %';
+    valFlashHal.textContent = (epsFlash * 100).toFixed(0) + ' %';
+    valRecall.textContent = (Rv * 100).toFixed(0) + ' %';
+
+    // Defect rates
+    const defectLoose = ((1 - p503) * epsPro * betaSame + p503 * epsFlash * betaLoose) * 100;
+    const defectSamebar = ((1 - p503) * epsPro * betaSame + p503 * epsFlash * betaSame) * 100;
+    const gain = defectLoose / Math.max(0.0001, defectSamebar);
+    const retryOverhead = p503 * epsFlash * Rv * 100;
+
+    resLoose.innerHTML = defectLoose.toFixed(2) + '<span class="kpi-unit">%</span>';
+    resSamebar.innerHTML = defectSamebar.toFixed(2) + '<span class="kpi-unit">%</span>';
+    resGain.innerHTML = gain.toFixed(1) + '<span class="kpi-unit">倍</span>';
+    resRetry.innerHTML = retryOverhead.toFixed(1) + '<span class="kpi-unit">%</span>';
+
+    // Render Curves (p = 0 to 0.5)
+    let dLoose = '';
+    let dSame = '';
+    const originX = 40;
+    const originY = 100;
+    const plotW = 540;
+    const plotH = 80;
+
+    for (let i = 0; i <= 20; i++) {
+      const p = (i / 20) * 0.5;
+      const x = originX + (i / 20) * plotW;
+      const dl = ((1 - p) * epsPro * betaSame + p * epsFlash * betaLoose) * 100;
+      const ds = ((1 - p) * epsPro * betaSame + p * epsFlash * betaSame) * 100;
+
+      const yLoose = originY - (dl / 15) * plotH;
+      const ySame = originY - (ds / 15) * plotH;
+
+      if (i === 0) {
+        dLoose += 'M ' + x.toFixed(1) + ' ' + yLoose.toFixed(1);
+        dSame += 'M ' + x.toFixed(1) + ' ' + ySame.toFixed(1);
+      } else {
+        dLoose += ' L ' + x.toFixed(1) + ' ' + yLoose.toFixed(1);
+        dSame += ' L ' + x.toFixed(1) + ' ' + ySame.toFixed(1);
+      }
+    }
+    pathLoose.setAttribute('d', dLoose);
+    pathSamebar.setAttribute('d', dSame);
+
+    // Current operating point
+    const currX = originX + (p503 / 0.5) * plotW;
+    const currYLoose = originY - (defectLoose / 15) * plotH;
+    const currYSame = originY - (defectSamebar / 15) * plotH;
+
+    ptLoose.setAttribute('cx', currX);
+    ptLoose.setAttribute('cy', currYLoose);
+    ptSamebar.setAttribute('cx', currX);
+    ptSamebar.setAttribute('cy', currYSame);
+  }
+
+  [inP503, inFlashHal, inRecall].forEach(input => input.addEventListener('input', updateFallbackReliability));
+  updateFallbackReliability();
+
+  // =========================================================================
+  // SANDBOX 4: Bidirectional MCP Topology
+  // =========================================================================
+  const inK = document.getElementById('sim-agents-count');
+  const inM = document.getElementById('sim-clients-count');
+  const valK = document.getElementById('val-k-agents');
+  const valM = document.getElementById('val-m-clients');
+  const btnToggleTopology = document.getElementById('btn-toggle-topology');
+
+  const resAdhoc = document.getElementById('res-adhoc-interfaces');
+  const resMcp = document.getElementById('res-mcp-interfaces');
+  const resReduction = document.getElementById('res-interface-reduction');
+  const resHours = document.getElementById('res-annual-maint-hours');
+  const topoSvgContainer = document.getElementById('svg-topology-container');
+
+  let showMcpMode = true;
+
+  btnToggleTopology.addEventListener('click', () => {
+    showMcpMode = !showMcpMode;
+    btnToggleTopology.textContent = showMcpMode ? '切换展示模式：传统点对点网状态' : '切换展示模式：双向 MCP 总线态';
+    renderTopology();
+  });
+
+  function updateTopologyMath() {
+    const K = parseInt(inK.value, 10);
+    const M = parseInt(inM.value, 10);
+
+    valK.textContent = K + ' 个';
+    valM.textContent = M + ' 个';
+
+    const adhocInterfaces = K * M + (K * (K - 1)) / 2;
+    const mcpInterfaces = K + M;
+    const reduction = ((adhocInterfaces - mcpInterfaces) / adhocInterfaces) * 100;
+    const hoursSaved = (adhocInterfaces - mcpInterfaces) * 16; // 16 hrs per interface/yr
+
+    resAdhoc.innerHTML = adhocInterfaces + '<span class="kpi-unit">条链路</span>';
+    resMcp.innerHTML = mcpInterfaces + '<span class="kpi-unit">个标准端</span>';
+    resReduction.innerHTML = reduction.toFixed(1) + '<span class="kpi-unit">%</span>';
+    resHours.innerHTML = hoursSaved + '<span class="kpi-unit">小时</span>';
+  }
+
+  function renderTopology() {
+    updateTopologyMath();
+    const K = parseInt(inK.value, 10);
+    const M = parseInt(inM.value, 10);
+
+    const svgW = 600;
+    const svgH = 180;
+    let svgHtml = '<svg class="viz-svg" viewBox="0 0 ' + svgW + ' ' + svgH + '">';
+
+    // Coordinates
+    const agentNodes = [];
+    const clientNodes = [];
+
+    // Left column: Clients
+    for (let i = 0; i < M; i++) {
+      const y = 30 + (i / Math.max(1, M - 1)) * (svgH - 60);
+      clientNodes.push({ x: 70, y: y, label: 'Client ' + (i + 1) });
+    }
+
+    // Right column: Agents
+    for (let i = 0; i < K; i++) {
+      const y = 25 + (i / Math.max(1, K - 1)) * (svgH - 50);
+      agentNodes.push({ x: 530, y: y, label: 'Agent ' + (i + 1) });
+    }
+
+    const busX = 300;
+
+    if (showMcpMode) {
+      // MCP Bus Mode
+      svgHtml += '<line x1="' + busX + '" y1="20" x2="' + busX + '" y2="' + (svgH - 20) + '" stroke="var(--emerald)" stroke-width="4" stroke-linecap="round"/>';
+      svgHtml += '<text x="' + (busX - 50) + '" y="15" font-size="11" fill="var(--emerald)" font-weight="700">BIDIRECTIONAL MCP BUS</text>';
+
+      clientNodes.forEach(c => {
+        svgHtml += '<line x1="' + c.x + '" y1="' + c.y + '" x2="' + busX + '" y2="' + c.y + '" stroke="var(--cyan)" stroke-width="1.5" stroke-dasharray="3,3"/>';
+      });
+      agentNodes.forEach(a => {
+        svgHtml += '<line x1="' + busX + '" y1="' + a.y + '" x2="' + a.x + '" y2="' + a.y + '" stroke="var(--emerald)" stroke-width="1.5"/>';
+      });
+    } else {
+      // Ad-hoc Mesh Mode
+      clientNodes.forEach(c => {
+        agentNodes.forEach(a => {
+          svgHtml += '<line x1="' + c.x + '" y1="' + c.y + '" x2="' + a.x + '" y2="' + a.y + '" stroke="var(--rose)" stroke-width="0.8" opacity="0.45"/>';
+        });
+      });
+      // Agent-to-Agent mesh
+      for (let i = 0; i < K; i++) {
+        for (let j = i + 1; j < K; j++) {
+          const midY = (agentNodes[i].y + agentNodes[j].y) / 2;
+          svgHtml += '<path d="M ' + agentNodes[i].x + ' ' + agentNodes[i].y + ' Q ' + (agentNodes[i].x - 60) + ' ' + midY + ' ' + agentNodes[j].x + ' ' + agentNodes[j].y + '" stroke="var(--amber)" stroke-width="0.7" fill="none" opacity="0.4"/>';
+        }
+      }
+    }
+
+    // Render Nodes
+    clientNodes.forEach(c => {
+      svgHtml += '<circle cx="' + c.x + '" cy="' + c.y + '" r="12" fill="var(--bg-surface)" stroke="var(--cyan)" stroke-width="2"/>';
+      svgHtml += '<text x="' + (c.x - 45) + '" y="' + (c.y + 4) + '" font-size="9.5" fill="var(--text-muted)" font-family="monospace">' + c.label + '</text>';
+    });
+
+    agentNodes.forEach(a => {
+      svgHtml += '<circle cx="' + a.x + '" cy="' + a.y + '" r="12" fill="var(--bg-surface)" stroke="var(--emerald)" stroke-width="2"/>';
+      svgHtml += '<text x="' + (a.x + 18) + '" y="' + (a.y + 4) + '" font-size="9.5" fill="var(--text-title)" font-family="monospace" font-weight="600">' + a.label + '</text>';
+    });
+
+    svgHtml += '</svg>';
+    topoSvgContainer.innerHTML = svgHtml;
+  }
+
+  [inK, inM].forEach(input => input.addEventListener('input', renderTopology));
+  renderTopology();
+
+})();
+</script>
+</body>
+</html>
