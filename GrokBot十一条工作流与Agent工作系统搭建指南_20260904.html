@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GrokBot 的 11 条使用技巧 · 搭出一套 Agent 工作系统 · 结构化单文件白皮书</title>
+<meta name="description" content="沿 Agent Native 原文的 11 条顺序，完整拆解情况监控、开发委派、通用入口、Agent 协作、项目 Bot、X 研究、Slack 触发、插件权限、多邮箱、Notion 写回与追问式日记，并附任务合同装配器、监控噪声预算沙盘、Bot 归属分流决策器等零依赖交互模块。"/>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --bg-app:#FAF7F2;--bg-surface:#FFFFFF;--bg-raised:#FFFFFF;--bg-subtle:#F3EFE8;--bg-muted:#EBE5DB;
+  --bg-glass:rgba(250,247,242,.92);
+  --accent:#D97757;--accent-hover:#C86545;--accent-subtle:rgba(217,119,87,.10);--accent-border:rgba(217,119,87,.35);
+  --emerald:#2D8A5E;--emerald-subtle:rgba(45,138,94,.09);--emerald-border:rgba(45,138,94,.28);
+  --rose:#C94A4A;--rose-subtle:rgba(201,74,74,.09);--rose-border:rgba(201,74,74,.28);
+  --amber:#C2801E;--amber-subtle:rgba(194,128,30,.10);--amber-border:rgba(194,128,30,.28);
+  --cyan:#3E7BA8;--cyan-subtle:rgba(62,123,168,.09);--cyan-border:rgba(62,123,168,.28);
+  --tx1:#1F1E1B;--tx2:#59554E;--tx3:#878278;--tx4:#B0AAA0;
+  --bd-hair:rgba(31,30,27,.06);--bd:#E6E0D6;--bd-md:#D4CCBF;
+  --shadow-sm:0 1px 2px rgba(31,30,27,.04),0 1px 3px rgba(31,30,27,.02);
+  --shadow-md:0 4px 14px -2px rgba(31,30,27,.06),0 2px 6px -1px rgba(31,30,27,.03);
+  --font-serif:"Songti SC","Noto Serif SC","Source Han Serif SC","Newsreader",Georgia,serif;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --font-mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  --r-xs:4px;--r-sm:6px;--r-md:10px;--r-lg:14px;--r-xl:20px;--r-full:9999px;
+  --max-w:1240px;--ease:cubic-bezier(.4,0,.2,1);
+}
+html[data-theme="dark"]{
+  --bg-app:#181715;--bg-surface:#22201D;--bg-raised:#282622;--bg-subtle:#1E1C1A;--bg-muted:#2E2B27;
+  --bg-glass:rgba(24,23,21,.92);
+  --accent:#E07A5F;--accent-hover:#EB8D74;--accent-subtle:rgba(224,122,95,.14);--accent-border:rgba(224,122,95,.4);
+  --emerald:#48BB78;--emerald-subtle:rgba(72,187,120,.12);--emerald-border:rgba(72,187,120,.3);
+  --rose:#F56565;--rose-subtle:rgba(245,101,101,.12);--rose-border:rgba(245,101,101,.3);
+  --amber:#ECC94B;--amber-subtle:rgba(236,201,75,.12);--amber-border:rgba(236,201,75,.3);
+  --cyan:#63B3ED;--cyan-subtle:rgba(99,179,237,.12);--cyan-border:rgba(99,179,237,.3);
+  --tx1:#F5F2EB;--tx2:#C4BFB5;--tx3:#8C867B;--tx4:#5E5950;
+  --bd-hair:rgba(255,255,255,.05);--bd:#2F2C27;--bd-md:#3E3A33;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.25);--shadow-md:0 4px 16px rgba(0,0,0,.35);
+}
+html{scroll-behavior:smooth;font-size:15px}
+body{margin:0;padding:0;font-family:var(--font-sans);color:var(--tx2);background:var(--bg-app);
+  line-height:1.82;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  transition:background-color .3s var(--ease),color .3s var(--ease)}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.reading-progress-bar{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:200;transition:width .1s linear}
+.shell{width:100%;max-width:var(--max-w);margin:0 auto;padding:0 28px}
+.top-nav{position:sticky;top:0;z-index:100;background:var(--bg-glass);backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--bd)}
+.nav-inner{height:60px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none;min-width:0}
+.brand:hover{text-decoration:none}
+.logo-badge{width:32px;height:32px;background:var(--accent);border-radius:var(--r-sm);display:grid;place-items:center;
+  color:#fff;font-family:var(--font-mono);font-weight:700;font-size:12px;flex-shrink:0}
+.brand-meta{display:flex;flex-direction:column;min-width:0}
+.brand-text{font-family:var(--font-serif);font-size:15px;font-weight:600;color:var(--tx1);line-height:1.25;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand-sub{font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--accent);letter-spacing:.06em;text-transform:uppercase}
+.nav-actions{display:flex;align-items:center;gap:10px}
+.btn-toggle{display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border-radius:var(--r-full);
+  background:var(--bg-surface);border:1px solid var(--bd);color:var(--tx2);font-size:12px;font-weight:500;
+  cursor:pointer;box-shadow:var(--shadow-sm);font-family:inherit;transition:all .2s var(--ease)}
+.btn-toggle:hover{border-color:var(--bd-md);color:var(--tx1);transform:translateY(-1px)}
+.btn-toggle.on{background:var(--accent-subtle);border-color:var(--accent-border);color:var(--accent);font-weight:600}
+.layout-container{display:flex;gap:40px;position:relative}
+.sidebar{width:250px;flex-shrink:0;display:none}
+@media(min-width:1060px){.sidebar{display:block}}
+.sidebar-inner{position:sticky;top:84px;max-height:calc(100vh - 110px);overflow-y:auto;padding-right:10px;
+  scrollbar-width:thin;scrollbar-color:var(--bd) transparent}
+.sidebar-title{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;
+  letter-spacing:.08em;margin:0 0 12px;padding-left:10px}
+.sidebar-nav{display:flex;flex-direction:column;gap:2px}
+.sidebar-link{display:block;padding:6px 12px;border-radius:var(--r-sm);font-size:13px;color:var(--tx2);
+  text-decoration:none;line-height:1.45;border-left:2px solid transparent;transition:all .15s ease}
+.sidebar-link:hover{color:var(--tx1);background:var(--bg-subtle);text-decoration:none}
+.sidebar-link.active{color:var(--accent);background:var(--accent-subtle);border-left-color:var(--accent);font-weight:600}
+.sidebar-link.sub{padding-left:24px;font-size:12px;color:var(--tx3)}
+.main-content{flex:1;min-width:0;padding:20px 0 90px}
+.doc-cover{padding:40px 0 32px;border-bottom:1px solid var(--bd);margin-bottom:38px}
+.eyebrow{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;
+  letter-spacing:.12em;margin-bottom:14px}
+.doc-title{font-family:var(--font-serif);font-size:2.3rem;font-weight:700;color:var(--tx1);line-height:1.28;
+  margin:0 0 16px;letter-spacing:-.01em}
+.doc-lede{font-size:1.03rem;color:var(--tx2);max-width:760px;margin:0 0 24px;line-height:1.85}
+.doc-meta{display:flex;flex-wrap:wrap;gap:8px}
+.meta-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:var(--r-full);
+  background:var(--bg-subtle);border:1px solid var(--bd);font-family:var(--font-mono);font-size:11px;color:var(--tx3)}
+section{margin-bottom:56px;scroll-margin-top:84px}
+h2{font-family:var(--font-serif);font-size:1.62rem;font-weight:700;color:var(--tx1);line-height:1.35;
+  margin:0 0 6px;letter-spacing:-.005em}
+.h2-num{font-family:var(--font-mono);font-size:.82rem;color:var(--accent);font-weight:700;margin-right:10px;
+  letter-spacing:.06em;vertical-align:.16em}
+.h2-rule{height:1px;background:linear-gradient(90deg,var(--accent-border),transparent);margin:0 0 22px}
+h3{font-family:var(--font-serif);font-size:1.16rem;font-weight:700;color:var(--tx1);margin:32px 0 12px;line-height:1.45}
+h4{font-family:var(--font-sans);font-size:.98rem;font-weight:700;color:var(--tx1);margin:22px 0 8px}
+p{margin:0 0 15px}
+p strong,li strong,td strong{color:var(--tx1);font-weight:650}
+ul,ol{margin:0 0 16px;padding-left:22px}
+li{margin-bottom:8px}
+.lede-list{background:var(--bg-surface);border:1px solid var(--bd);border-radius:var(--r-md);padding:18px 22px;margin:0 0 24px}
+.lede-list li{margin-bottom:9px}
+.lede-list li:last-child{margin-bottom:0}
+.overview-list{counter-reset:ov;list-style:none;padding-left:0;margin:0 0 24px}
+.overview-list li{position:relative;padding-left:44px;margin-bottom:11px;min-height:26px}
+.overview-list li::before{counter-increment:ov;content:counter(ov,decimal-leading-zero);position:absolute;left:0;top:3px;
+  font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-subtle);
+  border:1px solid var(--accent-border);border-radius:var(--r-xs);padding:1px 6px;line-height:1.5}
+.tbl-wrap{overflow-x:auto;margin:0 0 22px;border:1px solid var(--bd);border-radius:var(--r-md);background:var(--bg-surface)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+caption{caption-side:top;text-align:left;padding:12px 16px 10px;font-size:12px;color:var(--tx3);
+  border-bottom:1px solid var(--bd-hair)}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--bd-hair);vertical-align:top}
+thead th{background:var(--bg-subtle);color:var(--tx1);font-weight:700;font-size:12.5px;
+  font-family:var(--font-mono);letter-spacing:.02em;white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--bg-subtle)}
+td.c-num{font-family:var(--font-mono);color:var(--tx3);font-size:12px}
+.callout{border-left:3px solid var(--accent);background:var(--accent-subtle);border-radius:0 var(--r-md) var(--r-md) 0;
+  padding:16px 20px;margin:0 0 22px}
+.callout p:last-child{margin-bottom:0}
+.callout .co-t{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;display:block}
+.callout ul{margin-bottom:0}
+.qa{border:1px dashed var(--cyan-border);background:var(--cyan-subtle);border-radius:var(--r-md);
+  padding:16px 20px;margin:0 0 22px}
+.qa .co-t{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--cyan);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;display:block}
+.qa p:last-child{margin-bottom:0}
+.note{border:1px solid var(--amber-border);background:var(--amber-subtle);border-radius:var(--r-md);padding:15px 19px;margin:0 0 22px}
+.note .co-t{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--amber);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px;display:block}
+.note p:last-child{margin-bottom:0}
+.src-quote{border-left:3px solid var(--bd-md);padding:2px 0 2px 18px;margin:0 0 18px;color:var(--tx3);font-size:13.5px}
+pre{background:var(--bg-subtle);border:1px solid var(--bd);border-radius:var(--r-md);padding:15px 17px;
+  overflow-x:auto;font-family:var(--font-mono);font-size:12.4px;line-height:1.72;color:var(--tx1);
+  white-space:pre;word-break:normal;margin:0 0 20px}
+code{font-family:var(--font-mono);font-size:.9em}
+p code,li code,td code{background:var(--bg-subtle);border:1px solid var(--bd-hair);border-radius:var(--r-xs);
+  padding:.1em .38em;color:var(--accent)}
+.figure{border:1px solid var(--bd);border-radius:var(--r-md);background:var(--bg-surface);padding:18px;margin:0 0 22px}
+.figure svg{display:block;width:100%;height:auto}
+.figure figcaption{margin-top:12px;font-size:12.5px;color:var(--tx3);line-height:1.7;font-family:var(--font-mono)}
+.sandbox{border:1px solid var(--bd);border-radius:var(--r-lg);background:var(--bg-surface);padding:24px;margin:0 0 26px;
+  box-shadow:var(--shadow-sm)}
+.sb-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.sb-tag{font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--accent);background:var(--accent-subtle);
+  border:1px solid var(--accent-border);border-radius:var(--r-full);padding:2px 9px;letter-spacing:.06em;text-transform:uppercase}
+.sb-title{font-family:var(--font-serif);font-size:1.12rem;font-weight:700;color:var(--tx1);margin:0}
+.sb-desc{font-size:13px;color:var(--tx3);margin:0 0 18px;line-height:1.7}
+.sb-ctrl{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:14px 16px;background:var(--bg-subtle);
+  border:1px solid var(--bd-hair);border-radius:var(--r-md);margin-bottom:18px}
+.sb-ctrl label{font-size:12.5px;color:var(--tx2);display:inline-flex;align-items:center;gap:9px;font-weight:550}
+.sb-out{font-size:12px;color:var(--tx3);font-family:var(--font-mono);min-width:52px;text-align:right}
+select,input[type=text]{font-family:var(--font-sans);font-size:12.5px;padding:6px 10px;border-radius:var(--r-sm);
+  border:1px solid var(--bd-md);background:var(--bg-surface);color:var(--tx1);cursor:text}
+select{cursor:pointer;max-width:100%}
+input[type=text]{width:100%;min-width:0}
+input[type=range]{width:180px;accent-color:var(--accent);cursor:pointer}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+.stat{background:var(--bg-subtle);border:1px solid var(--bd-hair);border-radius:var(--r-md);padding:12px 14px}
+.stat-k{font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;
+  letter-spacing:.06em;display:block;margin-bottom:5px}
+.stat-v{font-family:var(--font-mono);font-size:1.28rem;font-weight:700;color:var(--tx1);line-height:1.2;
+  font-variant-numeric:tabular-nums}
+.stat-u{font-size:11px;color:var(--tx3);font-family:var(--font-sans);margin-left:3px;font-weight:400}
+.chip-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.chip{font-family:var(--font-mono);font-size:11.5px;padding:4px 11px;border-radius:var(--r-full);
+  border:1px solid var(--bd-md);color:var(--tx3);background:var(--bg-subtle)}
+.chip.ok{border-color:var(--emerald-border);background:var(--emerald-subtle);color:var(--emerald);font-weight:650}
+.chip.miss{border-color:var(--rose-border);background:var(--rose-subtle);color:var(--rose);font-weight:650}
+.field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--tx3);letter-spacing:.04em}
+.btn-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+.btn{font-family:var(--font-sans);font-size:12.5px;font-weight:600;padding:7px 15px;border-radius:var(--r-sm);
+  border:1px solid var(--accent-border);background:var(--accent-subtle);color:var(--accent);cursor:pointer;
+  transition:all .18s var(--ease)}
+.btn:hover{background:var(--accent);color:#fff;transform:translateY(-1px)}
+.btn.ghost{background:var(--bg-surface);border-color:var(--bd-md);color:var(--tx2)}
+.btn.ghost:hover{background:var(--bg-subtle);color:var(--tx1);border-color:var(--bd-md)}
+.verdict{border-radius:var(--r-md);padding:15px 18px;font-size:13.5px;line-height:1.8;margin-bottom:14px}
+.verdict.generic{border:1px solid var(--cyan-border);background:var(--cyan-subtle)}
+.verdict.special{border:1px solid var(--emerald-border);background:var(--emerald-subtle)}
+.verdict.project{border:1px solid var(--accent-border);background:var(--accent-subtle)}
+.verdict .v-t{font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  display:block;margin-bottom:6px}
+.verdict.generic .v-t{color:var(--cyan)}
+.verdict.special .v-t{color:var(--emerald)}
+.verdict.project .v-t{color:var(--accent)}
+.check-list{list-style:none;padding:0;margin:0 0 16px}
+.check-list li{display:flex;align-items:flex-start;gap:11px;padding:10px 14px;border:1px solid var(--bd);
+  border-radius:var(--r-md);background:var(--bg-subtle);margin-bottom:9px;cursor:pointer;transition:all .18s var(--ease)}
+.check-list li:hover{border-color:var(--bd-md)}
+.check-list li.done{background:var(--emerald-subtle);border-color:var(--emerald-border)}
+.check-list li.done .ck-body{color:var(--tx3);text-decoration:line-through;text-decoration-color:var(--tx4)}
+.check-list input[type=checkbox]{margin-top:5px;accent-color:var(--emerald);width:15px;height:15px;flex-shrink:0}
+.ck-body{font-size:13.5px;color:var(--tx1);line-height:1.7}
+.ck-body .ck-why{display:block;font-size:12px;color:var(--tx3);line-height:1.65;margin-top:2px}
+.doc-footer{border-top:1px solid var(--bd);margin-top:50px;padding:24px 0 10px;font-size:12.5px;color:var(--tx3)}
+.doc-footer p{margin-bottom:8px}
+.to-top{position:fixed;right:22px;bottom:22px;width:40px;height:40px;border-radius:var(--r-full);
+  background:var(--bg-surface);border:1px solid var(--bd-md);color:var(--tx2);cursor:pointer;z-index:90;
+  box-shadow:var(--shadow-md);font-size:16px;line-height:1;display:none;place-items:center;font-family:inherit}
+.to-top.show{display:grid}
+.to-top:hover{color:var(--accent);border-color:var(--accent-border);transform:translateY(-2px)}
+@media(max-width:1059px){
+  .doc-title{font-size:1.85rem}
+  .shell{padding:0 18px}
+  h2{font-size:1.4rem}
+  .sandbox{padding:18px}
+}
+@media(max-width:640px){
+  html{font-size:14px}
+  .doc-title{font-size:1.6rem}
+  .stat-v{font-size:1.1rem}
+  input[type=range]{width:130px}
+}
+@media print{
+  .top-nav,.sidebar,.to-top,.reading-progress-bar{display:none !important}
+  body{background:#fff;color:#1a1a1a;font-size:10.5pt;line-height:1.6}
+  .layout-container{display:block}
+  .main-content{padding:0}
+  section{page-break-inside:avoid;margin-bottom:26px}
+  h2,h3{page-break-after:avoid}
+  .sandbox,.figure,.tbl-wrap,.callout,.qa,.note{page-break-inside:avoid;box-shadow:none}
+  a{color:#1a1a1a;text-decoration:underline}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:8pt;color:#555}
+}
+</style>
+</head>
+<body>
+<div class="reading-progress-bar" id="progress-bar"></div>
+
+<header class="top-nav">
+  <div class="shell nav-inner">
+    <a class="brand" href="#top">
+      <span class="logo-badge">GB</span>
+      <span class="brand-meta">
+        <span class="brand-text">GrokBot 的 11 条使用技巧</span>
+        <span class="brand-sub">Agent Native · 11 Workflows</span>
+      </span>
+    </a>
+    <div class="nav-actions">
+      <button class="btn-toggle" id="btn-theme" type="button" title="切换深浅主题">◐ 主题</button>
+      <button class="btn-toggle" id="btn-print" type="button" title="打印或导出为 PDF">⎙ 打印</button>
+    </div>
+  </div>
+</header>
+
+<div class="shell layout-container" id="top">
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+      <p class="sidebar-title">目录 · Contents</p>
+      <nav class="sidebar-nav" id="toc">
+        <a class="sidebar-link" href="#abstract">一分钟速览</a>
+        <a class="sidebar-link" href="#overview">11 条工作流一览</a>
+        <a class="sidebar-link" href="#s01">01 · 情况监控 Bot</a>
+        <a class="sidebar-link" href="#s02">02 · 开发 Bot 用 Cursor</a>
+        <a class="sidebar-link" href="#s03">03 · 保留通用 Bot</a>
+        <a class="sidebar-link" href="#s04">04 · Bot 之间沟通</a>
+        <a class="sidebar-link" href="#s05">05 · 项目专属 Bot</a>
+        <a class="sidebar-link" href="#s06">06 · 接入 X</a>
+        <a class="sidebar-link" href="#s07">07 · Slack 事件触发</a>
+        <a class="sidebar-link" href="#s08">08 · 插件与权限</a>
+        <a class="sidebar-link" href="#s09">09 · 多邮箱检索</a>
+        <a class="sidebar-link" href="#s10">10 · Notion 写回</a>
+        <a class="sidebar-link" href="#s11">11 · 追问式日记</a>
+        <a class="sidebar-link" href="#appendix-a">附录 A · 横向对照表</a>
+        <a class="sidebar-link" href="#appendix-b">附录 B · 三类例程</a>
+        <a class="sidebar-link" href="#appendix-c">附录 C · 一周最小配置</a>
+        <a class="sidebar-link" href="#source">源文与版本信息</a>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <div class="doc-cover">
+      <p class="eyebrow">Agent Native · 11 条工作流 · 结构化单文件消化版</p>
+      <h1 class="doc-title">GrokBot 的 11 条使用技巧：<br/>搭出一套 Agent 工作系统</h1>
+      <p class="doc-lede">沿 Agent Native 原文的 11 条顺序，拆解情况监控、开发委派、通用入口、Agent 协作、项目 Bot、X、Slack、插件、多邮箱、Notion 和追问式日记。</p>
+      <div class="doc-meta">
+        <span class="meta-pill">源文：11 Tips for Using GrokBot</span>
+        <span class="meta-pill">分类：工具教程</span>
+        <span class="meta-pill">语言：中文</span>
+        <span class="meta-pill">工作流：11 条</span>
+        <span class="meta-pill">定档：2026-09-04</span>
+        <span class="meta-pill">零外部依赖 · 离线可用</span>
+      </div>
+    </div>
+
+    <section id="abstract">
+      <h2><span class="h2-num">00</span>一分钟速览</h2>
+      <div class="h2-rule"></div>
+      <ul class="lede-list">
+        <li>原文的 11 条技巧分别对应 11 个可独立使用的工作流，正文按 01—11 原顺序逐条解释，并在开头给出完整一览。</li>
+        <li>监控和触发型 Bot 的共同规则是：对象要短、命中条件要明确、没有变化保持沉默；专用 Bot 则要写清输出、证据和批准边界。</li>
+        <li>外部连接先验证正确身份与只读结果，再开放写入；发送、取消、合并、部署和发布继续等待批准，Notion 写入后必须读回。</li>
+      </ul>
+      <p>Agent Native 的作者把 GrokBot 称为 SpaceXAI 的通用 Agent 平台。它允许你创建多只 Bot，为每只 Bot 分配独立职责、上下文、插件和运行例程，再让它们互相交接。作者和团队长期使用后，整理出了 11 个最有用的工作流。</p>
+      <div class="note">
+        <span class="co-t">编者注 · 实体核对</span>
+        <p>“SpaceXAI”为源文（含中文转载页）使用的原样表述，本页按原文保留、不作改写；按公开语境理解，其指向通常为 xAI 的 Grok 产品体系。此注不影响正文 11 条工作流的任何结论。</p>
+      </div>
+      <p>这 11 条不是一套必须从头到尾照做的安装教程。它们分别处理监控、开发委派、通用入口、跨 Agent 协作、项目管理、X 研究、Slack 触发、插件权限、多邮箱、Notion 写回和深度思考。按原文顺序看，可以逐项判断哪一种工作流值得放进自己的系统。</p>
+    </section>
+
+    <section id="overview">
+      <h2><span class="h2-num">00+</span>11 条工作流一览</h2>
+      <div class="h2-rule"></div>
+      <ol class="overview-list">
+        <li><strong>建一只“情况监控”Bot</strong>：只在项目、交易、期限或决定发生实质变化时提醒。</li>
+        <li><strong>让开发 Bot 使用 Cursor</strong>：把长开发任务交给编码环境，并带回可审查产物。</li>
+        <li><strong>保留一只通用 Bot</strong>：给还没有固定归属的想法、问题和任务一个总入口。</li>
+        <li><strong>让 Bot 之间互相沟通</strong>：汇总完成项、决定、阻塞和下一步，减少人工搬运上下文。</li>
+        <li><strong>为重大项目单独建 Bot</strong>：保存项目目标、人员、文件、决定和未完成事项。</li>
+        <li><strong>把 Bot 接到 X</strong>：把帖子、收藏和互动数据整理成研究与内容线索。</li>
+        <li><strong>用事件触发例程监控 Slack</strong>：只在指定消息出现时启动，并把高后果动作留给审批。</li>
+        <li><strong>只安装真正有用的插件</strong>：为真实工作流增加上下文和动作能力，同时控制权限。</li>
+        <li><strong>连接多个邮箱</strong>：跨账户搜索资料，又不混淆发件身份和取消权限。</li>
+        <li><strong>把 GrokBot 接到 Notion</strong>：把研究写回既有页面，并读回确认位置与格式。</li>
+        <li><strong>建一只“追问式日记”Bot</strong>：通过连续追问把混乱想法变成判断和行动。</li>
+      </ol>
+    </section>
+
+    <section id="s01">
+      <h2><span class="h2-num">01</span>建一只“情况监控”Bot</h2>
+      <div class="h2-rule"></div>
+      <p>作者把它称为自己最有用的一只 Bot。它不负责生成一份又一份定时报告，而是维护一张很短的“活跃情境”清单：正在等待进展的项目、交易、截止日期或决定，每项只占一行。Bot 连接 Slack、邮件和日历，在工作日每五分钟检查一次；没有实质变化时保持沉默。</p>
+      <p>一旦变化命中，提醒固定回答四件事：哪个情境变了、发生了什么、为什么值得注意、用户下一步该做什么。提醒末尾再附上完整清单。清单也不必回到监控 Bot 中维护；用户可以在任何对话里要求当前 Bot 把新增或删除事项交接过去。</p>
+      <p>“每五分钟”只是作者采用的频率，不是所有人的默认答案。这个工作流能否低噪声运行，取决于监控对象是否足够少、“实质变化”是否写得清楚，以及未命中时是否真的不发消息。</p>
+
+      <div class="qa">
+        <span class="co-t">原文问答 · 定时监控、事件触发和临时等待分别怎样运行？</span>
+        <p>情况监控在工作日每五分钟检查短清单，无变化不通知；Slack Watch 在指定事件出现时启动；临时邮件例程在结果到达后提醒并删除。</p>
+      </div>
+
+      <div class="sandbox">
+        <div class="sb-head"><span class="sb-tag">沙盘 · 噪声预算</span><h3 class="sb-title">监控频率 × 静默率：把“每五分钟”换算成提醒预算</h3></div>
+        <p class="sb-desc">源文只给出了作者采用的频率（工作日每五分钟）与一条规则（无实质变化保持沉默）。本沙盘把这两点换算为可计算量：<strong>每日检查次数 = 60 ÷ 检查间隔 × 每日监控小时数</strong>；<strong>命中率上限 = 每日可接受提醒条数 ÷ 每日检查次数</strong>。命中率上限越低，说明“实质变化”的判定条件必须写得越严。所有数值均由上述两个公式实时算出，<strong>无任何预设或虚构统计</strong>；其中的“8 小时工作日”与“每日至多 3 条”为演示用基线假设，可调。</p>
+        <div class="sb-ctrl">
+          <label>检查间隔 <input type="range" id="mon-freq" min="1" max="60" step="1" value="5"/><span class="sb-out" id="out-freq">5 分钟</span></label>
+          <label>每日监控时长 <input type="range" id="mon-hours" min="1" max="24" step="1" value="8"/><span class="sb-out" id="out-hours">8 小时</span></label>
+          <label>每日可接受提醒 <input type="range" id="mon-budget" min="1" max="24" step="1" value="3"/><span class="sb-out" id="out-budget">3 条</span></label>
+        </div>
+        <div class="stat-grid">
+          <div class="stat"><span class="stat-k">每日检查次数</span><span class="stat-v" id="stat-checks-day">96</span><span class="stat-u">次 / 日</span></div>
+          <div class="stat"><span class="stat-k">每工作周检查</span><span class="stat-v" id="stat-checks-week">480</span><span class="stat-u">次 / 周（5 天）</span></div>
+          <div class="stat"><span class="stat-k">命中率上限</span><span class="stat-v" id="stat-hit-cap">3.13%</span><span class="stat-u">超出即噪声</span></div>
+          <div class="stat"><span class="stat-k">应保持静默</span><span class="stat-v" id="stat-silence">96.88%</span><span class="stat-u">的检查轮次</span></div>
+        </div>
+        <figure class="figure" style="margin-bottom:0">
+          <svg viewBox="0 0 660 96" role="img" aria-label="命中与静默占比条形示意">
+            <rect x="0" y="26" width="660" height="34" rx="6" fill="var(--bg-muted)"/>
+            <rect x="0" y="26" width="20" height="34" rx="6" fill="var(--accent)" id="mon-bar"/>
+            <text x="0" y="18" font-family="var(--font-mono)" font-size="11" fill="var(--tx3)">命中（提醒）</text>
+            <text x="660" y="18" text-anchor="end" font-family="var(--font-mono)" font-size="11" fill="var(--tx3)">静默（不打扰）</text>
+            <text x="330" y="80" text-anchor="middle" font-family="var(--font-mono)" font-size="11" fill="var(--tx3)">命中占比 ≤ 1 / 每日检查次数 × 可接受提醒条数</text>
+          </svg>
+        </figure>
+      </div>
+    </section>
+
+    <section id="s02">
+      <h2><span class="h2-num">02</span>让开发 Bot 使用 Cursor</h2>
+      <div class="h2-rule"></div>
+      <p>GrokBot 适合接收目标和组织上下文，耗时较长的开发工作则交给编码环境。作者的开发 Bot 会把仓库、要实现的结果、视觉方向和不可更改的约束交给 Cursor，让它在新分支上构建、运行并测试应用。</p>
+      <p>完成的定义不只是“代码已经生成”。Bot 要带回桌面截图、移动端截图和 Pull Request，附上简明改动说明，让用户能够先看结果、再检查代码。合并和部署继续停在人工批准线之前。这样，即使用户从手机发起任务，也能拿到一份可以审查的开发交接，而不是一段无法验证的完成声明。</p>
+
+      <h3>把专用 Bot 配置成一份可验收合同</h3>
+      <p>开发 Bot 只是一个例子。任何专用 Bot 都可以先填完下面这份任务合同。这里应保留代码块，因为这些字段是一份可复制、可改写的配置，不是普通正文清单。</p>
+      <pre><code class="language-yaml">job: 这只 Bot 唯一负责什么
+scope: 可以查看哪些项目、账户、频道或文件
+inputs: 开始前必须拿到哪些上下文
+trigger: 什么时候运行
+ignore_when: 哪些情况保持沉默
+output: 返回哪些固定字段或产物
+evidence: 用链接、截图、测试、PR 或读回证明什么
+approval: 哪些发送、写入、取消、合并或发布动作要等人批准
+read_back: 写入外部系统后怎样重新读取并确认结果</code></pre>
+      <p>职责决定工作范围，触发和沉默条件控制噪声，输出和证据决定怎样验收，批准和读回则约束外部动作。缺少其中任何一组，Bot 都可能“看起来完成了”，却无法证明结果正确落地。</p>
+
+      <div class="sandbox">
+        <div class="sb-head"><span class="sb-tag">沙盘 · 合同装配</span><h3 class="sb-title">任务合同装配器：九字段 → 可复制 YAML</h3></div>
+        <p class="sb-desc">下方九个字段与源文合同逐字对应，默认值取自源文 §02 的开发 Bot 场景。装配器只做两件确定性工作：① 把字段拼成 YAML；② 按源文末句的四组归类（职责 / 噪声 / 验收 / 外部动作）检查缺项——任意一组为空即标红。它不评分、不给结论，只暴露缺失。</p>
+        <div class="field-grid">
+          <div class="field"><label for="tc-job">job · 唯一职责</label><input type="text" id="tc-job" value="在新分支上实现指定功能并回交可审查产物"/></div>
+          <div class="field"><label for="tc-scope">scope · 可见范围</label><input type="text" id="tc-scope" value="指定仓库与新分支；不含生产配置与密钥"/></div>
+          <div class="field"><label for="tc-inputs">inputs · 前置上下文</label><input type="text" id="tc-inputs" value="仓库地址、期望结果、视觉方向、不可更改的约束"/></div>
+          <div class="field"><label for="tc-trigger">trigger · 何时运行</label><input type="text" id="tc-trigger" value="收到明确开发委派时"/></div>
+          <div class="field"><label for="tc-ignore">ignore_when · 何时沉默</label><input type="text" id="tc-ignore" value="只是讨论想法、无明确目标与约束时"/></div>
+          <div class="field"><label for="tc-output">output · 固定产出</label><input type="text" id="tc-output" value="桌面截图 + 移动端截图 + PR + 简明改动说明"/></div>
+          <div class="field"><label for="tc-evidence">evidence · 完成证据</label><input type="text" id="tc-evidence" value="构建的分支、运行与测试结果、截图、PR 链接"/></div>
+          <div class="field"><label for="tc-approval">approval · 待批动作</label><input type="text" id="tc-approval" value="合并与部署"/></div>
+          <div class="field"><label for="tc-readback">read_back · 写回核销</label><input type="text" id="tc-readback" value="重新打开 PR 页面核对分支、改动与截图"/></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="btn-copy" type="button">复制 YAML</button>
+          <button class="btn ghost" id="btn-reset" type="button">恢复默认示例</button>
+        </div>
+        <div class="chip-row">
+          <span class="chip" id="chip-job">职责组：job + scope</span>
+          <span class="chip" id="chip-noise">噪声组：trigger + ignore_when</span>
+          <span class="chip" id="chip-accept">验收组：output + evidence</span>
+          <span class="chip" id="chip-external">外部动作组：approval + read_back</span>
+        </div>
+        <div class="stat-grid">
+          <div class="stat"><span class="stat-k">已填字段</span><span class="stat-v" id="stat-fill">9 / 9</span></div>
+          <div class="stat"><span class="stat-k">完备组数</span><span class="stat-v" id="stat-groups">4 / 4</span></div>
+        </div>
+        <pre style="margin-bottom:0"><code class="language-yaml" id="out-contract">job: 在新分支上实现指定功能并回交可审查产物</code></pre>
+      </div>
+    </section>
+
+    <section id="s03">
+      <h2><span class="h2-num">03</span>保留一只通用 Bot</h2>
+      <div class="h2-rule"></div>
+      <p>作者建议保留一只几乎没有专业分工的 Bot，并把它置顶。语音笔记、快速问题、旧对话检索、策略讨论，以及暂时不知道该交给谁的任务，都先进入这个总入口。用户不必在每次开口前先设计分类体系。</p>
+      <p>只有当同类工作反复出现，或者开始需要专门工具、长期上下文或固定例程时，才把它拆成专用 Bot。这个门槛避免了另一种常见负担：系统里出现许多名字不同、职责却高度重叠的 Bot，最后用户仍要先判断该去哪里提问。</p>
+      <div class="qa">
+        <span class="co-t">原文问答 · 11 条技巧最终搭出什么，第一只 Bot 怎样开始？</span>
+        <p>从一只通用 Bot 开始，重复工作再拆成专用或项目 Bot；连接器提供上下文和动作，例程按时间或事件启动，协作结果回到总入口并由人批准。</p>
+      </div>
+      <p>通用 Bot 不是能力更弱的临时入口。它承担的是接收、检索和分流；专用 Bot 承担稳定流程；插件提供外部上下文与动作；例程决定何时自动运行；涉及后果的决定仍回到人。原文后面的 8 条技巧，基本都在给这套分工补充具体部件。</p>
+
+      <div class="sandbox">
+        <div class="sb-head"><span class="sb-tag">沙盘 · 归属分流</span><h3 class="sb-title">Bot 归属分流决策器</h3></div>
+        <p class="sb-desc">判定规则直接引自源文 §03 与 §05 的门槛描述，不引入源文之外的判据：① 项目是否持续足够久、重复足够多或重要到需要独立保存上下文、负责人和例程 → 项目 Bot；② 否则，是否需要专门工具、长期上下文或固定例程，或同类工作反复出现 → 专用 Bot；③ 否则 → 通用 Bot。项目结束后作者选择隐藏而非删除，本沙盘因此给出对应提示。</p>
+        <div class="sb-ctrl">
+          <label>出现频率
+            <select id="rt-freq">
+              <option value="once">一次性</option>
+              <option value="occasional">偶尔</option>
+              <option value="weekly" selected="selected">每周反复</option>
+              <option value="ongoing">持续进行</option>
+            </select>
+          </label>
+          <label>额外需要
+            <select id="rt-need">
+              <option value="none" selected="selected">无</option>
+              <option value="tools">专门工具或连接器</option>
+              <option value="context">长期上下文</option>
+              <option value="routine">固定例程</option>
+            </select>
+          </label>
+          <label>重大项目
+            <select id="rt-project">
+              <option value="no" selected="selected">否</option>
+              <option value="yes">是（需独立保存上下文、负责人与例程）</option>
+            </select>
+          </label>
+        </div>
+        <div class="verdict generic" id="out-route">
+          <span class="v-t">判定结果</span>
+          <span id="out-route-text">通用 Bot：尚未达到拆分门槛。</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="s04">
+      <h2><span class="h2-num">04</span>让 Bot 之间互相沟通</h2>
+      <div class="h2-rule"></div>
+      <p>多只 Bot 分工之后，用户不必成为它们之间的复制粘贴工具。作者让通用 Bot 像一个轻量级幕僚：主动询问可见的专用 Bot，收集过去七天完成的工作、已经作出的决定、当前阻塞、开放事项或期限，以及下一项需要用户参与的动作。</p>
+      <p>它返回的不是各段对话的拼接，而是一份压缩后的简报，并排出最值得关注的三件事，说明原因和负责的 Bot。持久事实、近期变化、责任归属和注意力优先级因此汇到同一个入口。</p>
+      <div class="qa">
+        <span class="co-t">原文问答 · 多只 Bot 怎样协作而不让用户搬运上下文？</span>
+        <p>通用 Bot 从专用 Bot 收集最近七天的完成项、决定、阻塞、开放事项和期限，再排出最应关注的三件事并标明负责人。</p>
+      </div>
+      <p>几只 Bot 需要围绕同一项目实时协调时，可以另开群聊。群聊用于现场讨论和交接；周期汇总用于把结果送回用户。两者分别解决协作过程和管理视野的问题。</p>
+    </section>
+
+    <section id="s05">
+      <h2><span class="h2-num">05</span>为重大项目单独建 Bot</h2>
+      <div class="h2-rule"></div>
+      <p>不是每项任务都值得新建 Bot。作者的门槛是：项目是否会持续足够久、重复足够多，或重要到需要独立保存上下文、负责人和例程。如果答案是否定的，让通用 Bot 处理即可。</p>
+      <p>新项目 Bot 不应从空白开始。让已经了解项目的 Bot 一次性交接目标和完成定义、关键人员、既有决定、文件与链接、不可变约束、审批边界、开放任务和截止日期。新 Bot 只保留一个清楚的主职责；只有存在稳定的周期性工作时，才增加例程。</p>
+      <p>项目结束后，作者选择隐藏而不是删除 Bot。上下文仍可通过 Command K 找回，主界面又不会长期被过期项目占满。这里保留的是项目记忆，不是继续让已经结束的例程运行。</p>
+      <div class="callout">
+        <span class="co-t">项目 Bot 交接清单 · 引自 §05</span>
+        <ul>
+          <li>目标和完成定义</li>
+          <li>关键人员</li>
+          <li>既有决定</li>
+          <li>文件与链接</li>
+          <li>不可变约束</li>
+          <li>审批边界</li>
+          <li>开放任务</li>
+          <li>截止日期</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="s06">
+      <h2><span class="h2-num">06</span>把 Bot 接到 X</h2>
+      <div class="h2-rule"></div>
+      <p>作者把 X 当作视频选题和研究线索的来源。连接主要账号和需要理解的品牌账号后，Bot 可以按内容格式、主题、浏览量和互动分析近期帖子，并为每条结果保留直达原帖的链接。私有互动数据还可以帮助作者观察哪些主题吸引了目标受众；这属于作者的实际用法，不等于平台对所有账号都能给出同样效果。</p>
+      <p>收藏工作流更具体：每周三和周日查看最近七天的书签，只留下与指定主题有关的内容。每条输出一句核心观点、两三句意义、可能的使用方式和原帖链接，再把相似内容聚合成三个值得继续研究的主题。</p>
+      <p>链接是这个工作流的证据层。没有原帖链接，摘要很快会变成一组无法回查的二手判断；保留链接后，用户才能核对语境、作者和原始数据。</p>
+    </section>
+
+    <section id="s07">
+      <h2><span class="h2-num">07</span>用事件触发例程监控 Slack</h2>
+      <div class="h2-rule"></div>
+      <p>定时例程在某个时间醒来，事件例程在某件事发生时醒来。Slack Watch 要先绑定具体频道或消息条件，并写清哪些内容算重要，例如交易、发票、阻塞或请求。普通聊天不命中条件，Bot 就保持沉默。</p>
+      <p>触发后，它先总结发生了什么、为什么需要关注，再取回相关链接或文档，并草拟回复或下一步动作。通知和草拟可以自动完成；发送消息、更新数据库、发布内容或把任务交给可能改变外部状态的流程，仍要等待批准。</p>
+      <p>原文还隐含了一个实用区分：持续状态适合定时检查，即时消息适合事件触发，一次性的等待适合临时例程。比如等待重要邮件回复，可以临时定期检查；回复到达后提醒用户，事情解决后再删除例程。</p>
+    </section>
+
+    <section id="s08">
+      <h2><span class="h2-num">08</span>只安装真正有用的插件</h2>
+      <div class="h2-rule"></div>
+      <p>插件让 Bot 读到工作实际发生的地方，也可能允许它在那里执行动作。作者建议从每天已经在用的 Drive、Calendar、Notion、Slack、X、Linear 或 ClickUp 开始；连接理由必须是支持一条真实工作流，而不是“这个集成存在”。</p>
+      <p>连接后先测试读取：账号或工作区是否正确，Bot 能否找到预期的文档、记录和页面。只读稳定后，再逐步开放草拟、更新、发送或发布。权限只给完成任务所需的最小范围，已经没有实际用途的连接应被移除。</p>
+      <div class="qa">
+        <span class="co-t">原文问答 · Cursor、X、邮箱、Notion 和插件分别需要什么权限与完成证据？</span>
+        <p>Cursor 用分支、测试、截图和 PR 验收；X 保留原链接；邮箱固定身份并先审后取消；Notion 只追加并读回；所有插件先读后写且使用最小权限。</p>
+      </div>
+      <p>作者给出的插件审计包含五项：连接了哪个账户或工作区；提供了什么上下文；允许执行什么动作；由哪只 Bot 或哪条工作流使用；是否存在不必要或过宽的权限。审计先返回清单，不自行更改权限或断开连接。</p>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 1 · 插件审计五项（引自 §08，审计只返回清单，不自动改权限）</caption>
+          <thead>
+            <tr><th scope="col">#</th><th scope="col">审计项</th><th scope="col">要回答的问题</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="c-num">1</td><td>连接目标</td><td>连接了哪个账户或工作区</td></tr>
+            <tr><td class="c-num">2</td><td>提供上下文</td><td>为 Bot 提供了哪些可读内容</td></tr>
+            <tr><td class="c-num">3</td><td>允许动作</td><td>被允许执行哪些写入或发送</td></tr>
+            <tr><td class="c-num">4</td><td>使用方</td><td>由哪只 Bot 或哪条工作流使用</td></tr>
+            <tr><td class="c-num">5</td><td>权限边界</td><td>是否存在不必要或过宽的权限</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s09">
+      <h2><span class="h2-num">09</span>连接多个邮箱</h2>
+      <div class="h2-rule"></div>
+      <p>多个个人和业务邮箱可以合成一个搜索域，用来寻找订阅、收据、税务文件、旧附件和已经忘记位置的对话。每个账户都要明确标记为个人、业务、合作或其他身份；负责发信的 Bot 还要指定默认发件账户，不能让它自行猜测该用哪个身份。</p>
+      <p>作者的订阅审计会搜索最近三个月的重复扣费，列出公司、金额、计费周期、所在邮箱、最近扣费日期和账户管理链接，把疑似重复项放在一起，并标出看似闲置的订阅。它交付的是审阅清单，不直接取消任何服务。</p>
+      <p>重要回复也可以交给临时例程等待：定期检查指定邮箱，邮件到达后提醒用户，情境解决后删除例程。这样既得到跨邮箱检索的便利，又不把发信、取消和长期监控权限混在一起。</p>
+    </section>
+
+    <section id="s10">
+      <h2><span class="h2-num">10</span>把 GrokBot 接到 Notion</h2>
+      <div class="h2-rule"></div>
+      <p>Notion 连接的价值不只是“能够创建页面”。它把研究、会议记录和项目状态写回用户已经工作的知识结构里。开始前要确认正确的工作区、数据库和页面层级，并明确允许写到哪里、采用什么格式。</p>
+      <p>作者的 Add Context 做法很克制：读取指定页面，不改写、删除或重排原内容；只在页面底部追加一个名为 “Additional Context” 的 callout，把详细研究放进折叠区并附来源链接。页面主体因此不被额外材料淹没。</p>
+      <p>写入后，Bot 重新读取页面，确认新增内容的位置和格式。API 返回成功只能证明请求被接受，读回才能证明用户实际看到的页面符合约定。对数据库更新、会议记录和项目状态，同样应该预先约定目标位置、字段和读回方式。</p>
+      <div class="note">
+        <span class="co-t">判据 · 写回完成的定义</span>
+        <p>API 返回成功 ≠ 写回完成。源文把“读回确认位置和格式”设为 Notion 工作流的收尾动作，并对数据库更新、会议记录与项目状态同样要求预先约定目标位置、字段和读回方式。</p>
+      </div>
+    </section>
+
+    <section id="s11">
+      <h2><span class="h2-num">11</span>建一只“追问式日记”Bot</h2>
+      <div class="h2-rule"></div>
+      <p>Grill Me Journal Bot 用于处理没有标准答案的想法。它是一只私密 Bot，常从手机上的语音笔记或一段混乱表述开始。Bot 先取回相关上下文，再一次只问一个困难问题，挑战模糊主张、隐藏假设和逻辑缺口。作者通常让它持续七到八轮。</p>
+      <div class="qa">
+        <span class="co-t">原文问答 · 日记 Bot 怎样把混乱想法变成可保存判断？</span>
+        <p>日记 Bot 先读相关上下文，再一次问一个难题，经过七到八轮示例追问后输出信念、未解问题、三项行动和可保存日记。</p>
+      </div>
+      <p>结束时，它交付四样东西：用户实际相信什么的简短总结、最强的未解决问题、三项下一步行动，以及一份可以保存的干净日记。成品写入 Bot 的计算机或用户选择的笔记系统，让这次思考成为之后可以检索和继续使用的文件。</p>
+      <p>七到八轮是作者的节奏示例。更合适的停止条件是判断已经能够行动：主张说清了，关键假设暴露了，未解问题可以准确命名，下一步也不再只是“继续想想”。</p>
+    </section>
+
+    <section id="appendix-a">
+      <h2><span class="h2-num">A</span>附录 A · 十一条工作流横向对照</h2>
+      <div class="h2-rule"></div>
+      <p>下表不添加源文之外的信息，仅把散落在 11 节里的“触发方式 / 外部系统 / 自动执行 / 待批动作 / 交付证据”抽到同一视图，便于判断哪几条与自己的系统直接相关。内容为源文各节的归纳，未引入任何量化指标。</p>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 2 · 11 条工作流对照（证据与批准边界均摘自对应章节）</caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th><th scope="col">工作流</th><th scope="col">触发方式</th>
+              <th scope="col">主要外部系统</th><th scope="col">可自动执行</th><th scope="col">需人批准</th><th scope="col">交付证据</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="c-num">01</td><td>情况监控 Bot</td><td>定时（工作日每五分钟）</td><td>Slack、邮件、日历</td><td>检查与判定</td><td>—（仅提醒）</td><td>四问提醒 + 活跃情境清单</td></tr>
+            <tr><td class="c-num">02</td><td>开发 Bot 使用 Cursor</td><td>手动委派</td><td>代码仓库、Cursor</td><td>建分支、运行、测试</td><td>合并、部署</td><td>桌面与移动端截图、PR、改动说明</td></tr>
+            <tr><td class="c-num">03</td><td>通用 Bot</td><td>随时对话</td><td>既有 Bot 与连接器</td><td>接收、检索、分流</td><td>涉及后果的决定</td><td>检索与交接结果</td></tr>
+            <tr><td class="c-num">04</td><td>Bot 之间沟通</td><td>周期汇总（过去七天）</td><td>各专用 Bot</td><td>收集与压缩简报</td><td>—</td><td>前三项要事 + 原因 + 负责 Bot</td></tr>
+            <tr><td class="c-num">05</td><td>项目专属 Bot</td><td>项目存续期内的委派与例程</td><td>项目文件与人员信息</td><td>保存上下文、运行例程</td><td>审批边界内的动作</td><td>八项交接清单</td></tr>
+            <tr><td class="c-num">06</td><td>接入 X</td><td>手动或定期（书签：周三、周日）</td><td>X 账号</td><td>分析、聚合、整理</td><td>—</td><td>原帖链接 + 核心观点 + 三个主题</td></tr>
+            <tr><td class="c-num">07</td><td>Slack 事件例程</td><td>事件触发（频道或消息条件）</td><td>Slack、相关文档</td><td>总结、取回链接、草拟</td><td>发送、更新数据库、发布、移交</td><td>总结 + 链接 + 草拟稿</td></tr>
+            <tr><td class="c-num">08</td><td>插件与权限治理</td><td>审计触发</td><td>Drive、Calendar、Notion、Slack、X、Linear、ClickUp</td><td>只读检索与清单生成</td><td>写入动作、权限变更</td><td>五项审计清单</td></tr>
+            <tr><td class="c-num">09</td><td>多邮箱检索</td><td>手动检索或临时例程</td><td>多个邮箱账户</td><td>跨账户搜索</td><td>发信身份、取消订阅</td><td>订阅审阅清单（不直接取消）</td></tr>
+            <tr><td class="c-num">10</td><td>Notion 写回</td><td>手动或流程末尾</td><td>Notion 工作区</td><td>追加 Additional Context callout</td><td>写入位置与格式约定</td><td>读回确认</td></tr>
+            <tr><td class="c-num">11</td><td>追问式日记</td><td>手动（语音笔记或混乱表述）</td><td>笔记系统</td><td>追问七到八轮</td><td>—</td><td>信念、未解问题、三项行动、日记</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="appendix-b">
+      <h2><span class="h2-num">B</span>附录 B · 三类例程与低噪声公共规则</h2>
+      <div class="h2-rule"></div>
+      <p>源文把例程的启动方式分成三类：定时、事件触发、临时等待。三者共用同一条规则——对象要短、命中条件要清楚、没有变化要保持安静；区别只在于何时醒来、何时结束、以及结束时要不要删除例程。</p>
+      <figure class="figure">
+        <svg viewBox="0 0 660 300" role="img" aria-label="定时、事件触发与临时等待三类例程流程示意图">
+          <rect x="243" y="8" width="174" height="38" rx="8" fill="var(--bg-muted)" stroke="var(--bd-md)"/>
+          <text x="330" y="32" text-anchor="middle" font-family="var(--font-sans)" font-size="12.5" fill="var(--tx1)">输入源：Slack · 邮件 · 日历 · X · Notion</text>
+          <path d="M330 46 L330 62" stroke="var(--accent)" stroke-width="1.4" fill="none"/>
+          <polygon points="330,68 326,60 334,60" fill="var(--accent)"/>
+          <rect x="243" y="72" width="174" height="38" rx="8" fill="var(--accent-subtle)" stroke="var(--accent-border)"/>
+          <text x="330" y="96" text-anchor="middle" font-family="var(--font-sans)" font-size="12.5" fill="var(--accent)">命中判定：是否属于实质变化</text>
+          <path d="M330 110 L330 126" stroke="var(--accent)" stroke-width="1.4" fill="none"/>
+          <polygon points="330,132 326,124 334,124" fill="var(--accent)"/>
+          <path d="M330 132 L110 132 L110 152" stroke="var(--bd-md)" stroke-width="1.3" fill="none"/>
+          <path d="M330 132 L330 152" stroke="var(--bd-md)" stroke-width="1.3" fill="none"/>
+          <path d="M330 132 L550 132 L550 152" stroke="var(--bd-md)" stroke-width="1.3" fill="none"/>
+          <polygon points="110,158 106,150 114,150" fill="var(--bd-md)"/>
+          <polygon points="330,158 326,150 334,150" fill="var(--bd-md)"/>
+          <polygon points="550,158 546,150 554,150" fill="var(--bd-md)"/>
+          <rect x="16" y="158" width="188" height="118" rx="10" fill="var(--bg-surface)" stroke="var(--bd-md)"/>
+          <text x="110" y="180" text-anchor="middle" font-family="var(--font-mono)" font-size="11" fill="var(--cyan)">01 · 定时清单</text>
+          <text x="30" y="202" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx2)">· 工作日每五分钟</text>
+          <text x="30" y="221" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx2)">· 短名单：项目·交易·期限·决定</text>
+          <text x="30" y="240" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx2)">· 无实质变化就沉默</text>
+          <text x="30" y="263" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx3)">结束条件：清单项关闭</text>
+          <rect x="236" y="158" width="188" height="118" rx="10" fill="var(--bg-surface)" stroke="var(--bd-md)"/>
+          <text x="330" y="180" text-anchor="middle" font-family="var(--font-mono)" font-size="11" fill="var(--emerald)">02 · 事件触发</text>
+          <text x="250" y="202" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx2)">· 指定频道或消息条件</text>
+          <text x="250" y="221" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx2)">· 交易·发票·阻塞·请求</text>
+          <text x="250" y="240" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx2)">· 未命中条件就忽略</text>
+          <text x="250" y="263" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx3)">结束条件：条件解除</text>
+          <rect x="456" y="158" width="188" height="118" rx="10" fill="var(--bg-surface)" stroke="var(--bd-md)"/>
+          <text x="550" y="180" text-anchor="middle" font-family="var(--font-mono)" font-size="11" fill="var(--amber)">03 · 临时等待</text>
+          <text x="470" y="202" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx2)">· 定期检查某封重要回复</text>
+          <text x="470" y="221" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx2)">· 结果到达后提醒</text>
+          <text x="470" y="240" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx2)">· 事情解决后删除例程</text>
+          <text x="470" y="263" font-family="var(--font-sans)" font-size="11.5" fill="var(--tx3)">结束条件：情境解除即删除</text>
+          <rect x="16" y="10" width="188" height="34" rx="8" fill="var(--bg-subtle)" stroke="var(--bd)"/>
+          <text x="110" y="31" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--tx3)">公共规则：短 · 清 · 静</text>
+        </svg>
+        <figcaption>图 1 · 依据 §01、§07、§09 正文描述重建的示意流程（源文作者原图为“工作日每五分钟检查与活跃情境清单”，本图为矢量重建，非原图复刻）。</figcaption>
+      </figure>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 3 · 三类例程的唤醒与结束条件</caption>
+          <thead>
+            <tr><th scope="col">类型</th><th scope="col">何时醒来</th><th scope="col">何时结束</th><th scope="col">源文出处</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>定时检查</td><td>固定时间或固定间隔（作者用工作日每五分钟）</td><td>清单项关闭或监控对象移除</td><td>§01 情况监控 Bot</td></tr>
+            <tr><td>事件触发</td><td>指定频道出现指定消息，或条件命中</td><td>条件解除；高后果动作转人工批准</td><td>§07 Slack Watch</td></tr>
+            <tr><td>临时等待</td><td>按临时例程定期检查某个具体结果</td><td>结果到达即提醒，情境解决后删除例程</td><td>§07 收尾、§09 邮件等待</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="appendix-c">
+      <h2><span class="h2-num">C</span>附录 C · 一周最小配置</h2>
+      <div class="h2-rule"></div>
+      <p>这 11 条可以从任意一条开始。若要压缩成一周的最小配置：建一只情况监控 Bot，只放两个正在等待变化的事项；置顶一只通用 Bot；从本周第一次重复出现的工作里挑一项，填完任务合同；只连接一个外部系统并先验证读取；周末让通用 Bot 汇总一次完成项、决定、阻塞和开放事项。每一步交付可检查结果后，再增加新的 Bot、连接器和例程。</p>
+      <div class="sandbox">
+        <div class="sb-head"><span class="sb-tag">沙盘 · 落地清单</span><h3 class="sb-title">一周最小配置执行清单</h3></div>
+        <p class="sb-desc">五步全部来自源文收束段，此处仅加勾选与计数；勾选只改变计数与配色，不产生任何推断结论。</p>
+        <ul class="check-list">
+          <li><input type="checkbox" id="wk-1"/><span class="ck-body"><label for="wk-1">建一只情况监控 Bot，只放两个正在等待变化的事项</label><span class="ck-why">保持清单足够短，是低噪声运行的前提（§01）。</span></span></li>
+          <li><input type="checkbox" id="wk-2"/><span class="ck-body"><label for="wk-2">置顶一只通用 Bot</label><span class="ck-why">给尚未归属的想法与任务一个总入口（§03）。</span></span></li>
+          <li><input type="checkbox" id="wk-3"/><span class="ck-body"><label for="wk-3">从本周第一次重复出现的工作里挑一项，填完任务合同</label><span class="ck-why">九个字段齐备后才谈得上验收（§02）。</span></span></li>
+          <li><input type="checkbox" id="wk-4"/><span class="ck-body"><label for="wk-4">只连接一个外部系统并先验证读取</label><span class="ck-why">先读后写、最小权限（§08）。</span></span></li>
+          <li><input type="checkbox" id="wk-5"/><span class="ck-body"><label for="wk-5">周末让通用 Bot 汇总一次完成项、决定、阻塞和开放事项</label><span class="ck-why">周期汇总把结果送回用户（§04）。</span></span></li>
+        </ul>
+        <div class="stat-grid">
+          <div class="stat"><span class="stat-k">已完成</span><span class="stat-v" id="stat-week">0 / 5</span><span class="stat-u">步</span></div>
+        </div>
+        <div class="verdict generic" id="out-week" style="margin-bottom:0">
+          <span class="v-t">下一步</span>
+          <span id="out-week-text">先完成第一步：把监控清单压到两项，再谈其他配置。</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="source">
+      <h2><span class="h2-num">S</span>源文与版本信息</h2>
+      <div class="h2-rule"></div>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 4 · 源文元数据（来自附件 frontmatter，未作改写）</caption>
+          <thead><tr><th scope="col">字段</th><th scope="col">值</th></tr></thead>
+          <tbody>
+            <tr><td>标题</td><td>GrokBot 的 11 条使用技巧：搭出一套 Agent 工作系统</td></tr>
+            <tr><td>slug</td><td>grokbot-11-tips</td></tr>
+            <tr><td>语言</td><td>zh</td></tr>
+            <tr><td>分类</td><td>工具教程</td></tr>
+            <tr><td>源文</td><td>11 Tips for Using GrokBot</td></tr>
+            <tr><td>链接</td><td><a href="https://best.xiaohu.ai/article/grokbot-11-tips/" rel="noreferrer noopener" target="_blank">https://best.xiaohu.ai/article/grokbot-11-tips/</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">
+        <span class="co-t">消化边界声明</span>
+        <p>本页正文 01—11 节为附件全文的结构化重排，未增删观点、未修改措辞口径；附录 A/B 为跨章节归纳；三个沙盘只做源文已给出条件的确定性换算（监控频次算术、合同九字段装配、§03/§05 分流门槛），不含任何未在源文中出现的量化结论或效果数据。</p>
+      </div>
+    </section>
+
+    <footer class="doc-footer">
+      <p>GrokBot 十一条工作流与 Agent 工作系统搭建指南 · 2026-09-04 定档 · 零外部依赖单文件交付（断网可完整阅读与交互）。</p>
+      <p>源文：11 Tips for Using GrokBot · 中文解读见 <a href="https://best.xiaohu.ai/article/grokbot-11-tips/" rel="noreferrer noopener" target="_blank">best.xiaohu.ai</a>。</p>
+    </footer>
+  </main>
+</div>
+
+<button class="to-top" id="btn-top" type="button" title="回到顶部" aria-label="回到顶部">↑</button>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- 主题切换 ---------- */
+  var root = document.documentElement;
+  var themeBtn = document.getElementById("btn-theme");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      themeBtn.classList.toggle("on", next === "light");
+    });
+  }
+
+  var printBtn = document.getElementById("btn-print");
+  if (printBtn) {
+    printBtn.addEventListener("click", function () { window.print(); });
+  }
+
+  /* ---------- 阅读进度 ---------- */
+  var bar = document.getElementById("progress-bar");
+  var topBtn = document.getElementById("btn-top");
+  function onScroll() {
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - doc.clientHeight;
+    var ratio = max > 0 ? (doc.scrollTop || document.body.scrollTop) / max : 0;
+    if (bar) { bar.style.width = (ratio * 100).toFixed(2) + "%"; }
+    if (topBtn) { if (ratio > 0.08) { topBtn.classList.add("show"); } else { topBtn.classList.remove("show"); } }
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+  if (topBtn) {
+    topBtn.addEventListener("click", function () {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  /* ---------- 目录高亮 ---------- */
+  var links = [].slice.call(document.querySelectorAll("#toc .sidebar-link"));
+  var sections = links.map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); });
+  if ("IntersectionObserver" in window) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) { return; }
+        var idx = sections.indexOf(en.target);
+        if (idx < 0) { return; }
+        links.forEach(function (a, i) { a.classList.toggle("active", i === idx); });
+      });
+    }, { rootMargin: "-80px 0px -70% 0px", threshold: 0 });
+    sections.forEach(function (s) { if (s) { obs.observe(s); } });
+  }
+
+  /* ---------- 沙盘 1：监控噪声预算 ---------- */
+  var monFreq = document.getElementById("mon-freq");
+  var monHours = document.getElementById("mon-hours");
+  var monBudget = document.getElementById("mon-budget");
+  var outFreq = document.getElementById("out-freq");
+  var outHours = document.getElementById("out-hours");
+  var outBudget = document.getElementById("out-budget");
+  var statDay = document.getElementById("stat-checks-day");
+  var statWeekChecks = document.getElementById("stat-checks-week");
+  var statHit = document.getElementById("stat-hit-cap");
+  var statSilence = document.getElementById("stat-silence");
+  var monBar = document.getElementById("mon-bar");
+
+  function updateMonitor() {
+    var f = parseFloat(monFreq.value);
+    var h = parseFloat(monHours.value);
+    var budget = parseFloat(monBudget.value);
+    var perDay = (60 / f) * h;
+    var perWeek = perDay * 5;
+    var hit = budget / perDay;
+    if (hit > 1) { hit = 1; }
+    var silence = 1 - hit;
+    outFreq.textContent = f + " 分钟";
+    outHours.textContent = h + " 小时";
+    outBudget.textContent = budget + " 条";
+    statDay.textContent = perDay.toFixed(perDay < 10 ? 1 : 0);
+    statWeekChecks.textContent = perWeek.toFixed(perWeek < 10 ? 1 : 0);
+    statHit.textContent = (hit * 100).toFixed(2) + "%";
+    statSilence.textContent = (silence * 100).toFixed(2) + "%";
+    if (monBar && monBar.setAttribute) {
+      monBar.setAttribute("width", Math.max(2, hit * 660).toFixed(1));
+    }
+  }
+  [monFreq, monHours, monBudget].forEach(function (el) {
+    el.addEventListener("input", updateMonitor);
+  });
+  updateMonitor();
+
+  /* ---------- 沙盘 2：任务合同装配器 ---------- */
+  var FIELDS = [
+    { id: "tc-job", key: "job" },
+    { id: "tc-scope", key: "scope" },
+    { id: "tc-inputs", key: "inputs" },
+    { id: "tc-trigger", key: "trigger" },
+    { id: "tc-ignore", key: "ignore_when" },
+    { id: "tc-output", key: "output" },
+    { id: "tc-evidence", key: "evidence" },
+    { id: "tc-approval", key: "approval" },
+    { id: "tc-readback", key: "read_back" }
+  ];
+  var DEFAULTS = {
+    "tc-job": "在新分支上实现指定功能并回交可审查产物",
+    "tc-scope": "指定仓库与新分支；不含生产配置与密钥",
+    "tc-inputs": "仓库地址、期望结果、视觉方向、不可更改的约束",
+    "tc-trigger": "收到明确开发委派时",
+    "tc-ignore": "只是讨论想法、无明确目标与约束时",
+    "tc-output": "桌面截图 + 移动端截图 + PR + 简明改动说明",
+    "tc-evidence": "构建的分支、运行与测试结果、截图、PR 链接",
+    "tc-approval": "合并与部署",
+    "tc-readback": "重新打开 PR 页面核对分支、改动与截图"
+  };
+  var GROUPS = [
+    { chip: "chip-job", label: "职责组：job + scope", keys: ["tc-job", "tc-scope"] },
+    { chip: "chip-noise", label: "噪声组：trigger + ignore_when", keys: ["tc-trigger", "tc-ignore"] },
+    { chip: "chip-accept", label: "验收组：output + evidence", keys: ["tc-output", "tc-evidence"] },
+    { chip: "chip-external", label: "外部动作组：approval + read_back", keys: ["tc-approval", "tc-readback"] }
+  ];
+  var outContract = document.getElementById("out-contract");
+  var statFill = document.getElementById("stat-fill");
+  var statGroups = document.getElementById("stat-groups");
+
+  function val(id) {
+    var el = document.getElementById(id);
+    return el ? String(el.value || "").trim() : "";
+  }
+
+  function updateContract() {
+    var lines = [];
+    var filled = 0;
+    FIELDS.forEach(function (f) {
+      var v = val(f.id);
+      if (v) { filled += 1; lines.push(f.key + ": " + v); }
+      else { lines.push(f.key + ": "); }
+    });
+    outContract.textContent = lines.join("\n");
+
+    var complete = 0;
+    GROUPS.forEach(function (g) {
+      var ok = g.keys.every(function (k) { return val(k).length > 0; });
+      var chip = document.getElementById(g.chip);
+      if (chip) {
+        chip.textContent = g.label + (ok ? " · 齐备" : " · 缺项");
+        chip.classList.toggle("ok", ok);
+        chip.classList.toggle("miss", !ok);
+      }
+      if (ok) { complete += 1; }
+    });
+    statFill.textContent = filled + " / 9";
+    statGroups.textContent = complete + " / 4";
+  }
+  FIELDS.forEach(function (f) {
+    var el = document.getElementById(f.id);
+    if (el) { el.addEventListener("input", updateContract); }
+  });
+
+  var copyBtn = document.getElementById("btn-copy");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", function () {
+      var text = outContract.textContent;
+      var done = function () {
+        var old = copyBtn.textContent;
+        copyBtn.textContent = "已复制";
+        setTimeout(function () { copyBtn.textContent = old; }, 1400);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { done(); });
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); } catch (e) { /* 复制不可用时静默降级 */ }
+        document.body.removeChild(ta);
+        done();
+      }
+    });
+  }
+  var resetBtn = document.getElementById("btn-reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", function () {
+      Object.keys(DEFAULTS).forEach(function (k) {
+        var el = document.getElementById(k);
+        if (el) { el.value = DEFAULTS[k]; }
+      });
+      updateContract();
+    });
+  }
+  updateContract();
+
+  /* ---------- 沙盘 3：Bot 归属分流 ---------- */
+  var rtFreq = document.getElementById("rt-freq");
+  var rtNeed = document.getElementById("rt-need");
+  var rtProject = document.getElementById("rt-project");
+  var outRoute = document.getElementById("out-route");
+  var outRouteText = document.getElementById("out-route-text");
+
+  function updateRoute() {
+    var freq = rtFreq.value;
+    var need = rtNeed.value;
+    var project = rtProject.value;
+    var cls = "verdict generic";
+    var kind = "通用 Bot";
+    var text = "";
+    if (project === "yes") {
+      cls = "verdict project";
+      kind = "项目 Bot";
+      text = "达到 §05 门槛：项目持续足够久、重复足够多，或重要到需要独立保存上下文、负责人和例程。新建后由已了解项目的 Bot 一次性交接八项内容（目标与完成定义、关键人员、既有决定、文件与链接、不可变约束、审批边界、开放任务、截止日期）；只保留一个主职责，只有存在稳定周期性工作时才加例程。项目结束后隐藏而非删除，上下文仍可通过 Command K 找回。";
+    } else if (need !== "none") {
+      cls = "verdict special";
+      kind = "专用 Bot";
+      text = "达到 §03 拆分门槛：开始需要专门工具、长期上下文或固定例程。先填完九字段任务合同（职责 / 噪声 / 验收 / 外部动作四组齐全），再谈自动化；缺任何一组都会出现“看起来完成、却无法证明落地”的结果。";
+    } else if (freq === "weekly" || freq === "ongoing") {
+      cls = "verdict special";
+      kind = "专用 Bot";
+      text = "达到 §03 拆分门槛：同类工作反复出现，值得从通用 Bot 中拆出。拆分前确认它确实需要专门工具、长期上下文或固定例程，避免造出一批名字不同、职责高度重叠的 Bot。";
+    } else {
+      cls = "verdict generic";
+      kind = "通用 Bot";
+      text = "未达拆分门槛：留给置顶的通用 Bot 处理即可。它承担接收、检索与分流，让用户在开口前不必先设计分类体系；等同类工作反复出现，或需要专门工具、长期上下文、固定例程时再拆。";
+    }
+    outRoute.setAttribute("class", cls);
+    outRouteText.textContent = kind + "：" + text;
+  }
+  [rtFreq, rtNeed, rtProject].forEach(function (el) {
+    el.addEventListener("change", updateRoute);
+  });
+  updateRoute();
+
+  /* ---------- 沙盘 4：一周最小配置 ---------- */
+  var WEEK = ["wk-1", "wk-2", "wk-3", "wk-4", "wk-5"];
+  var statWeek = document.getElementById("stat-week");
+  var outWeek = document.getElementById("out-week");
+  var outWeekText = document.getElementById("out-week-text");
+  var WEEK_TIPS = [
+    "先完成第一步：把监控清单压到两项，再谈其他配置。",
+    "监控清单就位；接着置顶一只通用 Bot，给尚未归属的想法一个总入口。",
+    "入口就位；从本周第一次重复出现的工作里挑一项，把九个字段的任务合同填完。",
+    "合同就位；只连接一个外部系统，并且先验证读取再谈写入。",
+    "只差最后一步：周末让通用 Bot 汇总一次完成项、决定、阻塞和开放事项。",
+    "五步全部交付了可检查结果；此时再增加新的 Bot、连接器和例程。"
+  ];
+
+  function updateWeek() {
+    var done = 0;
+    WEEK.forEach(function (id, i) {
+      var el = document.getElementById(id);
+      if (!el) { return; }
+      if (el.checked) { done += 1; }
+      if (el.parentElement) {
+        el.parentElement.classList.toggle("done", !!el.checked);
+      }
+      if (i === done && !el.checked) { /* 顺序提示由文案承担 */ }
+    });
+    statWeek.textContent = done + " / 5";
+    var idx = done > 5 ? 5 : done;
+    outWeek.setAttribute("class", done === 5 ? "verdict special" : "verdict generic");
+    outWeekText.textContent = WEEK_TIPS[idx];
+  }
+  WEEK.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) { el.addEventListener("change", updateWeek); }
+  });
+  updateWeek();
+})();
+</script>
+</body>
+</html>

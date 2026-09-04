@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="pzgwzSEVURGgfDOiBexNKD">
+<head data-page-node-id="1WbQLfCantupGugLI0CzrP">
+<meta charset="utf-8" data-page-node-id="5370DBBvUb3zlBix9L7c7G"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="KiiPPzMGMBOFHntTTDsuF5"/>
+<title>Codex Agent Harness 开源底座与业务系统集成指南</title>
+<meta name="description" content="OpenAI 将 Codex 的底层核心框架 Agent Harness 开源：上下文记忆、工具调用、沙箱与审批机制可复用，Agent 可接入物流后台、工单、报税与监控系统。单文件、零外部依赖。" data-page-node-id="XEZtM5YC0qULKa24DGdlCA"/>
+<style>
+/* ==========================================================================
+   DESIGN TOKENS · Warm Parchment & Terracotta ⟷ Obsidian Basalt
+   全部内联，零外部依赖（无 CDN / 无远程字体 / 无外链样式脚本）
+   ========================================================================== */
+:root{
+  --bg-app:#FAF7F2; --bg-surface:#FFFFFF; --bg-subtle:#F3EFE8; --bg-muted:#EBE5DB;
+  --bg-glass:rgba(250,247,242,.9);
+  --bd:#E3DDD2; --bd-strong:#CFC7B9; --hair:rgba(27,26,23,.07);
+
+  --acc:#C85A32; --acc-hover:#B24B26; --acc-soft:rgba(200,90,50,.09); --acc-border:rgba(200,90,50,.30);
+  --ok:#2D8A5E;  --ok-soft:rgba(45,138,94,.09);   --ok-border:rgba(45,138,94,.28);
+  --warn:#C2801E;--warn-soft:rgba(194,128,30,.09);--warn-border:rgba(194,128,30,.28);
+  --bad:#C94A4A; --bad-soft:rgba(201,74,74,.09);  --bad-border:rgba(201,74,74,.28);
+  --info:#2B7A9E;--info-soft:rgba(43,122,158,.09);--info-border:rgba(43,122,158,.28);
+
+  --t1:#1B1A17; --t2:#4A463F; --t3:#757065; --t4:#A6A094;
+
+  --sh-1:0 1px 3px rgba(27,26,23,.05),0 1px 2px rgba(27,26,23,.02);
+  --sh-2:0 5px 18px -3px rgba(27,26,23,.09),0 2px 7px -1px rgba(27,26,23,.04);
+
+  --f-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --f-serif:Georgia,"Songti SC","SimSun","Noto Serif CJK SC","Source Han Serif SC",serif;
+  --f-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+
+  --r-xs:4px; --r-sm:6px; --r-md:10px; --r-lg:15px; --r-pill:9999px;
+}
+html[data-theme="dark"]{
+  --bg-app:#121417; --bg-surface:#1A1D23; --bg-subtle:#22262F; --bg-muted:#2D333E;
+  --bg-glass:rgba(18,20,23,.9);
+  --bd:#2A303C; --bd-strong:#3D4657; --hair:rgba(255,255,255,.06);
+  --acc:#E07A5F; --acc-hover:#EA8F76; --acc-soft:rgba(224,122,95,.14); --acc-border:rgba(224,122,95,.38);
+  --ok:#34D399;  --ok-soft:rgba(52,211,153,.13);   --ok-border:rgba(52,211,153,.32);
+  --warn:#FBBF24;--warn-soft:rgba(251,191,36,.13);--warn-border:rgba(251,191,36,.32);
+  --bad:#F87171; --bad-soft:rgba(248,113,113,.13);--bad-border:rgba(248,113,113,.32);
+  --info:#38BDF8;--info-soft:rgba(56,189,248,.13);--info-border:rgba(56,189,248,.32);
+  --t1:#F4F5F7; --t2:#C5CBD6; --t3:#8C95A6; --t4:#576173;
+  --sh-1:0 1px 3px rgba(0,0,0,.28),0 1px 2px rgba(0,0,0,.16);
+  --sh-2:0 6px 22px -3px rgba(0,0,0,.48),0 2px 8px -1px rgba(0,0,0,.26);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:76px;-webkit-text-size-adjust:100%}
+body{background:var(--bg-app);color:var(--t2);font-family:var(--f-sans);font-size:15px;
+  line-height:1.85;letter-spacing:-.008em;-webkit-font-smoothing:antialiased;
+  transition:background-color .24s ease,color .24s ease}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:9999;
+  background:linear-gradient(90deg,var(--acc),var(--info));transition:width .08s linear}
+.skip-nav{position:absolute;top:-60px;left:16px;background:var(--acc);color:#fff;padding:7px 14px;
+  border-radius:var(--r-sm);z-index:10000;font-size:12.5px;font-weight:600;text-decoration:none;transition:top .2s}
+.skip-nav:focus{top:12px}
+
+/* ---------- Top bar ---------- */
+.topbar{position:sticky;top:0;z-index:900;background:var(--bg-glass);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--bd);height:60px}
+.topbar-in{max-width:1280px;margin:0 auto;padding:0 26px;height:100%;
+  display:flex;align-items:center;justify-content:space-between;gap:14px}
+.bar-left{display:flex;align-items:center;gap:11px;min-width:0}
+.bar-badge{font-family:var(--f-mono);font-size:10px;font-weight:700;letter-spacing:.08em;
+  background:var(--acc-soft);color:var(--acc);border:1px solid var(--acc-border);
+  border-radius:var(--r-pill);padding:3px 9px;white-space:nowrap}
+.bar-title{font-family:var(--f-serif);font-size:14.5px;font-weight:700;color:var(--t1);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-right{display:flex;align-items:center;gap:9px;flex:none}
+.btn-theme,.btn-toc{display:inline-flex;align-items:center;gap:7px;padding:6px 13px;font-size:12px;
+  font-family:var(--f-mono);color:var(--t2);background:var(--bg-surface);border:1px solid var(--bd);
+  border-radius:var(--r-pill);cursor:pointer;box-shadow:var(--sh-1);transition:all .18s ease;white-space:nowrap}
+.btn-theme:hover,.btn-toc:hover{color:var(--t1);border-color:var(--bd-strong);background:var(--bg-subtle)}
+.btn-toc{display:none}
+
+/* ---------- Layout ---------- */
+.layout{display:grid;grid-template-columns:262px minmax(0,1fr);gap:48px;
+  max-width:1280px;margin:0 auto;padding:40px 26px 90px;align-items:start}
+.sidebar{position:sticky;top:76px;max-height:calc(100vh - 100px);overflow-y:auto;
+  padding-right:14px;scrollbar-width:thin}
+.sidebar::-webkit-scrollbar{width:4px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--bd-strong);border-radius:2px}
+.brand{display:flex;align-items:center;gap:11px;padding-bottom:18px;margin-bottom:20px;
+  border-bottom:1px solid var(--bd)}
+.brand-mark{width:34px;height:34px;border-radius:var(--r-sm);background:var(--acc);color:#fff;
+  display:grid;place-items:center;font-size:16px;flex:none;font-family:var(--f-mono);font-weight:700}
+.brand-name{font-family:var(--f-serif);font-size:14px;font-weight:700;color:var(--t1);line-height:1.3}
+.brand-sub{font-family:var(--f-mono);font-size:9.5px;color:var(--t4);letter-spacing:.08em;text-transform:uppercase}
+.toc-label{font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--t4);
+  letter-spacing:.09em;text-transform:uppercase;margin-bottom:11px}
+ul.toc{list-style:none;border-left:1px solid var(--hair)}
+ul.toc a{display:block;font-size:12.8px;line-height:1.45;padding:5px 0 5px 13px;color:var(--t3);
+  text-decoration:none;border-left:2px solid transparent;margin-left:-1px;transition:all .16s ease}
+ul.toc a:hover{color:var(--t1);border-left-color:var(--t4)}
+ul.toc a.active{color:var(--acc);font-weight:600;border-left-color:var(--acc);
+  background:var(--acc-soft);border-radius:0 var(--r-xs) var(--r-xs) 0}
+.side-foot{margin-top:26px;padding-top:15px;border-top:1px solid var(--hair);
+  font-size:11px;color:var(--t4);line-height:1.62}
+main{min-width:0}
+
+/* ---------- Hero ---------- */
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:10.5px;
+  font-weight:700;color:var(--acc);letter-spacing:.09em;text-transform:uppercase;margin-bottom:12px}
+.eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--acc)}
+h1.doc-title{font-family:var(--f-serif);font-size:clamp(1.7rem,3.2vw,2.35rem);line-height:1.3;
+  font-weight:700;color:var(--t1);letter-spacing:-.02em;margin:0 0 15px}
+p.doc-desc{font-size:16px;line-height:1.78;color:var(--t2);margin:0 0 22px}
+.meta-bar{display:flex;flex-wrap:wrap;gap:7px 18px;padding:12px 16px;background:var(--bg-surface);
+  border:1px solid var(--bd);border-radius:var(--r-md);font-family:var(--f-mono);font-size:11.5px;
+  color:var(--t3);margin-bottom:26px;box-shadow:var(--sh-1)}
+.meta-bar b{color:var(--t1);font-weight:600}
+.meta-bar a{color:var(--info);text-decoration:none}
+.meta-bar a:hover{text-decoration:underline}
+
+/* ---------- KPI band ---------- */
+.kpi-band{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:0 0 34px}
+.kpi{background:var(--bg-surface);border:1px solid var(--bd);border-radius:var(--r-md);
+  padding:14px 15px 12px;box-shadow:var(--sh-1)}
+.kpi-num{font-family:var(--f-serif);font-size:20px;font-weight:700;color:var(--acc);line-height:1.25;
+  letter-spacing:-.01em}
+.kpi-label{font-size:11.5px;color:var(--t3);line-height:1.5;margin-top:5px}
+
+/* ---------- Sections ---------- */
+section.card{background:var(--bg-surface);border:1px solid var(--bd);border-radius:var(--r-lg);
+  padding:30px 34px 26px;margin-bottom:26px;box-shadow:var(--sh-1)}
+.sec-head{display:flex;align-items:baseline;gap:13px;margin-bottom:16px;
+  padding-bottom:13px;border-bottom:1px solid var(--hair)}
+.sec-idx{font-family:var(--f-mono);font-size:11px;font-weight:700;color:var(--acc);
+  letter-spacing:.1em;flex:none}
+h2.sec-title{font-family:var(--f-serif);font-size:21px;font-weight:700;color:var(--t1);
+  letter-spacing:-.01em;line-height:1.4}
+section.card p{margin:0 0 14px}
+section.card p:last-child{margin-bottom:0}
+strong{color:var(--t1);font-weight:650}
+a{color:var(--info);text-decoration:none;border-bottom:1px solid transparent;transition:border-color .15s}
+a:hover{border-bottom-color:var(--info)}
+a.ext::after{content:"↗";font-size:.82em;margin-left:2px;opacity:.75}
+code{font-family:var(--f-mono);font-size:.88em;background:var(--bg-muted);color:var(--t1);
+  border:1px solid var(--bd);border-radius:var(--r-xs);padding:1.5px 6px;white-space:nowrap}
+
+/* ---------- Lists ---------- */
+ul.rich{list-style:none;margin:0 0 14px;padding:0}
+ul.rich li{position:relative;padding:5px 0 5px 24px}
+ul.rich li::before{content:"";position:absolute;left:6px;top:15px;width:7px;height:7px;
+  border-radius:2px;background:var(--acc);opacity:.85}
+ul.rich li:last-child{padding-bottom:0}
+
+/* ---------- Q&A cards ---------- */
+.qa{background:var(--bg-subtle);border:1px solid var(--bd);border-left:3px solid var(--acc);
+  border-radius:var(--r-md);padding:15px 18px 13px;margin:16px 0 18px}
+.qa-q{display:flex;gap:9px;align-items:baseline;font-weight:700;color:var(--t1);
+  font-size:14.5px;margin-bottom:7px;line-height:1.6}
+.qa-chip{flex:none;font-family:var(--f-mono);font-size:9.5px;font-weight:700;letter-spacing:.06em;
+  color:var(--acc);background:var(--acc-soft);border:1px solid var(--acc-border);
+  border-radius:var(--r-pill);padding:2px 8px;transform:translateY(-1px)}
+.qa-a{font-size:14px;color:var(--t2);line-height:1.8}
+
+/* ---------- Notes & related ---------- */
+.note{border:1px solid var(--warn-border);background:var(--warn-soft);color:var(--t2);
+  border-radius:var(--r-md);padding:13px 16px;font-size:13.5px;margin:16px 0}
+.note b{color:var(--warn)}
+.related{border:1px dashed var(--info-border);background:var(--info-soft);
+  border-radius:var(--r-md);padding:13px 16px;font-size:13.5px;margin:16px 0}
+.related .rel-tag{font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--info);
+  letter-spacing:.08em;text-transform:uppercase;margin-right:8px}
+
+/* ---------- Three-layer diagram ---------- */
+.fig{margin:20px 0 18px;background:var(--bg-subtle);border:1px solid var(--bd);
+  border-radius:var(--r-md);padding:18px 16px 10px;overflow-x:auto}
+.fig svg{display:block;min-width:640px;width:100%;height:auto}
+.fig-cap{font-size:12px;color:var(--t3);text-align:center;padding:8px 6px 6px;line-height:1.6}
+
+/* ---------- Entry option cards ---------- */
+.opt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0 18px}
+.opt{background:var(--bg-subtle);border:1px solid var(--bd);border-radius:var(--r-md);
+  padding:15px 16px 13px;transition:border-color .18s ease,transform .18s ease}
+.opt:hover{border-color:var(--acc-border);transform:translateY(-2px)}
+.opt-tag{font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--acc);
+  letter-spacing:.07em;text-transform:uppercase}
+.opt-name{font-family:var(--f-serif);font-size:15.5px;font-weight:700;color:var(--t1);margin:5px 0 7px}
+.opt p{font-size:13px;color:var(--t2);margin:0;line-height:1.75}
+
+/* ---------- Step flow ---------- */
+ol.flow{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 18px;padding:0;counter-reset:step}
+ol.flow li{counter-increment:step;display:flex;align-items:center;gap:8px;
+  background:var(--bg-subtle);border:1px solid var(--bd);border-radius:var(--r-pill);
+  padding:7px 14px 7px 8px;font-size:13px;color:var(--t1);font-weight:600}
+ol.flow li::before{content:counter(step);display:grid;place-items:center;width:22px;height:22px;
+  border-radius:50%;background:var(--acc);color:#fff;font-family:var(--f-mono);
+  font-size:11px;font-weight:700;flex:none}
+ol.flow li.gate{border-color:var(--warn-border);background:var(--warn-soft)}
+ol.flow li.gate::before{background:var(--warn)}
+
+/* ---------- Comparison table ---------- */
+.tbl-wrap{overflow-x:auto;margin:16px 0 18px;border:1px solid var(--bd);border-radius:var(--r-md)}
+table.cmp{width:100%;border-collapse:collapse;font-size:13.8px;min-width:520px}
+table.cmp th,table.cmp td{padding:12px 16px;text-align:left;vertical-align:top;line-height:1.7}
+table.cmp thead th{font-family:var(--f-mono);font-size:11px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;background:var(--bg-subtle);border-bottom:1px solid var(--bd);color:var(--t3)}
+table.cmp thead th.col-yes{color:var(--ok)}
+table.cmp thead th.col-no{color:var(--bad)}
+table.cmp tbody tr{border-bottom:1px solid var(--hair)}
+table.cmp tbody tr:last-child{border-bottom:none}
+table.cmp tbody td:first-child{color:var(--t1);font-weight:600;border-right:1px solid var(--hair)}
+table.cmp tbody tr:hover{background:var(--bg-subtle)}
+
+/* ---------- Footer ---------- */
+.doc-foot{margin-top:10px;padding:22px 6px 4px;border-top:1px solid var(--bd);
+  font-size:12px;color:var(--t4);line-height:1.8}
+.doc-foot b{color:var(--t3)}
+
+/* ---------- Responsive & Print ---------- */
+@media (max-width:1024px){
+  .layout{grid-template-columns:1fr;gap:0;padding-top:26px}
+  .sidebar{position:fixed;top:60px;left:0;bottom:0;width:280px;z-index:950;
+    background:var(--bg-surface);border-right:1px solid var(--bd);padding:22px 20px;
+    transform:translateX(-102%);transition:transform .26s ease;max-height:none;box-shadow:var(--sh-2)}
+  .sidebar.open{transform:translateX(0)}
+  .btn-toc{display:inline-flex}
+  .kpi-band{grid-template-columns:repeat(2,1fr)}
+  .opt-grid{grid-template-columns:1fr}
+  section.card{padding:24px 20px 20px}
+}
+@media (max-width:560px){
+  .kpi-band{grid-template-columns:1fr}
+  .bar-title{display:none}
+}
+@media print{
+  .topbar,.sidebar,#progress,.skip-nav,.btn-toc{display:none !important}
+  .layout{display:block;padding:0;max-width:none}
+  body{background:#fff;color:#222;font-size:12px}
+  section.card,.kpi{box-shadow:none;border:1px solid #ddd;break-inside:avoid}
+  a{color:#222;text-decoration:underline}
+  .qa,.note,.related,.fig{break-inside:avoid}
+}
+</style>
+</head>
+<body data-page-node-id="trpCT2WGTWIGNq2PPNkf23">
+<a class="skip-nav" href="#main" data-page-node-id="Z1fU5mHCFNVUZGfGdpeoa5">跳到正文</a>
+<div id="progress" data-page-node-id="5pkG3OshWR0Iy737qasxWN"></div>
+
+<header class="topbar" data-page-node-id="aCrNdHlSC7OC2QdlvlTSur">
+  <div class="topbar-in" data-page-node-id="vnqYa8awBi5EjoJpzmtNHs">
+    <div class="bar-left" data-page-node-id="i3mniHcfv03NEwe68xwMCj">
+      <span class="bar-badge" data-page-node-id="aUTsV4mqnQYUhkjS2PqG6q">CODEX · HARNESS</span>
+      <span class="bar-title" data-page-node-id="6vw3wGPQp5hpob0SHecWEz">Codex Agent Harness 开源底座与业务系统集成指南</span>
+    </div>
+    <div class="bar-right" data-page-node-id="YTojXPRkFxUp7kkqjoklGN">
+      <button class="btn-toc" id="btn-toc" type="button" data-page-node-id="KmDQrFNma9xt8jqJ9EHNpW">☰ 目录</button>
+      <button class="btn-theme" id="btn-theme" type="button" data-page-node-id="yHFWSibYwcA2HJCJu3jBTH"><span class="tg-ico" data-page-node-id="Tb7OoWAYHiazam6OaSujUW">☾</span><span class="tg-txt" data-page-node-id="VIbt0NZDkXtG7xHxKxgCw7">深色</span></button>
+    </div>
+  </div>
+</header>
+
+<div class="layout" data-page-node-id="AsmxQt95yeGslDlUkVJGQg">
+  <aside class="sidebar" id="sidebar" data-page-node-id="Ty19rzBAakICDPiq6cUxfW">
+    <div class="brand" data-page-node-id="8I6wCHA2I8jQBaTR6ej3Y8">
+      <div class="brand-mark" data-page-node-id="YnDVG0zEwuubVTyQo3Z0bj">⌘</div>
+      <div data-page-node-id="naisJ0A0Px0SCuAhChRDU0">
+        <div class="brand-name" data-page-node-id="UDpyxBYI5inSElSoXBfs0f">Codex as a Platform</div>
+        <div class="brand-sub" data-page-node-id="YwxyFXfB1xBMkilirraaG4">Agent Harness 开源</div>
+      </div>
+    </div>
+    <div class="toc-label" data-page-node-id="OeyvqTi70C3ijRp0jQxSZH">本文目录</div>
+    <ul class="toc" data-page-node-id="JJ5ARmcGLDEWFF7otZ2qjx">
+      <li data-page-node-id="R9qwSfLouRK3W459682KHi"><a href="#sec-glance" data-page-node-id="iHWuRjt27gOp2LMCMQND5e">一分钟速览</a></li>
+      <li data-page-node-id="yFJ6yjhJyjo6lKMU7HEPul"><a href="#sec-opensource" data-page-node-id="IUimmBcfV3H1F7GJtO2PLh">OpenAI 这次到底开源了什么</a></li>
+      <li data-page-node-id="i5u0bMbqmMV8NWwJOTXZhi"><a href="#sec-why" data-page-node-id="noenRAaCkRSGilcomKngbH">为什么光有模型做不成 Agent</a></li>
+      <li data-page-node-id="tLUe8lVtbY14mm0RMv9vH8"><a href="#sec-layers" data-page-node-id="7pRRxGWrD8qttuevAPJUdd">接进业务系统后三层分工</a></li>
+      <li data-page-node-id="0HZFWyAi8c5Dm0BcFVYdHI"><a href="#sec-entry" data-page-node-id="6g5HNTD1bUMLImfnCS6c8v">三种接法怎么选</a></li>
+      <li data-page-node-id="0Aymvpglh8SHWWguVaJVFF"><a href="#sec-chatbox" data-page-node-id="AxCDLnnwOZgKjHmCOh1Vvt">接入 Agent ≠ 再加聊天框</a></li>
+      <li data-page-node-id="EVAI5uJm2YdKLGGsFc6tS3"><a href="#sec-relay" data-page-node-id="CFiKQ3k6XGv8UiQmgDJFVQ">Relay 演示：物流业务闭环</a></li>
+      <li data-page-node-id="h2Scrkl15jAKIKBHdOV6SO"><a href="#sec-boundary" data-page-node-id="kh4VNNWEQkrWXLgqdFYYk2">哪些开源了，哪些没有</a></li>
+    </ul>
+    <div class="side-foot" data-page-node-id="LgoGNFN2eBREBtTsETAsbI">
+      单文件交付 · 零外部依赖<br data-page-node-id="xzIjKdpAm5oeMD1GoOLNH6"/>断网双击即可完整阅读<br data-page-node-id="259sTuAtkBQXHrW0tZD2Ta"/>基准日期 2026-09-04
+    </div>
+  </aside>
+
+  <main id="main" data-page-node-id="mlBFUj2HJMnfHsaNXEE0VU">
+    <div class="eyebrow" data-page-node-id="VILNjKfWMJhINWmGfE7MCZ">OpenAI Codex · Agent Harness 开源深度解读</div>
+    <h1 class="doc-title" data-page-node-id="DDAncueaBbCCgzG0GPjaqr">OpenAI 将 Codex 的底层核心框架 Agent Harness 开源：你可以轻松将 Agent 接入自己的业务系统</h1>
+    <p class="doc-desc" data-page-node-id="GtaUeZgWRo8RDL4uWXPUVW">OpenAI 把管理上下文、工具调用、沙箱和审批的 Codex 执行底座开放出来。开发者不用从零造 Agent 框架，就能让 Codex 进入现有的看板、工单和业务后台。</p>
+
+    <div class="meta-bar" data-page-node-id="AVWLYVFb0t3WAgdOreSoUJ">
+      <span data-page-node-id="aoZX55CGy69bfdSUq5JH0Y">原始来源 <b data-page-node-id="i8Eg0dkoxasJiHLiKWe5jD">OpenAI Developers</b></span>
+      <span data-page-node-id="6BBBa0UKj91VBAZ5KSCfe0">分类 <b data-page-node-id="A6fcahPcrUCWWtTDaGeVtI">深度</b></span>
+      <span data-page-node-id="dQHFlyrAlYNXjf5IavygcG">原文 <a class="ext" href="https://best.xiaohu.ai/article/codex-as-a-platform/" target="_blank" rel="noopener" data-page-node-id="PRP548oU7MjIBOhdZSV3zp">best.xiaohu.ai</a></span>
+      <span data-page-node-id="LUxtBhPTsVtRItxNNIUKTS">收录基准 <b data-page-node-id="ao2cYsFbpfYFTgwiOqjNdo">2026-09-04</b></span>
+    </div>
+
+    <div class="kpi-band" data-page-node-id="GCudUsA1hXz4ec9nibioxA">
+      <div class="kpi" data-page-node-id="UBb9Aa0aoYgRD6xgjVlc6y">
+        <div class="kpi-num" data-page-node-id="GQw3BtJ7C0dtC0uzAZHqVn">13.3% → 38.3%</div>
+        <div class="kpi-label" data-page-node-id="g1uCQiCSQg0NPCDO9EDI1K">ARC-AGI-3 上 RHAE：保留推理状态 + 上下文压缩前后（GPT-5.6 Sol）</div>
+      </div>
+      <div class="kpi" data-page-node-id="Fw2h88jOOEa6oeNnuC1Dcp">
+        <div class="kpi-num" data-page-node-id="w2jjQ6d5AIRgBw8wG9ZISC">≈ 1/6</div>
+        <div class="kpi-label" data-page-node-id="elcLZ06Uuawhr9qVpBHJUR">同一实验中输出 Token 数降至原来的约六分之一</div>
+      </div>
+      <div class="kpi" data-page-node-id="4VyeRnjuudFvXSMer9CHBR">
+        <div class="kpi-num" data-page-node-id="B2SHN016C8D01VA5NfYaTr">7,000 份</div>
+        <div class="kpi-label" data-page-node-id="XnefAqaRyNSyeWl4Yk7jYG">Thrive / Crete 与 OpenAI 报税准备试点处理的税表数量</div>
+      </div>
+      <div class="kpi" data-page-node-id="HQQAXd4NHRtv4biYaTmLQM">
+        <div class="kpi-num" data-page-node-id="rRf0IjpEvEEzsUJKI9fYsb">≈ 1/3</div>
+        <div class="kpi-label" data-page-node-id="SUbAp41TUPIbegfz4Eh5WK">合作方自报的报税准备时间缩短幅度（非独立第三方评测）</div>
+      </div>
+    </div>
+
+    <!-- ========== 一分钟速览 ========== -->
+    <section class="card" id="sec-glance" data-page-node-id="EqVa8nhSN4QTDQRpAYU5Q2">
+      <div class="sec-head" data-page-node-id="DMSgn6MVo1hz8jSXZmyXd3"><span class="sec-idx" data-page-node-id="B8qr02dKcw0rp7IMbPXxrz">00</span><h2 class="sec-title" data-page-node-id="ANKBr8WQzMYcL6DPqhxiSN">一分钟速览</h2></div>
+      <ul class="rich" data-page-node-id="iAVNPHmOyM7d8w4hzPtxWF">
+        <li data-page-node-id="hzESHjDpiT73mj2H7RoZFv">Codex 不再只能待在编程插件或聊天框里；它的 Agent 能力可以接进物流后台、工单、报税和监控系统。</li>
+        <li data-page-node-id="xN2W0tH2o6QKiBkGnyCtaX">用户继续在原来的系统里工作：系统把当前对象和业务状态交给 Codex，重要操作按规则等待人工批准，结果再写回正式记录。</li>
+        <li data-page-node-id="3gJpLIuk5PTqRHDgrF29DE">开发团队不用从零搭建上下文记忆、工具调用、沙箱、进度和审批机制，可以直接复用 Codex 已有的开源组件。</li>
+        <li data-page-node-id="0hH4HaNWaq2iycfXKyHfPL">开源的是 CLI、SDK、app-server 等执行底座；模型、托管服务、IDE Extension 和 Codex cloud 没有一起开源。</li>
+      </ul>
+    </section>
+
+    <!-- ========== 01 开源了什么 ========== -->
+    <section class="card" id="sec-opensource" data-page-node-id="QXhRAZC0bJ5J4l6BgkbdWu">
+      <div class="sec-head" data-page-node-id="yfgKv3kzTPlaTMj5m7xf2X"><span class="sec-idx" data-page-node-id="u5VDBFgBAV0icCVDm5dqjL">01</span><h2 class="sec-title" data-page-node-id="w7aiRyXLQ8TKLj7m5JkYxA">OpenAI 这次到底开源了什么</h2></div>
+      <p data-page-node-id="n4Gu1LHJndKKVV2wKvCqiS">OpenAI 开源了让 Codex 能连续干活的底层框架：<strong data-page-node-id="iMeLSFfS4GRxpVZxySYwiz"><a class="ext" href="https://developers.openai.com/blog/codex-as-a-platform" target="_blank" rel="noopener" data-page-node-id="IOlINM0EofjEmyPQnMLZpW">Agent Harness</a></strong>。</p>
+      <p data-page-node-id="GSMGPExeHjaSGN38tgN4u0">可以把大模型想成一个聪明的大脑。大脑会思考，却不会自动知道自己正在处理哪张工单，也不会天然记住上一步做到哪里，更不知道该去哪个系统查数据、哪些操作可以直接执行、花钱或改记录前要找谁批准。要让它真正进公司上班，还得配上工作记录、工具箱、门禁和请示流程。Agent Harness 就是这套“上岗系统”。</p>
+      <p data-page-node-id="Vk4fRcVZhHGQGtS22nluis">这次开放带来三件很实际的事：</p>
+      <ul class="rich" data-page-node-id="FoAfCiMDKD1WJe2WQUbvue">
+        <li data-page-node-id="3bTdviz9uUhLMMX2nlWzRz"><strong data-page-node-id="EvEDQwWUjnkGfIIPte9AVp">对开发者：少造一层基础设施。</strong>上下文记忆、工具调用、沙箱、进度和审批机制，都可以复用 Codex 已有的开源组件。</li>
+        <li data-page-node-id="FOx46ZSkeOEix85rysHC4a"><strong data-page-node-id="zR6uksu2sUmBRHNM6sGCAC">对产品：AI 可以进入现有软件。</strong>物流后台、工单系统、报税软件和监控看板都可以成为 Codex 的工作界面。</li>
+        <li data-page-node-id="rTSIJJ8IC7TfU0wUd275Oz"><strong data-page-node-id="XSklc1TAnj6GgL45DEZB3L">对用户：不用把工作重新搬进聊天框。</strong>原系统提供当前对象和业务状态，结果仍回到原来的正式记录。</li>
+      </ul>
+      <p data-page-node-id="RTEDqEvh9TL0PT2cm8SoIX">放进物流后台，它可以是这样：调度员选中一票延误货物，Codex 直接拿到当前状态并调查原因；遇到花钱改订等有后果的动作，系统按规则停下来等人批准。</p>
+      <div class="note" data-page-node-id="t913oP3kUqeVjElWBgmKRs"><b data-page-node-id="Qa7kXAuMFCWjf5dsHPN8yS">边界先说清楚：</b>OpenAI 没有把整个 Codex、模型和云服务全部开源。明确开放的是 Codex CLI、SDK、app-server 等 Harness 与接入组件；模型访问、托管服务、IDE Extension 和 Codex cloud 仍是独立部分。准确地说，<strong data-page-node-id="2eqd2DRe7IhALzyCuHU6yz">开发者拿到的是 Codex 的 Agent 执行底座和接入层，不是整套 Codex 的自托管版本。</strong></div>
+    </section>
+
+    <!-- ========== 02 为什么光有模型不够 ========== -->
+    <section class="card" id="sec-why" data-page-node-id="VASizBC6waUny3rPIi8VPz">
+      <div class="sec-head" data-page-node-id="svVaeLDsLq9Ri7eqjJdw8W"><span class="sec-idx" data-page-node-id="JideI5GnMkTv6Ciu01QE9f">02</span><h2 class="sec-title" data-page-node-id="goLmd6TRgsldWiAYafyab4">为什么光有模型，还做不成真正的 Agent</h2></div>
+      <p data-page-node-id="iFM9hl9vuwUPk5hCcJG77v">一次普通的大模型调用很简单：输入问题，等待回答。可一旦任务从“回答”变成“完成”，缺失的东西会迅速暴露出来。</p>
+      <p data-page-node-id="fEd8nYGitQeQcCmrA3CSiL">模型要知道自己正在处理哪个对象；要记得此前做过什么；要读取文件、日志或业务记录；要调用外部工具；要在失败后换一条路线；还要区分哪些动作可以自动执行，哪些动作必须停下来等人批准。任务持续几十分钟甚至跨越多轮时，它还得压缩旧上下文，又不能把早期的重要判断一起忘掉。</p>
+      <p data-page-node-id="p5qOQYz6UKb51T5MCmT31x">Agent Harness 就是负责记住进度、调度工具、限制权限并继续推进任务的执行系统。</p>
+      <div class="qa" data-page-node-id="c9BDl95pVVjkBhkFXCfPcU">
+        <div class="qa-q" data-page-node-id="P8QBFzwmND32UZ5uRMquKl"><span class="qa-chip" data-page-node-id="P5Wo8aQlAtyMTXwZERZswB">Q</span>Agent Harness 到底比模型加 Prompt 多了什么？</div>
+        <div class="qa-a" data-page-node-id="DL4fhSBTxdepkfgLR0ny00">Harness 让任务在目标和上下文、模型判断、工具或沙箱动作、观察结果和状态更新之间持续循环；关键写操作经过人工审批。ARC-AGI-3 实验中，保留推理状态与上下文压缩把 RHAE 从 13.3% 提到 38.3%，输出 Token 降至约六分之一。</div>
+      </div>
+      <p data-page-node-id="KrVeyLawlFwhsqReNzNtoE">Harness 为什么重要，最直接的问题是：同一个模型换一套运行方式，结果会差多少？OpenAI 给出了一个很有分量、但也很容易被滥用的数字。</p>
+      <p data-page-node-id="mhAkBZDrTzeveAigKbj4Ak">在 <a class="ext" href="https://openai.com/index/how-two-settings-tripled-our-arc-agi-3-scores/" target="_blank" rel="noopener" data-page-node-id="qL96qsNPnFW1CDJCSJphKx">ARC-AGI-3</a> 这套公共任务集里，Agent 要在陌生的交互环境中持续观察、试错并找出规则，因此能否保住此前的判断和行动历史尤其重要。GPT-5.6 Sol 使用 ARC-AGI-3 官方的通用 Harness 时，RHAE（相对人类行动效率）为 <strong data-page-node-id="S5iLEN22nhpBxtq3dCzJ12">13.3%</strong>；改为保留此前形成的 reasoning（推理状态），并用 compaction（把旧上下文压成仍可继续使用的摘要）代替简单丢弃最旧内容后，RHAE 升到 <strong data-page-node-id="GcCLhYqpHumEoUAtU3V1b8">38.3%</strong>，输出 Token 数降至原来的约六分之一。</p>
+      <p data-page-node-id="U23h1hw425bEtXhRGB6eh4">背后的机制并不神秘。丢弃 reasoning，相当于让 Agent 每执行一步都重新理解游戏；滚动截断则会让更早的观察和动作逐渐消失。保留推理让计划能够延续，压缩上下文则让 Agent 在长任务中保住关键认识，而不是简单忘掉最旧的内容。</p>
+      <p data-page-node-id="OcQwNfXWuE1tA89HyxnSYv">但这个结果只属于特定模型、特定公共任务集和特定评测指标，不能写成“接入 Codex 后所有 Agent 都会提升三倍”。它说明：<strong data-page-node-id="ifzy0iipeeTzLazjoHdPCe">模型周围的运行架构，也会影响模型最终能发挥出多少能力。</strong></p>
+      <div class="related" data-page-node-id="SrkPVK6rmURXXnGZDapA1d"><span class="rel-tag" data-page-node-id="z0BUfZ0Gw77TmhTxXt3GGM">相关文章</span>关于 13.3%→38.3% 的完整实验拆解：<a class="ext" href="https://best.xiaohu.ai/article/openai-arc-agi-3-harness/" target="_blank" rel="noopener" data-page-node-id="3uFnXsgpOGK69fjQ5p3CbX">OpenAI 只打开两个 API 设置，GPT-5.6 Sol 在 ARC-AGI-3 的分数从 13.3% 涨到 38.3%</a></div>
+    </section>
+
+    <!-- ========== 03 三层分工 ========== -->
+    <section class="card" id="sec-layers" data-page-node-id="VvaX5FOIImaMY7q7GsK0BK">
+      <div class="sec-head" data-page-node-id="zpFSDFKyrlbHMAy5m9ROx5"><span class="sec-idx" data-page-node-id="vWduTCGNEkvV9GOJ9xvvCs">03</span><h2 class="sec-title" data-page-node-id="gLTozZrteIifmm0Wvh9srW">接进业务系统后，三层分别管什么</h2></div>
+      <p data-page-node-id="4DlG0j9PrfzuSR75WPRXHn">知道 Harness 是一套“上岗系统”以后，下一个问题就很实际：把 Codex 接进产品后，宿主应用、Codex app-server 和 MCP 分别负责什么？这套架构把责任清楚地切成三层，各管一块。</p>
+      <div class="qa" data-page-node-id="OjMbH4nB03o7BGCfw4Gf6F">
+        <div class="qa-q" data-page-node-id="55bG40h66vPQpvHqI4nM8u"><span class="qa-chip" data-page-node-id="IXT9RBiHApNcPvO9LueFlO">Q</span>宿主应用、Codex app-server 和 MCP 各自负责什么？</div>
+        <div class="qa-a" data-page-node-id="WAwPtOW6hHX1jMbuTjdDHw">宿主应用掌握当前业务对象、界面、规则和批准权；Codex app-server 维持线程、Agent loop、沙箱和事件流；应用自有 MCP 读取可信记录并暴露业务动作。批准后的变化回写系统并刷新界面。</div>
+      </div>
+
+      <div class="fig" data-page-node-id="eqBweA773uwnrZub0EcDaQ">
+        <svg viewBox="0 0 720 360" role="img" aria-label="宿主应用、Codex app-server 与 MCP 三层架构图" data-page-node-id="72YZPma3UBkl215tJp5kBQ">
+          <defs data-page-node-id="6eP8DdflAq6fUprMdPdcAe">
+            <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse" data-page-node-id="3LufGluJWtwdjORs7pPbDB">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--acc)" data-page-node-id="PRYcRDopZE1WzPzrqQze8Z"/>
+            </marker>
+          </defs>
+          <!-- Layer 1: host app -->
+          <rect x="40" y="22" width="460" height="80" rx="10" fill="var(--bg-surface)" stroke="var(--acc-border)" stroke-width="1.4" data-page-node-id="wTwR4GOzVNgSSmRKrpjUmC"/>
+          <text x="62" y="52" font-size="14.5" font-weight="700" fill="var(--t1)" data-page-node-id="xXH0SfEBmMtRxzd5uflCzb">① 宿主应用（物流后台 / 工单 / 报税软件）</text>
+          <text x="62" y="78" font-size="12" fill="var(--t3)" data-page-node-id="5coIbC4qNiF5HIATLcZImx">当前业务对象 · 界面与可见状态 · 业务规则 · 批准权</text>
+          <!-- Layer 2: app-server -->
+          <rect x="40" y="142" width="460" height="80" rx="10" fill="var(--bg-surface)" stroke="var(--acc-border)" stroke-width="1.4" data-page-node-id="Y1w0TE494zbFT4330sbZZW"/>
+          <text x="62" y="172" font-size="14.5" font-weight="700" fill="var(--t1)" data-page-node-id="d6GG58ACQkR6sXNcdAW9wB">② Codex app-server</text>
+          <text x="62" y="198" font-size="12" fill="var(--t3)" data-page-node-id="4v2wAqxBSYutWSbcclKfXD">任务线程与进度 · Agent loop · 沙箱 · 流式事件与中断</text>
+          <!-- Layer 3: MCP -->
+          <rect x="40" y="262" width="460" height="80" rx="10" fill="var(--bg-surface)" stroke="var(--acc-border)" stroke-width="1.4" data-page-node-id="NPEUyVWxi7ig5Bx49qElH0"/>
+          <text x="62" y="292" font-size="14.5" font-weight="700" fill="var(--t1)" data-page-node-id="UUUeCTRyVPKa9P0qNaB11L">③ 应用自有 MCP 服务</text>
+          <text x="62" y="318" font-size="12" fill="var(--t3)" data-page-node-id="qQguEK0HgS3cXogCyTvpju">读取权威记录 · 暴露改订 / 建单 / 更新状态等受控动作</text>
+          <!-- vertical双向 arrows -->
+          <path d="M270,104 L270,140" stroke="var(--acc)" stroke-width="1.6" fill="none" marker-start="url(#arr)" marker-end="url(#arr)" data-page-node-id="XMF2HCQj9BtZpC6yDUYnEf"/>
+          <path d="M270,224 L270,260" stroke="var(--acc)" stroke-width="1.6" fill="none" marker-start="url(#arr)" marker-end="url(#arr)" data-page-node-id="M7aUir2ceFbjYwQEWZCxRp"/>
+          <!-- approval gate -->
+          <rect x="530" y="142" width="160" height="80" rx="10" fill="var(--warn-soft)" stroke="var(--warn-border)" stroke-width="1.4" stroke-dasharray="5 4" data-page-node-id="19FwY3epGjgAHSoRXnSF4J"/>
+          <text x="550" y="172" font-size="13" font-weight="700" fill="var(--warn)" data-page-node-id="VhInpBSwoBdHyj7ipzUof1">审批门控</text>
+          <text x="550" y="194" font-size="11.5" fill="var(--t3)" data-page-node-id="ygxqVJC6j7jtCMn6w8p96w">有后果动作按规则</text>
+          <text x="550" y="210" font-size="11.5" fill="var(--t3)" data-page-node-id="6bwyCIatSp64RQtRtT38z9">停下，等人批准</text>
+          <path d="M500,182 L528,182" stroke="var(--warn)" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arr)" data-page-node-id="0UubeXDbSU9OvvXaxTEdl1"/>
+          <!-- write-back path -->
+          <path d="M610,224 L610,302 L502,302" stroke="var(--ok)" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arr)" data-page-node-id="XxlK2viTwgogYypCCwPXHU"/>
+          <text x="520" y="292" font-size="11" fill="var(--ok)" data-page-node-id="zGkThJLWuZXAM6NyljaQZu">获批后执行 · 回写正式记录并刷新界面</text>
+        </svg>
+        <div class="fig-cap" data-page-node-id="i8hpXHildV7VE5rF43ioGM">图 1 · 三层责任切分：宿主应用定义对象与规则，app-server 驱动任务循环，MCP 提供可信数据与受控动作；有后果的写操作经审批门控后回写。</div>
+      </div>
+
+      <p data-page-node-id="GNh518uSlFiXHImP1X9u20">第一层是<strong data-page-node-id="T24SosFpPUNkZCxz3jtaMi">宿主应用</strong>，也就是你原本的物流后台、工单系统或报税软件。用户选择了哪条告警、哪张工单或哪笔订单，当前页面展示了什么状态，业务允许做什么，哪一步需要人类同意，都由它定义。</p>
+      <p data-page-node-id="mWNwqOY1cFJGvdAywQdGdP">第二层是 <strong data-page-node-id="IY01U47fjtjlYrivaTcP3P">Codex app-server</strong>。它接过这些上下文，保存任务进度，驱动 Agent 持续调用工具，并把执行限制在沙箱和审批规则内。产品也能看到过程、随时中断并回应审批请求。</p>
+      <p data-page-node-id="0xDNSzRnGQPMHpyAEHetqu">第三层是应用自有的 <a class="ext" href="https://developers.openai.com/codex/extend/mcp" target="_blank" rel="noopener" data-page-node-id="PQhIFQWAIDeWOsp3u1OKXY">MCP 服务</a>，可以把它理解成一组专门给 Agent 使用的业务接口。MCP 不是业务数据库本身；Agent 通过它读取权威记录，也可以请求改订、建单、更新状态等业务动作。只有满足宿主应用的规则和审批条件后，动作才真正发生。</p>
+      <p data-page-node-id="tFV9f2z9x1CLC9c1FotvTq">完成后的变化还要回到原来的产品界面。Agent 的结论进入正式业务系统，由原系统继续充当最终记录和控制中心。</p>
+      <p data-page-node-id="IdBSR9IfLYNOckToovSPmo">这套分工解决了 Agent 产品里最容易混在一起的三件事：</p>
+      <ul class="rich" data-page-node-id="4H0GxXhLVAXVwEHP3uB9lW">
+        <li data-page-node-id="ew2GCsIJkDAAFHo4kMNPNe"><strong data-page-node-id="Wf6WxGIgba3VRSfOCJJlkS">Codex 负责把任务推进下去；</strong></li>
+        <li data-page-node-id="KRG3dsF8tPXu7nAJlWjC6V"><strong data-page-node-id="VSE1M3QW55MaBO1ERGrFWE">MCP 负责把可信数据和受控动作交给 Codex；</strong></li>
+        <li data-page-node-id="JOaCzmxMcAatCuhEtfRTzA"><strong data-page-node-id="WbvHLnCjqY2XNcaRJ13O4p">宿主应用负责告诉两者什么重要、什么允许，以及最终结果应该落在哪里。</strong></li>
+      </ul>
+    </section>
+
+    <!-- ========== 04 三种接法 ========== -->
+    <section class="card" id="sec-entry" data-page-node-id="Dy3fLSowhlkEJ4hUTp4P2s">
+      <div class="sec-head" data-page-node-id="U3MTLsMJibb2N9y46iJIZ5"><span class="sec-idx" data-page-node-id="hekpnC6kSdW7pxddyPQEcw">04</span><h2 class="sec-title" data-page-node-id="qCr8L1xFgAdfxtjoNrWkfv">从一次性任务到产品功能，三种接法怎么选</h2></div>
+      <p data-page-node-id="WWF0CGB9vI6XIkCDQqMQGT">大多数任务用不到 app-server。三种接法可以先用一句话记住：<strong data-page-node-id="qU5Fb0dZdhDur0lGt62wrr">脚本或后台任务用 <code data-page-node-id="xlAxy8BVCjHXOTQDgkVNxl">codex exec</code>，业务代码里调用用 SDK，把 Agent 做成产品功能则用 app-server。</strong></p>
+      <div class="qa" data-page-node-id="5DZaX9wUKc8UcNdeVYBEzc">
+        <div class="qa-q" data-page-node-id="dse74ruURyNtMWvqYDSu37"><span class="qa-chip" data-page-node-id="TmosSXTb1FzrReGRvSYNHI">Q</span>codex exec、SDK 和 app-server 应该怎么选？</div>
+        <div class="qa-a" data-page-node-id="efCACDZ4CZAk6wp4Jg74lE">codex exec 适合启动后完成并退出的一次性任务；SDK 适合业务代码启动、继续或恢复线程；app-server 适合产品直接管理持久线程、流式事件、中断和审批。</div>
+      </div>
+      <div class="opt-grid" data-page-node-id="WnwS72OavggeldOvc5NNPs">
+        <div class="opt" data-page-node-id="6HqCdBoDLIW46plF8V2pwW">
+          <div class="opt-tag" data-page-node-id="SjoNu2xeK5f1iVO3iwAOPH">一次性任务</div>
+          <div class="opt-name" data-page-node-id="1BsAV8H7NHZ3cpJh1oaF4Q"><a class="ext" href="https://developers.openai.com/codex/non-interactive-mode" target="_blank" rel="noopener" data-page-node-id="izJhhp0sagEftOIeZYmSWz">codex exec</a></div>
+          <p data-page-node-id="YMSF5pssGeMVw4LJ0IAbGF">适合边界清楚的一次性任务，例如在自动化检查流程里审查代码、定时整理记录，或者在后台批量处理一组输入。它既能返回最终文本，也能输出可供程序继续处理的事件或结构化结果。任务启动、运行、结束，生命周期相对简单。</p>
+        </div>
+        <div class="opt" data-page-node-id="GNRx2hY7yyZcUj3RMPZpLR">
+          <div class="opt-tag" data-page-node-id="qZ8EU05CylrppiKVGayuIB">业务代码调用</div>
+          <div class="opt-name" data-page-node-id="PFyQZTUCTBzGiOvqbYPtWH"><a class="ext" href="https://developers.openai.com/codex/codex-sdk" target="_blank" rel="noopener" data-page-node-id="SJLChvemDglSwt4bgJBGSP">Codex SDK</a></div>
+          <p data-page-node-id="XbqtSOQOVhWE2K6E0I8Ugh">适合由业务代码直接启动和管理 Codex 任务。应用可以开始新任务，也能继续或恢复过去的工作；产品团队不必自己处理 app-server 的底层协议。</p>
+        </div>
+        <div class="opt" data-page-node-id="2HmH1lyiFw1el2VErHYUOj">
+          <div class="opt-tag" data-page-node-id="f8Eib3L5xeGWOQc93fB3Ab">产品级集成</div>
+          <div class="opt-name" data-page-node-id="RTFfU1A67wuXCkCamkzZbh"><a class="ext" href="https://developers.openai.com/codex/app-server" target="_blank" rel="noopener" data-page-node-id="kbqrO9RNIuibFQKU7nO2V2">Codex app-server</a></div>
+          <p data-page-node-id="5J2pJ4iCPmTxzsCvUCz7ZV">适合把 Agent 直接做成产品功能。应用可以长期保留任务，看到执行过程，随时中断，临时提供工具，并在 Codex 请求时处理审批。</p>
+        </div>
+      </div>
+      <p data-page-node-id="IclGJSWPkm35sDYstXXz0h">不要把这三种方式理解成“低配、中配、高配”。选择时只看三个问题：任务是否需要持续状态，产品是否需要观察和干预执行过程，Agent 是否要在用户当前界面里完成有后果的业务动作。</p>
+      <p data-page-node-id="CxU88DBaGdxhZMzAFwJfKc">如果只是一次后台分析，直接上 app-server 只会增加集成成本；如果 Agent 要长期存在于运营台里，只靠一条 <code data-page-node-id="LZCGqvHQCFP9IFWhWdW3rV">codex exec</code> 命令又很难承载会话、审批和界面同步。</p>
+      <p data-page-node-id="QCTx5BlFBiNbzIEfnFmEyM">选择哪一层只是实现问题。更大的产品问题是：这些能力最终应该被放进什么界面？答案未必是再造一个聊天框。</p>
+    </section>
+
+    <!-- ========== 05 不等于聊天框 ========== -->
+    <section class="card" id="sec-chatbox" data-page-node-id="ibTXw8CUaLaf1AAlJdZN8c">
+      <div class="sec-head" data-page-node-id="PawgRyG8vFM3Mje6cj6PuG"><span class="sec-idx" data-page-node-id="g0WknmD7a3WbuqTDsu2u7E">05</span><h2 class="sec-title" data-page-node-id="FkVyZ1XtPYLoYvpobHj5kI">接入 Agent，不等于再加一个聊天框</h2></div>
+      <p data-page-node-id="zK7h1H8RhjUbthmAHxA9oF">产品团队接下来要决定的是：AI 应该放在哪里？OpenAI 的答案是，把 Agent 放进工作本来发生的地方，不要给所有软件统一加一个聊天框。</p>
+      <p data-page-node-id="hndCqJBl5KiAeqYJFGLkj9">一个脱离业务系统、拿不到当前上下文的通用聊天框，会把整理现场的麻烦全留给用户：请你先把正在处理的订单、页面状态、业务规则和操作目的重新翻译成一段 Prompt。</p>
+      <p data-page-node-id="ElCupJ51GL2a0LiIBovwnM">用户要重新说明自己正在看哪条记录，把看板上的状态复制给模型，再判断模型建议是否基于最新数据。模型给出方案后，用户还要切回业务系统执行。上下文、分析和动作被分散在两个地方，重要边界也很容易在复制粘贴中丢失。</p>
+      <p data-page-node-id="xVUpo3KMpZcKKoK1sbwF0u">把同一项工作并排来看，差别不在模型会不会回答，而在上下文由谁整理、业务边界从哪里获得，以及结果最终落在哪里。</p>
+      <div class="qa" data-page-node-id="XhBbfCEqNIn2wLbKzoVfHm">
+        <div class="qa-q" data-page-node-id="OajNGCtz2A3zS2T3Axo4XF"><span class="qa-chip" data-page-node-id="dwGt7nmRRWzHLos2gQ47vH">Q</span>同一项工作放进聊天框和嵌入业务系统后，真正差在哪里？</div>
+        <div class="qa-a" data-page-node-id="2CSHysLWEeXsT8Y5hCBGlI">在脱离业务系统、拿不到当前上下文的聊天框里，用户需要重新说明当前对象、复制可见状态、解释业务规则，并在获得建议后切回系统执行；嵌入业务系统后，宿主应用向 Agent 提供当前对象和最新状态，配置规则、权限与工具边界，并按宿主规则对有后果的写入请求人工批准，获批后由工具更新正式记录。</div>
+      </div>
+      <p data-page-node-id="uHIsKNFU681n6oSmWwCku9">所以，仪表盘、工单页、报税表格和安全事件队列不会因为 AI 到来就失去价值。它们早已把干活需要的对象、状态、证据和按钮摆在一起。Agent 更合理的位置，是进入这些界面直接使用已有上下文，省掉用户从空白输入框重新描述现场的过程。</p>
+      <p data-page-node-id="nWdBwNLMD1H2HaGx8x9WCS">聊天当然不会消失。开放探索、模糊问题和临时分析仍然适合对话。应该放弃的，是把通用聊天框当成所有 Agent 产品的唯一形态。</p>
+    </section>
+
+    <!-- ========== 06 Relay 演示 ========== -->
+    <section class="card" id="sec-relay" data-page-node-id="WS15705Ffq22vt2BOdWPFg">
+      <div class="sec-head" data-page-node-id="0DIqq1kR9uNTFZJXDFgwrc"><span class="sec-idx" data-page-node-id="BkiIv1TdAXlQvwbWJ9SUSt">06</span><h2 class="sec-title" data-page-node-id="zpBTyt1emICJGQMDTArSuV">Relay 演示：AI 怎样在物流后台把事情做完</h2></div>
+      <p data-page-node-id="EysOaf5TuWqnbVOjGzlJAM">Relay 使用虚构种子数据，不是真实客户系统；它把前面的三层分工和接入方式，落成了一笔完整的物流操作。</p>
+      <div class="qa" data-page-node-id="Lcr5mwvVEpMrbphQGSjXai">
+        <div class="qa-q" data-page-node-id="QWjuL4lgolORN71yiIrTov"><span class="qa-chip" data-page-node-id="o0Uu01V8KtGPmhY0BlP2D5">Q</span>Relay 如何把一次 Agent 分析变成受控的业务闭环？</div>
+        <div class="qa-a" data-page-node-id="JMy5S2QxAzbmqBgqBI6FEE">调度员在 Relay 中选择异常货物，页面提供业务上下文，Codex 经 MCP 读取当前记录并比较方案；重新订舱等写操作必须由人批准，执行后结果回写物流记录并刷新界面。</div>
+      </div>
+      <p data-page-node-id="5lENBkBs17ApkvqhAqk7Cq">调度员不是从零写一句“帮我分析物流延误”。他先在异常队列中选择一票货物，再点击“调查延误”或“比较补救方案”。这个点击本身已经交付了业务对象和用户意图，页面则继续提供路线、承诺时间、货值和当前异常等可见上下文。</p>
+      <p data-page-node-id="2g6G5zR8H3eiibcgFoQaCr">Codex 随后通过 Relay 的 MCP 工具读取当前运营记录，判断问题发生在哪里，并比较可用方案。分析可以自动进行；但如果下一步是重新订舱、改变业务记录或产生费用，系统就会停下来要求调度员批准。动作获批并执行后，变化重新进入物流记录，业务视图随之刷新。</p>
+      <p data-page-node-id="VPajLClHxnR6lAhKgkrTha">整个闭环可以压缩成七步：</p>
+      <ol class="flow" data-page-node-id="bOeyU9kGEkuV5a35rWoNOb">
+        <li data-page-node-id="Hus3sL26lGKXhBJx8eTLfy">选择对象</li>
+        <li data-page-node-id="oGQC3OBduC1ByIWFMHFbB7">注入上下文</li>
+        <li data-page-node-id="tSGvOAziYviIDOs5KUoJTU">查询权威数据</li>
+        <li data-page-node-id="0sbSKO57BzsLjAecVdyFD8">调查与比较</li>
+        <li class="gate" data-page-node-id="3fLXHZMsc74Q7wNPUqB7DA">人工批准</li>
+        <li data-page-node-id="IRFDqVlvDsvJ7AfPpxfTfS">执行业务动作</li>
+        <li data-page-node-id="vUxe4275D8AWpTy51Dtfw9">刷新正式记录</li>
+      </ol>
+      <p data-page-node-id="TlHQLXBH8ybjN0Ge7wtEdv">它比“给聊天框接几个工具”多出来的部分，正是产品设计：什么时候自动交付上下文，哪些工具可用，哪种动作有后果，以及人应该在哪里重新接管决定。</p>
+      <p data-page-node-id="H6CIPlFmOpx8yzJXXz6sIK">类似模式已经进入不同领域。<a class="ext" href="https://github.blog/changelog/2026-07-07-codex-as-agent-provider-and-agentic-enhancements-in-jetbrains-ides/" target="_blank" rel="noopener" data-page-node-id="AcVjcV9qQAMM5lt2KlttZY">GitHub 与 JetBrains</a> 把 Codex 放进现有 IDE 工作流；<a class="ext" href="https://blogs.cisco.com/ai/from-an-idea-to-a-live-app-on-cisco-in-minutes" target="_blank" rel="noopener" data-page-node-id="pBj9CZhw6KALa13m5jOafa">Cisco</a> 在 Cloud Control 的 App Builder 中使用 Codex SDK；Thrive Holdings、Crete 与 OpenAI 则把 Codex 接进报税准备和从业者反馈闭环。</p>
+      <p data-page-node-id="If76IByniwAdsfStuclI0G"><a class="ext" href="https://openai.com/index/building-self-improving-tax-agents-with-codex/" target="_blank" rel="noopener" data-page-node-id="njnB9FWmQYv0IFzQ5UsnRC">Thrive Holdings、Crete 与 OpenAI 的报税准备试点</a>处理了 <strong data-page-node-id="aU1peADQ5AosqZFno0lazt">7,000 份税表</strong>，合作方自报将准备时间缩短了约三分之一。这个数字不是独立第三方评测，但它展示了工作流嵌入的第二层价值：Agent 不只完成一次任务，还能读取生产记录、吸收专家纠正、形成评测任务，再推动下一轮产品改进。</p>
+    </section>
+
+    <!-- ========== 07 边界 ========== -->
+    <section class="card" id="sec-boundary" data-page-node-id="tILTMDVhgFwtamTaPBt8fI">
+      <div class="sec-head" data-page-node-id="S5nNIzZrmlMShN967F8w39"><span class="sec-idx" data-page-node-id="a5AGT9Lnx9f3mTv3U6QtnL">07</span><h2 class="sec-title" data-page-node-id="8WF44NYEe9NqeMGYoptnBa">最后说清楚：哪些开源了，哪些没有</h2></div>
+      <p data-page-node-id="Pr5Yiw3JeJ3rLJVTMYVBQ4">还有一个容易被误解的边界：Harness 可以嵌入产品，不等于整套 Codex 都能自由自托管。官方开放的边界没有这么宽。</p>
+      <div class="tbl-wrap" data-page-node-id="QVrfXGuZwHnklnSlddUF0X">
+        <table class="cmp" data-page-node-id="D2AQClMhuRnJdfmjlso41z">
+          <thead data-page-node-id="1qY2OntTb8KhEz9T65aS6v">
+            <tr data-page-node-id="69Omkd0EZPntVBZX3sTI9s"><th class="col-yes" data-page-node-id="mDFj2TVhETkPtRLZ6I39V6">已明确开源</th><th class="col-no" data-page-node-id="dTBA0lZAkCqRFNhIE7boBO">没有随 Harness 一起开源</th></tr>
+          </thead>
+          <tbody data-page-node-id="SPESW9j8GdW2VSHbIrzOa7">
+            <tr data-page-node-id="Cds9bzIydmjcMo1CcZHMAR"><td data-page-node-id="z1mR0S5tei6E2wU2RojTSf">Codex CLI</td><td data-page-node-id="am5cThC5q416iVrOAiDlxH">模型本身与模型访问</td></tr>
+            <tr data-page-node-id="aneK0r0y4rwcBnhDRzshyx"><td data-page-node-id="N4W4uJGVpn6ZAAbHxV7iEI">Codex SDK</td><td data-page-node-id="F8zEKT6bytq5Ylq6IF5Uof">OpenAI 托管服务</td></tr>
+            <tr data-page-node-id="C4q34teWkevoHKhlOzTa6L"><td data-page-node-id="hGAuGxQnSAYrfdkKbEW4yP">Codex app-server</td><td data-page-node-id="FdOwYnsFZaQMB61D2dRGz3">Codex IDE Extension</td></tr>
+            <tr data-page-node-id="zSqdaPPRvT9h4XOJMlFWPT"><td data-page-node-id="jCUWvSdywf2CbcJ69t1Fan"><a class="ext" href="https://github.com/openai/codex" target="_blank" rel="noopener" data-page-node-id="Gks0jXRkNVXyScLNDMI5w4">openai/codex</a> 仓库，Apache-2.0 许可</td><td data-page-node-id="9YyyBakpr7HRSr3eFkUQMq">Codex cloud</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p data-page-node-id="VeCmw3JgY614XO5HzolBfy">开发者拿到的是一套可以查看、修改并接进产品的 Agent 执行底座，以及从一次性任务到深度产品集成的不同入口；并没有因此拿到模型和云端服务的开源实现。</p>
+      <p data-page-node-id="X0JyMuPnZxDAH2BO22eTlZ">更重要的是，Harness 也不会替产品团队生成业务世界。哪张记录是权威数据，哪些工具可以调用，什么动作必须审批，怎样把结果写回系统，这些仍然必须由宿主应用定义。</p>
+      <p data-page-node-id="xMnAjk6VlOFQ8cqJIsmNjm">所以，OpenAI 帮开发者省掉了搭建 <strong data-page-node-id="H9lgMIm3odvKPEzaTWWsGN">Agent 执行底座</strong> 的大量工作；业务产品仍要由团队自己做好。差距最终来自对业务的理解，以及能否把数据、工具、权限和人工判断接成一条可靠流程，让 AI 真正在现有系统里把活干完。</p>
+      <div class="related" data-page-node-id="21mEvjKcnOHfVY1R2RhicG"><span class="rel-tag" data-page-node-id="7pvJBhseBXyUQgiCPiRaRy">延伸阅读</span>Harness 工程的十二条实践原则：<a class="ext" href="https://best.xiaohu.ai/article/harness-engineering/" target="_blank" rel="noopener" data-page-node-id="zzvS0zrbjVY4RhiRkuv6m8">Harness 工程十二条心法：Google 首席工程师一年实践，浓缩成可直接照做的流程和模板</a></div>
+    </section>
+
+    <div class="doc-foot" data-page-node-id="h0BVQ39qnYEe6wukLmiVN6">
+      <b data-page-node-id="xgRvWsVMJtYC90UVUMcxqw">文档说明</b> · 本文由附件 Markdown 源文档完整转换而来，保留原文标题层级、段落、列表、表格、引用块与全部超链接；版式、图示与交互为格式层增强，未新增任何无出处数据。单文件自包含，零外部依赖，断网可用。<br data-page-node-id="um8BhiOa1qrwfec0vo6FKp"/>
+      原始来源：OpenAI Developers（经 best.xiaohu.ai 转载） · 收录基准日期：2026-09-04
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var doc = document.documentElement;
+  function byId(id) { return document.getElementById(id); }
+
+  /* ---------- 主题切换（localStorage 隐私模式降级） ---------- */
+  var themeBtn = byId("btn-theme");
+  var stored = null;
+  try {
+    stored = window.localStorage ? window.localStorage.getItem("codex-harness-theme") : null;
+  } catch (e) { stored = null; }
+  if (stored === "light" || stored === "dark") {
+    doc.setAttribute("data-theme", stored);
+  }
+  function syncThemeLabel() {
+    var dark = doc.getAttribute("data-theme") !== "light";
+    themeBtn.querySelector(".tg-ico").textContent = dark ? "☾" : "☀";
+    themeBtn.querySelector(".tg-txt").textContent = dark ? "深色" : "浅色";
+  }
+  themeBtn.addEventListener("click", function () {
+    var next = doc.getAttribute("data-theme") === "light" ? "dark" : "light";
+    doc.setAttribute("data-theme", next);
+    try {
+      if (window.localStorage) { window.localStorage.setItem("codex-harness-theme", next); }
+    } catch (e) { /* 隐私模式下降级为仅本次会话生效 */ }
+    syncThemeLabel();
+  });
+  syncThemeLabel();
+
+  /* ---------- 阅读进度条 ---------- */
+  var bar = byId("progress");
+  function onProgress() {
+    var h = doc.scrollHeight - window.innerHeight;
+    var p = h > 0 ? (window.scrollY / h) * 100 : 0;
+    if (p < 0) { p = 0; }
+    if (p > 100) { p = 100; }
+    bar.style.width = p + "%";
+  }
+  window.addEventListener("scroll", onProgress, { passive: true });
+  window.addEventListener("resize", onProgress);
+  onProgress();
+
+  /* ---------- 目录滚动高亮 ---------- */
+  var links = document.querySelectorAll("ul.toc a[href^=\"#\"]");
+  var pairs = [];
+  for (var i = 0; i < links.length; i++) {
+    var target = byId(links[i].getAttribute("href").slice(1));
+    if (target) { pairs.push({ a: links[i], sec: target }); }
+  }
+  function onSpy() {
+    var y = window.scrollY + 130;
+    var cur = null;
+    for (var j = 0; j < pairs.length; j++) {
+      if (pairs[j].sec.offsetTop <= y) { cur = pairs[j]; }
+    }
+    for (var k = 0; k < pairs.length; k++) {
+      pairs[k].a.classList.toggle("active", cur === pairs[k]);
+    }
+  }
+  window.addEventListener("scroll", onSpy, { passive: true });
+  onSpy();
+
+  /* ---------- 移动端目录抽屉 ---------- */
+  var tocBtn = byId("btn-toc");
+  var sidebar = byId("sidebar");
+  if (tocBtn && sidebar) {
+    tocBtn.addEventListener("click", function () {
+      sidebar.classList.toggle("open");
+    });
+    for (var m = 0; m < links.length; m++) {
+      links[m].addEventListener("click", function () {
+        sidebar.classList.remove("open");
+      });
+    }
+  }
+})();
+</script>
+</body>
+</html>

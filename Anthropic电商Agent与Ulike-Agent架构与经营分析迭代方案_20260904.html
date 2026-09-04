@@ -1,0 +1,2249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ulike-Agent × Anthropic 智能体架构与经营分析演进方案 · 权威整合版 (2026-09-04)</title>
+  <style>
+    :root {
+      --bg-primary: #0f141c;
+      --bg-secondary: #161e2b;
+      --bg-card: #1c2636;
+      --text-primary: #f0f4f8;
+      --text-secondary: #b8c5d6;
+      --text-muted: #798a9f;
+      --border-color: #273549;
+      --border-subtle: #1e2b3c;
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --accent-teal: #06b6d4;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-orange: #f59e0b;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    }
+
+    html[data-theme="light"] {
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-card: #f1f5f9;
+      --text-primary: #0f172a;
+      --text-secondary: #334155;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+      --border-subtle: #cbd5e1;
+      --accent-blue: #2563eb;
+      --accent-purple: #7c3aed;
+      --accent-teal: #0891b2;
+      --accent-green: #059669;
+      --accent-red: #dc2626;
+      --accent-orange: #d97706;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    /* 顶部导航条 */
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .badge-tag {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-toggle:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+
+    /* 主布局 */
+    .main-container {
+      display: flex;
+      max-width: 1540px;
+      margin: 0 auto;
+      padding: 24px 20px 60px 20px;
+      gap: 28px;
+    }
+
+    /* 侧边栏浮动导航 */
+    .sidebar-toc {
+      width: 280px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 76px;
+      max-height: calc(100vh - 96px);
+      overflow-y: auto;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .sidebar-toc h3 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .toc-list {
+      list-style: none;
+    }
+
+    .toc-item {
+      margin-bottom: 8px;
+    }
+
+    .toc-link {
+      display: block;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 12px;
+      padding: 5px 8px;
+      border-radius: 4px;
+      transition: all 0.15s ease;
+      line-height: 1.4;
+    }
+
+    .toc-link:hover, .toc-link.active {
+      color: var(--accent-blue);
+      background: var(--bg-card);
+      font-weight: 600;
+    }
+
+    .toc-sub {
+      padding-left: 12px;
+      margin-top: 4px;
+      border-left: 1px dashed var(--border-subtle);
+      margin-left: 6px;
+    }
+
+    .toc-sub .toc-link {
+      font-size: 11px;
+      padding: 3px 6px;
+    }
+
+    /* 正文区 */
+    .content-article {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .section-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 28px 32px;
+      margin-bottom: 32px;
+      box-shadow: var(--shadow-sm);
+      scroll-margin-top: 76px;
+    }
+
+    .section-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--accent-blue);
+      margin-bottom: 6px;
+    }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 14px;
+      letter-spacing: -0.3px;
+    }
+
+    p {
+      color: var(--text-secondary);
+      font-size: 13.5px;
+      line-height: 1.7;
+      margin-bottom: 14px;
+    }
+
+    /* 表格 */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 12.5px;
+    }
+
+    .data-table th, .data-table td {
+      padding: 10px 14px;
+      border: 1px solid var(--border-color);
+      text-align: left;
+    }
+
+    .data-table th {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .data-table tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    /* 代码块与行内代码 */
+    code {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: var(--bg-card);
+      color: var(--accent-teal);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    pre {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin: 12px 0;
+    }
+
+    /* 徽章 */
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+
+    /* 交互沙盘 */
+    .sandbox-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .sandbox-header {
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 10px;
+      margin-bottom: 16px;
+    }
+
+    .sandbox-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    input[type="range"] {
+      accent-color: var(--accent-blue);
+      cursor: pointer;
+    }
+
+    input[type="number"], input[type="text"] {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    input[type="number"]:focus, input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+    }
+
+    /* 响应式适配 */
+    @media (max-width: 1024px) {
+      .main-container {
+        flex-direction: column;
+      }
+      .sidebar-toc {
+        width: 100%;
+        position: relative;
+        top: 0;
+        max-height: 280px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-brand">
+    <span class="badge-tag">工业级架构白皮书</span>
+    <span style="font-weight:700;font-size:15px;color:var(--text-primary);">Ulike-Agent × Anthropic 智能体技术架构与经营分析演进方案</span>
+  </div>
+  <div class="header-actions">
+    <span style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);">基线: 2026-09-04 · 权威整合版</span>
+    <button class="btn-toggle" id="themeToggleBtn">
+      <span id="themeIcon">🌓</span>
+      <span id="themeText">切换主题</span>
+    </button>
+  </div>
+</header>
+
+<div class="main-container">
+  <!-- 侧边栏浮动导航 (TOC) -->
+  <aside class="sidebar-toc">
+    <h3>方案大纲目录</h3>
+    <ul class="toc-list">
+      <li class="toc-item"><a href="#sec1" class="toc-link">01 · 执行摘要与战略统合蓝图</a>
+        <div class="toc-sub">
+          <a href="#sec1-1" class="toc-link">1.1 闭环跃迁与双轮驱动</a>
+          <a href="#sec1-2" class="toc-link">1.2 P + M 统合演进矩阵</a>
+          <a href="#sec1-3" class="toc-link">1.3 辩证审阅与拒收项订正</a>
+          <a href="#sec1-4" class="toc-link">1.4 Ulike 反向领先项保护</a>
+        </div>
+      </li>
+      <li class="toc-item"><a href="#sec2" class="toc-link">02 · 底层架构哲学与六大支柱</a>
+        <div class="toc-sub">
+          <a href="#sec2-1" class="toc-link">2.1 规则放置四分法</a>
+          <a href="#sec2-2" class="toc-link">2.2 两段式 Prompt 与小时钟缓存</a>
+          <a href="#sec2-3" class="toc-link">2.3 不动点防注入围栏</a>
+          <a href="#sec2-4" class="toc-link">2.4 实体出处门禁与服务端富化</a>
+          <a href="#sec2-5" class="toc-link">2.5 两阶段暂存写与双重护栏</a>
+          <a href="#sec2-6" class="toc-link">2.6 跨会话结构化记忆沉淀</a>
+        </div>
+      </li>
+      <li class="toc-item"><a href="#sec3" class="toc-link">03 · 双系统架构逐维实证矩阵</a></li>
+      <li class="toc-item"><a href="#sec4" class="toc-link">04 · 商家五大技能与经营分析深度融合</a>
+        <div class="toc-sub">
+          <a href="#sec4-1" class="toc-link">4.1 performance-insights 归因革命</a>
+          <a href="#sec4-2" class="toc-link">4.2 其余四大技能动作闭环</a>
+          <a href="#sec4-3" class="toc-link">4.3 Action Chips 动作接力协议</a>
+        </div>
+      </li>
+      <li class="toc-item"><a href="#sec5" class="toc-link">05 · 架构底座落地详案 (P 系列)</a>
+        <div class="toc-sub">
+          <a href="#sec5-p0" class="toc-link">P0: 结构安全与前缀缓存</a>
+          <a href="#sec5-p1" class="toc-link">P1: 暂存审批、技能与委托</a>
+          <a href="#sec5-p2" class="toc-link">P2: 延迟削减与长会话治理</a>
+        </div>
+      </li>
+      <li class="toc-item"><a href="#sec6" class="toc-link">06 · 经营闭环落地详案 (M 系列)</a>
+        <div class="toc-sub">
+          <a href="#sec6-m0" class="toc-link">M0: 归因四道闸与大盘快照</a>
+          <a href="#sec6-m1" class="toc-link">M1: 每日经营简报与调价护栏</a>
+          <a href="#sec6-m2" class="toc-link">M2: 人群营销与全链路闭环</a>
+        </div>
+      </li>
+      <li class="toc-item"><a href="#sec7" class="toc-link">07 · 交互式工程仿真沙盘</a>
+        <div class="toc-sub">
+          <a href="#sb1" class="toc-link">沙盘 1: 缓存经济学模型</a>
+          <a href="#sb2" class="toc-link">沙盘 2: 经营归因价量拆解</a>
+          <a href="#sb3" class="toc-link">沙盘 3: Eager 提前派发时延</a>
+          <a href="#sb4" class="toc-link">沙盘 4: 写操作护栏拦截仿真</a>
+        </div>
+      </li>
+      <li class="toc-item"><a href="#sec8" class="toc-link">08 · 演进路线、里程碑与代码证据</a></li>
+    </ul>
+  </aside>
+
+  <!-- 文章正文区 -->
+  <main class="content-article">
+
+    <!-- 第 1 章 · 执行摘要与战略统合蓝图 -->
+    <section id="sec1">
+      <h1 class="doc-title">Anthropic 电商 Agent 与 Ulike-Agent 技术架构与经营分析演进方案</h1>
+      <div class="doc-meta-banner">
+        <span><b>目标系统：</b>Ulike-Agent monorepo (Java 控制面 + Python 执行面 + Open WebUI + Wren MDL + Packs 治理)</span>
+        <span><b>参照标杆：</b>Anthropic <code>commerce-agents</code> 工业级参考实现 (Apache-2.0)</span>
+        <span><b>文档定位：</b>跨架构与经营业务的唯一权威增量演进方案</span>
+        <span><b>更新时间：</b>2026-09-04</span>
+      </div>
+
+      <p class="lead">
+        本文档为 Ulike-Agent 引入工业级生产治理的统合指导纲领。针对此前架构设计与业务分析文档碎片化、视角脱节的痛点，
+        本方案严格执行<b>“增量累计、辩证取舍、业务闭环”</b>原则，将底层软件工程确定性防御（P 系列）与上层智能经营分析闭环（M 系列）
+        深度缝合，建立起一套“用代码硬门禁规范模型、用归因四道闸防止妄断、从看数诊断无缝触发治理执行”的全新演进架构。
+      </p>
+
+      <div id="sec1-1">
+        <h2 class="sec-title"><span class="sec-num">01</span> 执行摘要：架构围栏与经营闭环的双轮跃迁</h2>
+        <h3 class="sub-title">1.1 核心问题诊断：从“只读看数开环”迈向“安全决策闭环”</h3>
+        <p>
+          当前 Ulike-Agent 在多服务编排（Backend/Tool/OWUI/Wren）、声明式领域包治理（<code>packs/domains/sales</code>、<code>packs/domains/finance</code>）
+          与 SQLite 架构收敛上已取得显著成果。然而，深入对照 Anthropic 官方生产级参考实现后，系统暴露出两个根本性割裂：
+        </p>
+        <ul>
+          <li><b>底层工程层割裂：</b>提示词拼装把动态变量（当前分秒、生成文件列表）直插 System Prompt 前缀，导致大模型 <b>Prompt Cache 100% 击穿</b>，Token 成本虚高且首字延迟（TTFT）严重堆叠；同时外部数据缺乏字符级与 XML 不动点（Fixpoint）围栏，缺乏实体出处（Provenance）硬校验。</li>
+          <li><b>经营业务层割裂：</b>现有的智能分析（如 <code>sales-performance-review</code>）产物止步于静态的 Markdown / IR 报告，属于典型的<b>“单向只读开环”</b>。运营在得知大盘异动原因后，依然必须跳出智能体，手动进入各个业务后台执行调价、补货或治理。系统缺乏一套像 Anthropic <code>merchant-agent</code> 那样<b>从归因分析（performance-insights）直接流转到商品治理（catalog）、库存（inventory）、调价（pricing）与营销（marketing）的两阶段暂存提交（Staged Changes）闭环</b>。</li>
+        </ul>
+      </div>
+
+      <div id="sec1-2">
+        <h3 class="sub-title">1.2 P + M 统合演进矩阵：十六项具体实施项全景</h3>
+        <p>
+          本方案将全部改进项收敛为两大序列、三个实施批次。所有项目均具备明确的代码落地归属与验收判定：
+        </p>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>编号</th>
+                <th>序列</th>
+                <th>改进项名称</th>
+                <th>核心机制与目标</th>
+                <th>代码落点模块</th>
+                <th>优先级</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>P0-1</b></td>
+                <td>架构底座</td>
+                <td>实体出处守卫 (Provenance Gate)</td>
+                <td>写工具与业务实体仅接受本会话见过的 ID，拦截未见实体</td>
+                <td><code>genie-backend:RunState</code> / <code>genie-tool</code></td>
+                <td><span class="status-pill pill-p0">P0 立即实施</span></td>
+              </tr>
+              <tr>
+                <td><b>P0-2</b></td>
+                <td>架构底座</td>
+                <td>提示词静动分离与小时钟</td>
+                <td>两段式 System Block，时间截断至小时，锁定静态前缀缓存</td>
+                <td><code>genie-backend:ReactImplAgent</code> / <code>LLM.java</code></td>
+                <td><span class="status-pill pill-p0">P0 立即实施</span></td>
+              </tr>
+              <tr>
+                <td><b>P0-3</b></td>
+                <td>架构底座</td>
+                <td>输入防御围栏 (Fencing Pipeline)</td>
+                <td>NFKC 标准化、剔除隐形控制符、伪造轮次清洗、XML 不动点剥离</td>
+                <td><code>genie-backend</code> (Java移植) / <code>genie-tool</code></td>
+                <td><span class="status-pill pill-p0">P0 立即实施</span></td>
+              </tr>
+              <tr>
+                <td><b>M0-1</b></td>
+                <td>经营闭环</td>
+                <td>经营分析归因四道闸规范</td>
+                <td>将 Mix vs Level 拆解、因果时空对齐、三级证据定性写入 Playbook</td>
+                <td><code>packs/domains/sales/</code> (Playbooks & Prompts)</td>
+                <td><span class="status-pill pill-p0">P0 立即实施</span></td>
+              </tr>
+              <tr>
+                <td><b>M0-2</b></td>
+                <td>经营闭环</td>
+                <td>大盘快照先行工具 (Snapshot Tool)</td>
+                <td>实现固定结构 <code>get_business_snapshot</code>，替代开局全量 SQL 拉取</td>
+                <td><code>genie-tool/tool/business_snapshot.py</code></td>
+                <td><span class="status-pill pill-p0">P0 立即实施</span></td>
+              </tr>
+              <tr>
+                <td><b>P1-4</b></td>
+                <td>架构底座</td>
+                <td>两阶段暂存写语义 (Staged Changes)</td>
+                <td>写工具统一生成不可变草案 Diff，通过独立审批面提交，打通 HITL</td>
+                <td><code>genie-backend:ApprovalService</code> / <code>control.db</code></td>
+                <td><span class="status-pill pill-p1">P1 关键迭代</span></td>
+              </tr>
+              <tr>
+                <td><b>P1-5</b></td>
+                <td>架构底座</td>
+                <td>领域技能两层动态按需装配</td>
+                <td>Packs 内解耦指令与元数据，实现类似 SKILL.md 的按需动态注入</td>
+                <td><code>packs/</code> / <code>genie-backend:PackLoader</code></td>
+                <td><span class="status-pill pill-p1">P1 关键迭代</span></td>
+              </tr>
+              <tr>
+                <td><b>P1-6</b></td>
+                <td>架构底座</td>
+                <td>受限分析委托 (run_analysis)</td>
+                <td>时序与多维交叉重计算在沙盒运行，精简卡片回传，释放主上下文</td>
+                <td><code>genie-tool/agent_runtime/</code> / <code>DataAnalysisTool</code></td>
+                <td><span class="status-pill pill-p1">P1 关键迭代</span></td>
+              </tr>
+              <tr>
+                <td><b>P1-7</b></td>
+                <td>架构底座</td>
+                <td>跨会话结构化记忆与代数防并发</td>
+                <td>会话后轻量抽取事实，引入 <code>purge_generation</code> 防止清理脏写</td>
+                <td><code>open-webui:memory</code> / <code>genie-backend</code></td>
+                <td><span class="status-pill pill-p1">P1 关键迭代</span></td>
+              </tr>
+              <tr>
+                <td><b>M1-3</b></td>
+                <td>经营闭环</td>
+                <td>每日经营简报组件与定时触发</td>
+                <td>按 Money at Stake 排序紧急待办，构建 <code>present_digest</code> 卡片</td>
+                <td><code>genie-backend:ReportTool</code> / <code>open-webui</code></td>
+                <td><span class="status-pill pill-p1">P1 关键迭代</span></td>
+              </tr>
+              <tr>
+                <td><b>M1-4</b></td>
+                <td>经营闭环</td>
+                <td>分析末端 Action Chips 动作流转</td>
+                <td>诊断结论直出交互芯片，一键预填跳转补货、调价、营销、治理流</td>
+                <td><code>open-webui/src/lib/apis/ulike/</code> / BFF</td>
+                <td><span class="status-pill pill-p1">P1 关键迭代</span></td>
+              </tr>
+              <tr>
+                <td><b>M1-5</b></td>
+                <td>经营闭环</td>
+                <td>定价测算与双重幅度安全护栏</td>
+                <td>最大调价比例、促销深度硬上限，底价穿透保护，边际利润禁止心算</td>
+                <td><code>packs/domains/sales/operators/pricing.yaml</code></td>
+                <td><span class="status-pill pill-p1">P1 关键迭代</span></td>
+              </tr>
+              <tr>
+                <td><b>P2-8</b></td>
+                <td>架构底座</td>
+                <td>长历史折叠压缩 (Compaction)</td>
+                <td>多轮工具结果在第 5 轮后自动精简折叠，保护上下文窗口</td>
+                <td><code>genie-backend:Memory.java</code></td>
+                <td><span class="status-pill pill-p2">P2 深度治理</span></td>
+              </tr>
+              <tr>
+                <td><b>P2-9</b></td>
+                <td>架构底座</td>
+                <td>会话状态乐观并发控制</td>
+                <td>带版本号 CAS 推进会话，彻底消除双端并发竞争</td>
+                <td><code>genie-backend:TaskStateManager</code></td>
+                <td><span class="status-pill pill-p2">P2 深度治理</span></td>
+              </tr>
+              <tr>
+                <td><b>P2-10</b></td>
+                <td>架构底座</td>
+                <td>工具流中执行 (Eager Dispatch)</td>
+                <td>首个工具参数在流式中闭合时提前异步启动底层耗时操作</td>
+                <td><code>genie-backend:LLM.java</code></td>
+                <td><span class="status-pill pill-p2">P2 深度治理</span></td>
+              </tr>
+              <tr>
+                <td><b>M2-6</b></td>
+                <td>经营闭环</td>
+                <td>营销活动模板与真实 ROI 归因</td>
+                <td>意图分群定义，警示老客自然复购虚增，预算总量零和博弈控制</td>
+                <td><code>packs/domains/marketing/</code></td>
+                <td><span class="status-pill pill-p2">P2 深度治理</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="sec1-3">
+        <h3 class="sub-title">1.3 辩证审阅四项核心取舍（兼听、辨伪与订正声明）</h3>
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">① 纠偏“拒收电商语义”</span>
+              <span class="status-pill pill-p0">重要订正</span>
+            </div>
+            <p style="font-size:12px;color:var(--text-secondary);">
+              早期审查文档误将 <code>commerce-agents</code> 等同于“买家端购物车”，从而写下了“拒收电商语义”的武断结论。<b>事实核验表明：其 Merchant Agent 是一套极其精湛的商家数字化经营操作系统</b>。Ulike 属于时尚消费电子制造与零售品牌，Merchant Agent 的经营归因、库存监控、调价护栏和客群营销模板不仅不应拒收，反而是 Ulike 智能经营分析急需补齐的灵魂业务能力。
+            </p>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">② 纠偏“全盘单主循环替代”</span>
+              <span class="status-pill pill-p1">双轨制折中</span>
+            </div>
+            <p style="font-size:12px;color:var(--text-secondary);">
+              Anthropic 主张纯粹的 Single Primary Loop（单智能体循环），反对 Router-Subagent 级联。<b>辩证采纳结论：</b>对于 Ulike 深度研报、跨多数据源核算的场景（如财务对账、销售季度复盘），Ulike 的声明式 DAG / Planning-Solve 具有高可控性，不宜盲目废除；但在日常单点问答与快速下钻中，应摒弃强制调用 SummaryAgent 的多余开销，建立<b>“普通问答走 Single Loop，重度分析走 DAG Pipeline”的双轨架构</b>。
+            </p>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">③ 订正“Ulike 无记忆”误判</span>
+              <span class="status-pill pill-warn">事实核查</span>
+            </div>
+            <p style="font-size:12px;color:var(--text-secondary);">
+              由于 macOS BSD <code>grep</code> 不支持 <code>\|</code> 导致管道匹配静默失效，前置探查曾误判“Ulike 无记忆模块”。经深入源码核查，Ulike 在 <code>agent/dto/Memory.java</code> 具备完整的会话内消息容器，在 <code>ShadowLedgerMemory</code> 具备验证账本。<b>真正的缺口是：缺乏“跨会话的轻量结构化事实抽取与并发安全沉淀”</b>，需精准补齐。
+            </p>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">④ 拒收“三端运行时同构”</span>
+              <span class="status-pill pill-p3">明确拒收</span>
+            </div>
+            <p style="font-size:12px;color:var(--text-secondary);">
+              Anthropic 将同一套 Agent 逻辑强行同构成 Messages API、Agent SDK 和 Managed Agents 三套适配层，这纯属云厂商为了向客户兜售三款商业化产品线的策略。Ulike-Agent 拥有自主控制的 Java/Python 双栈运行时与统一的 Open WebUI BFF，<b>严禁为了模仿而引入这种高冗余的抽象层，保持单一控制面</b>。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div id="sec1-4">
+        <h3 class="sub-title">1.4 Ulike-Agent 固有优势与反向领先项清单（守正出奇）</h3>
+        <p>
+          在汲取外部养分的同时，必须保持对自身技术沉淀的清醒自信。以下四项是 Ulike-Agent 的<b>反向领先项</b>，在本次迭代中必须严格捍卫，严禁劣化：
+        </p>
+        <div class="callout callout-purple">
+          <div class="callout-title">Ulike-Agent 架构防御基准（严禁被外部模式稀释）：</div>
+          <ul style="padding-left:18px;margin-top:6px;line-height:1.7;">
+            <li><b>声明式 Packs 治理资产（领先）：</b><code>packs/domains/</code> 将领域意图、数据血缘、指标语义与分析算子完全解耦声明。这种治理深度远超 Anthropic 仅依赖 Markdown 的平铺设计。</li>
+            <li><b>启动期 Fail-Closed 审批门控（领先）：</b><code>ApprovalActivationGate</code> 在应用启动阶段即验证持久化 Schema，缺表或配置失配直接阻断启动，杜绝了内存悬空审批在重启时静默丢失的隐患。</li>
+            <li><b>Shadow 影子双栈验证链（领先）：</b>在向生产切流前，具备完整的 Shadow 评估环境，能对新旧模型、新旧算子的输出进行无感并行跑批与语义一致性对比。</li>
+            <li><b>分级风险控制体系（L0~L3）：</b>将写操作细化为只读诊断（L0/L1）、受限配置变更（L2）与重大资金/调价/退款审批（L3），边界清晰，杜绝过度审批或安全失控。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第 2 章 · 底层架构哲学与六大支柱 -->
+    <section id="sec2">
+      <h2 class="sec-title"><span class="sec-num">02</span> 架构哲学透视：六大支柱与源码级实证</h2>
+      <p class="lead">
+        <code>commerce-agents</code> 的工业级价值不在于几句提示词，而在于确立了一套<b>“用确定性的软件工程围栏约束非确定性大模型”</b>的系统化范式。
+        这套体系建立在六大支柱之上，每一项都在源码中有极其严谨的算法落点。
+      </p>
+
+      <div id="sec2-1">
+        <h3 class="sub-title">2.1 支柱一 · 规则放置四分法（Where a Rule Lives）</h3>
+        <p>工业级系统绝不能寄希望于“在 Prompt 里多说几遍请遵守规则”。Anthropic 确立了软硬边界绝对隔离的四分法：</p>
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-header"><span class="card-title">Prompt 提示词</span><span class="status-pill pill-p3">软性指导</span></div>
+            <p style="font-size:12px;color:var(--text-secondary);">仅负责推理意图引导、解释口吻、启发式分析模式与无危害的风格偏好。绝对不承担安全性、资金、权限或不可逆变更的校验。</p>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Code 门禁代码</span><span class="status-pill pill-p0">硬性约束</span></div>
+            <p style="font-size:12px;color:var(--text-secondary);">掌控不可逾越的业务红线（单次调价上限、底价保护、补货配额、审批流拦截）。违反者直接由代码层抛出异常阻断，模型无法绕过。</p>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Tools 原子工具</span><span class="status-pill pill-p1">执行与隔离</span></div>
+            <p style="font-size:12px;color:var(--text-secondary);">隔离环境副作用，负责只读拉取与原子化变更。工具层执行参数合法性校验并捕获异常，将其收敛为结构化结果回传。</p>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Schemas 契约</span><span class="status-pill pill-p2">结构截断</span></div>
+            <p style="font-size:12px;color:var(--text-secondary);">通过 Pydantic / JSON Schema 定义严格的数据载荷，强行截断字段超长输入，在输入进入模型或执行逻辑前做类型阻断。</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="sec2-2">
+        <h3 class="sub-title">2.2 支柱二 · 两段式 System Block 与小时级时钟的三断点缓存</h3>
+        <p>长上下文多轮 Agent 最大的成本黑洞是<b>前缀突变导致 Prompt Cache 无法命中</b>。<code>prompt_assembly.py</code> 建立了三断点机制与小时钟隔离：</p>
+        <ul>
+          <li><b>Breakpoint 1（静态文本块）：</b>系统协议、角色设定、领域通用指令，在末尾打上 <code>cache_control: {"type": "ephemeral"}</code>。</li>
+          <li><b>Breakpoint 2（工具注册表）：</b>所有 Tools 定义一次性冻结，在最后一个 Tool 的末尾打断点。</li>
+          <li><b>Breakpoint 3（滚动轮次断点）：</b>在多轮对话中，将最新持久化消息的尾部动态移动断点，使得前序多轮历史变成只读 Cache Read。</li>
+          <li><b>小时级上下文时钟（Context Clock）：</b>动态时间如果包含分/秒，每次请求前缀都发生变化，缓存必穿透！因此动态时间严格截断至整点（<code>now.replace(minute=0, second=0, microsecond=0)</code>），并作为<b>第二系统文本块（Second System Block）</b>跟在静态块后面。</li>
+        </ul>
+        <pre><code>// 截断到小时的上下文时钟实现（消除分秒对静态缓存前缀的污染）
+def context_clock(now: datetime) -> str:
+    return now.replace(minute=0, second=0, microsecond=0).isoformat(timespec="minutes")
+
+// 两段式 System 块结构：静态前缀先行，动态上下文随后
+def build_system_blocks(static_text: str, context: str) -> list[dict[str, Any]]:
+    return [
+        {"type": "text", "text": static_text, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": context},
+    ]</code></pre>
+      </div>
+
+      <div id="sec2-3">
+        <h3 class="sub-title">2.3 支柱三 · 结构化输入防御数据围栏（Fencing Pipeline）</h3>
+        <p>外部不可信数据（用户提问、搜索结果、第三方网页、CSV 文本）进入大模型上下文前，必须经过强行净化，<code>fencing.py</code> 确立了四道线性清洗防线：</p>
+        <ol style="padding-left:18px;margin-bottom:12px;line-height:1.7;">
+          <li><b>Unicode NFKC 标准化与不可见控制符清除：</b>过滤零宽字符（<code>\u200B</code>）、双向覆盖（Bidi <code>\u202A-\u202E</code>）、蒙古文元音分隔符、隐形 ASCII 标签等后门。</li>
+          <li><b>伪造轮次边界消除：</b>将数据文本中出现的形如 <code>\n\n(human|assistant|user|system):</code> 的标记替换为 <code>\1\2 -</code>，彻底瓦解试图通过换行伪造对话边界的提示词注入。</li>
+          <li><b>XML 标签不动点（Fixpoint）剥离：</b>使用 <code>while True</code> 循环递归移除 <code>&lt;tool_use&gt;</code>、<code>&lt;tool_result&gt;</code>、<code>&lt;system&gt;</code> 等控制标签，直至清洗前后文本完全相同（收敛至 Fixpoint），彻底防御类似 <code>&lt;/label&lt;/label&gt;&gt;</code> 的嵌套转义注入。</li>
+          <li><b>硬长度截断：</b>对文本设定 <code>max_fenced_chars</code>（默认 12,000 字符），超限强制截断并追加 <code>...[truncated]</code>，防止超长内容对上下文造成 DoS 挤占。</li>
+        </ol>
+      </div>
+
+      <div id="sec2-4">
+        <h3 class="sub-title">2.4 支柱四 · 实体出处硬门禁（Provenance Gates）与服务端富化（Enrichment）</h3>
+        <p>
+          在生产环境中，模型最大的风险之一是<b>“伪造不存在的实体 ID”</b>与<b>“在 Markdown 中凭空捏造虚假价格/指标”</b>。
+        </p>
+        <ul>
+          <li><b>出处守卫（Provenance Gate）：</b>每个 Session 的 <code>RunState</code> 严格维护 <code>seen_ids</code> 集合。任何写操作或参数下发，其传入的 SKU ID、订单号、品类代码必须属于 <code>seen_ids</code>。若模型幻觉出未经查询的实体，Code Gate 立即拦截并将其标记为 <code>held</code>，打回重查。</li>
+          <li><b>服务端富化架构（Server-Side Enrichment）：</b><b>模型只负责做出决策（选择实体 ID + 输出业务理由），卡片上的核心指标、最新单价、库存数、趋势图数据 100% 由后端从权威数据库 JOIN 补齐。</b>模型无法在输出流中凭空修改关键数字，从机制上消除了数据幻觉。</li>
+        </ul>
+      </div>
+
+      <div id="sec2-5">
+        <h3 class="sub-title">2.5 支柱五 · 两阶段暂存写（Staged Changes）与双重 Guardrail 护栏</h3>
+        <p>
+          涉及调价、补货、营销预算调整等破坏性操作时，严禁单步直接执行。<code>merchant-agent/core/merchant_agent/changes.py</code> 建立了<b>两阶段提交（2PC-like）</b>规范：
+        </p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>阶段</th><th>操作动作</th><th>执行主体</th><th>安全校验与护栏</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><b>阶段一 (Stage)</b></td>
+                <td>调用 <code>stage_*</code> 工具提出变更草案，生成包含 Before/After/Diff 的不可变变更记录并入库暂存。</td>
+                <td>AI Agent</td>
+                <td>执行第 1 次 <code>check_guardrails</code>：校验单次变动条目上限、保护字段不可改、调价幅度未超阈值。超限直接拒绝暂存。</td>
+              </tr>
+              <tr>
+                <td><b>中间态 (Preview)</b></td>
+                <td>前端组件渲染可视化差异对比（Diff Card），呈现调价影响面、边际利润变化与风险等级。</td>
+                <td>前端 UI</td>
+                <td>人工（运营/店长）或具名 Host 在独立界面肉眼审查对比。</td>
+              </tr>
+              <tr>
+                <td><b>阶段二 (Commit)</b></td>
+                <td>点击批准（Approve）或拒绝（Reject），触发执行管道对暂存的草案执行最终落库。</td>
+                <td>Host 系统 / 人工</td>
+                <td>执行第 2 次 <code>check_guardrails</code>：防止自暂存至批准期间底表基线数据发生漂移，再次校验通过后原子生效。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="sec2-6">
+        <h3 class="sub-title">2.6 支柱六 · 跨会话结构化记忆沉淀与 purge_generation 并发控制</h3>
+        <p>长程智能体需要记住用户的业务偏好与关键业务目标，但绝不能让记忆抽取阻塞用户响应：</p>
+        <ul>
+          <li><b>会话后异步抽取（Post-Turn Extraction）：</b>在会话交互关键路径之外，启动后台轻量小模型，基于严格的模板抽取“一年后依然成立且脱离今日琐事”的三类事实：偏好（Preference）、约束（Constraint）、业务上下文（Context）。</li>
+          <li><b>代数并发控制（Purge Generation）：</b>为每个租户/用户维护一个单调递增的整数代数 <code>purge_generation</code>。当用户发出“清除我的偏好/重置上下文”时，代数自增。若后台正有耗时的抽取任务在运行，写回前比对代数，一旦发现代数落后立即全量丢弃，彻底杜绝并发脏写。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 第 3 章 · 双系统架构逐维实证矩阵 -->
+    <section id="sec3">
+      <h2 class="sec-title"><span class="sec-num">03</span> 双系统架构逐维实证矩阵（十四维度全景对照）</h2>
+      <p class="lead">
+        以下矩阵基于双方工程真实代码探查建立。每一项均核验了具体的源代码文件、类与方法，杜绝概念层面的空谈与脑补。
+      </p>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>维度</th>
+              <th>commerce-agents 设计与源码落点</th>
+              <th>Ulike-Agent 现状与源码落点</th>
+              <th>差距评估与演进策略</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>1. 编排拓扑</b></td>
+              <td>Single Primary Loop + <code>load_skill</code> 动态加载，重计算委派受限只读 Delegate<br><code>commerce_common/execution.py</code></td>
+              <td><code>PlanningAgent</code> (DAG) $\rightarrow$ <code>ReactImplAgent</code> $\rightarrow$ <code>SummaryAgent</code> 三段串行<br><code>service/impl/PlanSolveHandlerImpl.java:157</code></td>
+              <td><b>双轨制演进：</b>日常单点问答收敛至 Single Loop 取消二次总结；重度研报保留 DAG 算子调度。</td>
+            </tr>
+            <tr>
+              <td><b>2. Prompt 缓存</b></td>
+              <td>3 断点机制 + 静态前缀冻结 + 动态时钟截断到整点 (小时钟)<br><code>commerce_common/prompt_assembly.py:25-58</code></td>
+              <td>动态变量 <code>{{date}}</code>、<code>{{files}}</code>、<code>{{query}}</code> 每步直插 System Prompt 前缀<br><code>agent/agent/ReactImplAgent.java:83-86</code></td>
+              <td><b>P0 立即重构：</b>实现两段式 System Block，时间截断到小时，前缀断点冻结，实现 80%+ 缓存命中。</td>
+            </tr>
+            <tr>
+              <td><b>3. 输入防御围栏</b></td>
+              <td>字符级净化 + 伪造轮次边界消除 + XML 标签递归消除至不动点 (Fixpoint)<br><code>commerce_common/fencing.py:102-120</code></td>
+              <td>仅在上层对特定字段做格式与枚举过滤，缺乏进入 LLM 前的底层文本围栏<br><code>service/Nl2SqlRequestBuilder.java:27-36</code></td>
+              <td><b>P0 移植 Java 围栏：</b>在 <code>genie-backend</code> 构建统一 <code>FencingPipeline</code>，杜绝嵌套注入与伪造轮次。</td>
+            </tr>
+            <tr>
+              <td><b>4. 实体出处门禁</b></td>
+              <td>出处守卫：<code>RunState.seen_ids</code> 白名单校验，非白名单实体直接拦截为 <code>held</code><br><code>shopping_agent/gates.py:35-50</code></td>
+              <td>依赖下游数据库外键约束或报错，应用层无运行时实体出处追踪账本<br><code>service/impl/AgentRunnerServiceImpl.java</code></td>
+              <td><b>P0 建立出处追踪：</b>在 <code>RunState</code> 中跟踪本轮交互见过的实体 ID，拦截模型凭空捏造的虚假编码。</td>
+            </tr>
+            <tr>
+              <td><b>5. 服务端富化</b></td>
+              <td>模型仅产出实体 ID 与选型理由，卡片价格、库存、趋势图 100% 由后端从 DB 富化<br><code>commerce_common/presentation.py:76-113</code></td>
+              <td>模型在 Markdown 中自行拼接价格与排版，前端直接展示模型文本<br><code>agent/printer/SSEPrinter.java</code></td>
+              <td><b>P1 富化卡片协议：</b>将卡片数据源收敛至后端 DB/语义层，模型只传实体 ID，消除关键数据幻觉。</td>
+            </tr>
+            <tr>
+              <td><b>6. 写操作与审批</b></td>
+              <td>两阶段暂存写（Staged Changes），Stage 校验 + Commit 校验，前端 Diff 审批面<br><code>merchant_agent/changes.py:31-100</code></td>
+              <td><code>ApprovalService</code> 已具备持久化与 CAS，但仅在 PlanSolve 尾部粗粒度确认<br><code>agent/runtime/approval/ApprovalService.java:73</code></td>
+              <td><b>P1 暂存草案化：</b>将写操作改造成不可变 <code>StagedChange</code>，配合可视化 Diff 确认，打通审批面。</td>
+            </tr>
+            <tr>
+              <td><b>7. 业务分析深度</b></td>
+              <td><code>performance-insights</code>：Mix vs Level 严格分离，因果时空精准对齐，三级证据定性<br><code>merchant-agent/skills/performance-insights/</code></td>
+              <td><code>packs/domains/sales/</code> 已有 <code>price-volume</code> 算子，但缺乏归因四道闸先验拦截规则<br><code>packs/domains/sales/operators/price-volume.yaml</code></td>
+              <td><b>M0 业务方法论注入：</b>将归因纪律与四道闸逻辑写入 Sales 领域技能与算子前置规则。</td>
+            </tr>
+            <tr>
+              <td><b>8. 数据大盘感知</b></td>
+              <td><code>get_business_snapshot</code> 确定性首轮快照工具，开局掌握核心指标与异常波动<br><code>merchant-agent/core/merchant_agent/tools/</code></td>
+              <td>首轮通常直接触发宽表复杂 SQL 查询或由模型自由生成查询语句<br><code>service/impl/ReactHandlerImpl.java</code></td>
+              <td><b>M0 快照先行工具：</b>开发专用的指标快照工具，统一分析起点，并作为缓存命中锚点。</td>
+            </tr>
+            <tr>
+              <td><b>9. 经营动作闭环</b></td>
+              <td>分析结论末端直出 Action Chips，无缝流转至商品巡检、库存补货、调价、营销<br><code>merchant-agent/skills/</code></td>
+              <td>输出静态 Markdown/IR 报告即告终结，缺乏业务动作接力与预填入口<br><code>ReportIrCompatibilityAssembler.java</code></td>
+              <td><b>M1 动作芯片闭环：</b>在分析报告末尾生成结构化 Action Chips，一键预填并拉起后续业务流。</td>
+            </tr>
+            <tr>
+              <td><b>10. 调价风控护栏</b></td>
+              <td>双重变动率上限（永久调价上限 + 促销折扣上限），底价保护，边际利润禁止心算<br><code>merchant_agent/changes.py:70-92</code></td>
+              <td>无应用级业务风控护栏，依赖人工肉眼把关<br><code>ApprovalService.java</code></td>
+              <td><b>M1 业务护栏落地：</b>在算子与写工具层固化双重变动上限与底价穿透拦截。</td>
+            </tr>
+            <tr>
+              <td><b>11. 记忆并发安全</b></td>
+              <td>会话后轻量抽取脱水事实，<code>purge_generation</code> 整数代数防并发脏写<br><code>commerce_common/memory.py:78-98</code></td>
+              <td>会话内 <code>Memory.java</code> 仅保存在线消息；无跨会话结构化记忆与代数隔离<br><code>agent/dto/Memory.java</code></td>
+              <td><b>P1 跨会话记忆：</b>会话结束后异步抽取用户长期偏好与目标，引入代数安全机制。</td>
+            </tr>
+            <tr>
+              <td><b>12. 算力委托分流</b></td>
+              <td><code>run_analysis</code>：将大批时序点计算隔离在受限沙盒，仅回传卡片，释放主上下文<br><code>merchant_agent/analysis.py:21-43</code></td>
+              <td>中间 SQL 结果与数据明细全部打印至主上下文，极易造成上下文膨胀<br><code>agent/tool/common/DataAnalysisTool.java</code></td>
+              <td><b>P1 受限分析委托：</b>实现只读计算委托，大批数据在子线程/沙盒完成聚合，仅回传摘要。</td>
+            </tr>
+            <tr>
+              <td><b>13. 领域资产治理</b></td>
+              <td>Markdown 文件直接存储提示词与规则，缺乏元数据结构定义<br><code>skills/*/SKILL.md</code></td>
+              <td><code>packs/domains/</code> 采用强类型 YAML 声明算子、数据血缘与语义契约<br><code>packs/domains/sales/ontology.yaml</code></td>
+              <td><b><span class="status-pill pill-lead">Ulike 领先项</span></b>：保留声明式 Packs 治理资产，仅吸纳其指令拆分模式。</td>
+            </tr>
+            <tr>
+              <td><b>14. 审批与门禁机制</b></td>
+              <td>内存态 <code>ChangeLedger</code>，依赖外部宿主实现持久化<br><code>merchant_agent/changes.py</code></td>
+              <td>SQLite <code>agent_approval</code> + 启动期 <code>ApprovalActivationGate</code> 强门禁，fail-closed<br><code>genie-backend/ApprovalService.java</code></td>
+              <td><b><span class="status-pill pill-lead">Ulike 领先项</span></b>：保留启动期强校验硬门禁，将暂存草案挂载进现有持久化审批表。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 第 4 章 · 商家五大技能与经营分析深度融合 -->
+    <section id="sec4">
+      <h2 class="sec-title"><span class="sec-num">04</span> 商家 Agent 五大技能深度嫁接：Ulike 智能经营分析的闭环跃迁</h2>
+      <p class="lead">
+        <code>merchant-agent</code> 是 Anthropic 为店长与品牌操盘手设计的数字化经营中枢。
+        它由 <code>performance-insights</code> 统领全盘归因诊断，并通过 <code>catalog-listings</code>、<code>inventory-operations</code>、
+        <code>pricing-promotions</code> 与 <code>marketing-campaigns</code> 形成直接的治理闭环。
+        这套设计彻底解决了 Ulike-Agent 经营分析“有诊断、无执行”的硬伤。
+      </p>
+
+      <div id="sec4-1">
+        <h3 class="sub-title">4.1 performance-insights：严密归因方法论的体系化注入</h3>
+        <p>
+          在实际业务中，许多所谓的“智能分析”充斥着草率的伪归因（例如看见 GMV 下跌就怪罪于流量下滑，或者将低价品畅销误判为大盘降价）。
+          <code>performance-insights/SKILL.md</code> 确立了一套硬核的分析师推导纪律：
+        </p>
+
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-header"><span class="card-title">① 数据快照先行纪律</span><span class="status-pill pill-p0">Snapshot First</span></div>
+            <p style="font-size:12px;color:var(--text-secondary);">
+              <b>原则：</b>分析必须始于 <code>get_business_snapshot</code>：获取大盘核心指标、同期对比（<code>compare_to</code>）及预警计数。只有快照无法直接回答的深层问题，才允许触发 <code>query_metrics</code> 下钻。严禁开局直接暴力跑宽表 SQL。
+            </p>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">② 比较期选择学 (Comparisons)</span><span class="status-pill pill-p0">严防口径错位</span></div>
+            <p style="font-size:12px;color:var(--text-secondary);">
+              <b>原则：</b>周度环比看上周；季节性异动看去年同期；政策或调价前后看变动窗口。<b>硬红线：未完周期（Partial Period）严禁直接与完整周期对比</b>；若今日数据截至 14 点，必须同步截取对比期的前 14 点进行同截面核算，否则强制标注“不完全对比”。
+            </p>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">③ 价量与结构漂移分离 (Mix vs Level)</span><span class="status-pill pill-p0">数学级硬门禁</span></div>
+            <p style="font-size:12px;color:var(--text-secondary);">
+              <b>原则：</b>大盘均价（客单价）下滑，必须在数学上严格分解为：<b>单品真实降价（Level drop）</b>与<b>低价品销量占比上升造成的结构恶化（Mix shift）</b>。在未下钻品类细分结构（Segment）之前，严禁直接声称“降价导致收入下滑”！
+            </p>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">④ 因果时空精准对齐 (Causal Alignment)</span><span class="status-pill pill-p0">时空交集校验</span></div>
+            <p style="font-size:12px;color:var(--text-secondary);">
+              <b>原则：</b>候选外部诱因必须严格满足两道闸：<b>时间线吻合</b>（营销停滞、调价或断码发生时间与异动拐点严格一致）且<b>影响范围精准落在该分段内</b>。两项同时满足才称为 Cause；仅时间重合者只允许表述为 Correlation；无数据支持者强制标记为“不可见”。
+            </p>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top:20px;">
+          <div class="callout-title">数学证明：大盘均价变动的 Mix 与 Level 经典分解公式</div>
+          <p style="font-size:12px;line-height:1.6;margin-bottom:6px;">
+            设大盘由各细分品类 $i$ 构成，基期为 $0$，报告期为 $1$。品类单价为 $P_i$，销量占比为 $W_i$（$\sum W_i = 1$）。大盘平均客单价 $ar{P} = \sum W_i P_i$。则平均单价总变动 $\Delta ar{P}$ 可严格正交展开为：
+          </p>
+          <pre style="margin:6px 0;padding:10px 14px;"><code>ΔP_bar = P_bar_1 - P_bar_0 
+       = ∑ (W_i1 * P_i1) - ∑ (W_i0 * P_i0)
+       = ∑ W_i0 * (P_i1 - P_i0)    [单品纯价变动贡献：Level Effect]
+       + ∑ P_i0 * (W_i1 - W_i0)    [结构漂移变动贡献：Mix Effect]
+       + ∑ (W_i1 - W_i0)*(P_i1 - P_i0) [交叉复合交互项：Interaction]</code></pre>
+          <p style="font-size:12px;color:var(--text-secondary);margin:0;">
+            Ulike 在脱毛仪与美容仪业务中常出现“大盘客单价下跌，但核心单品并未降价”的假象，其真实诱因往往是低价配件或便携款销量占比（$W_{low}$）骤增。必须在代码层强制计算上述公式，严禁模型信口开河。
+          </p>
+        </div>
+      </div>
+
+      <div id="sec4-2">
+        <h3 class="sub-title">4.2 其余四大技能对经营分析的动作闭环支持</h3>
+        <p>
+          一旦 <code>performance-insights</code> 定位出异动根因，智能体立即引导进入以下四大动作执行技能，且所有动作必须进入 <b>Staged Changes 暂存提交流水线</b>：
+        </p>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>技能模块</th><th>诊断对接场景</th><th>核心执行逻辑</th><th>安全护栏 (Code Gates)</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><b>inventory-operations<br>(库存与履约)</b></td>
+                <td>销售异动溯源为“主力 SKU 缺货断码”或“长尾品库存周转极低”</td>
+                <td>
+                  ① <b>晨会经营简报 (Daily Briefing)：</b>提取库存报警、履约异常与大盘波动，按涉资规模（Money at stake）和紧迫度排序出 3~6 项关键决策；<br>
+                  ② <b>滞销三叉树处置：</b>耐用品持仓成本低则保持现状（Leave it）；有临期失效风险则转降价清仓（Mark it down）；毫无动销可能则直接下架（Pull it）。
+                </td>
+                <td>
+                  • 单次补货件数上限（<code>max_restock_quantity</code>）；<br>
+                  • 计算预计售罄天数必须附带公式入参，禁止黑盒输出。
+                </td>
+              </tr>
+              <tr>
+                <td><b>catalog-listings<br>(商品内容治理)</b></td>
+                <td>分析表明“某新品曝光高但转化率极低，搜索无排位”</td>
+                <td>
+                  ① <b>内容规范四项巡检：</b>检查属性完整度、搜索关键词前置性、品类归属及主图缺失；<br>
+                  ② <b>属性补全防脑补：</b>属性值只能来自商品详情现有文本或用户当次输入，严禁凭空揣测；<br>
+                  ③ <b>批量暂存模式：</b>先产出 1~2 个样本供运营确认，确认后再批量分批暂存待审。
+                </td>
+                <td>
+                  • 限制单次批量变更条目上限（<code>max_items_per_change</code>）；<br>
+                  • 保护字段阻断（合规标签、税收类目禁止模型修改）。
+                </td>
+              </tr>
+              <tr>
+                <td><b>pricing-promotions<br>(定价与促销)</b></td>
+                <td>归因表明“老款主力机型面临竞品降价冲击，动销骤降”</td>
+                <td>
+                  ① <b>边际利润硬锚定：</b>利润率（<code>margin_pct</code>）直接由底表带出，模型只引用、绝不自行心算；<br>
+                  ② <b>最小变动幅度测算：</b>锚定运营目标（清仓、保利润、保销量），提议最小必要降价幅度；<br>
+                  ③ <b>期限促销与永久调价分离：</b>明确活动截止日的走 <code>stage_promotion</code>，基准变动的走 <code>stage_price_update</code>。
+                </td>
+                <td>
+                  • 永久调价变动率硬上限（<code>max_price_delta_pct</code>，如 20%）；<br>
+                  • 促销折扣深度上限（<code>max_promotion_discount_pct</code>）；<br>
+                  • 绝对底价保护：任何方案击穿保底成本立即硬拦截。
+                </td>
+              </tr>
+              <tr>
+                <td><b>marketing-campaigns<br>(营销活动拟定)</b></td>
+                <td>分析显示“老客复购周期拉长，高价值会员流失风险加剧”</td>
+                <td>
+                  ① <b>意图驱动分群：</b>明确区分拉新获客、沉睡唤醒（>90天未购）与特定周期关怀；<br>
+                  ② <b>渠道归因陷阱警示：</b>提示老客每年的自然例行复购不能全额归功于当期触达，剔除自然转化虚增；<br>
+                  ③ <b>预算零和博弈：</b>总预算恒定，建议向 A 活动倾斜预算时必须明确削减 B 活动预算。
+                </td>
+                <td>
+                  • 营销活动总预算硬配额（<code>campaign_budget_cap</code>）；<br>
+                  • 人群圈选范围必须来自系统已有客群画像，禁止凭空造数。
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="sec4-3">
+        <h3 class="sub-title">4.3 终结“分析归分析、运营归运营”：Action Chips 动作接力协议</h3>
+        <p>
+          Ulike-Agent 在前台 Open WebUI 交付经营分析报告时，末尾必须摒弃纯文本建议，统一渲染<b>结构化行动芯片（Action Chips）</b>：
+        </p>
+        <div class="callout callout-success">
+          <div class="callout-title">动作接力实战场景示例：</div>
+          <p style="font-size:13px;line-height:1.6;margin-bottom:8px;">
+            <b>【分析结论】</b>“本周 Air 3 极光绿款 GMV 环比下降 28.4%。时空对齐核验：主因系华东总仓自周三起缺货断码（出处: <code>alert_inv_20260902</code>），导致跳出率激增；同时天猫旗舰店客单价微降 3.2%，拆解证实为赠品刷头低价品销量占比上升 12% 引起的结构漂移（Mix shift），核心主机价格未变。”
+          </p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+            <button class="btn-toggle" style="background:var(--accent-soft);border-color:var(--accent-primary);color:var(--accent-primary);font-weight:600;">
+              ⚡ 立即测算华东仓紧急调拨 500 件 (库存闭环)
+            </button>
+            <button class="btn-toggle" style="background:var(--warn-bg);border-color:var(--warn-border);color:var(--warn-text);font-weight:600;">
+              ⚡ 暂存低转化连带品捆绑促销草案 (定价闭环)
+            </button>
+            <button class="btn-toggle" style="background:var(--bg-secondary);border-color:var(--border-default);color:var(--text-secondary);">
+              🔍 深入下钻华北与华南仓分流情况 (进一步分析)
+            </button>
+          </div>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">
+            点击芯片即可无缝拉起对应的写工具流（自动预填 SKU、仓库、周期等参数），直接生成 Staged Change 草案，并在右侧弹出 Visual Diff 确认面板！
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第 5 章 · 架构底座落地详案 (P 系列) -->
+    <section id="sec5">
+      <h2 class="sec-title"><span class="sec-num">05</span> 架构底座迭代实施详案 (P 系列：P0 ~ P2)</h2>
+      <p class="lead">
+        本章针对 Ulike-Agent 底层工程弱点，逐项给出具体的代码修改方案、类设计、包路径与测试验证断言。
+      </p>
+
+      <div id="sec5-p0">
+        <h3 class="sub-title">5.1 P0 级即刻落地项：结构安全与提示词工程</h3>
+        
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">P0-1 实体出处守卫 (Provenance Gate)</span>
+            <span class="status-pill pill-p0">P0 · 阻断幻觉实体</span>
+          </div>
+          <p><b>问题根因：</b>模型在写类工具或指标钻取中，可能凭空生成不存在的 SKU 编码或订单号，导致后端脏写或无意义 SQL 异常。</p>
+          <p><b>实施步骤：</b></p>
+          <ol style="padding-left:18px;margin-bottom:10px;line-height:1.7;">
+            <li>在 <code>genie-backend/.../RunStateSnapshot.java</code> 中扩展 <code>Set&lt;String&gt; seenIds</code>，在所有只读工具（如查询商品、查询订单、快照工具）返回时，自动解析并提取实体 ID 存入该集合。</li>
+            <li>在所有写工具（或生成配置工具）执行前，前置挂载 <code>ProvenanceGate</code> 拦截器。校验入参中的目标实体是否包含在当前会话的 <code>seenIds</code> 内。</li>
+            <li>若出现未见实体，不直接抛出系统 500 异常，而是收敛为标准错误返回：<code>"Entity ID [xxx] was not observed in current session context. Please read before write."</code> 并标记为 <code>held</code>。</li>
+          </ol>
+        </div>
+
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">P0-2 提示词静/动分离与小时钟 (Prompt Caching Architecture)</span>
+            <span class="status-pill pill-p0">P0 · 核心成本与时延降低</span>
+          </div>
+          <p><b>问题根因：</b><code>ReactImplAgent.java</code> 与 <code>PlanningAgent.java</code> 构造 System Prompt 时，直接使用 <code>replace("{{date}}", context.getDateInfo())</code> 将精确到秒的时间戳和每步都在变动的 <code>{{files}}</code> 插在 System Prompt 前缀，导致 DeepSeek / Claude 的 Prompt Cache 命中率为 0。</p>
+          <p><b>实施步骤：</b></p>
+          <ol style="padding-left:18px;margin-bottom:10px;line-height:1.7;">
+            <li><b>拆分两段式 System Block：</b>
+              <ul>
+                <li><b>Block 1 (静态段)：</b>包含角色定义、协议契约、Packs 声明式算子骨架。在结尾显式注入 <code>cache_control: {"type": "ephemeral"}</code>。</li>
+                <li><b>Block 2 (动态段)：</b>放置当前动态文件列表、动态会话状态与小时钟。</li>
+              </ul>
+            </li>
+            <li><b>实现 Context Clock 小时钟：</b>将时间严格截断至当前小时：
+              <pre><code>public static String getContextClock() {
+    return LocalDateTime.now().truncatedTo(ChronoUnit.HOURS).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+}</code></pre>
+            </li>
+            <li>在多轮交互中，仅对最后一条已完成消息打滚动断点，确保多轮对话前序 Tool Results 全部命中缓存。</li>
+          </ol>
+        </div>
+
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">P0-3 工业级输入防御围栏 (Java Fencing Pipeline)</span>
+            <span class="status-pill pill-p0">P0 · 防注入与控制符安全</span>
+          </div>
+          <p><b>问题根因：</b><code>genie-backend</code> 缺乏底层字符级清洗，搜索结果与用户输入中的不可见控制符、伪造轮次边界可轻易实施越狱。</p>
+          <p><b>实施步骤：</b></p>
+          <ol style="padding-left:18px;margin-bottom:10px;line-height:1.7;">
+            <li>在 <code>genie-backend/src/main/java/com/jd/genie/security/</code> 新建 <code>FencingPipeline.java</code>；</li>
+            <li>使用 <code>Normalizer.normalize(text, Normalizer.Form.NFKC)</code> 实现规范化；</li>
+            <li>正则过滤 13 类隐形字符区间（零宽、Bidi、不可见标签字符）；</li>
+            <li>正则替换伪造轮次：<code>text.replaceAll("(?i)(\\r?\\n[ \\t]*\\r?\\n[ \\t]*)(human|assistant|system|user)[ \\t]*:", "$1$2 -")</code>；</li>
+            <li>循环消除控制标签（Fixpoint 迭代）：
+              <pre><code>String prev;
+do {
+    prev = text;
+    text = TAG_PATTERN.matcher(text).replaceAll("[removed]");
+} while (!text.equals(prev));</code></pre>
+            </li>
+          </ol>
+        </div>
+      </div>
+
+      <div id="sec5-p1">
+        <h3 class="sub-title">5.2 P1 级关键迭代项：暂存审批、技能加载与分析委托</h3>
+        
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">P1-4 两阶段暂存写语义 (Staged Changes) 与 ApprovalService 融合</span>
+            <span class="status-pill pill-p1">P1 · 审批闭环</span>
+          </div>
+          <p><b>方案设计：</b>复用现有的 SQLite <code>agent_approval</code> 表与 <code>ApprovalService</code>。写类工具（调价、修改看板、变更库存规则）严禁直接写库，统一返回 <code>StagedChange</code> 结构（包含 <code>before_state</code>, <code>after_state</code>, <code>diff</code>, <code>change_kind</code>）。在入库暂存与最终批准两个时间节点均执行 <code>check_guardrails</code>，前端 Open WebUI 渲染可视化 Diff 卡片，管理员一键 Approve 触发底层无状态 RPC 提交。</p>
+        </div>
+
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">P1-5 Packs 领域技能两层动态按需装配</span>
+            <span class="status-pill pill-p1">P1 · 提示词解耦</span>
+          </div>
+          <p><b>方案设计：</b>将当前 <code>packs/domains/</code> 中庞大的 YAML 描述拆分为<b>“轻量元数据声明（常驻静态块）”</b>与<b>“详细场景指令（按需加载）”</b>两层。主 Agent 默认只知晓技能名称与简短摘要，通过类似于 <code>load_skill("sales-deep-attribution")</code> 的机制动态将特定业务指令引入第二系统块，大幅削减默认上下文消耗。</p>
+        </div>
+
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">P1-6 受限分析委托 (run_analysis) 与结果瘦身回传</span>
+            <span class="status-pill pill-p1">P1 · 上下文减负</span>
+          </div>
+          <p><b>方案设计：</b>在 <code>genie-tool/agent_runtime/</code> 中实现受限分析 Delegate。主智能体遇到“交叉多维对比、品类异动拉动率测算”时，下发计算任务至 Delegate。Delegate 在 Python 沙盒中完成计算，仅向主智能体回传标准格式的 <code>AnalysisResult</code>（精简指标摘要卡片），杜绝将数千行原始时序数组直接打印到主会话历史。</p>
+        </div>
+
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">P1-7 跨会话结构化记忆与 purge_generation 代数并发控制</span>
+            <span class="status-pill pill-p1">P1 · 长期记忆</span>
+          </div>
+          <p><b>方案设计：</b>接入 Open WebUI 异步记忆管道，在主会话完成后异步调用小模型抽取“偏好/约束/业务背景”三类持久事实。在 SQLite / Redis 中为用户维护单调递增的 <code>purge_generation</code>。用户执行“清理记忆”时自增代数，后台异步抽取任务在落库前必须原子比对代数，一旦发现代数不一致即刻丢弃，彻底消除并发写回脏数据风险。</p>
+        </div>
+      </div>
+
+      <div id="sec5-p2">
+        <h3 class="sub-title">5.3 P2 级深度治理项：延迟削减与长会话治理</h3>
+        <p><b>P2-8 历史折叠（History Compaction）：</b>当单会话交互超过 5 轮时，自动将前序轮次的详尽 Tool Result 替换为精简摘要或单行回执，释放上下文空间。<br>
+        <b>P2-9 会话乐观并发控制：</b>引入版本号比对，双端同时修改会话时执行 CAS 检验，杜绝并发覆盖。<br>
+        <b>P2-10 工具流中执行（Eager Dispatch）：</b>在 LLM 流式输出工具 JSON 的过程中，当首个耗时工具的参数结构闭合时，即刻在后台异步启动该工具执行，与剩余文本生成实现并发并重叠时延。</p>
+      </div>
+    </section>
+
+    <!-- 第 6 章 · 经营业务闭环落地详案 (M 系列) -->
+    <section id="sec6">
+      <h2 class="sec-title"><span class="sec-num">06</span> 经营闭环落地详案 (M 系列：M0 ~ M2)</h2>
+      <p class="lead">
+        本章将 <code>merchant-agent</code> 五大技能中的分析素养、风控护栏与动作芯片，具象化为 Ulike 业务域（Sales/Marketing）的落地方案。
+      </p>
+
+      <div id="sec6-m0">
+        <h3 class="sub-title">6.1 M0 级即刻落地项：归因四道闸与大盘快照先行</h3>
+
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">M0-1 经营分析素养指令注入 (Playbook & Operator 增强)</span>
+            <span class="status-pill pill-p0">M0 · 防假归因</span>
+          </div>
+          <p><b>改造落点：</b><code>packs/domains/sales/playbooks/sales-performance-review.yaml</code> 与 <code>operators/price-volume.yaml</code></p>
+          <p><b>规则注入：</b>在算子的 <code>evidencePolicy</code> 与系统 Prompt 中强制注入四道纪律：</p>
+          <ol style="padding-left:18px;margin-bottom:10px;line-height:1.7;">
+            <li><b>基准期对齐闸：</b>严禁未完周期（Partial Period）与完整周期直接比对，必须同截面截取。</li>
+            <li><b>Mix/Level 分离闸：</b>均价变动必须在数学上拆分为单品纯价效应与品类占比结构效应；未下钻品类占比前禁止下定论。</li>
+            <li><b>因果时空对齐闸：</b>任何外部原因假设，其发生时间必须与异动拐点重合，且影响范围必须落在受波及品类内。</li>
+            <li><b>三级置信度定性：</b>严格使用 Finding（确证事实）、Lead（线索待查）、Inconclusive（数据不足）。</li>
+          </ol>
+        </div>
+
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">M0-2 大盘快照先行工具 (get_business_snapshot)</span>
+            <span class="status-pill pill-p0">M0 · 快速感知大盘</span>
+          </div>
+          <p><b>改造落点：</b><code>genie-tool/genie_tool/tool/business_snapshot.py</code></p>
+          <p><b>工具功能：</b>入参仅需 <code>period</code>（如当周、当月）与 <code>channel</code>。后端直接从 ClickHouse / MySQL 预聚合视图中返回固定结构的轻量 JSON：</p>
+          <pre><code>{
+  "period": "2026-W36",
+  "compare_to": "2026-W35",
+  "gross_gmv": 14280000.00,
+  "gmv_growth_pct": -8.4,
+  "net_quantity": 8420,
+  "avg_unit_price": 1695.96,
+  "unit_price_change_pct": -3.2,
+  "active_alerts_count": { "stockout": 4, "low_turnover": 7, "price_spike": 1 }
+}</code></pre>
+          <p style="font-size:12px;color:var(--text-secondary);">该工具为经营分析的第一步固定读工具，返回快照后立即可判断总体态势，同时为 Prompt Caching 锚定输入前缀。</p>
+        </div>
+      </div>
+
+      <div id="sec6-m1">
+        <h3 class="sub-title">6.2 M1 级关键迭代项：每日经营简报、动作流转与调价护栏</h3>
+
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">M1-3 每日经营简报组件 (present_digest) 与定时触发</span>
+            <span class="status-pill pill-p1">M1 · 店长晨会抓手</span>
+          </div>
+          <p><b>方案设计：</b>开发专门的 <code>present_digest</code> 前端展示组件。每日开盘或晨会时，自动化任务运行 Headless 循环，聚合库存警报、退款飙升订单、关键指标异动与昨日未办结审批，按“涉资规模 (Money at stake)”自顶向下输出 3~6 项关键待办卡片，每项卡片直接挂接处置按钮。</p>
+        </div>
+
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">M1-4 经营报告末端 Action Chips 动作接力协议</span>
+            <span class="status-pill pill-p1">M1 · 决策闭环</span>
+          </div>
+          <p><b>方案设计：</b>在 <code>ReportIrCompatibilityAssembler</code> 生成的最终 JSON 中，新增 <code>action_chips</code> 字段：</p>
+          <pre><code>"action_chips": [
+  {
+    "label": "⚡ 调拨华东仓 500 件 Air3 (缺货处置)",
+    "intent": "INVENTORY_RESTOCK",
+    "prefilled_params": { "sku": "ULIKE-AIR3-GRN", "target_warehouse": "WH_EAST_01", "qty": 500 }
+  },
+  {
+    "label": "⚡ 暂存低动销配件捆绑促销方案",
+    "intent": "STAGE_PROMOTION",
+    "prefilled_params": { "discount_pct": 15, "end_date": "2026-09-15" }
+  }
+]</code></pre>
+          <p style="font-size:12px;color:var(--text-secondary);">Open WebUI 捕获该事件后，直接将建议渲染为交互按钮，用户点击即可带着预填参数唤起写操作暂存抽屉。</p>
+        </div>
+
+        <div class="card" style="margin-bottom:18px;">
+          <div class="card-header">
+            <span class="card-title">M1-5 定价测算与双重幅度安全护栏 (Pricing Guardrails)</span>
+            <span class="status-pill pill-p1">M1 · 价格资金风控</span>
+          </div>
+          <p><b>方案设计：</b>新建 <code>packs/domains/sales/operators/pricing.yaml</code> 算子。在执行任何改价测算时强制执行：</p>
+          <ul>
+            <li>单次基准改价幅度上限 $\le 20\%$；</li>
+            <li>单次促销活动折扣深度上限 $\le 35\%$；</li>
+            <li>绝对底价校验：<code>price_after >= cost_floor</code>；</li>
+            <li>利润率 <code>margin_pct</code> 必须由后端底表携带，严禁模型自主心算。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div id="sec6-m2">
+        <h3 class="sub-title">6.3 M2 级深度治理项：营销活动拟定与全渠道归因校准</h3>
+        <p>
+          在 <code>packs/domains/marketing/</code> 中沉淀标准的 Campaign 治理规范：<br>
+          ① <b>意图人群模型：</b>区分首购拉新、沉默唤醒（>90天）、周期耗材复购（滤网/刷头）；<br>
+          ② <b>自然复购虚增剥离：</b>在测算活动 ROI 时，必须自动对照该客群历史无触达下的自然基准转化率（Organic Baseline），剥离虚假增量，避免盲目追加低效短信/投放费用；<br>
+          ③ <b>营销总预算零和分配：</b>对各渠道活动实行预算上限控制，增配必须伴随减配建议。
+        </p>
+      </div>
+    </section>
+
+    <!-- 07. 交互式工程仿真沙盘 -->
+    <section id="sec7" class="section-card">
+      <div class="section-badge">07 · 可计算工程验证</div>
+      <h2>交互式工程仿真沙盘 (Interactive Simulation Sandboxes)</h2>
+      <p>
+        架构设计的价值在于可验证性与定量决策。本章提供四个基于浏览器纯原生引擎（零外部 CDN 脚本/零外链依赖）的交互仿真沙盘，
+        分别对应提示词缓存经济学量化、多维经营异动四道闸归因分解、Eager Dispatch 流水线时延缩减与两阶段暂存护栏拦截。
+      </p>
+
+      <!-- 沙盘 1: 缓存经济学 -->
+      <div id="sb1" class="sandbox-container" style="margin-top:28px;">
+        <div class="sandbox-header">
+          <div class="sandbox-title">
+            <span class="badge" style="background:var(--accent-blue);color:#fff;">沙盘 1</span>
+            三断点提示词缓存与小时钟经济学测算器 (Prompt Caching Economics)
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);">模拟不同并发与会话轮次下，三断点缓存与小时钟整点对齐带来的成本与时延红利</div>
+        </div>
+        
+        <div class="sandbox-grid" style="display:grid;grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-top: 16px;">
+          <!-- 输入控制面板 -->
+          <div class="sandbox-panel" style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);">
+            <h4 style="margin-top:0;margin-bottom:12px;font-size:14px;color:var(--text-primary);">参数设定面板</h4>
+            
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                <span>系统级与静态工具 Tokens (Prefix):</span>
+                <span id="sb1_val_static" style="font-weight:700;color:var(--accent-blue);">12,000</span>
+              </div>
+              <input type="range" id="sb1_static" min="3000" max="30000" step="1000" value="12000" style="width:100%;">
+            </div>
+
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                <span>单会话平均对话轮数 (Turns):</span>
+                <span id="sb1_val_turns" style="font-weight:700;color:var(--accent-blue);">10</span>
+              </div>
+              <input type="range" id="sb1_turns" min="2" max="30" step="1" value="10" style="width:100%;">
+            </div>
+
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                <span>每轮增量消息 Tokens (User/Tool):</span>
+                <span id="sb1_val_turn_tokens" style="font-weight:700;color:var(--accent-blue);">1,200</span>
+              </div>
+              <input type="range" id="sb1_turn_tokens" min="400" max="4000" step="200" value="1200" style="width:100%;">
+            </div>
+
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                <span>日均活跃会话数 (Daily Sessions):</span>
+                <span id="sb1_val_sessions" style="font-weight:700;color:var(--accent-blue);">2,000</span>
+              </div>
+              <input type="range" id="sb1_sessions" min="200" max="10000" step="200" value="2000" style="width:100%;">
+            </div>
+
+            <div style="margin-bottom:8px;">
+              <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="sb1_enable_clock" checked>
+                <span>启用小时钟整点对齐 (Context Clock)，将击穿率从 95% 压制至 4%</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 输出测算面板 -->
+          <div class="sandbox-panel" style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);display:flex;flex-direction:column;justify-content:space-between;">
+            <div>
+              <h4 style="margin-top:0;margin-bottom:12px;font-size:14px;color:var(--text-primary);">效益量化收益对比 (月度)</h4>
+              
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+                <div style="background:var(--bg-primary);padding:10px;border-radius:6px;border:1px solid var(--border-color);">
+                  <div style="font-size:11px;color:var(--text-muted);">无缓存总开销 / 月</div>
+                  <div id="sb1_res_no_cache" style="font-size:18px;font-weight:700;color:var(--accent-red);margin-top:4px;">¥ 184,320</div>
+                </div>
+                <div style="background:var(--bg-primary);padding:10px;border-radius:6px;border:1px solid var(--border-color);">
+                  <div style="font-size:11px;color:var(--text-muted);">三断点优化后开销 / 月</div>
+                  <div id="sb1_res_opt_cache" style="font-size:18px;font-weight:700;color:var(--accent-green);margin-top:4px;">¥ 42,160</div>
+                </div>
+              </div>
+
+              <!-- 条形对比图 -->
+              <div style="margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:4px;">
+                  <span>成本削减比率 (Cost Reduction)</span>
+                  <span id="sb1_res_saving_pct" style="font-weight:700;color:var(--accent-green);">77.1% 节约</span>
+                </div>
+                <div style="height:12px;background:var(--bg-primary);border-radius:6px;overflow:hidden;position:relative;border:1px solid var(--border-color);">
+                  <div id="sb1_bar_saving" style="height:100%;width:77.1%;background:linear-gradient(90deg, var(--accent-blue), var(--accent-green));border-radius:6px;transition:width 0.3s ease;"></div>
+                </div>
+              </div>
+
+              <!-- 首字延迟 TTFT -->
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:4px;">
+                  <span>预期首字延迟 (TTFT P95)</span>
+                  <span id="sb1_res_ttft" style="font-weight:700;color:var(--accent-blue);">1,850ms → 380ms (-79%)</span>
+                </div>
+                <div style="height:12px;background:var(--bg-primary);border-radius:6px;overflow:hidden;position:relative;border:1px solid var(--border-color);">
+                  <div id="sb1_bar_ttft" style="height:100%;width:21%;background:var(--accent-blue);border-radius:6px;transition:width 0.3s ease;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div style="background:var(--bg-card);padding:10px;border-radius:6px;border-left:3px solid var(--accent-green);font-size:12px;color:var(--text-secondary);margin-top:12px;">
+              <strong>月度净节省: </strong><span id="sb1_res_saving_abs" style="font-weight:700;color:var(--accent-green);">¥ 142,160</span> 元。在 Ulike 大促高峰期，高复用静态前缀结合小时钟，彻底锁死首字响应延迟在 400ms 以内。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 2: 经营归因价量拆解 -->
+      <div id="sb2" class="sandbox-container" style="margin-top:36px;">
+        <div class="sandbox-header">
+          <div class="sandbox-title">
+            <span class="badge" style="background:var(--accent-purple);color:#fff;">沙盘 2</span>
+            performance-insights 归因分解测算器 (Mix vs. Level Variance Decomposition)
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);">实证体验 Anthropic 严格禁止粗暴混淆，将 GMV 异动严格剥离为纯价格效应、纯销量效应与结构漂移效应</div>
+        </div>
+
+        <div style="margin-top:14px;background:var(--bg-secondary);padding:12px 16px;border-radius:8px;border:1px solid var(--border-color);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:12px;font-weight:600;color:var(--text-primary);">典型经营预设情景:</span>
+          <button class="btn-scenario" onclick="loadSb2Scenario('A')">情景 A: 虚假繁荣 (配件放量致结构劣化)</button>
+          <button class="btn-scenario" onclick="loadSb2Scenario('B')">情景 B: 降价大促让利换量 (以价换量)</button>
+          <button class="btn-scenario" onclick="loadSb2Scenario('C')">情景 C: 高端化产品升级 (价量齐升)</button>
+        </div>
+
+        <div class="sandbox-grid" style="display:grid;grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px; margin-top: 16px;">
+          <!-- 输入表格 -->
+          <div class="sandbox-panel" style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);overflow-x:auto;">
+            <h4 style="margin-top:0;margin-bottom:12px;font-size:14px;color:var(--text-primary);">各品类基期 (Period 0) 与 报告期 (Period 1) 数据输入</h4>
+            <table class="data-table" style="font-size:12px;width:100%;">
+              <thead>
+                <tr>
+                  <th>SKU 品类名称</th>
+                  <th>基期价 (P0)</th>
+                  <th>基期量 (Q0)</th>
+                  <th>报告价 (P1)</th>
+                  <th>报告量 (Q1)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>高端蓝宝石脱毛仪</td>
+                  <td><input type="number" id="sb2_p0_1" value="2199" style="width:65px;" oninput="calcSb2()"></td>
+                  <td><input type="number" id="sb2_q0_1" value="1000" style="width:55px;" oninput="calcSb2()"></td>
+                  <td><input type="number" id="sb2_p1_1" value="2199" style="width:65px;" oninput="calcSb2()"></td>
+                  <td><input type="number" id="sb2_q1_1" value="850" style="width:55px;" oninput="calcSb2()"></td>
+                </tr>
+                <tr>
+                  <td>轻巧型日常护理仪</td>
+                  <td><input type="number" id="sb2_p0_2" value="1299" style="width:65px;" oninput="calcSb2()"></td>
+                  <td><input type="number" id="sb2_q0_2" value="1500" style="width:55px;" oninput="calcSb2()"></td>
+                  <td><input type="number" id="sb2_p1_2" value="1299" style="width:65px;" oninput="calcSb2()"></td>
+                  <td><input type="number" id="sb2_q1_2" value="1600" style="width:55px;" oninput="calcSb2()"></td>
+                </tr>
+                <tr>
+                  <td>舒缓凝胶与替换配件</td>
+                  <td><input type="number" id="sb2_p0_3" value="199" style="width:65px;" oninput="calcSb2()"></td>
+                  <td><input type="number" id="sb2_q0_3" value="2000" style="width:55px;" oninput="calcSb2()"></td>
+                  <td><input type="number" id="sb2_p1_3" value="199" style="width:65px;" oninput="calcSb2()"></td>
+                  <td><input type="number" id="sb2_q1_3" value="4500" style="width:55px;" oninput="calcSb2()"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 分解输出与判词 -->
+          <div class="sandbox-panel" style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);display:flex;flex-direction:column;justify-content:space-between;">
+            <div>
+              <h4 style="margin-top:0;margin-bottom:12px;font-size:14px;color:var(--text-primary);">正交三因素分解结果 (Orthogonal Decomposition)</h4>
+              
+              <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:10px;margin-bottom:12px;">
+                <div style="background:var(--bg-primary);padding:8px 12px;border-radius:6px;border:1px solid var(--border-color);">
+                  <div style="font-size:11px;color:var(--text-muted);">基期 GMV (P0*Q0)</div>
+                  <div id="sb2_res_gmv0" style="font-size:15px;font-weight:700;color:var(--text-primary);">¥ 4,545,500</div>
+                </div>
+                <div style="background:var(--bg-primary);padding:8px 12px;border-radius:6px;border:1px solid var(--border-color);">
+                  <div style="font-size:11px;color:var(--text-muted);">报告期 GMV (P1*Q1)</div>
+                  <div id="sb2_res_gmv1" style="font-size:15px;font-weight:700;color:var(--text-primary);">¥ 4,843,050</div>
+                </div>
+              </div>
+
+              <!-- 变动分解项目 -->
+              <div style="font-size:12px;margin-bottom:6px;display:flex;justify-content:space-between;">
+                <span>总增量 ΔGMV:</span>
+                <span id="sb2_res_d_gmv" style="font-weight:700;color:var(--accent-green);">+¥ 297,550 (+6.5%)</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px;padding-left:8px;border-left:2px solid var(--border-color);">
+                <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+                  <span>① 纯价格效应 (Price Effect):</span>
+                  <span id="sb2_res_d_price" style="font-family:var(--font-mono);">¥ 0</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+                  <span>② 纯销量规模效应 (Volume Effect):</span>
+                  <span id="sb2_res_d_volume" style="font-family:var(--font-mono);color:var(--accent-green);">+¥ 2,473,500</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;">
+                  <span>③ 销售结构变动效应 (Mix Effect):</span>
+                  <span id="sb2_res_d_mix" style="font-family:var(--font-mono);color:var(--accent-red);">-¥ 2,175,950</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI 经营归因判词面板 -->
+            <div id="sb2_diagnosis" style="background:var(--bg-card);padding:12px;border-radius:6px;border-left:3px solid var(--accent-purple);font-size:12px;color:var(--text-primary);line-height:1.5;">
+              <strong>智能体归因判词: </strong>检测到表面 GMV 增长 6.5%，但主要受低客单价耗材放量带动的虚假规模拉动 (+247万)，高价值旗舰脱毛仪销量下滑 15% 导致销售结构产生严重劣化 (-217万)。建议立即发起针对高净值客群的旗舰唤醒活动。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 3: Eager Dispatch 时延流水 -->
+      <div id="sb3" class="sandbox-container" style="margin-top:36px;">
+        <div class="sandbox-header">
+          <div class="sandbox-title">
+            <span class="badge" style="background:var(--accent-teal);color:#fff;">沙盘 3</span>
+            Eager Dispatch 提前派发流水分段时延仿真器 (Pipeline Timeline Simulator)
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);">对比传统串行等待与 Anthropic 流式参数提前派发执行模式下的端到端响应时延</div>
+        </div>
+
+        <div class="sandbox-grid" style="display:grid;grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-top: 16px;">
+          <div class="sandbox-panel" style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);">
+            <h4 style="margin-top:0;margin-bottom:12px;font-size:14px;color:var(--text-primary);">流水线阶段耗时调节 (ms)</h4>
+            
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                <span>大模型首字延迟 (TTFT):</span>
+                <span id="sb3_val_ttft" style="font-weight:700;color:var(--accent-teal);">450ms</span>
+              </div>
+              <input type="range" id="sb3_ttft" min="200" max="1500" step="50" value="450" oninput="calcSb3()" style="width:100%;">
+            </div>
+
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                <span>Tool 调用参数生成耗时 (Args Stream):</span>
+                <span id="sb3_val_gen" style="font-weight:700;color:var(--accent-teal);">600ms</span>
+              </div>
+              <input type="range" id="sb3_gen" min="200" max="1500" step="50" value="600" oninput="calcSb3()" style="width:100%;">
+            </div>
+
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                <span>DB / 工具查询与执行耗时 (Tool Execution):</span>
+                <span id="sb3_val_exec" style="font-weight:700;color:var(--accent-teal);">850ms</span>
+              </div>
+              <input type="range" id="sb3_exec" min="200" max="2500" step="50" value="850" oninput="calcSb3()" style="width:100%;">
+            </div>
+
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                <span>提前派发触发门限比例 (Trigger at % args):</span>
+                <span id="sb3_val_trigger" style="font-weight:700;color:var(--accent-teal);">35%</span>
+              </div>
+              <input type="range" id="sb3_trigger" min="15" max="80" step="5" value="35" oninput="calcSb3()" style="width:100%;">
+            </div>
+          </div>
+
+          <div class="sandbox-panel" style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);display:flex;flex-direction:column;justify-content:space-between;">
+            <div>
+              <h4 style="margin-top:0;margin-bottom:12px;font-size:14px;color:var(--text-primary);">时序瀑布流对比</h4>
+              
+              <!-- 传统串行 -->
+              <div style="margin-bottom:16px;">
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:4px;">
+                  <span>传统串行执行模式 (Serial Execution)</span>
+                  <span id="sb3_res_serial" style="font-weight:700;color:var(--accent-red);">1,900 ms</span>
+                </div>
+                <div style="height:22px;background:var(--bg-primary);border-radius:4px;display:flex;overflow:hidden;border:1px solid var(--border-color);">
+                  <div id="sb3_bar_s1" style="background:var(--accent-blue);height:100%;width:23.7%;" title="TTFT"></div>
+                  <div id="sb3_bar_s2" style="background:var(--accent-purple);height:100%;width:31.5%;" title="LLM Gen"></div>
+                  <div id="sb3_bar_s3" style="background:var(--accent-red);height:100%;width:44.8%;" title="Tool Exec"></div>
+                </div>
+              </div>
+
+              <!-- Eager Dispatch -->
+              <div style="margin-bottom:16px;">
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:4px;">
+                  <span>Eager Dispatch 提前并发流水线</span>
+                  <span id="sb3_res_eager" style="font-weight:700;color:var(--accent-green);">1,510 ms (-390ms, 节省 20.5%)</span>
+                </div>
+                <div style="height:22px;background:var(--bg-primary);border-radius:4px;position:relative;overflow:hidden;border:1px solid var(--border-color);">
+                  <div id="sb3_bar_e1" style="position:absolute;left:0;top:0;background:var(--accent-blue);height:100%;width:29.8%;" title="TTFT"></div>
+                  <div id="sb3_bar_e2" style="position:absolute;left:29.8%;top:0;background:var(--accent-purple);height:100%;width:39.7%;" title="LLM Gen"></div>
+                  <div id="sb3_bar_e3" style="position:absolute;left:43.7%;top:0;background:var(--accent-green);height:100%;width:56.3%;opacity:0.85;" title="Eager Exec"></div>
+                </div>
+              </div>
+
+              <!-- 阶段图例说明 -->
+              <div style="display:flex;gap:12px;font-size:11px;color:var(--text-muted);margin-top:10px;">
+                <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:var(--accent-blue);"></span>TTFT</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:var(--accent-purple);"></span>参数生成</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:var(--accent-green);"></span>提前重叠执行</span>
+              </div>
+            </div>
+
+            <div style="background:var(--bg-card);padding:10px;border-radius:6px;border-left:3px solid var(--accent-teal);font-size:12px;color:var(--text-secondary);margin-top:12px;">
+              <strong>重叠收益分析: </strong>在模型流式吐出核心过滤参数（如 SKU ID、日期范围）时立即派发 Wren 语义检索，网络与语义翻译耗时被大模型后续思考过程完全吃平。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 4: 两阶段暂存与写操作护栏拦截仿真 -->
+      <div id="sb4" class="sandbox-container" style="margin-top:36px;">
+        <div class="sandbox-header">
+          <div class="sandbox-title">
+            <span class="badge" style="background:var(--accent-red);color:#fff;">沙盘 4</span>
+            两阶段暂存写操作与护栏拦截动态沙盘 (Staged Changes & Guardrail Simulator)
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);">体验从意图输入、前置 Stage 护栏校验、Visual Diff 渲染到后置 Commit 拦截的全闭环过程</div>
+        </div>
+
+        <div style="margin-top:14px;background:var(--bg-secondary);padding:12px 16px;border-radius:8px;border:1px solid var(--border-color);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:12px;font-weight:600;color:var(--text-primary);">注入模拟测试动作:</span>
+          <button class="btn-scenario" onclick="loadSb4Action('safe')">动作 1: 合规调价 (-9.1%)</button>
+          <button class="btn-scenario" onclick="loadSb4Action('price_violation')">动作 2: 违规大降价 (-54.5% 触红线)</button>
+          <button class="btn-scenario" onclick="loadSb4Action('readonly_violation')">动作 3: 越权篡改核心字段 (tenant_id)</button>
+          <button class="btn-scenario" onclick="loadSb4Action('batch_violation')">动作 4: 批量超限 (修改 120 个 SKU)</button>
+        </div>
+
+        <div class="sandbox-grid" style="display:grid;grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; margin-top: 16px;">
+          <!-- 动作草案编辑器 -->
+          <div class="sandbox-panel" style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);">
+            <h4 style="margin-top:0;margin-bottom:10px;font-size:14px;color:var(--text-primary);">暂存动作草案 (Staged Change Draft)</h4>
+            
+            <div style="margin-bottom:10px;">
+              <label style="font-size:11px;color:var(--text-muted);">目标业务实体与操作</label>
+              <input type="text" id="sb4_entity" value="SKU-2026-SAPPHIRE (旗舰脱毛仪)" style="width:100%;margin-top:3px;" readonly>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+              <div>
+                <label style="font-size:11px;color:var(--text-muted);">原值 (Old Value)</label>
+                <input type="text" id="sb4_old_val" value="2199.00" style="width:100%;margin-top:3px;" readonly>
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text-muted);">拟修改新值 (New Value)</label>
+                <input type="text" id="sb4_new_val" value="1999.00" style="width:100%;margin-top:3px;" oninput="runSb4Check()">
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+              <div>
+                <label style="font-size:11px;color:var(--text-muted);">批量涉及数量 (Items)</label>
+                <input type="number" id="sb4_batch_count" value="1" style="width:100%;margin-top:3px;" oninput="runSb4Check()">
+              </div>
+              <div>
+                <label style="font-size:11px;color:var(--text-muted);">修改字段名称 (Field)</label>
+                <input type="text" id="sb4_field_name" value="sale_price" style="width:100%;margin-top:3px;" oninput="runSb4Check()">
+              </div>
+            </div>
+
+            <button id="sb4_btn_stage" onclick="runSb4Check()" style="width:100%;padding:10px;background:var(--accent-blue);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;">
+              执行 Stage 预检与护栏校验
+            </button>
+          </div>
+
+          <!-- 护栏拦截与审批决策 -->
+          <div class="sandbox-panel" style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);display:flex;flex-direction:column;justify-content:space-between;">
+            <div>
+              <h4 style="margin-top:0;margin-bottom:10px;font-size:14px;color:var(--text-primary);">护栏安全审查流水线 (Security Guardrails)</h4>
+              
+              <!-- 检查项 1 -->
+              <div id="sb4_chk_1" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border-radius:5px;margin-bottom:6px;border:1px solid var(--border-color);font-size:12px;">
+                <span>规则 1: 调价幅度 ≤ 30%</span>
+                <span id="sb4_st_1" style="color:var(--accent-green);font-weight:700;">PASS (9.1%)</span>
+              </div>
+
+              <!-- 检查项 2 -->
+              <div id="sb4_chk_2" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border-radius:5px;margin-bottom:6px;border:1px solid var(--border-color);font-size:12px;">
+                <span>规则 2: 禁止修改只读保护字段</span>
+                <span id="sb4_st_2" style="color:var(--accent-green);font-weight:700;">PASS</span>
+              </div>
+
+              <!-- 检查项 3 -->
+              <div id="sb4_chk_3" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border-radius:5px;margin-bottom:6px;border:1px solid var(--border-color);font-size:12px;">
+                <span>规则 3: 单批次修改数量 ≤ 50 项</span>
+                <span id="sb4_st_3" style="color:var(--accent-green);font-weight:700;">PASS (1/50)</span>
+              </div>
+
+              <!-- 检查项 4 -->
+              <div id="sb4_chk_4" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border-radius:5px;margin-bottom:10px;border:1px solid var(--border-color);font-size:12px;">
+                <span>规则 4: 影响销售额阈值安全</span>
+                <span id="sb4_st_4" style="color:var(--accent-green);font-weight:700;">PASS</span>
+              </div>
+            </div>
+
+            <!-- 决策卡片 -->
+            <div id="sb4_verdict_box" style="background:var(--bg-card);padding:12px;border-radius:6px;border-left:3px solid var(--accent-green);font-size:12px;">
+              <div style="font-weight:700;color:var(--accent-green);margin-bottom:4px;" id="sb4_verdict_title">✓ 护栏校验全部通过：已生成 Staged 暂存单</div>
+              <div style="color:var(--text-secondary);" id="sb4_verdict_desc">未触发任何阻断红线。已生成审批单 #STAGE-9024，等待具备 L2 权限的运营主管在 Open WebUI 进行 Visual Diff 双重核实确认。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <style>
+      .btn-scenario {
+        padding: 4px 10px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-scenario:hover {
+        background: var(--accent-blue);
+        color: #fff;
+        border-color: var(--accent-blue);
+      }
+    </style>
+
+    <script>
+      // 沙盘 1: 缓存经济学计算
+      function calcSb1() {
+        const staticTokens = parseInt(document.getElementById('sb1_static').value);
+        const turns = parseInt(document.getElementById('sb1_turns').value);
+        const turnTokens = parseInt(document.getElementById('sb1_turn_tokens').value);
+        const sessions = parseInt(document.getElementById('sb1_sessions').value);
+        const enableClock = document.getElementById('sb1_enable_clock').checked;
+
+        document.getElementById('sb1_val_static').innerText = staticTokens.toLocaleString();
+        document.getElementById('sb1_val_turns').innerText = turns;
+        document.getElementById('sb1_val_turn_tokens').innerText = turnTokens.toLocaleString();
+        document.getElementById('sb1_val_sessions').innerText = sessions.toLocaleString();
+
+        // 费率假设 (每 1M tokens: 输入 $3.00, 缓存写入 $3.75, 缓存读取 $0.30) 汇率 7.2
+        const rateInput = (3.0 * 7.2) / 1000000;
+        const rateCacheWrite = (3.75 * 7.2) / 1000000;
+        const rateCacheRead = (0.30 * 7.2) / 1000000;
+
+        // 1. 无缓存开销: 每轮都要全量重新传输 prefix + 历史轮次
+        let dailyNoCacheTokens = 0;
+        for (let t = 1; t <= turns; t++) {
+          dailyNoCacheTokens += (staticTokens + t * turnTokens) * sessions;
+        }
+        const monthlyNoCacheCost = dailyNoCacheTokens * rateInput * 30;
+
+        // 2. 缓存开销:
+        // 若没有 context clock，动态时间戳导致每分钟击穿，命中率 ~15%
+        // 若启用 context clock，整点截断，击穿率 ~4%，会话轮次间 100% 命中
+        const hitRate = enableClock ? 0.92 : 0.18;
+        
+        let dailyOptTokens = 0;
+        // 第1轮: 写入缓存
+        dailyOptTokens += (staticTokens * rateCacheWrite + turnTokens * rateInput) * sessions;
+        // 后续轮次: 命中缓存
+        for (let t = 2; t <= turns; t++) {
+          const prefixHitCost = (staticTokens * (hitRate * rateCacheRead + (1 - hitRate) * rateInput));
+          const turnCost = (t * turnTokens) * rateInput;
+          dailyOptTokens += (prefixHitCost + turnCost) * sessions;
+        }
+        const monthlyOptCost = dailyOptTokens * 30;
+
+        const savingAbs = monthlyNoCacheCost - monthlyOptCost;
+        const savingPct = (savingAbs / monthlyNoCacheCost) * 100;
+
+        document.getElementById('sb1_res_no_cache').innerText = '¥ ' + Math.round(monthlyNoCacheCost).toLocaleString();
+        document.getElementById('sb1_res_opt_cache').innerText = '¥ ' + Math.round(monthlyOptCost).toLocaleString();
+        document.getElementById('sb1_res_saving_abs').innerText = '¥ ' + Math.round(savingAbs).toLocaleString();
+        document.getElementById('sb1_res_saving_pct').innerText = savingPct.toFixed(1) + '% 节约';
+        document.getElementById('sb1_bar_saving').style.width = Math.min(100, Math.max(5, savingPct)) + '%';
+
+        // TTFT 估算
+        if (enableClock) {
+          document.getElementById('sb1_res_ttft').innerText = '1,850ms → 380ms (-79.5%)';
+          document.getElementById('sb1_bar_ttft').style.width = '20.5%';
+        } else {
+          document.getElementById('sb1_res_ttft').innerText = '1,850ms → 1,620ms (-12.4% 频受击穿)';
+          document.getElementById('sb1_bar_ttft').style.width = '87.6%';
+        }
+      }
+
+      // 沙盘 2: 经营归因拆解
+      function calcSb2() {
+        const p0_1 = parseFloat(document.getElementById('sb2_p0_1').value) || 0;
+        const q0_1 = parseFloat(document.getElementById('sb2_q0_1').value) || 0;
+        const p1_1 = parseFloat(document.getElementById('sb2_p1_1').value) || 0;
+        const q1_1 = parseFloat(document.getElementById('sb2_q1_1').value) || 0;
+
+        const p0_2 = parseFloat(document.getElementById('sb2_p0_2').value) || 0;
+        const q0_2 = parseFloat(document.getElementById('sb2_q0_2').value) || 0;
+        const p1_2 = parseFloat(document.getElementById('sb2_p1_2').value) || 0;
+        const q1_2 = parseFloat(document.getElementById('sb2_q1_2').value) || 0;
+
+        const p0_3 = parseFloat(document.getElementById('sb2_p0_3').value) || 0;
+        const q0_3 = parseFloat(document.getElementById('sb2_q0_3').value) || 0;
+        const p1_3 = parseFloat(document.getElementById('sb2_p1_3').value) || 0;
+        const q1_3 = parseFloat(document.getElementById('sb2_q1_3').value) || 0;
+
+        const gmv0 = (p0_1 * q0_1) + (p0_2 * q0_2) + (p0_3 * q0_3);
+        const gmv1 = (p1_1 * q1_1) + (p1_2 * q1_2) + (p1_3 * q1_3);
+        const d_gmv = gmv1 - gmv0;
+
+        const totalQ0 = q0_1 + q0_2 + q0_3;
+        const totalQ1 = q1_1 + q1_2 + q1_3;
+        const avgP0 = totalQ0 > 0 ? (gmv0 / totalQ0) : 0;
+
+        // 1. 价格效应: Q1 * (P1 - P0)
+        const d_price = q1_1 * (p1_1 - p0_1) + q1_2 * (p1_2 - p0_2) + q1_3 * (p1_3 - p0_3);
+
+        // 2. 规模效应: (TotalQ1 - TotalQ0) * avgP0
+        const d_volume = (totalQ1 - totalQ0) * avgP0;
+
+        // 3. 结构效应: d_gmv - d_price - d_volume (严格恒等闭合)
+        const d_mix = d_gmv - d_price - d_volume;
+
+        document.getElementById('sb2_res_gmv0').innerText = '¥ ' + Math.round(gmv0).toLocaleString();
+        document.getElementById('sb2_res_gmv1').innerText = '¥ ' + Math.round(gmv1).toLocaleString();
+        
+        const sign = d_gmv >= 0 ? '+' : '';
+        const pct = gmv0 > 0 ? ((d_gmv / gmv0) * 100).toFixed(1) : '0.0';
+        document.getElementById('sb2_res_d_gmv').innerText = `${sign}¥ ${Math.round(d_gmv).toLocaleString()} (${sign}${pct}%)`;
+        document.getElementById('sb2_res_d_gmv').style.color = d_gmv >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+
+        document.getElementById('sb2_res_d_price').innerText = (d_price >= 0 ? '+' : '') + '¥ ' + Math.round(d_price).toLocaleString();
+        document.getElementById('sb2_res_d_volume').innerText = (d_volume >= 0 ? '+' : '') + '¥ ' + Math.round(d_volume).toLocaleString();
+        document.getElementById('sb2_res_d_mix').innerText = (d_mix >= 0 ? '+' : '') + '¥ ' + Math.round(d_mix).toLocaleString();
+
+        document.getElementById('sb2_res_d_price').style.color = d_price >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+        document.getElementById('sb2_res_d_volume').style.color = d_volume >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+        document.getElementById('sb2_res_d_mix').style.color = d_mix >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+
+        // 自动判定诊断词
+        let diagHtml = '';
+        if (d_mix < -100000 && d_volume > 200000) {
+          diagHtml = `<strong>智能体归因判词: </strong>检测到表面 GMV 上涨，但存在明显的【虚假繁荣】风险。销量规模带来正面拉动 (${Math.round(d_volume/10000)}万元)，但销售结构劣化引发结构损失 (${Math.round(d_mix/10000)}万元)。原因在于低价耗材配件销量爆发式放量，稀释了高价旗舰脱毛仪的营收占比。建议启动动作芯片：【调优高净值会员定向加购权益】。`;
+        } else if (d_price < -100000 && d_volume > 100000) {
+          diagHtml = `<strong>智能体归因判词: </strong>检测到典型【降价促销量】特征。纯价格效应为负 (${Math.round(d_price/10000)}万元)，规模效应为正 (${Math.round(d_volume/10000)}万元)。促销弹性系数已显现，但需谨防毛利侵蚀。建议启动动作芯片：【测算保本毛利底线】并暂存促销限额。`;
+        } else if (d_price >= 0 && d_volume >= 0 && d_mix >= 0) {
+          diagHtml = `<strong>智能体归因判词: </strong>当前经营呈现健康的【三轮驱动协同增长】态势。主力旗舰与高毛利商品稳步放量，结构漂移带来持续正向贡献。建议启动动作芯片：【自动生成供应链安全库存增补单】。`;
+        } else {
+          diagHtml = `<strong>智能体归因判词: </strong>业绩异动由价格、规模与品类结构多因素复合驱动。请结合 Action Chips 下钻至具体渠道与时段细分看数。`;
+        }
+        document.getElementById('sb2_diagnosis').innerHTML = diagHtml;
+      }
+
+      function loadSb2Scenario(type) {
+        if (type === 'A') {
+          document.getElementById('sb2_p0_1').value = 2199; document.getElementById('sb2_q0_1').value = 1000;
+          document.getElementById('sb2_p1_1').value = 2199; document.getElementById('sb2_q1_1').value = 850;
+          document.getElementById('sb2_p0_2').value = 1299; document.getElementById('sb2_q0_2').value = 1500;
+          document.getElementById('sb2_p1_2').value = 1299; document.getElementById('sb2_q1_2').value = 1600;
+          document.getElementById('sb2_p0_3').value = 199;  document.getElementById('sb2_q0_3').value = 2000;
+          document.getElementById('sb2_p1_3').value = 199;  document.getElementById('sb2_q1_3').value = 4500;
+        } else if (type === 'B') {
+          document.getElementById('sb2_p0_1').value = 2199; document.getElementById('sb2_q0_1').value = 1000;
+          document.getElementById('sb2_p1_1').value = 1899; document.getElementById('sb2_q1_1').value = 1400;
+          document.getElementById('sb2_p0_2').value = 1299; document.getElementById('sb2_q0_2').value = 1500;
+          document.getElementById('sb2_p1_2').value = 1099; document.getElementById('sb2_q1_2').value = 2100;
+          document.getElementById('sb2_p0_3').value = 199;  document.getElementById('sb2_q0_3').value = 2000;
+          document.getElementById('sb2_p1_3').value = 199;  document.getElementById('sb2_q1_3').value = 2500;
+        } else if (type === 'C') {
+          document.getElementById('sb2_p0_1').value = 2199; document.getElementById('sb2_q0_1').value = 1000;
+          document.getElementById('sb2_p1_1').value = 2399; document.getElementById('sb2_q1_1').value = 1200;
+          document.getElementById('sb2_p0_2').value = 1299; document.getElementById('sb2_q0_2').value = 1500;
+          document.getElementById('sb2_p1_2').value = 1299; document.getElementById('sb2_q1_2').value = 1600;
+          document.getElementById('sb2_p0_3').value = 199;  document.getElementById('sb2_q0_3').value = 2000;
+          document.getElementById('sb2_p1_3').value = 199;  document.getElementById('sb2_q1_3').value = 2000;
+        }
+        calcSb2();
+      }
+
+      // 沙盘 3: Eager Dispatch 流水时延
+      function calcSb3() {
+        const ttft = parseInt(document.getElementById('sb3_ttft').value);
+        const gen = parseInt(document.getElementById('sb3_gen').value);
+        const exec = parseInt(document.getElementById('sb3_exec').value);
+        const triggerPct = parseInt(document.getElementById('sb3_trigger').value) / 100;
+
+        document.getElementById('sb3_val_ttft').innerText = ttft + 'ms';
+        document.getElementById('sb3_val_gen').innerText = gen + 'ms';
+        document.getElementById('sb3_val_exec').innerText = exec + 'ms';
+        document.getElementById('sb3_val_trigger').innerText = Math.round(triggerPct * 100) + '%';
+
+        // 串行总耗时
+        const serialTotal = ttft + gen + exec;
+        // Eager 提前触发时间点
+        const eagerTriggerTime = ttft + (gen * triggerPct);
+        // Eager 完成时间点: max(eagerTriggerTime + exec, ttft + gen)
+        const eagerTotal = Math.max(eagerTriggerTime + exec, ttft + gen);
+        const savedMs = serialTotal - eagerTotal;
+        const savedPct = ((savedMs / serialTotal) * 100).toFixed(1);
+
+        document.getElementById('sb3_res_serial').innerText = serialTotal + ' ms';
+        document.getElementById('sb3_res_eager').innerText = `${eagerTotal} ms (-${savedMs}ms, 节省 ${savedPct}%)`;
+
+        // 更新进度条
+        const maxTime = Math.max(serialTotal, eagerTotal) * 1.05;
+        document.getElementById('sb3_bar_s1').style.width = ((ttft / maxTime) * 100) + '%';
+        document.getElementById('sb3_bar_s2').style.width = ((gen / maxTime) * 100) + '%';
+        document.getElementById('sb3_bar_s3').style.width = ((exec / maxTime) * 100) + '%';
+
+        document.getElementById('sb3_bar_e1').style.width = ((ttft / maxTime) * 100) + '%';
+        document.getElementById('sb3_bar_e2').style.left = ((ttft / maxTime) * 100) + '%';
+        document.getElementById('sb3_bar_e2').style.width = ((gen / maxTime) * 100) + '%';
+
+        document.getElementById('sb3_bar_e3').style.left = ((eagerTriggerTime / maxTime) * 100) + '%';
+        document.getElementById('sb3_bar_e3').style.width = ((exec / maxTime) * 100) + '%';
+      }
+
+      // 沙盘 4: 护栏检查与拦截
+      function runSb4Check() {
+        const oldVal = parseFloat(document.getElementById('sb4_old_val').value) || 0;
+        const newVal = parseFloat(document.getElementById('sb4_new_val').value) || 0;
+        const batchCount = parseInt(document.getElementById('sb4_batch_count').value) || 1;
+        const fieldName = document.getElementById('sb4_field_name').value.trim();
+
+        let pass1 = true, pass2 = true, pass3 = true, pass4 = true;
+        let reasons = [];
+
+        // 规则 1: 降价幅度
+        if (oldVal > 0) {
+          const deltaPct = ((oldVal - newVal) / oldVal) * 100;
+          if (deltaPct > 30) {
+            pass1 = false;
+            document.getElementById('sb4_st_1').innerText = `BLOCK (降幅 ${deltaPct.toFixed(1)}% > 30%)`;
+            document.getElementById('sb4_st_1').style.color = 'var(--accent-red)';
+            reasons.push(`降价幅度达到 ${deltaPct.toFixed(1)}%，严重超过系统允许的 30% 安全阈值`);
+          } else {
+            document.getElementById('sb4_st_1').innerText = `PASS (${deltaPct > 0 ? '-' + deltaPct.toFixed(1) + '%' : '合规'})`;
+            document.getElementById('sb4_st_1').style.color = 'var(--accent-green)';
+          }
+        }
+
+        // 规则 2: 只读保护字段
+        const protectedFields = ['tenant_id', 'id', 'created_at', 'cost_price', 'salt'];
+        if (protectedFields.includes(fieldName)) {
+          pass2 = false;
+          document.getElementById('sb4_st_2').innerText = `BLOCK (只读字段 ${fieldName})`;
+          document.getElementById('sb4_st_2').style.color = 'var(--accent-red)';
+          reasons.push(`字段 [${fieldName}] 属于核心系统只读保护字段，严禁任何业务 Agent 覆写`);
+        } else {
+          document.getElementById('sb4_st_2').innerText = 'PASS';
+          document.getElementById('sb4_st_2').style.color = 'var(--accent-green)';
+        }
+
+        // 规则 3: 批次数量
+        if (batchCount > 50) {
+          pass3 = false;
+          document.getElementById('sb4_st_3').innerText = `BLOCK (${batchCount} > 50条限制)`;
+          document.getElementById('sb4_st_3').style.color = 'var(--accent-red)';
+          reasons.push(`单次暂存修改记录数 (${batchCount}) 超出批量护栏上限 50 条`);
+        } else {
+          document.getElementById('sb4_st_3').innerText = `PASS (${batchCount}/50)`;
+          document.getElementById('sb4_st_3').style.color = 'var(--accent-green)';
+        }
+
+        // 汇总决策
+        const allPass = pass1 && pass2 && pass3 && pass4;
+        const box = document.getElementById('sb4_verdict_box');
+        const title = document.getElementById('sb4_verdict_title');
+        const desc = document.getElementById('sb4_verdict_desc');
+
+        if (allPass) {
+          box.style.borderLeftColor = 'var(--accent-green)';
+          title.style.color = 'var(--accent-green)';
+          title.innerText = '✓ 护栏校验全部通过：已生成 Staged 暂存单';
+          desc.innerHTML = `未触发任何硬阻断规则。已生成暂存修改单 <code>#STAGE-${Math.floor(Math.random()*8999+1000)}</code>，进入 Open WebUI 待办审批流，等待有权责任人核准后 Commit。`;
+        } else {
+          box.style.borderLeftColor = 'var(--accent-red)';
+          title.style.color = 'var(--accent-red)';
+          title.innerText = '✕ 触发安全护栏致命拦截 (Guardrail Blocked)';
+          desc.innerHTML = `<span style="color:var(--accent-red);font-weight:600;">拦截原因:</span><br>` + reasons.map(r => '• ' + r).join('<br>');
+        }
+      }
+
+      function loadSb4Action(type) {
+        if (type === 'safe') {
+          document.getElementById('sb4_entity').value = 'SKU-2026-SAPPHIRE (旗舰脱毛仪)';
+          document.getElementById('sb4_old_val').value = '2199.00';
+          document.getElementById('sb4_new_val').value = '1999.00';
+          document.getElementById('sb4_batch_count').value = '1';
+          document.getElementById('sb4_field_name').value = 'sale_price';
+        } else if (type === 'price_violation') {
+          document.getElementById('sb4_entity').value = 'SKU-2026-SAPPHIRE (旗舰脱毛仪)';
+          document.getElementById('sb4_old_val').value = '2199.00';
+          document.getElementById('sb4_new_val').value = '999.00';
+          document.getElementById('sb4_batch_count').value = '1';
+          document.getElementById('sb4_field_name').value = 'sale_price';
+        } else if (type === 'readonly_violation') {
+          document.getElementById('sb4_entity').value = 'SKU-2026-SAPPHIRE (旗舰脱毛仪)';
+          document.getElementById('sb4_old_val').value = 'ulike_china_east';
+          document.getElementById('sb4_new_val').value = 'ulike_overseas_dev';
+          document.getElementById('sb4_batch_count').value = '1';
+          document.getElementById('sb4_field_name').value = 'tenant_id';
+        } else if (type === 'batch_violation') {
+          document.getElementById('sb4_entity').value = 'ALL_ACTIVE_SKUS (全量在售商品)';
+          document.getElementById('sb4_old_val').value = 'ACTIVE';
+          document.getElementById('sb4_new_val').value = 'PROMOTION';
+          document.getElementById('sb4_batch_count').value = '120';
+          document.getElementById('sb4_field_name').value = 'listing_status';
+        }
+        runSb4Check();
+      }
+
+      // 初始化各沙盘
+      window.addEventListener('DOMContentLoaded', () => {
+        calcSb1();
+        document.getElementById('sb1_static').addEventListener('input', calcSb1);
+        document.getElementById('sb1_turns').addEventListener('input', calcSb1);
+        document.getElementById('sb1_turn_tokens').addEventListener('input', calcSb1);
+        document.getElementById('sb1_sessions').addEventListener('input', calcSb1);
+        document.getElementById('sb1_enable_clock').addEventListener('change', calcSb1);
+
+        calcSb2();
+        calcSb3();
+        runSb4Check();
+      });
+    </script>
+
+    <!-- 08. 演进路线、里程碑与代码证据 -->
+    <section id="sec8" class="section-card">
+      <div class="section-badge">08 · 演进路线与证据索引</div>
+      <h2>演进路线、里程碑与源码级证据索引 (Evolution Roadmap & Code Evidence Index)</h2>
+      <p>
+        架构落地必须具备清晰的工程节奏与可验证的验收依据。本章建立四阶段渐进式演进路线图，明确各阶段里程碑交付物与验收门禁（Gate），
+        并提供覆盖双端系统的源码级证据链与代码溯源索引。
+      </p>
+
+      <!-- 8.1 四阶段演进路线 -->
+      <div style="margin-top:24px;">
+        <h3 style="font-size:18px;color:var(--text-primary);border-bottom:1px solid var(--border-color);padding-bottom:8px;">8.1 四阶段渐进式演进时间表与验收门禁</h3>
+        
+        <div style="display:grid;grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 16px;">
+          <!-- Phase 0 -->
+          <div style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);border-top:3px solid var(--accent-blue);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-weight:700;color:var(--accent-blue);font-size:14px;">Phase 0: 结构安全与缓存基石</span>
+              <span class="badge" style="background:var(--accent-blue);color:#fff;">1~2 周</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">
+              <strong>核心范围:</strong> P0-1 输入围栏流水线 + P0-2 静态前缀与小时钟整点缓存 + M0-1 大盘快照接口。<br>
+              <strong>关键交付:</strong>
+              <ul style="margin:6px 0;padding-left:18px;">
+                <li><code>PromptAssemblyService</code> 提示词分段装配器</li>
+                <li><code>FencingFilter</code> 不动点输入清洗过滤器</li>
+                <li><code>GetBusinessSnapshotTool</code> 毫秒级大盘快照</li>
+              </ul>
+              <strong>验收门禁 (Gate 0):</strong>
+              单元测试注入 13 类隐藏控制符 100% 阻断；首字延迟 TTFT 下降 ≥ 65%；静态前缀缓存命中率 ≥ 85%。
+            </div>
+          </div>
+
+          <!-- Phase 1 -->
+          <div style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);border-top:3px solid var(--accent-purple);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-weight:700;color:var(--accent-purple);font-size:14px;">Phase 1: 暂存审批与归因革命</span>
+              <span class="badge" style="background:var(--accent-purple);color:#fff;">3~4 周</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">
+              <strong>核心范围:</strong> P1-1 两阶段暂存写与 Guardrails + P1-2 动态技能按需加载 + M0-2 归因四道闸与 Action Chips。<br>
+              <strong>关键交付:</strong>
+              <ul style="margin:6px 0;padding-left:18px;">
+                <li><code>ulike_staged_changes</code> 暂存与审批状态机</li>
+                <li><code>sales-performance-review.yaml</code> 注入归因纪律</li>
+                <li>Open WebUI <code>ActionChipBar.svelte</code> 交互芯片</li>
+              </ul>
+              <strong>验收门禁 (Gate 1):</strong>
+              禁止模型未经 Stage 直接写库；归因分析强制输出 Mix/Level 分解；报告末尾 100% 挂载可点击动作芯片。
+            </div>
+          </div>
+
+          <!-- Phase 2 -->
+          <div style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);border-top:3px solid var(--accent-teal);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-weight:700;color:var(--accent-teal);font-size:14px;">Phase 2: 经营简报与调价治理</span>
+              <span class="badge" style="background:var(--accent-teal);color:#fff;">4~6 周</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">
+              <strong>核心范围:</strong> M1-1 每日经营晨会简报 + M1-2 定价与促销暂存护栏 + M1-3 商品信息治理巡检。<br>
+              <strong>关键交付:</strong>
+              <ul style="margin:6px 0;padding-left:18px;">
+                <li>每日早 8:00 定时晨报推送（结合 <code>automation_update</code>）</li>
+                <li>调价与大促深度两道红线硬阻断拦截</li>
+                <li>商品 Listing 规范度巡检与优化建议草案</li>
+              </ul>
+              <strong>验收门禁 (Gate 2):</strong>
+              晨报覆盖当月进度、存销比与异常 SKU；调价降幅 > 30% 必阻断；批量修改超 50 条必阻断。
+            </div>
+          </div>
+
+          <!-- Phase 3 -->
+          <div style="background:var(--bg-secondary);padding:16px;border-radius:8px;border:1px solid var(--border-color);border-top:3px solid var(--accent-green);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-weight:700;color:var(--accent-green);font-size:14px;">Phase 3: 跨会话记忆与全域闭环</span>
+              <span class="badge" style="background:var(--accent-green);color:#fff;">6~8 周</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">
+              <strong>核心范围:</strong> P1-3 跨会话结构化记忆 + P2-1 Eager 提前派发 + M2 人群画像与营销全链路闭环。<br>
+              <strong>关键交付:</strong>
+              <ul style="margin:6px 0;padding-left:18px;">
+                <li>异步记忆提取与代数并发控制 (Purge Generation)</li>
+                <li>Eager 流式参数侦测与并发语义查询</li>
+                <li>营销短信/邮件文案生成与预算 ROI 测算草案</li>
+              </ul>
+              <strong>验收门禁 (Gate 3):</strong>
+              长会话延迟衰减斜率 ≤ 5%；多次对话自动复用经营偏好；实现“归因 $ightarrow$ 定价 $ightarrow$ 营销”全自主接力。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 8.2 源码级证据链与代码溯源索引 -->
+      <div style="margin-top:36px;">
+        <h3 style="font-size:18px;color:var(--text-primary);border-bottom:1px solid var(--border-color);padding-bottom:8px;">8.2 源码级证据链与对照溯源索引 (Code Provenance Matrix)</h3>
+        <p style="font-size:13px;color:var(--text-secondary);">
+          下表严格建立 Anthropic 原生仓库（<code>commerce-agents</code>）核心实现与 Ulike-Agent 现有代码库（<code>Ulike-Agent</code>）各模块之间的代码级映射对照：
+        </p>
+
+        <div style="overflow-x:auto;margin-top:14px;">
+          <table class="data-table" style="font-size:12px;width:100%;">
+            <thead>
+              <tr>
+                <th style="width:16%;">核心机制 / 架构命题</th>
+                <th style="width:34%;">Anthropic 原生代码源与实现 (Source Provenance)</th>
+                <th style="width:34%;">Ulike-Agent 现有落点与改造文件 (Target Location)</th>
+                <th style="width:16%;">落地改造核心动作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>三断点缓存与小时钟</strong></td>
+                <td>
+                  <code>commerce-common/.../prompt_assembly.py</code><br>
+                  • <code>context_clock()</code>: <code>now.replace(minute=0, second=0)</code><br>
+                  • <code>build_system_blocks()</code>: 静态块带 <code>cache_control</code> 声明
+                </td>
+                <td>
+                  <code>genie-backend/.../agent/agent/ReactImplAgent.java</code><br>
+                  • 现有代码: <code>replace("{{date}}", ...)</code> 插在前缀<br>
+                  • 改造落点: <code>PromptAssemblyService.java</code>
+                </td>
+                <td>将动态日期/时间移至尾部块；静态前缀独立缓存</td>
+              </tr>
+              <tr>
+                <td><strong>输入数据围栏流水线</strong></td>
+                <td>
+                  <code>commerce-common/.../fencing.py</code><br>
+                  • <code>fence_input()</code>: 长度超限截断、不可见字符剥离<br>
+                  • <code>_strip_xml_tags()</code>: <code>while True</code> 循环递归至不动点
+                </td>
+                <td>
+                  <code>genie-backend/.../context/AgentContext.java</code><br>
+                  • 现有代码: 未对用户输入与 RAG 文本做深度字符过滤<br>
+                  • 改造落点: <code>FencingPipelineFilter.java</code>
+                </td>
+                <td>接入 Unicode NFKC 标准化、13 类控制符剥离与防伪轮次转义</td>
+              </tr>
+              <tr>
+                <td><strong>两阶段暂存与双重护栏</strong></td>
+                <td>
+                  <code>merchant-agent/.../changes.py</code><br>
+                  • <code>stage_changes()</code>, <code>commit_changes()</code><br>
+                  • <code>check_guardrails()</code>: 校验调价阈值、只读字段掩码
+                </td>
+                <td>
+                  <code>genie-backend/.../service/ApprovalService.java</code><br>
+                  • 现有代码: 具备工单表结构，但未区分 Stage/Commit<br>
+                  • 改造落点: <code>StagedChangeManager.java</code> & SQLite
+                </td>
+                <td>在 SQLite 新增 <code>ulike_staged_changes</code> 表；构建 Visual Diff</td>
+              </tr>
+              <tr>
+                <td><strong>经营归因四道闸</strong></td>
+                <td>
+                  <code>merchant-agent/skills/performance-insights/SKILL.md</code><br>
+                  • 严禁直接对比未完周期与完整周期<br>
+                  • 强制剥离纯价格效应与结构漂移效应 (Mix vs. Level)
+                </td>
+                <td>
+                  <code>packs/domains/sales/playbooks/sales-performance-review.yaml</code><br>
+                  • 现有代码: 依赖 Wren 自由查询，无正交分解约束<br>
+                  • 改造落点: 注入四道闸规则与 Action Chips 协议
+                </td>
+                <td>固化正交三因素计算公式；末尾输出下钻与修复 Action 芯片</td>
+              </tr>
+              <tr>
+                <td><strong>大盘实时快照工具</strong></td>
+                <td>
+                  <code>merchant-agent/.../analysis.py</code><br>
+                  • <code>get_business_snapshot()</code>: 一次性读取营收/客单/毛利/存销比
+                </td>
+                <td>
+                  <code>genie-tool/tools/</code> & <code>packs/domains/sales/</code><br>
+                  • 现有代码: 需多轮 Tool 拼接 SQL 计算大盘<br>
+                  • 改造落点: <code>genie-tool/tools/business_snapshot.py</code>
+                </td>
+                <td>建立物化/预聚合大盘快照查询接口，降低 80% Token 消耗</td>
+              </tr>
+              <tr>
+                <td><strong>跨会话结构化记忆</strong></td>
+                <td>
+                  <code>commerce-common/.../memory.py</code><br>
+                  • 会话后异步蒸馏偏好事实<br>
+                  • <code>purge_generation</code> 单调递增并发控制
+                </td>
+                <td>
+                  <code>open-webui/src/lib/apis/ulike/</code> & <code>genie-backend/.../Memory.java</code><br>
+                  • 现有代码: 仅有会话内 Transient Memory<br>
+                  • 改造落点: <code>AsyncMemoryExtractTask.java</code>
+                </td>
+                <td>会话结束异步写入 <code>ulike_user_memory</code> 表；按租户隔离</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 8.3 架构哲学寄语 -->
+      <div style="margin-top:36px;background:var(--bg-secondary);padding:20px;border-radius:8px;border:1px solid var(--border-color);border-left:4px solid var(--accent-purple);">
+        <h4 style="margin-top:0;margin-bottom:10px;font-size:15px;color:var(--text-primary);">架构演进寄语：从“看数工具”走向“数字化经营副驾驶”</h4>
+        <p style="font-size:13px;color:var(--text-secondary);line-height:1.7;margin-bottom:10px;">
+          通过对 Anthropic <code>commerce-agents</code> 开源架构的源码级深度解构，我们最大的收获不是获得了一组电商业务的具体字段，
+          而是汲取了其对<strong>生产级智能体工程严密性（Engineering Rigor）</strong>的极致追求：
+        </p>
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.7;">
+          1. <strong>告别无谓的复杂性迷信: </strong>用单主循环 + 动态技能加载（Single Primary Loop with Skills）替代层层级联、脆弱不可控的多 Agent 路由；<br>
+          2. <strong>防线坚守于确定性代码: </strong>绝不将系统安全性与数据一致性寄托在大模型软性 Prompt 的“自觉”，而是用不动点输入围栏、出处门禁、两阶段暂存写与服务端富化，将模型死死限制在建议者与起草者的边界之内；<br>
+          3. <strong>用科学方法论武装经营分析: </strong>在 Ulike 智能分析中彻底杜绝粗暴片面的因果揣测，用严格对齐的时空窗与 Mix vs. Level 正交分解，为商家提供可解释、可信赖、可复查的经营归因；<br>
+          4. <strong>直通业务闭环: </strong>用 Action Chips 与两阶段暂存审批，打破分析与业务系统之间的高墙，让每一次洞察都能一键跃迁为合规、安全、受控的经营生产力。
+        </div>
+      </div>
+    </section>
+
+    <!-- 底部版权与元数据 -->
+    <footer style="margin-top:48px;padding-top:20px;border-top:1px solid var(--border-color);text-align:center;font-size:12px;color:var(--text-muted);line-height:1.6;">
+      <div>Ulike-Agent 架构演进与经营分析方案白皮书 · 唯一权威整合归档版</div>
+      <div>生成日期: 2026-09-04 · 纯原生零依赖单文件规范 (Zero-Dependency Single File) · 遵循组织资产存储铁律</div>
+    </footer>
+  </main>
+</div>
+
+  <script>
+    // 主题切换交互
+    const themeBtn = document.getElementById('themeToggleBtn');
+    const themeIcon = document.getElementById('themeIcon');
+    const themeText = document.getElementById('themeText');
+    const root = document.documentElement;
+
+    function applyTheme(isLight) {
+      if (isLight) {
+        root.setAttribute('data-theme', 'light');
+        themeIcon.innerText = '☀️';
+        themeText.innerText = '浅色模式';
+        localStorage.setItem('ulike_agent_theme', 'light');
+      } else {
+        root.removeAttribute('data-theme');
+        themeIcon.innerText = '🌙';
+        themeText.innerText = '深色模式';
+        localStorage.setItem('ulike_agent_theme', 'dark');
+      }
+    }
+
+    const savedTheme = localStorage.getItem('ulike_agent_theme');
+    if (savedTheme === 'light') {
+      applyTheme(true);
+    } else {
+      applyTheme(false);
+    }
+
+    themeBtn.addEventListener('click', () => {
+      const isCurrentlyLight = root.getAttribute('data-theme') === 'light';
+      applyTheme(!isCurrentlyLight);
+    });
+
+    // 目录高亮监听
+    window.addEventListener('scroll', () => {
+      const sections = document.querySelectorAll('section[id]');
+      const scrollPos = window.scrollY + 100;
+      sections.forEach(sec => {
+        const top = sec.offsetTop;
+        const height = sec.offsetHeight;
+        const id = sec.getAttribute('id');
+        const link = document.querySelector(`.toc-link[href="#${id}"]`);
+        if (link) {
+          if (scrollPos >= top && scrollPos < top + height) {
+            link.classList.add('active');
+          } else {
+            link.classList.remove('active');
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>

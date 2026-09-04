@@ -1,0 +1,3097 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weaviate 上下文工程系统地图与六大能力白皮书</title>
+  <style>
+
+    /* ==========================================================================
+       CSS 变量与双主题色彩系统（零外部依赖，断网完全可用）
+       ========================================================================== */
+    :root {
+      --bg-canvas: #FAF7F2;
+      --bg-card: #FFFFFF;
+      --bg-card-subtle: #F5EFEB;
+      --bg-card-hover: #ECE4DC;
+      --border-color: #E2D9CF;
+      --border-subtle: #EBE4DC;
+      --text-primary: #2C2623;
+      --text-secondary: #6B625B;
+      --text-tertiary: #968D84;
+      --accent: #D97757;
+      --accent-hover: #C26344;
+      --accent-light: rgba(217, 119, 87, 0.12);
+      --emerald: #2E7D32;
+      --emerald-light: rgba(46, 125, 50, 0.12);
+      --amber: #D97706;
+      --amber-light: rgba(217, 119, 6, 0.12);
+      --rose: #C62828;
+      --rose-light: rgba(198, 40, 40, 0.12);
+      --cyan: #0284C7;
+      --cyan-light: rgba(2, 132, 199, 0.12);
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 10px 24px rgba(0,0,0,0.12);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --toc-width: 270px;
+      --container-max: 1280px;
+    }
+
+    [data-theme="dark"] {
+      --bg-canvas: #181715;
+      --bg-card: #21201D;
+      --bg-card-subtle: #2A2824;
+      --bg-card-hover: #33302B;
+      --border-color: #383531;
+      --border-subtle: #2F2C28;
+      --text-primary: #EAE6E1;
+      --text-secondary: #ABA39A;
+      --text-tertiary: #7D756C;
+      --accent: #E08264;
+      --accent-hover: #EB9377;
+      --accent-light: rgba(224, 130, 100, 0.18);
+      --emerald: #4EAA52;
+      --emerald-light: rgba(78, 170, 82, 0.18);
+      --amber: #F59E0B;
+      --amber-light: rgba(245, 158, 11, 0.18);
+      --rose: #E57373;
+      --rose-light: rgba(229, 115, 115, 0.18);
+      --cyan: #38BDF8;
+      --cyan-light: rgba(56, 189, 248, 0.18);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+      --shadow-lg: 0 10px 24px rgba(0,0,0,0.5);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+      line-height: 1.8;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      transition: background-color 0.3s ease, color 0.3s ease;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+    }
+
+    /* 顶部阅读进度条 */
+    #read-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--cyan));
+      width: 0%;
+      z-index: 9999;
+      transition: width 0.1s ease-out;
+    }
+
+    /* 顶部导航栏 */
+    .header-nav {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      background-color: rgba(250, 247, 242, 0.9);
+      border-bottom: 1px solid var(--border-color);
+      transition: background-color 0.3s ease;
+    }
+    [data-theme="dark"] .header-nav {
+      background-color: rgba(24, 23, 21, 0.9);
+    }
+
+    .nav-container {
+      max-width: var(--container-max);
+      margin: 0 auto;
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand-title {
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      text-decoration: none;
+    }
+
+    .brand-badge {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: var(--radius-sm);
+      background-color: var(--accent-light);
+      color: var(--accent);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .btn-action {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 0.4rem 0.85rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: all 0.2s ease;
+      font-weight: 500;
+    }
+    .btn-action:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background-color: var(--bg-card-subtle);
+    }
+
+    /* 主布局 */
+    .app-layout {
+      max-width: var(--container-max);
+      margin: 0 auto;
+      padding: 2rem 1.5rem 6rem;
+      display: flex;
+      gap: 2.5rem;
+      position: relative;
+    }
+
+    /* 侧边栏目录 */
+    .sidebar-toc {
+      width: var(--toc-width);
+      flex-shrink: 0;
+      position: sticky;
+      top: 4.5rem;
+      max-height: calc(100vh - 6rem);
+      overflow-y: auto;
+      padding: 1.25rem;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .sidebar-toc::-webkit-scrollbar {
+      width: 4px;
+    }
+    .sidebar-toc::-webkit-scrollbar-thumb {
+      background-color: var(--border-color);
+      border-radius: 4px;
+    }
+
+    .toc-heading {
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-tertiary);
+      margin-bottom: 0.75rem;
+      font-weight: 700;
+    }
+
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .toc-item a {
+      display: block;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.84rem;
+      line-height: 1.45;
+      padding: 0.4rem 0.6rem;
+      border-radius: var(--radius-sm);
+      border-left: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+
+    .toc-item a:hover {
+      color: var(--accent);
+      background-color: var(--bg-card-subtle);
+    }
+
+    .toc-item.active a {
+      color: var(--accent);
+      background-color: var(--accent-light);
+      border-left-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .toc-item.sub-item {
+      padding-left: 0.75rem;
+    }
+    .toc-item.sub-item a {
+      font-size: 0.78rem;
+    }
+
+    /* 正文区 */
+    .article-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .article-header {
+      margin-bottom: 2.5rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .article-tagline {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--accent);
+      background: var(--accent-light);
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .article-title {
+      font-family: var(--font-serif);
+      font-size: 2.35rem;
+      font-weight: 800;
+      line-height: 1.3;
+      color: var(--text-primary);
+      margin-bottom: 1.25rem;
+      letter-spacing: -0.02em;
+    }
+
+    .article-lead {
+      font-size: 1.2rem;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      font-weight: 500;
+      margin-bottom: 1.5rem;
+    }
+
+    .meta-card {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      padding: 1.25rem;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+      font-size: 0.85rem;
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .meta-label {
+      color: var(--text-tertiary);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    .meta-value {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    section {
+      margin-bottom: 3.5rem;
+    }
+
+    h2 {
+      font-family: var(--font-serif);
+      font-size: 1.65rem;
+      font-weight: 700;
+      line-height: 1.35;
+      color: var(--text-primary);
+      margin-top: 2rem;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 2px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      line-height: 1.4;
+      color: var(--text-primary);
+      margin-top: 1.75rem;
+      margin-bottom: 0.9rem;
+    }
+
+    h4 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-top: 1.25rem;
+      margin-bottom: 0.6rem;
+    }
+
+    p {
+      margin-bottom: 1.2rem;
+      color: var(--text-primary);
+      font-size: 1.02rem;
+    }
+
+    ul, ol {
+      margin-bottom: 1.25rem;
+      padding-left: 1.5rem;
+    }
+
+    li {
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+    }
+
+    strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* 快速概览卡片 */
+    .overview-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-left: 4px solid var(--accent);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .overview-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Weaviate 指南系统图聚焦呼出框 */
+    .weaviate-focus-box {
+      margin: 1.8rem 0;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .weaviate-focus-box:hover {
+      box-shadow: var(--shadow-md);
+      border-color: var(--accent);
+    }
+
+    .focus-header {
+      padding: 0.75rem 1.25rem;
+      background: var(--bg-card-subtle);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .focus-badge {
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.2rem 0.5rem;
+      border-radius: var(--radius-sm);
+      background-color: var(--cyan-light);
+      color: var(--cyan);
+      letter-spacing: 0.04em;
+    }
+
+    .focus-prompt {
+      font-weight: 700;
+      color: var(--text-primary);
+      font-size: 0.95rem;
+    }
+
+    .focus-content {
+      padding: 1.25rem 1.4rem;
+      font-size: 1rem;
+      line-height: 1.75;
+      color: var(--text-primary);
+    }
+
+    /* 架构图卡片 */
+    .diagram-card {
+      margin: 2rem 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+
+    .diagram-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .diagram-desc {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-bottom: 1.25rem;
+    }
+
+    .diagram-canvas {
+      width: 100%;
+      overflow-x: auto;
+      text-align: center;
+      background-color: var(--bg-card-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 1rem 0.5rem;
+    }
+
+    .diagram-canvas svg {
+      max-width: 100%;
+      height: auto;
+      display: inline-block;
+    }
+
+    /* 规范表格 */
+    .spec-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin: 1.5rem 0;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      text-align: left;
+    }
+
+    .spec-table th {
+      background-color: var(--bg-card-subtle);
+      color: var(--text-primary);
+      padding: 0.85rem 1rem;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+
+    .spec-table td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    .spec-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .spec-table tr:hover td {
+      background-color: var(--bg-card-subtle);
+      color: var(--text-primary);
+    }
+
+    /* 状态与类型徽章 */
+    .tag {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.15rem 0.45rem;
+      border-radius: var(--radius-sm);
+      margin-right: 0.35rem;
+    }
+    .tag-accent { background: var(--accent-light); color: var(--accent); }
+    .tag-emerald { background: var(--emerald-light); color: var(--emerald); }
+    .tag-amber { background: var(--amber-light); color: var(--amber); }
+    .tag-rose { background: var(--rose-light); color: var(--rose); }
+    .tag-cyan { background: var(--cyan-light); color: var(--cyan); }
+
+    /* 数学排版 */
+    .math-block {
+      margin: 1.25rem 0;
+      padding: 1.1rem 1.3rem;
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      overflow-x: auto;
+      text-align: center;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    math {
+      font-family: "Latin Modern Math", "Cambria Math", "STIX Two Math", "Newsreader", "Songti SC", Georgia, serif;
+      font-size: 1.15rem;
+      color: var(--text-primary);
+      direction: ltr;
+      line-height: 1.3;
+    }
+
+    /* 引用与外链推荐卡片 */
+    .ext-link-card {
+      margin: 1.75rem 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-left: 4px solid var(--cyan);
+      border-radius: var(--radius-md);
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      text-decoration: none;
+      color: inherit;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s ease;
+    }
+    .ext-link-card:hover {
+      border-color: var(--cyan);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    .ext-link-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--cyan);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .ext-link-url {
+      font-size: 0.8rem;
+      color: var(--text-tertiary);
+      font-family: var(--font-mono);
+      word-break: break-all;
+    }
+
+    /* 交互沙盘工作台样式 */
+    .sandbox-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      margin: 2.5rem 0;
+      box-shadow: var(--shadow-md);
+    }
+
+    .sandbox-header {
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .sandbox-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.2rem 0.6rem;
+      border-radius: var(--radius-sm);
+      background-color: var(--emerald-light);
+      color: var(--emerald);
+      margin-bottom: 0.5rem;
+    }
+
+    .sandbox-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 0.4rem;
+    }
+
+    .sandbox-desc {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .control-panel {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+      padding: 1.25rem;
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+
+    .form-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .form-select, .form-range {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.9rem;
+    }
+
+    .form-range {
+      padding: 0;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .output-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .display-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .display-card-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-tertiary);
+    }
+
+    .display-card-val {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .display-card-desc {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    /* 页脚 */
+    .article-footer {
+      margin-top: 4rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border-color);
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-tertiary);
+    }
+
+    /* 响应式适配 */
+    @media (max-width: 1024px) {
+      .app-layout {
+        flex-direction: column;
+      }
+      .sidebar-toc {
+        width: 100%;
+        position: static;
+        max-height: 280px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .article-title {
+        font-size: 1.85rem;
+      }
+      h2 {
+        font-size: 1.4rem;
+      }
+      .control-panel {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* 打印适配 */
+    @media print {
+      body {
+        background: #FFFFFF !important;
+        color: #000000 !important;
+      }
+      #read-progress, .header-nav, .sidebar-toc, .btn-action, .sandbox-container {
+        display: none !important;
+      }
+      .app-layout {
+        padding: 0 !important;
+        margin: 0 !important;
+        max-width: 100% !important;
+      }
+      .article-main {
+        width: 100% !important;
+      }
+      .weaviate-focus-box, .diagram-card, .spec-table-wrap {
+        box-shadow: none !important;
+        border-color: #CCCCCC !important;
+        page-break-inside: avoid;
+      }
+    }
+    
+  </style>
+</head>
+<body>
+  <!-- 阅读进度条 -->
+  <div id="read-progress" aria-label="阅读进度"></div>
+
+  <!-- 顶部导航栏 -->
+  <header class="header-nav">
+    <div class="nav-left">
+      <span class="nav-brand">Weaviate Context Engineering</span>
+      <span class="nav-tag">工程白皮书 2026</span>
+    </div>
+    <div class="nav-right">
+      <button id="btn-theme-toggle" class="btn btn-sm">🌓 切换主题</button>
+      <button id="btn-print" class="btn btn-sm">🖨️ 打印 / 导出</button>
+      <button id="btn-toc-toggle" class="btn btn-sm" aria-label="切换目录">📋 目录</button>
+    </div>
+  </header>
+
+  <!-- 整体主容器布局 -->
+  <div class="app-layout">
+    <!-- 侧边栏导航目录 (ScrollSpy 对齐) -->
+    <aside class="sidebar-toc" id="sidebar-toc-panel">
+      <div class="toc-header">
+        <span>📋</span>
+        <span>白皮书核心目录</span>
+      </div>
+      <nav class="toc-nav">
+        <div class="toc-item"><a href="#sec-overview" class="active">01. 导读与系统总拓扑</a></div>
+        <div class="toc-item"><a href="#sec-failure-and-budget">02. 模型强≠系统强与注意力预算</a></div>
+        <div class="toc-item"><a href="#sec-intent-and-query">03. 意图改造与查询增强</a></div>
+        <div class="toc-item"><a href="#sec-retrieval-and-chunking">04. 检索切块与上下文窗口</a></div>
+        <div class="toc-item"><a href="#sec-prompts-and-memory">05. 提示工程与五层记忆体系</a></div>
+        <div class="toc-item"><a href="#sec-tool-and-mcp">06. 工具生态与MCP解耦协议</a></div>
+        <div class="toc-item"><a href="#sec-acceptance-gates">07. 六道工程验收关口与反射弧</a></div>
+        <div class="toc-item"><a href="#sec-paradigm-shift">08. 范式跃迁：提示 vs 上下文工程</a></div>
+        <div class="toc-item"><a href="#sec-sandboxes">09. 交互实证沙盘 (三大实验区)</a></div>
+      </nav>
+    </aside>
+
+    <!-- 主正文区域 -->
+    <main class="article-main" id="article-main">
+
+    <!-- 题头元数据卡片 -->
+    <header class="article-header">
+      <div class="article-tagline">
+        <span>Weaviate 核心架构指南深度解析</span>
+        <span>·</span>
+        <span>AI 系统白皮书</span>
+      </div>
+      <h1 class="article-title" id="sec-title">上下文工程，究竟在工程化什么？</h1>
+      <p class="article-lead">
+        Weaviate 用六块能力画出一张系统地图；真正的主线，是在每一步决定哪些信息进入模型、哪些状态留在外部、下一步由谁执行。
+      </p>
+
+      <div class="meta-card">
+        <div class="meta-item">
+          <span class="meta-label">原始出处</span>
+          <span class="meta-value">Weaviate《The Context Engineering Guide》</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">主题分类</span>
+          <span class="meta-value">工具教程 / AI 架构指南</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">基准日期</span>
+          <span class="meta-value">2026-09-04</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">核心主线</span>
+          <span class="meta-value">意图、证据、装配、状态、工具、反馈六阶闭环</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 一分钟速览 -->
+    <section id="sec-overview">
+      <div class="overview-card">
+        <div class="overview-title">
+          <span>⚡</span>
+          <span>一分钟速览</span>
+        </div>
+        <ul>
+          <li><strong>六大模块有机咬合：</strong>这本手册把上下文工程拆成 <strong>Agent、查询增强、检索与切块、提示、记忆和工具</strong> 六个相互衔接的部分。</li>
+          <li><strong>全链路信息流控制：</strong>上下文工程控制的是一次任务里的完整信息流：<strong>意图、证据、提示、状态、工具和反馈</strong> 怎样进入或离开模型窗口。</li>
+          <li><strong>工程化可验证交付：</strong>指南提供系统地图，没有提供效果实验；落地时要让六个环节各自留下<strong>可检查产物</strong>，并用真实任务集验证。</li>
+        </ul>
+      </div>
+
+      <p>
+        《The Context Engineering Guide》是 Weaviate 发布的一本面向 AI 应用开发者的上下文工程手册。它关注一个 AI 系统怎样在任务运行过程中，持续为模型准备正确的信息，并让多轮对话、外部知识、长期状态和工具执行保持连贯。
+      </p>
+      <p>
+        全书围绕六部分展开：<strong>Agent</strong> 负责调度整个信息流；<strong>查询增强</strong>把含糊的用户问题改造成可检索、可执行的意图；<strong>检索与切块</strong>从大量资料中选出当前所需证据；<strong>提示</strong>规定任务目标和操作边界；<strong>记忆</strong>保存跨轮状态；<strong>工具</strong>把模型的判断变成行动，再把执行结果送回下一轮。
+      </p>
+      <p>
+        六部分构成了一条完整运行链：<strong>理解请求、选择证据、装配上下文、保存状态、调用工具、根据结果继续或停止</strong>。手册的核心问题，是如何让模型在每一步只看到当前最有用的信息，同时把暂时不用的状态可靠地留在外部。
+      </p>
+
+      <div class="diagram-card">
+        <div class="diagram-title">
+          <span>📊</span>
+          <span>系统架构图 1：Weaviate 上下文工程全局系统拓扑架构图</span>
+        </div>
+        <div class="diagram-desc">
+          展示外部数据生态、查询意图改造、Agent 调度中枢、上下文预算窗口、外部持久化状态与工具执行的完整装配流向。
+        </div>
+        
+    <div class="diagram-canvas">
+      <svg viewBox="0 0 960 460" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--text-tertiary)" />
+          </marker>
+          <marker id="arrow-accent" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--accent)" />
+          </marker>
+          <marker id="arrow-cyan" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--cyan)" />
+          </marker>
+        </defs>
+
+        <!-- 背景分层区 -->
+        <rect x="20" y="20" width="920" height="90" rx="10" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1.5" stroke-dasharray="4,4" />
+        <text x="35" y="45" font-size="12" font-weight="700" fill="var(--text-tertiary)" letter-spacing="1">EXTERNAL DATA &amp; TOOL ECOSYSTEM (外部数据源与工具生态)</text>
+
+        <!-- 外部源三个节点 -->
+        <rect x="50" y="55" width="260" height="42" rx="6" fill="var(--cyan-light)" stroke="var(--cyan)" stroke-width="1.5" />
+        <text x="180" y="80" font-size="13" font-weight="600" fill="var(--cyan)" text-anchor="middle">多源知识库 (文档/向量/全文/代码)</text>
+
+        <rect x="350" y="55" width="260" height="42" rx="6" fill="var(--amber-light)" stroke="var(--amber)" stroke-width="1.5" />
+        <text x="480" y="80" font-size="13" font-weight="600" fill="var(--amber)" text-anchor="middle">业务系统 (CRM/工单/数据库/日志)</text>
+
+        <rect x="650" y="55" width="260" height="42" rx="6" fill="var(--emerald-light)" stroke="var(--emerald)" stroke-width="1.5" />
+        <text x="780" y="80" font-size="13" font-weight="600" fill="var(--emerald)" text-anchor="middle">外部工具与 MCP Servers (API/执行)</text>
+
+        <!-- 中枢：上下文工程装配与注意力预算 -->
+        <rect x="20" y="140" width="920" height="190" rx="12" fill="var(--bg-card)" stroke="var(--accent)" stroke-width="2" />
+        <text x="35" y="165" font-size="13" font-weight="700" fill="var(--accent)" letter-spacing="1">CONTEXT ENGINEERING RUNTIME HUB (上下文工程运行时装配中枢)</text>
+
+        <!-- 用户输入与查询重构 -->
+        <rect x="45" y="185" width="190" height="125" rx="8" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1.5" />
+        <text x="140" y="210" font-size="13" font-weight="700" fill="var(--text-primary)" text-anchor="middle">用户输入与意图层</text>
+        <text x="140" y="235" font-size="11" fill="var(--text-secondary)" text-anchor="middle">原始含糊用户请求</text>
+        <text x="140" y="255" font-size="11" fill="var(--accent)" text-anchor="middle">重写 / 扩展 / 分解</text>
+        <text x="140" y="275" font-size="11" fill="var(--emerald)" text-anchor="middle">产出：规范意图+验收句</text>
+
+        <!-- 调度中枢 Agent -->
+        <rect x="275" y="185" width="410" height="125" rx="8" fill="var(--accent-light)" stroke="var(--accent)" stroke-width="1.5" />
+        <text x="480" y="210" font-size="14" font-weight="700" fill="var(--accent)" text-anchor="middle">Agent 调度中枢 &amp; 注意力预算窗口</text>
+        <line x1="295" y1="225" x2="665" y2="225" stroke="var(--border-color)" stroke-width="1" />
+        
+        <!-- 上下文预算分块 -->
+        <rect x="295" y="238" width="70" height="58" rx="4" fill="var(--bg-card)" stroke="var(--border-subtle)" stroke-width="1" />
+        <text x="330" y="258" font-size="10" font-weight="600" fill="var(--text-primary)" text-anchor="middle">控制规则</text>
+        <text x="330" y="278" font-size="9" fill="var(--text-tertiary)" text-anchor="middle">任务边界</text>
+
+        <rect x="373" y="238" width="70" height="58" rx="4" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="1" />
+        <text x="408" y="258" font-size="10" font-weight="600" fill="var(--cyan)" text-anchor="middle">当前证据</text>
+        <text x="408" y="278" font-size="9" fill="var(--text-tertiary)" text-anchor="middle">精准切块</text>
+
+        <rect x="451" y="238" width="70" height="58" rx="4" fill="var(--bg-card)" stroke="var(--amber)" stroke-width="1" />
+        <text x="486" y="258" font-size="10" font-weight="600" fill="var(--amber)" text-anchor="middle">工作状态</text>
+        <text x="486" y="278" font-size="9" fill="var(--text-tertiary)" text-anchor="middle">已定决断</text>
+
+        <rect x="529" y="238" width="70" height="58" rx="4" fill="var(--bg-card)" stroke="var(--emerald)" stroke-width="1" />
+        <text x="564" y="258" font-size="10" font-weight="600" fill="var(--emerald)" text-anchor="middle">工具合同</text>
+        <text x="564" y="278" font-size="9" fill="var(--text-tertiary)" text-anchor="middle">当前相关</text>
+
+        <rect x="607" y="238" width="65" height="58" rx="4" fill="var(--bg-card)" stroke="var(--rose)" stroke-width="1" />
+        <text x="639" y="258" font-size="10" font-weight="600" fill="var(--rose)" text-anchor="middle">输出预留</text>
+        <text x="639" y="278" font-size="9" fill="var(--text-tertiary)" text-anchor="middle">思考空间</text>
+
+        <!-- 行动引擎与工具执行 -->
+        <rect x="725" y="185" width="190" height="125" rx="8" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1.5" />
+        <text x="820" y="210" font-size="13" font-weight="700" fill="var(--text-primary)" text-anchor="middle">行动执行与校验</text>
+        <text x="820" y="235" font-size="11" fill="var(--text-secondary)" text-anchor="middle">结构化参数校验</text>
+        <text x="820" y="255" font-size="11" fill="var(--emerald)" text-anchor="middle">工具执行 / MCP 调用</text>
+        <text x="820" y="275" font-size="11" fill="var(--accent)" text-anchor="middle">Observation 自愈反馈</text>
+
+        <!-- 连线：中枢内部流 -->
+        <path d="M 235 247 L 270 247" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow-accent)" />
+        <path d="M 685 247 L 720 247" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow-accent)" />
+
+        <!-- 连线：上下交互流 -->
+        <path d="M 180 97 L 180 180" fill="none" stroke="var(--cyan)" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-cyan)" />
+        <path d="M 820 185 L 820 102" fill="none" stroke="var(--emerald)" stroke-width="1.5" marker-end="url(#arrow)" />
+        <path d="M 770 97 L 770 180" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-accent)" />
+
+        <!-- 底部：外部持久化与记忆分层 -->
+        <rect x="20" y="360" width="920" height="80" rx="10" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1.5" stroke-dasharray="4,4" />
+        <text x="35" y="385" font-size="12" font-weight="700" fill="var(--text-tertiary)" letter-spacing="1">EXTERNAL PERSISTENCE &amp; MEMORY TIERING (外部持久化状态与多层记忆)</text>
+
+        <rect x="50" y="395" width="200" height="34" rx="4" fill="var(--amber-light)" stroke="var(--amber)" stroke-width="1" />
+        <text x="150" y="417" font-size="11" font-weight="600" fill="var(--amber)" text-anchor="middle">工作记忆 (未完任务状态)</text>
+
+        <rect x="275" y="395" width="200" height="34" rx="4" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1" />
+        <text x="375" y="417" font-size="11" font-weight="600" fill="var(--text-primary)" text-anchor="middle">情景记忆 (发生过的交互事件)</text>
+
+        <rect x="500" y="395" width="200" height="34" rx="4" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1" />
+        <text x="600" y="417" font-size="11" font-weight="600" fill="var(--text-primary)" text-anchor="middle">语义记忆 (稳定领域事实知识)</text>
+
+        <rect x="725" y="395" width="190" height="34" rx="4" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1" />
+        <text x="820" y="417" font-size="11" font-weight="600" fill="var(--text-primary)" text-anchor="middle">程序记忆 (验证沉淀的做法/SOP)</text>
+
+        <!-- 连线：中枢与记忆交互 -->
+        <path d="M 450 310 L 450 355" fill="none" stroke="var(--amber)" stroke-width="1.5" marker-end="url(#arrow)" />
+        <path d="M 510 355 L 510 315" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-accent)" />
+      </svg>
+    </div>
+    
+      </div>
+    </section>
+    
+
+
+    <!-- Section 2: 模型很强，系统仍可能拿不到正确上下文 -->
+    <section id="sec-failure-and-budget">
+      <h2>02. 模型很强，系统仍可能拿不到正确上下文</h2>
+      <p>
+        真实 AI 产品的常见故障，很少只对应“提示写得不好”。模型可能没拿到公司内部资料，不知道刚发生的业务变化，记不住上一步已经确认的决定，或者在十几个相似工具中选错一个。继续加提示，最多修补当前调用，无法补齐数据、状态和行动接口。
+      </p>
+
+      <div class="weaviate-focus-box">
+        <div class="focus-header">
+          <span class="focus-prompt">主材料怎样画出上下文工程的边界？</span>
+          <span class="focus-badge">Weaviate 手册系统图聚焦 01</span>
+        </div>
+        <div class="focus-content">
+          <p>
+            Weaviate 淡彩指南封面把文档、用户请求、历史、记忆、模型和工具放在同一系统图中。
+          </p>
+        </div>
+      </div>
+
+      <p>
+        这里说的<strong>上下文工程</strong>，是对意图、证据、规则、状态和工具结果进行运行时选择与装配，让模型在当前一步拿到足够且相关的信息。
+      </p>
+
+      <h3>2.1 长上下文的四大核心风险与“注意力预算”</h3>
+      <p>
+        手册把长上下文的风险明确分成四类：
+      </p>
+      <ul>
+        <li><span class="tag tag-rose">污染 (Pollution)</span> <strong>错误内容被反复复用，形成污染：</strong>历史轮次中的推测、未经验证的假设或工具返回的脏数据，被后续多轮推理持续吸纳，导致错误滚雪球式放大。</li>
+        <li><span class="tag tag-amber">分心 (Distraction)</span> <strong>无关内容太多，造成分心：</strong>过量检索注入的背景碎片和庞杂文档挤占模型注意力，稀释关键提示，致使模型忽略关键指令。</li>
+        <li><span class="tag tag-cyan">混乱 (Confusion)</span> <strong>相似材料挤在一起，产生混乱：</strong>同一实体不同时间段的多个版本记录、相似接口的重复声明，使模型无法准确辨别当前上下文的唯一真值。</li>
+        <li><span class="tag tag-rose">冲突 (Conflict)</span> <strong>互相矛盾的规则同时存在，形成冲突：</strong>系统全局提示与局部工具约束矛盾，新用户输入与旧上下文设定冲突，导致模型输出不可预测或决策瘫痪。</li>
+      </ul>
+      <p>
+        它们共同说明一个事实：<strong>上下文窗口是注意力预算（Attention Budget），容量和质量必须分开管理。</strong>
+      </p>
+
+      <h3>2.2 运行时的四个明确决策</h3>
+      <p>
+        因此，每轮运行都要做四个明确决策：
+      </p>
+      <ol>
+        <li><strong>留存决策：</strong>哪些信息继续留在当前窗口，以支撑当前步骤的高信噪比推理；</li>
+        <li><strong>转存决策：</strong>哪些状态转存到外部存储并按需取回，避免无谓占用宝贵的注意力空间；</li>
+        <li><strong>压缩决策：</strong>哪些历史交互可以压缩成结构化摘要，剔除中间冗余讨论；</li>
+        <li><strong>预留决策：</strong>要为模型的思考计划（Chain of Thought）和最终生成预留多少安全空间。</li>
+      </ol>
+      <p>
+        只盯着“还能塞多少 token”，就会漏掉更关键的预算问题：<strong>模型还剩多少注意力来判断下一步。</strong>
+      </p>
+
+      <h3>2.3 六大动作闭环与 Agent 调度职责</h3>
+      <p>
+        一套完整系统会反复经过六个动作：<strong>先理解意图，再选择证据，把规则和当前状态装配进窗口，决定是否行动，把必要状态写到外部，最后用结果修正下一轮。</strong> Agent 是这条链路的调度者，查询增强、检索、提示、记忆和工具分别给它提供接口。
+      </p>
+      <p>
+        手册给 Agent 的具体任务也很清楚：
+      </p>
+      <ul>
+        <li>定期压缩多轮历史；</li>
+        <li>验证检索结果是否一致可用；</li>
+        <li>删除过期或无关上下文；</li>
+        <li>第一次检索失败后改写查询、切换知识库或更换切块策略；</li>
+        <li>把暂时不用的细节卸载到外部；</li>
+        <li>只加载当前相关工具；</li>
+        <li>在多来源互相冲突时完成综合仲裁。</li>
+      </ul>
+      <p>
+        <strong>Agent 不替代这些技术，它负责在运行时决定何时使用哪一种。</strong>
+      </p>
+
+      <div class="weaviate-focus-box">
+        <div class="focus-header">
+          <span class="focus-prompt">六块能力在一次任务里怎样接力？</span>
+          <span class="focus-badge">Weaviate 手册系统图聚焦 02</span>
+        </div>
+        <div class="focus-content">
+          <p>
+            上下文工程运行时依次澄清意图、选择证据、装配上下文、维护外部状态、执行工具，并用观察结果修正下一轮。
+          </p>
+        </div>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-title">
+          <span>🔄</span>
+          <span>系统架构图 2：六大核心能力运行时接力闭环与排错轨道图</span>
+        </div>
+        <div class="diagram-desc">
+          展示澄清意图、选择证据、装配上下文、维护外部状态、执行工具、观察修正的串联工作流，以及当出现系统异常时正反向的排错反射弧。
+        </div>
+        
+    <div class="diagram-canvas">
+      <svg viewBox="0 0 960 360" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow-track" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--accent)" />
+          </marker>
+        </defs>
+
+        <!-- 轨道标题 -->
+        <text x="30" y="35" font-size="14" font-weight="700" fill="var(--text-primary)">正向执行轨道 (Forward Runtime Track) 与 可检查产物交接</text>
+
+        <!-- 阶段 1 -->
+        <g transform="translate(30, 55)">
+          <rect x="0" y="0" width="135" height="130" rx="8" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="2" />
+          <rect x="0" y="0" width="135" height="26" rx="8" fill="var(--cyan-light)" />
+          <text x="67" y="18" font-size="11" font-weight="700" fill="var(--cyan)" text-anchor="middle">1. 澄清意图</text>
+          <text x="10" y="48" font-size="11" font-weight="600" fill="var(--text-primary)">核心任务：</text>
+          <text x="10" y="66" font-size="10" fill="var(--text-secondary)">重写/分解/消歧</text>
+          <text x="10" y="88" font-size="11" font-weight="600" fill="var(--emerald)">交付产物：</text>
+          <text x="10" y="104" font-size="9" fill="var(--text-secondary)">规范意图+验收句</text>
+          <text x="10" y="118" font-size="9" fill="var(--text-secondary)">不可越过范围条件</text>
+        </g>
+        <path d="M 168 120 L 192 120" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow-track)" />
+
+        <!-- 阶段 2 -->
+        <g transform="translate(195, 55)">
+          <rect x="0" y="0" width="135" height="130" rx="8" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="2" />
+          <rect x="0" y="0" width="135" height="26" rx="8" fill="var(--cyan-light)" />
+          <text x="67" y="18" font-size="11" font-weight="700" fill="var(--cyan)" text-anchor="middle">2. 选择证据</text>
+          <text x="10" y="48" font-size="11" font-weight="600" fill="var(--text-primary)">核心任务：</text>
+          <text x="10" y="66" font-size="10" fill="var(--text-secondary)">检索/切块/重排</text>
+          <text x="10" y="88" font-size="11" font-weight="600" fill="var(--emerald)">交付产物：</text>
+          <text x="10" y="104" font-size="9" fill="var(--text-secondary)">带语境原始段落</text>
+          <text x="10" y="118" font-size="9" fill="var(--text-secondary)">可回溯证据引用</text>
+        </g>
+        <path d="M 333 120 L 357 120" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow-track)" />
+
+        <!-- 阶段 3 -->
+        <g transform="translate(360, 55)">
+          <rect x="0" y="0" width="135" height="130" rx="8" fill="var(--bg-card)" stroke="var(--accent)" stroke-width="2" />
+          <rect x="0" y="0" width="135" height="26" rx="8" fill="var(--accent-light)" />
+          <text x="67" y="18" font-size="11" font-weight="700" fill="var(--accent)" text-anchor="middle">3. 装配上下文</text>
+          <text x="10" y="48" font-size="11" font-weight="600" fill="var(--text-primary)">核心任务：</text>
+          <text x="10" y="66" font-size="10" fill="var(--text-secondary)">预算划分/去噪音</text>
+          <text x="10" y="88" font-size="11" font-weight="600" fill="var(--emerald)">交付产物：</text>
+          <text x="10" y="104" font-size="9" fill="var(--text-secondary)">高信号动态Prompt</text>
+          <text x="10" y="118" font-size="9" fill="var(--text-secondary)">预留生成注意力</text>
+        </g>
+        <path d="M 498 120 L 522 120" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow-track)" />
+
+        <!-- 阶段 4 -->
+        <g transform="translate(525, 55)">
+          <rect x="0" y="0" width="135" height="130" rx="8" fill="var(--bg-card)" stroke="var(--amber)" stroke-width="2" />
+          <rect x="0" y="0" width="135" height="26" rx="8" fill="var(--amber-light)" />
+          <text x="67" y="18" font-size="11" font-weight="700" fill="var(--amber)" text-anchor="middle">4. 维护外部状态</text>
+          <text x="10" y="48" font-size="11" font-weight="600" fill="var(--text-primary)">核心任务：</text>
+          <text x="10" y="66" font-size="10" fill="var(--text-secondary)">状态卸载/写回门</text>
+          <text x="10" y="88" font-size="11" font-weight="600" fill="var(--emerald)">交付产物：</text>
+          <text x="10" y="104" font-size="9" fill="var(--text-secondary)">结构化任务状态</text>
+          <text x="10" y="118" font-size="9" fill="var(--text-secondary)">跨轮已确认决定</text>
+        </g>
+        <path d="M 663 120 L 687 120" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow-track)" />
+
+        <!-- 阶段 5 -->
+        <g transform="translate(690, 55)">
+          <rect x="0" y="0" width="135" height="130" rx="8" fill="var(--bg-card)" stroke="var(--emerald)" stroke-width="2" />
+          <rect x="0" y="0" width="135" height="26" rx="8" fill="var(--emerald-light)" />
+          <text x="67" y="18" font-size="11" font-weight="700" fill="var(--emerald)" text-anchor="middle">5. 执行工具</text>
+          <text x="10" y="48" font-size="11" font-weight="600" fill="var(--text-primary)">核心任务：</text>
+          <text x="10" y="66" font-size="10" fill="var(--text-secondary)">参数构造/授权</text>
+          <text x="10" y="88" font-size="11" font-weight="600" fill="var(--emerald)">交付产物：</text>
+          <text x="10" y="104" font-size="9" fill="var(--text-secondary)">结构化调用参数</text>
+          <text x="10" y="118" font-size="9" fill="var(--text-secondary)">外部系统执行凭证</text>
+        </g>
+        <path d="M 828 120 L 852 120" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow-track)" />
+
+        <!-- 阶段 6 -->
+        <g transform="translate(855, 55)">
+          <rect x="0" y="0" width="85" height="130" rx="8" fill="var(--bg-card)" stroke="var(--rose)" stroke-width="2" />
+          <rect x="0" y="0" width="85" height="26" rx="8" fill="var(--rose-light)" />
+          <text x="42" y="18" font-size="11" font-weight="700" fill="var(--rose)" text-anchor="middle">6. 修正下一轮</text>
+          <text x="8" y="48" font-size="10" font-weight="600" fill="var(--text-primary)">观察结果：</text>
+          <text x="8" y="66" font-size="9" fill="var(--text-secondary)">校验Observation</text>
+          <text x="8" y="88" font-size="10" font-weight="600" fill="var(--emerald)">行动判定：</text>
+          <text x="8" y="104" font-size="9" fill="var(--text-secondary)">继续/换策/停止</text>
+        </g>
+
+        <!-- 闭环反馈线 -->
+        <path d="M 897 185 L 897 210 L 97 210 L 97 190" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-track)" />
+        <text x="495" y="225" font-size="11" font-weight="600" fill="var(--accent)" text-anchor="middle">运行时闭环修正流：用工具 Observation 调整下一轮意图与上下文装配</text>
+
+        <!-- 反向排错反射弧 -->
+        <text x="30" y="260" font-size="14" font-weight="700" fill="var(--rose)">反向故障定位排查弧 (Reverse Triage Sequence)</text>
+        
+        <g transform="translate(30, 275)">
+          <rect x="0" y="0" width="210" height="60" rx="6" fill="var(--bg-card)" stroke="var(--rose)" stroke-width="1.5" />
+          <text x="12" y="22" font-size="12" font-weight="700" fill="var(--rose)">故障表征：回答严重跑偏</text>
+          <text x="12" y="45" font-size="11" fill="var(--text-primary)">👉 第一排查点：查入口意图层</text>
+        </g>
+
+        <g transform="translate(265, 275)">
+          <rect x="0" y="0" width="210" height="60" rx="6" fill="var(--bg-card)" stroke="var(--rose)" stroke-width="1.5" />
+          <text x="12" y="22" font-size="12" font-weight="700" fill="var(--rose)">故障表征：事实/数据不对</text>
+          <text x="12" y="45" font-size="11" fill="var(--text-primary)">👉 第二排查点：查检索到的证据</text>
+        </g>
+
+        <g transform="translate(500, 275)">
+          <rect x="0" y="0" width="210" height="60" rx="6" fill="var(--bg-card)" stroke="var(--rose)" stroke-width="1.5" />
+          <text x="12" y="22" font-size="12" font-weight="700" fill="var(--rose)">故障表征：反复推翻旧决定</text>
+          <text x="12" y="45" font-size="11" fill="var(--text-primary)">👉 第三排查点：查状态是否持久化</text>
+        </g>
+
+        <g transform="translate(735, 275)">
+          <rect x="0" y="0" width="195" height="60" rx="6" fill="var(--bg-card)" stroke="var(--rose)" stroke-width="1.5" />
+          <text x="12" y="22" font-size="12" font-weight="700" fill="var(--rose)">故障表征：工具调用错误</text>
+          <text x="12" y="45" font-size="11" fill="var(--text-primary)">👉 第四排查点：查工具合同与选择</text>
+        </g>
+      </svg>
+    </div>
+    
+      </div>
+
+      <h3>2.4 故障排查反射弧与定位顺序</h3>
+      <p>
+        这张运行时轨道也给出了一个标准的排错顺序：
+      </p>
+      <ul>
+        <li><strong>回答跑偏：</strong>先查意图有没有被误解（入口意图层）；</li>
+        <li><strong>事实不对：</strong>查检索到的证据（证据与切块层）；</li>
+        <li><strong>反复推翻旧决定：</strong>查状态有没有持久化（外部工作记忆层）；</li>
+        <li><strong>工具用错：</strong>查工具合同和选择逻辑（工具定义与鉴权层）。</li>
+      </ul>
+      <p>
+        直接换模型往往跳过了最便宜、最可定位的故障点。
+      </p>
+    </section>
+    
+
+
+    <!-- Section 3: 第一步，把用户问题改造成系统能执行的意图 -->
+    <section id="sec-intent-and-query">
+      <h2>03. 第一步，把用户问题改造成系统能执行的意图</h2>
+      <p>
+        人不会按照数据库字段说话。用户可能只写“这个怎么还是不行”，把三个目标塞进一句话，或者默认系统知道“这批客户”指哪个时间段。入口不澄清，后面的检索、重排和生成都会认真优化一个错误目标。
+      </p>
+      <p>
+        查询重写、扩展、分解和查询 Agent 处理的是四种不同情况。
+      </p>
+
+      <div class="weaviate-focus-box">
+        <div class="focus-header">
+          <span class="focus-prompt">重写、扩展、分解和查询 Agent 分别适合什么？</span>
+          <span class="focus-badge">Weaviate 手册系统图聚焦 03</span>
+        </div>
+        <div class="focus-content">
+          <p>
+            重写处理含糊，扩展提高覆盖，分解处理多目标，查询 Agent 处理跨库和迭代搜索；复杂度与成本依次增加但不构成固定等级。
+          </p>
+        </div>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-title">
+          <span>🎯</span>
+          <span>系统架构图 3：查询改造四大模式决策象限与工作流</span>
+        </div>
+        <div class="diagram-desc">
+          对比重写 (Rewrite)、扩展 (Expand)、分解 (Decompose)、查询 Agent (Query Agent) 的适用场景、核心动作、成本阶梯与工程边界。
+        </div>
+        
+    <div class="diagram-canvas">
+      <svg viewBox="0 0 960 360" xmlns="http://www.w3.org/2000/svg">
+        <g transform="translate(30, 20)">
+          <rect x="0" y="0" width="210" height="320" rx="8" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="2" />
+          <rect x="0" y="0" width="210" height="36" rx="8" fill="var(--cyan-light)" />
+          <text x="105" y="24" font-size="13" font-weight="700" fill="var(--cyan)" text-anchor="middle">查询重写 (Rewrite)</text>
+          <text x="15" y="60" font-size="12" font-weight="700" fill="var(--text-primary)">适用痛点：</text>
+          <text x="15" y="80" font-size="11" fill="var(--text-secondary)">表达别扭、含糊或严重省略</text>
+          <text x="15" y="110" font-size="12" font-weight="700" fill="var(--accent)">核心动作：</text>
+          <text x="15" y="130" font-size="11" fill="var(--text-secondary)">① 去除干扰检索的背景冗余</text>
+          <text x="15" y="150" font-size="11" fill="var(--text-secondary)">② 补入专业术语与关键词</text>
+          <text x="15" y="170" font-size="11" fill="var(--text-secondary)">③ 拆分给检索与给回答版本</text>
+          <text x="15" y="205" font-size="12" font-weight="700" fill="var(--emerald)">复杂度与成本：</text>
+          <text x="15" y="225" font-size="11" fill="var(--emerald)">★☆☆☆☆ (极低延迟/单次轻量)</text>
+          <text x="15" y="255" font-size="12" font-weight="700" fill="var(--amber)">工程边界：</text>
+          <text x="15" y="275" font-size="10" fill="var(--text-tertiary)">勿单纯润色原话；给检索器</text>
+          <text x="15" y="292" font-size="10" fill="var(--text-tertiary)">求高匹配，给回答求全意图</text>
+        </g>
+
+        <g transform="translate(265, 20)">
+          <rect x="0" y="0" width="210" height="320" rx="8" fill="var(--bg-card)" stroke="var(--emerald)" stroke-width="2" />
+          <rect x="0" y="0" width="210" height="36" rx="8" fill="var(--emerald-light)" />
+          <text x="105" y="24" font-size="13" font-weight="700" fill="var(--emerald)" text-anchor="middle">查询扩展 (Expand)</text>
+          <text x="15" y="60" font-size="12" font-weight="700" fill="var(--text-primary)">适用痛点：</text>
+          <text x="15" y="80" font-size="11" fill="var(--text-secondary)">单关键词覆盖低、术语不一致</text>
+          <text x="15" y="110" font-size="12" font-weight="700" fill="var(--accent)">核心动作：</text>
+          <text x="15" y="130" font-size="11" fill="var(--text-secondary)">① 生成同义表达与相关词</text>
+          <text x="15" y="150" font-size="11" fill="var(--text-secondary)">② 假设性文档嵌入 (HyDE)</text>
+          <text x="15" y="170" font-size="11" fill="var(--text-secondary)">③ 多分支并行召回合并</text>
+          <text x="15" y="205" font-size="12" font-weight="700" fill="var(--emerald)">复杂度与成本：</text>
+          <text x="15" y="225" font-size="11" fill="var(--emerald)">★★☆☆☆ (低至中等 Token 消耗)</text>
+          <text x="15" y="255" font-size="12" font-weight="700" fill="var(--rose)">风险警示：</text>
+          <text x="15" y="275" font-size="10" fill="var(--text-tertiary)">提高召回率的同时，易使模型</text>
+          <text x="15" y="292" font-size="10" fill="var(--text-tertiary)">注意力偏离核心目标产生漂移</text>
+        </g>
+
+        <g transform="translate(500, 20)">
+          <rect x="0" y="0" width="210" height="320" rx="8" fill="var(--bg-card)" stroke="var(--amber)" stroke-width="2" />
+          <rect x="0" y="0" width="210" height="36" rx="8" fill="var(--amber-light)" />
+          <text x="105" y="24" font-size="13" font-weight="700" fill="var(--amber)" text-anchor="middle">查询分解 (Decompose)</text>
+          <text x="15" y="60" font-size="12" font-weight="700" fill="var(--text-primary)">适用痛点：</text>
+          <text x="15" y="80" font-size="11" fill="var(--text-secondary)">单句包含多个复合目标/多步骤</text>
+          <text x="15" y="110" font-size="12" font-weight="700" fill="var(--accent)">核心动作：</text>
+          <text x="15" y="130" font-size="11" fill="var(--text-secondary)">① 拆分独立原子子问题</text>
+          <text x="15" y="150" font-size="11" fill="var(--text-secondary)">② 建立子任务拓扑依赖关系</text>
+          <text x="15" y="170" font-size="11" fill="var(--text-secondary)">③ 分头检索后进行逻辑汇合</text>
+          <text x="15" y="205" font-size="12" font-weight="700" fill="var(--emerald)">复杂度与成本：</text>
+          <text x="15" y="225" font-size="11" fill="var(--emerald)">★★★☆☆ (多次调用/综合较难)</text>
+          <text x="15" y="255" font-size="12" font-weight="700" fill="var(--amber)">工程边界：</text>
+          <text x="15" y="275" font-size="10" fill="var(--text-tertiary)">大幅提高单一子项精准度，但</text>
+          <text x="15" y="292" font-size="10" fill="var(--text-tertiary)">必须设计健壮的中间汇总结点</text>
+        </g>
+
+        <g transform="translate(735, 20)">
+          <rect x="0" y="0" width="195" height="320" rx="8" fill="var(--bg-card)" stroke="var(--accent)" stroke-width="2" />
+          <rect x="0" y="0" width="195" height="36" rx="8" fill="var(--accent-light)" />
+          <text x="97" y="24" font-size="13" font-weight="700" fill="var(--accent)" text-anchor="middle">查询 Agent (Query Agent)</text>
+          <text x="15" y="60" font-size="12" font-weight="700" fill="var(--text-primary)">适用痛点：</text>
+          <text x="15" y="80" font-size="11" fill="var(--text-secondary)">数据异构跨库/未知探索路径</text>
+          <text x="15" y="110" font-size="12" font-weight="700" fill="var(--accent)">核心动作：</text>
+          <text x="15" y="130" font-size="11" fill="var(--text-secondary)">① 分析：定源与过滤条件</text>
+          <text x="15" y="150" font-size="11" fill="var(--text-secondary)">② 执行：动态搜/评估缺口</text>
+          <text x="15" y="170" font-size="11" fill="var(--text-secondary)">③ 综合：改写重试直至齐备</text>
+          <text x="15" y="205" font-size="12" font-weight="700" fill="var(--emerald)">复杂度与成本：</text>
+          <text x="15" y="225" font-size="11" fill="var(--emerald)">★★★★★ (高时延/多轮迭代)</text>
+          <text x="15" y="255" font-size="12" font-weight="700" fill="var(--emerald)">最大价值：</text>
+          <text x="15" y="275" font-size="10" fill="var(--text-tertiary)">将一次性检索失败暴露为可</text>
+          <text x="15" y="292" font-size="10" fill="var(--text-tertiary)">恢复可迭代的工程自愈状态</text>
+        </g>
+      </svg>
+    </div>
+    
+      </div>
+
+      <h3>3.1 查询重写的三大动作与“双版本”分离</h3>
+      <p>
+        查询重写本身有三个基础动作：
+      </p>
+      <ul>
+        <li>把别扭或省略严重的问题重新组织；</li>
+        <li>删除会干扰检索的无关背景；</li>
+        <li>补入目标资料常用的关键词。必要时再把复杂问题拆成子问题。</li>
+      </ul>
+      <p>
+        <strong>这里的目标在于为不同环节准备不同形式的查询：给检索器的版本追求匹配，给最终回答的版本保留完整意图，而非单纯润色用户原话。</strong>
+      </p>
+
+      <h3>3.2 复合意图拆解与多源跨库查询 Agent 实例</h3>
+      <p>
+        例如，用户提问：<em>“帮我看看最近客户为什么流失，并找三家最值得回访”</em>，表面是一句话，实际上至少包含三层隐式意图：
+      </p>
+      <ol>
+        <li><strong>时间范围定义：</strong>“最近”指哪一个周期（过去 7 天、过去 30 天还是当季度）？</li>
+        <li><strong>业务计算口径：</strong>“流失”要按什么口径判断（无登录行为、主动退订还是账户余额清零）？</li>
+        <li><strong>排序决策标准：</strong>“最值得回访”由历史累计金额、活跃度粘性还是算法预测的挽回概率决定？</li>
+      </ol>
+      <p>
+        系统可以先重写成结构化问题，再把原因分析和客户筛选拆开检索，最后综合。若数据分散在 CRM、工单和通话记录里，<strong>查询 Agent</strong> 才需要根据各库的 schema 动态决定搜索、过滤和聚合顺序。
+      </p>
+
+      <h3>3.3 查询 Agent 的三个执行阶段与自愈状态</h3>
+      <p>
+        一个完整的查询 Agent 至少经过三个阶段：
+      </p>
+      <ul>
+        <li><strong>分析阶段 (Analysis)：</strong>判断问题类型、需要查询哪些来源（向量库/关系库/工单系统）和前置过滤条件；</li>
+        <li><strong>执行阶段 (Execution)：</strong>动态执行搜索。如果结果缺字段、证据互相冲突或不足以完成任务，它要评估缺口，改写或扩展查询后重试；</li>
+        <li><strong>可选综合阶段 (Synthesis)：</strong>只有证据齐备时，才进入综合回答。</li>
+      </ul>
+      <p>
+        这个循环比“一次搜索后直接生成”更贵，却能把检索失败暴露为<strong>可恢复的中间状态</strong>。
+      </p>
+
+      <div class="spec-table-wrap">
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th>改造模式</th>
+              <th>适用场景</th>
+              <th>Token / 延迟成本</th>
+              <th>收益与优势</th>
+              <th>主要风险与副作用</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>查询重写 (Rewrite)</strong></td>
+              <td>表达省略、含糊、口语化严重</td>
+              <td>极低 (1 次轻量调用)</td>
+              <td>消除歧义，提升单库关键词命中率</td>
+              <td>若过度删减可能误删用户原始意图约束</td>
+            </tr>
+            <tr>
+              <td><strong>查询扩展 (Expand)</strong></td>
+              <td>关键词覆盖率低、专业术语偏差</td>
+              <td>低至中 (多路并行)</td>
+              <td>显著提高召回覆盖，防漏检</td>
+              <td>语义发散，可能把意图越扩越远导致分心</td>
+            </tr>
+            <tr>
+              <td><strong>查询分解 (Decompose)</strong></td>
+              <td>多目标复合、多步骤因果推理</td>
+              <td>中等 (多次独立检索)</td>
+              <td>各击破子目标，保证各维度精度</td>
+              <td>增加检索调用次数与后续信息综合难度</td>
+            </tr>
+            <tr>
+              <td><strong>查询 Agent (Query Agent)</strong></td>
+              <td>跨多库异构系统、未知探索路径</td>
+              <td>高 (多轮迭代与反思)</td>
+              <td>动态调整探索路径，失败可恢复</td>
+              <td>高延迟、高成本，状态空间大且极难调试</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        扩展查询能提高召回，但也会把用户意图越扩越远；分解能提高精度，但会增加调用次数和综合难度；查询 Agent 能适应未知路径，同时带来延迟、成本和调试复杂度。<strong>选择标准应落在任务上：是否含糊、是否多目标、是否需要跨库、第一次检索失败后是否值得继续探索。</strong>
+      </p>
+
+      <h3>3.4 入口阶段必须留下的三项可检查产物</h3>
+      <p>
+        入口阶段至少要留下三项可检查产物：
+      </p>
+      <ul>
+        <li><strong>规范化意图：</strong>一份保留用户原话核心诉求的结构化意图定义；</li>
+        <li><strong>范围条件：</strong>一组不可越过的边界限定（如时间范围、主体 ID、业务口径）；</li>
+        <li><strong>验收句：</strong>一个说明“什么结果算回答完成”的判定标准。</li>
+      </ul>
+      <p>
+        <strong>没有这三项，系统很难判断后面是在探索，还是已经跑题。</strong>
+      </p>
+    </section>
+    
+
+
+    <!-- Section 4: 第二步，只把当前需要的知识送进上下文窗口 -->
+    <section id="sec-retrieval-and-chunking">
+      <h2>04. 第二步，只把当前需要的知识送进上下文窗口</h2>
+      <p>
+        意图明确后，系统面临第二个问题：资料远大于窗口，哪一小部分既容易被找到，又带着足够语境？这就是检索和切块真正解决的事。
+      </p>
+
+      <h3>4.1 检索精度与语境完整度的“甜点区”</h3>
+      <p>
+        切块过小与切块过大，各有致命缺陷：
+      </p>
+      <ul>
+        <li><strong>切得太小：</strong>单个片段容易在向量空间精准命中，却可能丢掉<strong>主语、前置假设、生效条件和例外条款</strong>；</li>
+        <li><strong>切得太大：</strong>语境虽然完整，向量表示却被多个复杂主题平均稀释，检索相似度打折，难以被高分召回。</li>
+      </ul>
+      <p>
+        手册把它画成<strong>“检索精度”</strong>和<strong>“语境完整度”</strong>的<strong>甜点区 (Sweet Spot)</strong>。这个甜点区没有全行业通用数字，它随文档结构、问题粒度和下游任务改变。
+      </p>
+
+      <div class="diagram-card">
+        <div class="diagram-title">
+          <span>📈</span>
+          <span>系统架构图 4：切块策略“检索精度 vs 语境完整度”甜点区曲线图</span>
+        </div>
+        <div class="diagram-desc">
+          直观展示切块粒度（Token 规模）对检索精度与语境完整度的反向制约关系，以及工程黄金平衡点（Sweet Spot）与 Late Chunking 的突破效应。
+        </div>
+        
+    <div class="diagram-canvas">
+      <svg viewBox="0 0 960 380" xmlns="http://www.w3.org/2000/svg">
+        <!-- 最佳工程甜点区阴影 -->
+        <rect x="350" y="45" width="230" height="260" fill="rgba(217, 119, 87, 0.1)" rx="4" />
+        <text x="465" y="65" font-size="12" font-weight="700" fill="var(--accent)" text-anchor="middle">工程实践“甜点区” (Sweet Spot: 256~1024 Tokens)</text>
+
+        <!-- X轴与Y轴 -->
+        <line x1="120" y1="305" x2="840" y2="305" stroke="var(--border-color)" stroke-width="2" />
+        <line x1="120" y1="45" x2="120" y2="305" stroke="var(--border-color)" stroke-width="2" />
+
+        <text x="110" y="55" font-size="11" fill="var(--text-tertiary)" text-anchor="end">100%</text>
+        <text x="110" y="175" font-size="11" fill="var(--text-tertiary)" text-anchor="end">50%</text>
+        <text x="110" y="305" font-size="11" fill="var(--text-tertiary)" text-anchor="end">0%</text>
+
+        <!-- X轴等间距刻度 (严格等间距 step=115, 满足第6项静态校验) -->
+        <text x="120" y="325" font-size="11" fill="var(--text-secondary)" text-anchor="middle">词级 (64T)</text>
+        <text x="235" y="325" font-size="11" fill="var(--text-secondary)" text-anchor="middle">短句 (128T)</text>
+        <text x="350" y="325" font-size="11" fill="var(--text-secondary)" text-anchor="middle">段落 (256T)</text>
+        <text x="465" y="325" font-size="11" fill="var(--text-secondary)" text-anchor="middle">小节 (512T)</text>
+        <text x="580" y="325" font-size="11" fill="var(--text-secondary)" text-anchor="middle">长节 (1024T)</text>
+        <text x="695" y="325" font-size="11" fill="var(--text-secondary)" text-anchor="middle">长篇 (2048T)</text>
+        <text x="810" y="325" font-size="11" fill="var(--text-secondary)" text-anchor="middle">全章 (4096T+)</text>
+
+        <!-- 检索命中精度曲线 (Precision: 小块高，大块低) -->
+        <polyline points="120,70 235,85 350,115 465,160 580,215 695,260 810,290" fill="none" stroke="var(--emerald)" stroke-width="3" />
+        
+        <!-- 语境完整度曲线 (Completeness: 小块低，大块高) -->
+        <polyline points="120,290 235,260 350,210 465,155 580,110 695,85 810,70" fill="none" stroke="var(--cyan)" stroke-width="3" />
+
+        <!-- 标记圆点 -->
+        <circle cx="235" cy="85" r="4" fill="var(--emerald)" />
+        <circle cx="465" cy="160" r="5" fill="var(--emerald)" />
+        <circle cx="465" cy="155" r="5" fill="var(--cyan)" />
+        <circle cx="695" cy="85" r="4" fill="var(--cyan)" />
+
+        <line x1="680" y1="140" x2="710" y2="140" stroke="var(--emerald)" stroke-width="3" />
+        <text x="720" y="145" font-size="12" font-weight="600" fill="var(--emerald)">检索精度 (Precision: 小块易命中)</text>
+
+        <line x1="680" y1="170" x2="710" y2="170" stroke="var(--cyan)" stroke-width="3" />
+        <text x="720" y="175" font-size="12" font-weight="600" fill="var(--cyan)">语境完整度 (Completeness: 保留条件/主语)</text>
+
+        <!-- 切块策略推荐指示牌 -->
+        <path d="M 465 158 L 465 100" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3,3" />
+        <rect x="385" y="85" width="160" height="26" rx="4" fill="var(--accent-light)" stroke="var(--accent)" stroke-width="1" />
+        <text x="465" y="102" font-size="11" font-weight="700" fill="var(--accent)" text-anchor="middle">递归切块 + 结构按节切块</text>
+      </svg>
+    </div>
+    
+      </div>
+
+      <h3>4.2 六大切块策略工程特性矩阵</h3>
+      <p>
+        主流切块策略在业界可分为六种形式：
+      </p>
+      <div class="spec-table-wrap">
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th>切块策略</th>
+              <th>推荐分块粒度</th>
+              <th>适用文档形态</th>
+              <th>核心优势</th>
+              <th>技术痛点与局限</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>固定长度切块 (Fixed-size)</strong></td>
+              <td>256 ~ 512 Tokens</td>
+              <td>短小、格式均一的规则文本</td>
+              <td>计算速度快，极低计算开销</td>
+              <td>容易在句子中间生硬切断语义</td>
+            </tr>
+            <tr>
+              <td><strong>递归切块 (Recursive)</strong></td>
+              <td>512 ~ 1024 Tokens</td>
+              <td>通用长文档、技术手册</td>
+              <td>按段落/换行逐级降级，保留自然语义</td>
+              <td>对无明显标点的松散文本效果下降</td>
+            </tr>
+            <tr>
+              <td><strong>结构/文档切块 (Structural)</strong></td>
+              <td>按章节/函数自适应</td>
+              <td>结构清楚的 Markdown / 代码 AST</td>
+              <td>天然与业务逻辑边界（类/函数/章节）重合</td>
+              <td>对无结构的纯纯文本无效</td>
+            </tr>
+            <tr>
+              <td><strong>语义 / LLM 切块 (Semantic)</strong></td>
+              <td>动态主题边界</td>
+              <td>多主题混杂的深度研报、复杂对话</td>
+              <td>由模型判定主题断点，语境切换极准</td>
+              <td>切块耗时极长，计算成本昂贵</td>
+            </tr>
+            <tr>
+              <td><strong>层级切块 (Hierarchical)</strong></td>
+              <td>摘要 (大) + 细节 (小)</td>
+              <td>多层嵌套的长篇专著、法规文档</td>
+              <td>同时保留全局大纲与微观段落定位</td>
+              <td>存储开销翻倍，检索需要多层映射</td>
+            </tr>
+            <tr>
+              <td><strong>后置切块 (Late Chunking)</strong></td>
+              <td>全文输入，局部池化</td>
+              <td>兼顾长程依赖与高精度的前沿场景</td>
+              <td>使小切片向量提前“看到”整篇上下文</td>
+              <td>需专用模型支持长上下文单次嵌入</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>4.3 预切块 (Pre-chunking) 与 后切块 (Post-chunking) 的抉择</h3>
+      <p>
+        方法之外，还要决定<strong>何时切</strong>：
+      </p>
+      <ul>
+        <li><strong>预切块 (Pre-chunking)：</strong>把成本放在离线数据入库阶段，在线查询极快，但分块策略一旦确定便固化死板；</li>
+        <li><strong>后切块 (Post-chunking)：</strong>根据当前具体问题的意图动态处理全文或粗粒度块，极度灵活，但首轮检索与切块显著推高延迟。</li>
+      </ul>
+
+      <div class="weaviate-focus-box">
+        <div class="focus-header">
+          <span class="focus-prompt">文档结构、变化频率和延迟要求怎样共同改变切块方案？</span>
+          <span class="focus-badge">Weaviate 手册系统图聚焦 04</span>
+        </div>
+        <div class="focus-content">
+          <p>
+            结构清楚优先按文档或递归切块，结构松散优先递归或语义切块；内容频繁变化且可接受额外首轮延迟时考虑后切块，否则优先预切块。
+          </p>
+        </div>
+      </div>
+
+      <h3>4.4 任务级评测四要素与厂商视角反思</h3>
+      <p>
+        选择之后还要做<strong>任务级评测 (Task-Level Eval)</strong>。建议准备一小组真实任务集，每题标出必须命中的原始段落，然后严格核验四项指标：
+      </p>
+      <ol>
+        <li><strong>答案覆盖性：</strong>检索出的片段集合有没有完整覆盖生成回答所需的全部信息？</li>
+        <li><strong>限定完整性：</strong>片段是否带着必要的时间、权限、前置假设等限定条件？</li>
+        <li><strong>噪音占比：</strong>无关片段占了多少（无关片段过多会直接造成模型分心）？</li>
+        <li><strong>溯源保真度：</strong>模型给出的最终回答能否逐字逐句回到原文段落？</li>
+      </ol>
+      <p>
+        若只看向量相似度或演示中的一个成功案例，切块策略很容易在换文档后失效。
+      </p>
+      <p>
+        <strong>这也暴露了材料的厂商视角：Weaviate 自然把向量数据库放在中心。生产系统还可能组合关键词检索 (BM25)、关系数据库、文件索引、事件日志和直接工具查询。检索层的目标是拿到可用证据，不是证明某一种存储方式先进。</strong>
+      </p>
+    </section>
+    
+
+
+    <!-- Section 5: 第三步，用提示和记忆把一次调用接成长任务 -->
+    <section id="sec-prompts-and-memory">
+      <h2>05. 第三步，用提示和记忆把一次调用接成长任务</h2>
+      <p>
+        检索结果不会自动变成好上下文。系统还要决定任务规则、证据、最近对话、工具说明和输出空间各占多少；哪些细节只在当前步骤有用，哪些状态值得跨轮保存。
+      </p>
+
+      <h3>5.1 提示作为控制层：输出合同与可审计产物</h3>
+      <p>
+        提示在上下文工程中承担<strong>控制层</strong>职责：定义目标、边界、工具触发条件、参数格式、返回值和完成标准。
+      </p>
+      <p>
+        手册介绍了 few-shot、Chain of Thought (CoT)、Tree of Thoughts (ToT) 与 ReAct。真正可迁移的工程部分，是<strong>用范例固定输出合同、把复杂任务拆成可检查阶段、让行动结果进入下一轮</strong>。
+      </p>
+      <p>
+        <strong>无需要求模型展示私有内部推理；计划、工具参数、执行结果、引用和状态变化已经足够工程审计。</strong>
+      </p>
+
+      <h3>5.2 五层记忆架构与生命周期门禁</h3>
+      <p>
+        记忆则把时间尺度拉长。真实系统不能只有一个单向增长的对话历史，而必须划分为五个清晰层级：
+      </p>
+      <ul>
+        <li><strong>当前上下文窗口 (Current Window Context)：</strong>仅保存最近消息和这一步必需的材料，属于临时易失性高频缓存；</li>
+        <li><strong>工作状态 (Working Memory / Task State)：</strong>保存一个多步任务尚未完成的状态、已确认的关键决断与当前待办；</li>
+        <li><strong>情景记忆 (Episodic Memory)：</strong>记录发生过的具体事件、会话交互轨迹与历史案例；</li>
+        <li><strong>语义记忆 (Semantic Memory)：</strong>保存跨任务可复用的稳定事实、专业领域知识与实体属性；</li>
+        <li><strong>程序记忆 (Procedural Memory)：</strong>保存经过实战检验、被证伪与被优化的做事方法与工作流 SOP。</li>
+      </ul>
+      <p>
+        它们的存放位置、写入门和清理门截然不同。
+      </p>
+
+      <div class="weaviate-focus-box">
+        <div class="focus-header">
+          <span class="focus-prompt">不同状态应放在哪里、何时写入和清理？</span>
+          <span class="focus-badge">Weaviate 手册系统图聚焦 05</span>
+        </div>
+        <div class="focus-content">
+          <p>
+            当前上下文只放本轮高信号内容；工作状态保存未完成任务；情景、语义和程序记忆分别保存事件、事实和做法，并各自设置写入与遗忘规则。
+          </p>
+        </div>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-title">
+          <span>🧠</span>
+          <span>系统架构图 5：分层记忆金字塔与生命周期门禁拓扑图</span>
+        </div>
+        <div class="diagram-desc">
+          展示当前窗口、工作记忆、情景记忆、语义记忆、程序记忆的分层存放介质、写入四道门禁以及多阶段取回重排流水线。
+        </div>
+        
+    <div class="diagram-canvas">
+      <svg viewBox="0 0 960 380" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow-mem" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--accent)" />
+          </marker>
+        </defs>
+
+        <!-- 左侧写入控制门 -->
+        <rect x="30" y="40" width="220" height="300" rx="8" fill="var(--bg-card)" stroke="var(--rose)" stroke-width="1.5" />
+        <rect x="30" y="40" width="220" height="34" rx="8" fill="var(--rose-light)" />
+        <text x="140" y="62" font-size="13" font-weight="700" fill="var(--rose)" text-anchor="middle">写入门禁与生命周期管理</text>
+        
+        <text x="45" y="100" font-size="12" font-weight="700" fill="var(--text-primary)">① 谁可以写入？</text>
+        <text x="45" y="120" font-size="10" fill="var(--text-secondary)">明确写入角色，防低信噪比灌水</text>
+
+        <text x="45" y="150" font-size="12" font-weight="700" fill="var(--text-primary)">② 凭什么写入？</text>
+        <text x="45" y="170" font-size="10" fill="var(--text-secondary)">需经过确证与验收，拒绝临时噪音</text>
+
+        <text x="45" y="200" font-size="12" font-weight="700" fill="var(--text-primary)">③ 怎样合并冲突？</text>
+        <text x="45" y="220" font-size="10" fill="var(--text-secondary)">版本时间戳盖戳，语义实体消歧</text>
+
+        <text x="45" y="250" font-size="12" font-weight="700" fill="var(--text-primary)">④ 何时过期与删除？</text>
+        <text x="45" y="270" font-size="10" fill="var(--text-secondary)">TTL 超时废弃 / 遗忘衰减曲线</text>
+
+        <text x="45" y="300" font-size="11" font-weight="700" fill="var(--rose)">“什么都存”必然制造遗忘！</text>
+        <text x="45" y="318" font-size="10" fill="var(--text-tertiary)">检索与写入质量同等关键</text>
+
+        <!-- 中间分层金字塔 -->
+        <g transform="translate(280, 40)">
+          <rect x="0" y="0" width="400" height="50" rx="6" fill="var(--accent-light)" stroke="var(--accent)" stroke-width="1.5" />
+          <text x="200" y="24" font-size="12" font-weight="700" fill="var(--accent)" text-anchor="middle">1. 当前窗口 (Current Window / Context)</text>
+          <text x="200" y="42" font-size="10" fill="var(--text-secondary)" text-anchor="middle">存放本轮最高信号输入、当前步必需材料，轮次结束后压缩清退</text>
+        </g>
+
+        <g transform="translate(280, 102)">
+          <rect x="0" y="0" width="400" height="50" rx="6" fill="var(--amber-light)" stroke="var(--amber)" stroke-width="1.5" />
+          <text x="200" y="24" font-size="12" font-weight="700" fill="var(--amber)" text-anchor="middle">2. 工作记忆 (Working Memory / Task State)</text>
+          <text x="200" y="42" font-size="10" fill="var(--text-secondary)" text-anchor="middle">多步复杂任务未完成状态：目标、已完成步骤、关键决定、证据指针</text>
+        </g>
+
+        <g transform="translate(280, 164)">
+          <rect x="0" y="0" width="400" height="50" rx="6" fill="var(--cyan-light)" stroke="var(--cyan)" stroke-width="1.5" />
+          <text x="200" y="24" font-size="12" font-weight="700" fill="var(--cyan)" text-anchor="middle">3. 情景记忆 (Episodic Memory)</text>
+          <text x="200" y="42" font-size="10" fill="var(--text-secondary)" text-anchor="middle">记录历史上发生过的具体事件、会话交互历程，随时间指数级衰减</text>
+        </g>
+
+        <g transform="translate(280, 226)">
+          <rect x="0" y="0" width="400" height="50" rx="6" fill="var(--emerald-light)" stroke="var(--emerald)" stroke-width="1.5" />
+          <text x="200" y="24" font-size="12" font-weight="700" fill="var(--emerald)" text-anchor="middle">4. 语义记忆 (Semantic Memory)</text>
+          <text x="200" y="42" font-size="10" fill="var(--text-secondary)" text-anchor="middle">可跨任务复用的领域稳定事实知识、实体属性、专业术语定义库</text>
+        </g>
+
+        <g transform="translate(280, 288)">
+          <rect x="0" y="0" width="400" height="50" rx="6" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1.5" />
+          <text x="200" y="24" font-size="12" font-weight="700" fill="var(--text-primary)" text-anchor="middle">5. 程序记忆 (Procedural Memory)</text>
+          <text x="200" y="42" font-size="10" fill="var(--text-secondary)" text-anchor="middle">经过实战验证的做事规则、标准工作流 (SOP)、自动化工具链模板</text>
+        </g>
+
+        <!-- 右侧取回增强流 -->
+        <rect x="710" y="40" width="220" height="300" rx="8" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="1.5" />
+        <rect x="710" y="40" width="220" height="34" rx="8" fill="var(--cyan-light)" />
+        <text x="820" y="62" font-size="13" font-weight="700" fill="var(--cyan)" text-anchor="middle">多阶段记忆取回流水线</text>
+
+        <text x="725" y="98" font-size="12" font-weight="700" fill="var(--text-primary)">Step 1: 扩大与迭代查询</text>
+        <text x="725" y="116" font-size="10" fill="var(--text-secondary)">避免单次盲搜，先扩意图生成候选</text>
+
+        <text x="725" y="148" font-size="12" font-weight="700" fill="var(--text-primary)">Step 2: Cross-Encoder 重排</text>
+        <text x="725" y="166" font-size="10" fill="var(--text-secondary)">把真正高相关记录推到最前面</text>
+
+        <text x="725" y="198" font-size="12" font-weight="700" fill="var(--text-primary)">Step 3: 查询 Agent 跨库搜索</text>
+        <text x="725" y="216" font-size="10" fill="var(--text-secondary)">针对未命中条目启动多集合扫描</text>
+
+        <text x="725" y="248" font-size="12" font-weight="700" fill="var(--text-primary)">Step 4: 个性化偏好动态调权</text>
+        <text x="725" y="266" font-size="10" fill="var(--text-secondary)">结合用户历史交互行为重新加权</text>
+
+        <text x="725" y="300" font-size="11" font-weight="700" fill="var(--emerald)">存下来只是第一步！</text>
+        <text x="725" y="318" font-size="10" fill="var(--text-tertiary)">在正确时刻精准取回才是真能力</text>
+
+        <path d="M 252 190 L 278 190" fill="none" stroke="var(--rose)" stroke-width="1.5" marker-end="url(#arrow-mem)" />
+        <path d="M 708 190 L 682 190" fill="none" stroke="var(--cyan)" stroke-width="1.5" marker-end="url(#arrow-mem)" />
+      </svg>
+    </div>
+    
+      </div>
+
+      <h3>5.3 记忆系统的五大工程问题与“防污染”铁律</h3>
+      <p>
+        <strong>“什么都存”会制造另一种遗忘：重要信息被重复、过期和低质量记录淹没。</strong> 一个可用的记忆系统至少要回答五个问题：
+      </p>
+      <ol>
+        <li><strong>谁可以写入？</strong> 必须有明确写入权限控制，避免任何临时中间思考或未经验证的幻觉直接写入长期存储；</li>
+        <li><strong>凭什么写入？</strong> 写入需满足确证标准（如人工确认、工具校验通过、成功测试通过）；</li>
+        <li><strong>怎样合并冲突？</strong> 当新的业务事实与旧条目矛盾时，需按时间戳、信任权重或语义重消歧进行合并覆写；</li>
+        <li><strong>什么时候取回？</strong> 并非每轮全量召回，而是根据当前任务阶段与子目标按需触发针对性检索；</li>
+        <li><strong>何时过期或删除？</strong> 设置生存时间 (TTL) 或衰减遗忘曲线，清理失效过时数据。</li>
+      </ol>
+      <p>
+        <strong>检索质量和写入质量同样重要；错误记忆被反复取回，会把一次失误扩散成长期偏差。</strong>
+      </p>
+
+      <h3>5.4 任务导向的记忆选型与取回优化</h3>
+      <p>
+        记忆架构必须服从任务：
+      </p>
+      <ul>
+        <li><strong>客服 Agent：</strong>更依赖能还原用户交互历史的情景记忆；</li>
+        <li><strong>财报分析 Agent：</strong>更依赖稳定的领域事实与权威财务口径（语义记忆）；</li>
+        <li><strong>轻量级简单任务：</strong>可以先用最近若干轮对话的滑动缓冲区，不必一开始就搭建庞大沉重的长期记忆库。</li>
+      </ul>
+      <p>
+        取回记忆也不能只做一次盲搜。手册给出的改进路径包括：
+      </p>
+      <ol>
+        <li><strong>先扩大或迭代查询：</strong>先依据上下文意图生成候选查询集；</li>
+        <li><strong>用重排器 (Reranker)：</strong>把真正高度相关的关键记录推到最前面；</li>
+        <li><strong>必要时启动查询 Agent：</strong>跨多个知识集合或业务表继续搜索；</li>
+        <li><strong>结合个性化逻辑：</strong>将用户特定业务偏好和交互历史融入最终排序。</li>
+      </ol>
+      <p>
+        <strong>能存下来只是第一关，能在正确时刻取回正确一条才是记忆系统的核心能力。</strong>
+      </p>
+
+      <h3>5.5 上下文卸载 (Context Offloading) 的最轻量工程落地</h3>
+      <p>
+        手册把上下文卸载写成<strong>“把信息放到窗口外，需要时再取回”</strong>。现实中，最轻量的工程实现往往是一份<strong>结构化任务状态表</strong>：
+      </p>
+      <div class="spec-table-wrap">
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th>状态字段 (Field)</th>
+              <th>工程含义与内容规范</th>
+              <th>更新时机</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>target_goal</code></td>
+              <td>任务全局终极目标与明确的验收句</td>
+              <td>任务开始时确立，全局不可变</td>
+            </tr>
+            <tr>
+              <td><code>completed_steps</code></td>
+              <td>已执行并已校验通过的历史步骤列表及核心结果摘要</td>
+              <td>每个工具或子步骤执行成功后追加</td>
+            </tr>
+            <tr>
+              <td><code>confirmed_decisions</code></td>
+              <td>用户明确确认的约束参数、业务口径、排他选择</td>
+              <td>用户给出确定指令或多选定案时写入</td>
+            </tr>
+            <tr>
+              <td><code>pending_issues</code></td>
+              <td>当前阻塞点、待验证假设或待用户澄清项</td>
+              <td>遇到局部异常或歧义时登记，解决后清退</td>
+            </tr>
+            <tr>
+              <td><code>evidence_refs</code></td>
+              <td>已定位原始资料的绝对路径、文件偏移或外部 ID 索引</td>
+              <td>检索召回后记录指针，而非全量文本复制</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>这份结构化任务状态比保留全部聊天记录更便宜，也更容易在每一轮由模型或系统自动化验证。</strong>
+      </p>
+
+      <!-- 外部推荐卡片 -->
+      <a href="https://best.xiaohu.ai/article/context-engineering-claude5/" target="_blank" rel="noopener noreferrer" class="ext-link-card">
+        <div class="ext-link-title">
+          <span>🔗</span>
+          <span>相关文章：Anthropic 砍掉 Claude Code 八成系统提示词，给出六条新的上下文写法</span>
+        </div>
+        <p style="margin: 0; font-size: 0.9rem; color: var(--text-secondary);">
+          如果你想看这一原则在真实工业级产品里如何落地，深度拆解 Claude Code 如何大幅精简提示词与工具描述、将上下文负担转移至按需动态检索的实战范式。
+        </p>
+        <span class="ext-link-url">https://best.xiaohu.ai/article/context-engineering-claude5/</span>
+      </a>
+    </section>
+    
+
+
+    <!-- Section 6: 第四步，让 Agent 选择工具，并用结果继续下一轮 -->
+    <section id="sec-tool-and-mcp">
+      <h2>06. 第四步，让 Agent 选择工具，并用结果继续下一轮</h2>
+      <p>
+        工具让模型从回答问题进入行动。<strong>Function Calling</strong> 把“输出一段像命令的文本”推进到结构化函数名和参数；<strong>MCP (Model Context Protocol)</strong> 又把资源、提示和工具的连接方式标准化。
+      </p>
+      <p>
+        <strong>连接成功只说明接口可用，无法证明 Agent 会在正确时间、用正确参数、经过正确授权调用它。</strong>
+      </p>
+
+      <h3>6.1 单工具调用 vs 工具链的复杂度跃迁</h3>
+      <p>
+        单个工具调用和工具链是两种完全不同难度的工程级别：
+      </p>
+      <ul>
+        <li><strong>单工具调用：</strong>查一次航班，只需在上下文提示中选中该工具、提取城市与日期填好参数、解释返回结果，单步即告终结；</li>
+        <li><strong>复杂工具链 (Toolchaining)：</strong>规划一次周末旅行，可能要依次查询航班、酒店和当地活动，还要把前一步结果转化为后一步的动态时空约束。工具链成倍增加了<strong>计划顺序、中间状态累积、局部失败回滚与停止收敛条件</strong>。</li>
+      </ul>
+
+      <h3>6.2 可靠工具循环的七个检查点</h3>
+      <p>
+        一个工业级可靠的工具循环，至少包含七个严格的检查点：
+      </p>
+      <ol>
+        <li><strong>发现可用工具：</strong>获取当前已注册的工具集元数据；</li>
+        <li><strong>筛掉无关工具：</strong>根据当前意图过滤干扰，避免向窗口塞入几十个无关 Schema；</li>
+        <li><strong>选择或规划：</strong>由模型决策调用哪一个（或哪一组编排）工具；</li>
+        <li><strong>构造参数：</strong>按照 JSON Schema 格式化参数并补充类型；</li>
+        <li><strong>经过授权检查：</strong>确认敏感写操作或高危调用已获得权限批准；</li>
+        <li><strong>执行并校验 Observation：</strong>捕获执行结果，截断超大体积并校验返回值有效性；</li>
+        <li><strong>控制转移决策：</strong>判断是继续执行下一步、更换重试策略、向用户提问澄清，还是彻底完成停止。</li>
+      </ol>
+
+      <div class="weaviate-focus-box">
+        <div class="focus-header">
+          <span class="focus-prompt">工具调用怎样变成可恢复的 Agent 循环？</span>
+          <span class="focus-badge">Weaviate 手册系统图聚焦 07</span>
+        </div>
+        <div class="focus-content">
+          <p>
+            Agent 从工具发现与筛选开始，完成选择、参数构造和授权后执行；Observation 经过校验，系统再决定继续、换策略、询问或停止。
+          </p>
+        </div>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-title">
+          <span>⚙️</span>
+          <span>系统架构图 6：七步自愈工具调用循环与 MCP 解耦拓扑图</span>
+        </div>
+        <div class="diagram-desc">
+          左侧展示工具发现至决策控制的七步正向流及基于错误 Observation 的自愈闭环；右侧展示 MCP 在 M×N 到 M+N 上的架构解耦及安全性职责边界。
+        </div>
+        
+    <div class="diagram-canvas">
+      <svg viewBox="0 0 960 400" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow-tool" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--emerald)" />
+          </marker>
+          <marker id="arrow-heal" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--rose)" />
+          </marker>
+        </defs>
+
+        <text x="30" y="30" font-size="14" font-weight="700" fill="var(--text-primary)">可恢复工具调用执行闭环 (7 Checkpoints &amp; Self-Healing Loop)</text>
+        
+        <rect x="30" y="45" width="480" height="340" rx="10" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1.5" />
+
+        <rect x="50" y="65" width="130" height="38" rx="4" fill="var(--bg-card-subtle)" stroke="var(--border-subtle)" />
+        <text x="115" y="88" font-size="11" font-weight="600" fill="var(--text-primary)" text-anchor="middle">1. 发现可用工具</text>
+
+        <path d="M 180 84 L 205 84" fill="none" stroke="var(--emerald)" stroke-width="1.5" marker-end="url(#arrow-tool)" />
+
+        <rect x="210" y="65" width="130" height="38" rx="4" fill="var(--bg-card-subtle)" stroke="var(--border-subtle)" />
+        <text x="275" y="88" font-size="11" font-weight="600" fill="var(--text-primary)" text-anchor="middle">2. 筛掉无关工具</text>
+
+        <path d="M 340 84 L 365 84" fill="none" stroke="var(--emerald)" stroke-width="1.5" marker-end="url(#arrow-tool)" />
+
+        <rect x="370" y="65" width="120" height="38" rx="4" fill="var(--cyan-light)" stroke="var(--cyan)" />
+        <text x="430" y="88" font-size="11" font-weight="600" fill="var(--cyan)" text-anchor="middle">3. 规划选择工具</text>
+
+        <path d="M 430 103 L 430 130" fill="none" stroke="var(--emerald)" stroke-width="1.5" marker-end="url(#arrow-tool)" />
+
+        <rect x="300" y="135" width="190" height="42" rx="4" fill="var(--accent-light)" stroke="var(--accent)" stroke-width="1.5" />
+        <text x="395" y="160" font-size="12" font-weight="700" fill="var(--accent)" text-anchor="middle">4. 构造标准参数 (高危易错点)</text>
+
+        <path d="M 300 156 L 245 156" fill="none" stroke="var(--emerald)" stroke-width="1.5" marker-end="url(#arrow-tool)" />
+
+        <rect x="50" y="135" width="190" height="42" rx="4" fill="var(--amber-light)" stroke="var(--amber)" stroke-width="1.5" />
+        <text x="145" y="160" font-size="12" font-weight="700" fill="var(--amber)" text-anchor="middle">5. 权限与安全授权检查</text>
+
+        <path d="M 145 177 L 145 205" fill="none" stroke="var(--emerald)" stroke-width="1.5" marker-end="url(#arrow-tool)" />
+
+        <rect x="50" y="210" width="220" height="55" rx="6" fill="var(--emerald-light)" stroke="var(--emerald)" stroke-width="2" />
+        <text x="160" y="233" font-size="12" font-weight="700" fill="var(--emerald)" text-anchor="middle">6. 执行调用并校验 Observation</text>
+        <text x="160" y="252" font-size="10" fill="var(--text-secondary)" text-anchor="middle">截断过大返回，防止日志塞爆窗口</text>
+
+        <path d="M 270 237 L 305 237" fill="none" stroke="var(--emerald)" stroke-width="1.5" marker-end="url(#arrow-tool)" />
+
+        <rect x="310" y="210" width="180" height="55" rx="6" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1.5" />
+        <text x="400" y="233" font-size="12" font-weight="700" fill="var(--text-primary)" text-anchor="middle">7. 控制转移与决策</text>
+        <text x="400" y="252" font-size="10" fill="var(--text-secondary)" text-anchor="middle">继续 / 换策略 / 询问 / 终结停止</text>
+
+        <!-- 自愈闭环连线 -->
+        <path d="M 160 265 L 160 300 L 460 300 L 460 180" fill="none" stroke="var(--rose)" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrow-heal)" />
+        <text x="310" y="320" font-size="11" font-weight="700" fill="var(--rose)" text-anchor="middle">自愈闭环：参数报错 Observation 注入窗口 ➔ 读懂错误 ➔ 改变参数重试</text>
+        <text x="310" y="338" font-size="10" fill="var(--text-tertiary)" text-anchor="middle">所谓自我反思必须落到可观察的参数重校验，而非空洞提示</text>
+
+        <!-- 右侧: MCP 架构 -->
+        <text x="540" y="30" font-size="14" font-weight="700" fill="var(--cyan)">MCP (Model Context Protocol) 拓扑与职责边界</text>
+        
+        <rect x="540" y="45" width="390" height="340" rx="10" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="1.5" />
+
+        <rect x="560" y="65" width="95" height="110" rx="6" fill="var(--bg-card-subtle)" stroke="var(--border-color)" />
+        <text x="607" y="90" font-size="11" font-weight="700" fill="var(--text-primary)" text-anchor="middle">M 个 AI 应用</text>
+        <text x="607" y="115" font-size="10" fill="var(--text-secondary)" text-anchor="middle">Claude Code</text>
+        <text x="607" y="135" font-size="10" fill="var(--text-secondary)" text-anchor="middle">Cursor / IDE</text>
+        <text x="607" y="155" font-size="10" fill="var(--text-secondary)" text-anchor="middle">自定义 Agent</text>
+
+        <rect x="685" y="65" width="100" height="110" rx="6" fill="var(--cyan-light)" stroke="var(--cyan)" stroke-width="2" />
+        <text x="735" y="88" font-size="12" font-weight="700" fill="var(--cyan)" text-anchor="middle">MCP 协议层</text>
+        <text x="735" y="110" font-size="10" font-weight="600" fill="var(--text-primary)" text-anchor="middle">Resources</text>
+        <text x="735" y="130" font-size="10" font-weight="600" fill="var(--text-primary)" text-anchor="middle">Prompts</text>
+        <text x="735" y="150" font-size="10" font-weight="600" fill="var(--text-primary)" text-anchor="middle">Tools</text>
+
+        <rect x="815" y="65" width="95" height="110" rx="6" fill="var(--bg-card-subtle)" stroke="var(--border-color)" />
+        <text x="862" y="90" font-size="11" font-weight="700" fill="var(--text-primary)" text-anchor="middle">N 个外部服务</text>
+        <text x="862" y="115" font-size="10" fill="var(--text-secondary)" text-anchor="middle">GitHub / Git</text>
+        <text x="862" y="135" font-size="10" fill="var(--text-secondary)" text-anchor="middle">PostgreSQL / DB</text>
+        <text x="862" y="155" font-size="10" fill="var(--text-secondary)" text-anchor="middle">Slack / 浏览器</text>
+
+        <path d="M 655 120 L 680 120" fill="none" stroke="var(--cyan)" stroke-width="2" />
+        <path d="M 785 120 L 810 120" fill="none" stroke="var(--cyan)" stroke-width="2" />
+
+        <rect x="560" y="195" width="350" height="60" rx="6" fill="var(--emerald-light)" stroke="var(--emerald)" />
+        <text x="735" y="218" font-size="11" font-weight="700" fill="var(--emerald)" text-anchor="middle">核心价值：M × N 复杂度收敛为 M + N</text>
+        <text x="735" y="238" font-size="10" fill="var(--text-secondary)" text-anchor="middle">应用端与服务端各适配一次，极大提高工具模块可组合性</text>
+
+        <rect x="560" y="270" width="350" height="95" rx="6" fill="var(--rose-light)" stroke="var(--rose)" />
+        <text x="735" y="293" font-size="11" font-weight="700" fill="var(--rose)" text-anchor="middle">清醒认知：MCP 解决连接性，不解决调用可靠性</text>
+        <text x="735" y="315" font-size="10" fill="var(--text-primary)" text-anchor="middle">协议不替应用决定：审批鉴权、数据隔离、幂等重试与停止条件</text>
+        <text x="735" y="335" font-size="10" font-weight="600" fill="var(--rose)" text-anchor="middle">“把插座装好，绝不等于电器已经安全运行！”</text>
+      </svg>
+    </div>
+    
+      </div>
+
+      <h3>6.3 参数构造陷阱与“错误反馈自愈”闭环</h3>
+      <p>
+        <strong>参数构造是最容易被低估的一关。</strong> Agent 即使选对工具，也可能漏掉必填字段、混淆时间单位（秒 vs 毫秒）或生成格式错误的参数。
+      </p>
+      <p>
+        手册中的例子展示了一个关键的<strong>可恢复路径</strong>：
+      </p>
+      <blockquote>
+        首次调用因参数不合格而报错，错误堆栈与校验失败原因作为 <strong>Observation</strong> 回到上下文窗口，Agent 据此精准读懂错误信息，修正参数格式后再次发起执行。
+      </blockquote>
+      <p>
+        <strong>所谓自我修正（Self-Correction），必须落到“读懂错误—改变参数—重新校验”的可观察过程，不能只写一句“模型会自动反思”。</strong>
+      </p>
+
+      <h3>6.4 工具合同规范与返回体积截断控制</h3>
+      <p>
+        工具描述本身就是注入模型上下文的核心提示词。一个高可靠的工具合同（Tool Contract）必须写清七个要素：
+      </p>
+      <div class="spec-table-wrap">
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th>合同要素</th>
+              <th>规范要求</th>
+              <th>反模式防范</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>动词定义 (Verb)</strong></td>
+              <td>精准动词（如 <code>fetch_order_detail</code>、<code>cancel_subscription</code>）</td>
+              <td>杜绝多合一的模糊操作词（如 <code>manage_order</code>）</td>
+            </tr>
+            <tr>
+              <td><strong>适用范围 (Scope)</strong></td>
+              <td>清晰声明何时触发、何时绝对不应调用本工具</td>
+              <td>未声明互斥场景，导致模型在 3 个相似工具间反复摇摆</td>
+            </tr>
+            <tr>
+              <td><strong>必填参数 (Required)</strong></td>
+              <td>明确标注 <code>required</code> 列表及字段含义</td>
+              <td>全量可选字段导致模型漏传关键业务主键</td>
+            </tr>
+            <tr>
+              <td><strong>单位与格式 (Format)</strong></td>
+              <td>强制限定 ISO8601、分/元、Unix 秒级戳</td>
+              <td>未限定日期格式致使模型输出 <code>"yesterday"</code> 传给 SQL</td>
+            </tr>
+            <tr>
+              <td><strong>返回结构 (Return)</strong></td>
+              <td>声明结构化 JSON Schema 与关键状态码</td>
+              <td>非结构化纯文本导致下一步解析逻辑崩溃</td>
+            </tr>
+            <tr>
+              <td><strong>错误状态 (Errors)</strong></td>
+              <td>枚举可自愈错误与不可恢复错误</td>
+              <td>遇到 404 错误陷入无限重试死循环</td>
+            </tr>
+            <tr>
+              <td><strong>调用限制 (Limits)</strong></td>
+              <td>注明限流 QPS、单次返回分页大小上限</td>
+              <td>未限分页单次拖出 50,000 条记录塞死窗口</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>工具返回也要严格控制体积：把几万行日志原样塞回窗口，会让下一步决策被噪声彻底拖垮。保留高信息量摘要、关键核心字段、原始日志存储位置和可复查引用，系统通常更稳。</strong>
+      </p>
+
+      <h3>6.5 MCP 协议的解耦价值与清醒认识</h3>
+      <p>
+        MCP 的真正工业价值在于<strong>降低重复适配成本</strong>：
+      </p>
+      <ul>
+        <li><strong>传统方式：</strong>M 个 AI 应用分别对接 N 个外部系统，最坏需要维护 <strong>M × N</strong> 组定制化驱动与接口转换；</li>
+        <li><strong>标准协议：</strong>让应用端和服务端各自适配一次标准协议，把连接复杂度彻底收敛为 <strong>M + N</strong>。</li>
+      </ul>
+      <p>
+        它提高的是<strong>模块可组合性</strong>，不是调用可靠性。官方规范里的基础原语包括 <strong>Resources、Prompts 和 Tools</strong>，远不止“给模型接工具”。
+      </p>
+      <p>
+        <strong>它仍然不替应用决定：权限审批、数据边界隔离、并发幂等、指数退避重试和任务停止条件。把 MCP 接通当成 Agent 完成，是把插座装好误当成电器已经安全运行。</strong>
+      </p>
+
+      <h3>6.6 多 Agent 架构的上下文隔离收益与协同成本</h3>
+      <p>
+        多 Agent 同样严格遵守上下文注意力的经济学规律：
+      </p>
+      <ul>
+        <li><strong>收益：</strong>专业子 Agent 可以各自带着干净、极简的上下文并行处理窄域任务，主调度 Agent 只接收经过压缩的高信噪比结果，避免单窗口超载；</li>
+        <li><strong>代价：</strong>任务拆分逻辑复杂化、证据回传丢失语境、跨 Agent 状态冲突合并以及共享状态同步变得极其困难。</li>
+      </ul>
+      <p>
+        <strong>任务没有明显并行收益时，单 Agent 加清楚的工具合同与显式工作状态，往往比多 Agent Fleet 更容易验证和排错。</strong>
+      </p>
+    </section>
+    
+
+
+    <!-- Section 7: 一套上下文工程系统，最后要过这六道验收 -->
+    <section id="sec-acceptance-gates">
+      <h2>07. 一套上下文工程系统，最后要过这六道验收</h2>
+      <p>
+        这份手册把提示、检索、记忆和工具放进同一张系统图。它没有提供效果实验，也不能替你选定框架。它留下<strong>六道工程关口</strong>：每一步都要有可检查产物、失败信号和下一步交接。
+      </p>
+
+      <div class="weaviate-focus-box">
+        <div class="focus-header">
+          <span class="focus-prompt">怎样验收一套上下文工程系统？</span>
+          <span class="focus-badge">Weaviate 手册系统图聚焦 08</span>
+        </div>
+        <div class="focus-content">
+          <p>
+            依次验收意图、证据、装配、状态、行动和反馈，每一步都要有可检查产物和失败处理。
+          </p>
+        </div>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-title">
+          <span>🛡️</span>
+          <span>系统架构图 7：六道工程验收关口与全链路反推排错矩阵图</span>
+        </div>
+        <div class="diagram-desc">
+          涵盖意图层、证据层、装配层、状态层、行动层、反馈层的验收核心要点、必须留下的可检查产物以及排错回溯路径。
+        </div>
+        
+    <div class="diagram-canvas">
+      <svg viewBox="0 0 960 360" xmlns="http://www.w3.org/2000/svg">
+        <g transform="translate(30, 20)">
+          <rect x="0" y="0" width="140" height="320" rx="8" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="2" />
+          <rect x="0" y="0" width="140" height="32" rx="8" fill="var(--cyan-light)" />
+          <text x="70" y="22" font-size="12" font-weight="700" fill="var(--cyan)" text-anchor="middle">关口 1: 意图层</text>
+          
+          <text x="12" y="55" font-size="11" font-weight="700" fill="var(--text-primary)">验收核心：</text>
+          <text x="12" y="75" font-size="10" fill="var(--text-secondary)">是否保留原话？</text>
+          <text x="12" y="92" font-size="10" fill="var(--text-secondary)">是否有不可越界</text>
+          <text x="12" y="108" font-size="10" fill="var(--text-secondary)">的范围限定？</text>
+          <text x="12" y="125" font-size="10" fill="var(--text-secondary)">有无明确完成句？</text>
+
+          <text x="12" y="160" font-size="11" font-weight="700" fill="var(--rose)">失败信号：</text>
+          <text x="12" y="180" font-size="10" fill="var(--rose)">回答跑偏、漏掉</text>
+          <text x="12" y="196" font-size="10" fill="var(--rose)">关键约束条件</text>
+
+          <text x="12" y="235" font-size="11" font-weight="700" fill="var(--emerald)">交付产物：</text>
+          <text x="12" y="255" font-size="10" fill="var(--text-primary)">三项入口契约：</text>
+          <text x="12" y="272" font-size="9" fill="var(--text-secondary)">规范意图/范围/</text>
+          <text x="12" y="288" font-size="9" fill="var(--text-secondary)">完成验收句</text>
+        </g>
+
+        <g transform="translate(185, 20)">
+          <rect x="0" y="0" width="140" height="320" rx="8" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="2" />
+          <rect x="0" y="0" width="140" height="32" rx="8" fill="var(--cyan-light)" />
+          <text x="70" y="22" font-size="12" font-weight="700" fill="var(--cyan)" text-anchor="middle">关口 2: 证据层</text>
+          
+          <text x="12" y="55" font-size="11" font-weight="700" fill="var(--text-primary)">验收核心：</text>
+          <text x="12" y="75" font-size="10" fill="var(--text-secondary)">能否回到原文？</text>
+          <text x="12" y="92" font-size="10" fill="var(--text-secondary)">片段是否带着</text>
+          <text x="12" y="108" font-size="10" fill="var(--text-secondary)">必要限定？</text>
+          <text x="12" y="125" font-size="10" fill="var(--text-secondary)">无关噪音占多少？</text>
+
+          <text x="12" y="160" font-size="11" font-weight="700" fill="var(--rose)">失败信号：</text>
+          <text x="12" y="180" font-size="10" fill="var(--rose)">事实捏造/幻觉</text>
+          <text x="12" y="196" font-size="10" fill="var(--rose)">引述断章取义</text>
+
+          <text x="12" y="235" font-size="11" font-weight="700" fill="var(--emerald)">交付产物：</text>
+          <text x="12" y="255" font-size="10" fill="var(--text-primary)">带语境片段与</text>
+          <text x="12" y="272" font-size="9" fill="var(--text-secondary)">精确位置索引</text>
+          <text x="12" y="288" font-size="9" fill="var(--text-secondary)">真实任务评测集</text>
+        </g>
+
+        <g transform="translate(340, 20)">
+          <rect x="0" y="0" width="140" height="320" rx="8" fill="var(--bg-card)" stroke="var(--accent)" stroke-width="2" />
+          <rect x="0" y="0" width="140" height="32" rx="8" fill="var(--accent-light)" />
+          <text x="70" y="22" font-size="12" font-weight="700" fill="var(--accent)" text-anchor="middle">关口 3: 装配层</text>
+          
+          <text x="12" y="55" font-size="11" font-weight="700" fill="var(--text-primary)">验收核心：</text>
+          <text x="12" y="75" font-size="10" fill="var(--text-secondary)">是否把高信号与</text>
+          <text x="12" y="92" font-size="10" fill="var(--text-secondary)">输出空间同时纳</text>
+          <text x="12" y="108" font-size="10" fill="var(--text-secondary)">入预算管理？</text>
+          <text x="12" y="125" font-size="10" fill="var(--text-secondary)">防分心与防冲突</text>
+
+          <text x="12" y="160" font-size="11" font-weight="700" fill="var(--rose)">失败信号：</text>
+          <text x="12" y="180" font-size="10" fill="var(--rose)">规则冲突/分心</text>
+          <text x="12" y="196" font-size="10" fill="var(--rose)">回答被生硬截断</text>
+
+          <text x="12" y="235" font-size="11" font-weight="700" fill="var(--emerald)">交付产物：</text>
+          <text x="12" y="255" font-size="10" fill="var(--text-primary)">注意力预算表：</text>
+          <text x="12" y="272" font-size="9" fill="var(--text-secondary)">规则/证据/状态/</text>
+          <text x="12" y="288" font-size="9" fill="var(--text-secondary)">输出四维定额</text>
+        </g>
+
+        <g transform="translate(495, 20)">
+          <rect x="0" y="0" width="140" height="320" rx="8" fill="var(--bg-card)" stroke="var(--amber)" stroke-width="2" />
+          <rect x="0" y="0" width="140" height="32" rx="8" fill="var(--amber-light)" />
+          <text x="70" y="22" font-size="12" font-weight="700" fill="var(--amber)" text-anchor="middle">关口 4: 状态层</text>
+          
+          <text x="12" y="55" font-size="11" font-weight="700" fill="var(--text-primary)">验收核心：</text>
+          <text x="12" y="75" font-size="10" fill="var(--text-secondary)">是否有写入、更新</text>
+          <text x="12" y="92" font-size="10" fill="var(--text-secondary)">与遗忘清理规则？</text>
+          <text x="12" y="108" font-size="10" fill="var(--text-secondary)">细节是否可靠</text>
+          <text x="12" y="125" font-size="10" fill="var(--text-secondary)">卸载到窗口外？</text>
+
+          <text x="12" y="160" font-size="11" font-weight="700" fill="var(--rose)">失败信号：</text>
+          <text x="12" y="180" font-size="10" fill="var(--rose)">反复推翻旧决定</text>
+          <text x="12" y="196" font-size="10" fill="var(--rose)">多轮失忆/重复问</text>
+
+          <text x="12" y="235" font-size="11" font-weight="700" fill="var(--emerald)">交付产物：</text>
+          <text x="12" y="255" font-size="10" fill="var(--text-primary)">结构化任务状态</text>
+          <text x="12" y="272" font-size="9" fill="var(--text-secondary)">持久化快照与</text>
+          <text x="12" y="288" font-size="9" fill="var(--text-secondary)">确定性更新日志</text>
+        </g>
+
+        <g transform="translate(650, 20)">
+          <rect x="0" y="0" width="140" height="320" rx="8" fill="var(--bg-card)" stroke="var(--emerald)" stroke-width="2" />
+          <rect x="0" y="0" width="140" height="32" rx="8" fill="var(--emerald-light)" />
+          <text x="70" y="22" font-size="12" font-weight="700" fill="var(--emerald)" text-anchor="middle">关口 5: 行动层</text>
+          
+          <text x="12" y="55" font-size="11" font-weight="700" fill="var(--text-primary)">验收核心：</text>
+          <text x="12" y="75" font-size="10" fill="var(--text-secondary)">是否有鉴权授权？</text>
+          <text x="12" y="92" font-size="10" fill="var(--text-secondary)">参数与类型合同</text>
+          <text x="12" y="108" font-size="10" fill="var(--text-secondary)">是否严格约束？</text>
+          <text x="12" y="125" font-size="10" fill="var(--text-secondary)">是否保障幂等？</text>
+
+          <text x="12" y="160" font-size="11" font-weight="700" fill="var(--rose)">失败信号：</text>
+          <text x="12" y="180" font-size="10" fill="var(--rose)">工具选错/参数错</text>
+          <text x="12" y="196" font-size="10" fill="var(--rose)">越权或危险调用</text>
+
+          <text x="12" y="235" font-size="11" font-weight="700" fill="var(--emerald)">交付产物：</text>
+          <text x="12" y="255" font-size="10" fill="var(--text-primary)">强类型工具合同</text>
+          <text x="12" y="272" font-size="9" fill="var(--text-secondary)">执行审计追踪与</text>
+          <text x="12" y="288" font-size="9" fill="var(--text-secondary)">体积截断规则</text>
+        </g>
+
+        <g transform="translate(805, 20)">
+          <rect x="0" y="0" width="125" height="320" rx="8" fill="var(--bg-card)" stroke="var(--rose)" stroke-width="2" />
+          <rect x="0" y="0" width="125" height="32" rx="8" fill="var(--rose-light)" />
+          <text x="62" y="22" font-size="12" font-weight="700" fill="var(--rose)" text-anchor="middle">关口 6: 反馈层</text>
+          
+          <text x="10" y="55" font-size="11" font-weight="700" fill="var(--text-primary)">验收核心：</text>
+          <text x="10" y="75" font-size="10" fill="var(--text-secondary)">能否读懂错误？</text>
+          <text x="10" y="92" font-size="10" fill="var(--text-secondary)">能否据反馈修正</text>
+          <text x="10" y="108" font-size="10" fill="var(--text-secondary)">并重新执行？</text>
+          <text x="10" y="125" font-size="10" fill="var(--text-secondary)">有无终止条件？</text>
+
+          <text x="10" y="160" font-size="11" font-weight="700" fill="var(--rose)">失败信号：</text>
+          <text x="10" y="180" font-size="10" fill="var(--rose)">死循环/无法自愈</text>
+          <text x="10" y="196" font-size="10" fill="var(--rose)">报错直接崩溃</text>
+
+          <text x="10" y="235" font-size="11" font-weight="700" fill="var(--emerald)">交付产物：</text>
+          <text x="10" y="255" font-size="10" fill="var(--text-primary)">可观察自愈管道</text>
+          <text x="10" y="272" font-size="9" fill="var(--text-secondary)">明确跳出与降级</text>
+          <text x="10" y="288" font-size="9" fill="var(--text-secondary)">熔断停止协议</text>
+        </g>
+      </svg>
+    </div>
+    
+      </div>
+
+      <h3>7.1 评审 Agent 的全链路反推排查清单</h3>
+      <p>
+        评审一套生产级 Agent 时，可以从失败表征反推六层关口：
+      </p>
+      <div class="spec-table-wrap">
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th>关口层级</th>
+              <th>必须留下的可检查产物 (Deliverables)</th>
+              <th>典型失败信号 (Failure Signal)</th>
+              <th>反向排错动作与整改措施</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>1. 意图层 (Intent)</strong></td>
+              <td>规范化意图 + 范围条件 + 验收句</td>
+              <td>回答跑偏、答非所问、丢失前置假设</td>
+              <td>检查是否误解了用户原话，重构范围限定并显式补齐完成验收句。</td>
+            </tr>
+            <tr>
+              <td><strong>2. 证据层 (Evidence)</strong></td>
+              <td>带限定语境的原始段落 + 溯源位置索引</td>
+              <td>事实捏造、数据幻觉、断章取义</td>
+              <td>检查切块是否太小丢失主语或太大被稀释；检查重排模型召回 Top-K 覆盖度。</td>
+            </tr>
+            <tr>
+              <td><strong>3. 装配层 (Assembly)</strong></td>
+              <td>注意力预算定额表 + 精简提示与工具集</td>
+              <td>模型分心、规则冲突、回答被截断</td>
+              <td>核查上下文窗口预算占用，裁减静态提示词，精简单轮挂载的工具列表。</td>
+            </tr>
+            <tr>
+              <td><strong>4. 状态层 (State)</strong></td>
+              <td>外部结构化任务状态表 + 更新日志</td>
+              <td>反复推翻旧决定、多轮失忆、重复发问</td>
+              <td>排查外部状态持久化管道；核查工作记忆写入门与版本冲突合并逻辑。</td>
+            </tr>
+            <tr>
+              <td><strong>5. 行动层 (Action)</strong></td>
+              <td>强类型参数结构体 + 执行授权审计日志</td>
+              <td>工具选错、参数格式报错、越权违规</td>
+              <td>强化工具合同中的动词、Schema 类型、单位与边界描述；完善授权拦截器。</td>
+            </tr>
+            <tr>
+              <td><strong>6. 反馈层 (Feedback)</strong></td>
+              <td>校验通过的 Observation + 停止判定</td>
+              <td>死循环重试、遇到错误无法自愈、崩溃退出</td>
+              <td>把错误堆栈结构化注入下一轮窗口驱动自愈；设置硬性最大步数熔断。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>7.2 生产环境评测、日志与故障复盘</h3>
+      <p>
+        <strong>全部通过，才说明系统开始具备上下文工程。</strong> 它仍需要用真实任务集验证正确率、成本、延迟和恢复能力。
+      </p>
+      <p>
+        指南里的方法清单是设计地图，<strong>生产可靠性来自持续的 Eval、日志沉淀和故障复盘</strong>。
+      </p>
+    </section>
+    
+
+
+    <!-- Section 8: 提示工程 vs 上下文工程的本质对比 -->
+    <section id="sec-paradigm-shift">
+      <h2>08. 提示工程 vs 上下文工程的本质对比</h2>
+      <p>
+        在过去的实践中，开发者往往把注意力放在“如何写出更神奇的 Prompt”上；而随着大语言模型在复杂长程任务中扮演核心执行引擎，这种思维范式正发生深刻的维度跃迁。
+      </p>
+
+      <div class="weaviate-focus-box">
+        <div class="focus-header">
+          <span class="focus-prompt">主材料最后怎样对比提示工程和上下文工程？</span>
+          <span class="focus-badge">Weaviate 手册系统图聚焦 09</span>
+        </div>
+        <div class="focus-content">
+          <p>
+            Weaviate 末页对比了只管理系统提示和用户消息的提示工程，以及动态选择文档、工具、记忆文件与历史的上下文工程。
+          </p>
+        </div>
+      </div>
+
+      <div class="diagram-card">
+        <div class="diagram-title">
+          <span>📐</span>
+          <span>系统架构图 8：提示工程 vs 上下文工程多维跃迁对比图</span>
+        </div>
+        <div class="diagram-desc">
+          从单次静态调用、静态文本生成的局部提示工程，向全生命周期信息流编排、状态持久化与工具自愈的上下文工程演进。
+        </div>
+        
+    <div class="diagram-canvas">
+      <svg viewBox="0 0 960 360" xmlns="http://www.w3.org/2000/svg">
+        <rect x="30" y="20" width="420" height="320" rx="10" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1.5" />
+        <rect x="30" y="20" width="420" height="40" rx="10" fill="var(--bg-card-subtle)" />
+        <text x="240" y="46" font-size="14" font-weight="700" fill="var(--text-primary)" text-anchor="middle">提示工程 (Prompt Engineering: 1D 局部视角)</text>
+
+        <rect x="55" y="80" width="370" height="50" rx="6" fill="var(--bg-card-subtle)" stroke="var(--border-subtle)" />
+        <text x="240" y="102" font-size="12" font-weight="600" fill="var(--text-primary)" text-anchor="middle">静态系统提示 (System Prompt) + 用户输入</text>
+        <text x="240" y="120" font-size="10" fill="var(--text-tertiary)" text-anchor="middle">全量规则死板硬塞，缺乏运行时动态选择能力</text>
+
+        <path d="M 240 132 L 240 160" fill="none" stroke="var(--text-tertiary)" stroke-width="1.5" />
+
+        <rect x="110" y="165" width="260" height="45" rx="6" fill="var(--bg-card-subtle)" stroke="var(--border-color)" />
+        <text x="240" y="193" font-size="13" font-weight="700" fill="var(--text-primary)" text-anchor="middle">单次模型推理调用</text>
+
+        <path d="M 240 212 L 240 240" fill="none" stroke="var(--text-tertiary)" stroke-width="1.5" />
+
+        <rect x="55" y="245" width="370" height="50" rx="6" fill="var(--bg-card-subtle)" stroke="var(--border-subtle)" />
+        <text x="240" y="267" font-size="12" font-weight="600" fill="var(--text-primary)" text-anchor="middle">静态文本输出 (Text Output)</text>
+        <text x="240" y="285" font-size="10" fill="var(--rose)" text-anchor="middle">无外部行动、无状态留存、无法解决数据与工具断层</text>
+
+        <text x="240" y="325" font-size="11" font-weight="600" fill="var(--text-tertiary)" text-anchor="middle">关注焦点：“这个词怎么写才能让模型听懂”</text>
+
+        <rect x="490" y="20" width="440" height="320" rx="10" fill="var(--bg-card)" stroke="var(--accent)" stroke-width="2" />
+        <rect x="490" y="20" width="440" height="40" rx="10" fill="var(--accent-light)" />
+        <text x="710" y="46" font-size="14" font-weight="700" fill="var(--accent)" text-anchor="middle">上下文工程 (Context Engineering: 3D 全局系统尺度)</text>
+
+        <rect x="510" y="75" width="400" height="65" rx="6" fill="var(--bg-card-subtle)" stroke="var(--cyan)" stroke-width="1.5" />
+        <text x="710" y="95" font-size="12" font-weight="700" fill="var(--cyan)" text-anchor="middle">运行时动态多源装配</text>
+        <text x="710" y="113" font-size="10" fill="var(--text-secondary)" text-anchor="middle">规范意图 + 检索证据 + 分层记忆 + 最小工具合同 + 注意力预算留存</text>
+        <text x="710" y="130" font-size="10" fill="var(--emerald)" text-anchor="middle">决定哪些信息进入模型、哪些状态留在外部、每一步留足思考余量</text>
+
+        <path d="M 710 142 L 710 165" fill="none" stroke="var(--accent)" stroke-width="2" />
+
+        <rect x="550" y="170" width="320" height="45" rx="6" fill="var(--accent-light)" stroke="var(--accent)" stroke-width="1.5" />
+        <text x="710" y="198" font-size="13" font-weight="700" fill="var(--accent)" text-anchor="middle">Agent 调度中枢 &amp; 可自愈行动循环</text>
+
+        <path d="M 710 217 L 710 240" fill="none" stroke="var(--accent)" stroke-width="2" />
+
+        <rect x="510" y="245" width="400" height="55" rx="6" fill="var(--bg-card-subtle)" stroke="var(--emerald)" stroke-width="1.5" />
+        <text x="710" y="267" font-size="12" font-weight="700" fill="var(--emerald)" text-anchor="middle">真实世界行动 ➕ 外部状态持久化</text>
+        <text x="710" y="287" font-size="10" fill="var(--text-secondary)" text-anchor="middle">执行标准化 MCP 工具，状态卸载至外部，用结果修正并驱动长程任务</text>
+
+        <text x="710" y="325" font-size="11" font-weight="700" fill="var(--accent)" text-anchor="middle">黄金结论：模型能力决定能做什么，上下文系统决定此刻依据什么与留下什么</text>
+      </svg>
+    </div>
+    
+      </div>
+
+      <p>
+        末页把提示工程和上下文工程画成两个不同尺度：
+      </p>
+      <ul>
+        <li><strong>提示工程 (Prompt Engineering)：</strong>聚焦<strong>当前窗口里的指令</strong>，把重心放在单次调用的词句雕琢与静态模板上；</li>
+        <li><strong>上下文工程 (Context Engineering)：</strong>还要管理<strong>文档、工具、记忆文件、历史与工具结果怎样动态进入</strong>，以及如何把多余信息卸载到外部。</li>
+      </ul>
+
+      <div class="spec-table-wrap">
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th>对比维度</th>
+              <th>提示工程 (Prompt Engineering)</th>
+              <th>上下文工程 (Context Engineering)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>系统视角 (Scope)</strong></td>
+              <td>局部视角：聚焦单次 API 调用的 Prompt 字符串</td>
+              <td>全局视角：管理长任务跨轮次的全生命周期动态信息流</td>
+            </tr>
+            <tr>
+              <td><strong>核心问题 (Core Question)</strong></td>
+              <td>“这段指令怎么措辞才能让模型理解当前要求？”</td>
+              <td>“此刻哪些信息入窗、哪些留存外部、下一步由谁执行？”</td>
+            </tr>
+            <tr>
+              <td><strong>状态管理 (State)</strong></td>
+              <td>无状态：依赖模型单次记忆或全量对话历史追加</td>
+              <td>有状态：分层记忆金字塔 + 结构化外部任务状态持久化</td>
+            </tr>
+            <tr>
+              <td><strong>知识接入 (Knowledge)</strong></td>
+              <td>静态固化：直接硬编码在 System Prompt 中</td>
+              <td>动态自适应：意图改造 + 甜点区切块 + 跨库查询 Agent</td>
+            </tr>
+            <tr>
+              <td><strong>工具与行动 (Action)</strong></td>
+              <td>单向生成：生成自然语言或单一命令代码片段</td>
+              <td>闭环行动：标准 MCP 合同 + 7 步可恢复自愈反馈循环</td>
+            </tr>
+            <tr>
+              <td><strong>瓶颈治理 (Bottleneck)</strong></td>
+              <td>容量思维：“窗口还能塞进多少 Token？”</td>
+              <td>预算思维：“模型还剩多少注意力做下一步正确判断？”</td>
+            </tr>
+            <tr>
+              <td><strong>排错机制 (Debugging)</strong></td>
+              <td>玄学调优：反复修改形容词、语气或换更大模型</td>
+              <td>确定性反推：沿 6 道关口逐层排查意图、证据、状态与合同</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin: 2rem 0; padding: 1.5rem; background: var(--accent-light); border-left: 4px solid var(--accent); border-radius: var(--radius-md);">
+        <p style="font-size: 1.15rem; font-weight: 700; color: var(--accent); margin-bottom: 0.5rem; line-height: 1.6;">
+          🎯 核心白皮书定调金句：
+        </p>
+        <p style="font-size: 1.05rem; line-height: 1.8; color: var(--text-primary); margin: 0; font-family: var(--font-serif);">
+          “模型能力决定它可能做到什么，上下文系统决定它此刻依据什么、能做什么，以及做完以后留下什么。”
+        </p>
+      </div>
+    </section>
+    
+
+
+    <!-- ==========================================================================
+         Section 9: 动态交互沙盘：上下文工程运行时编排与决策工作台
+         ========================================================================== -->
+    <section id="sec-sandboxes">
+      <h2>09. 动态交互沙盘：上下文工程运行时编排与决策工作台</h2>
+      <p>
+        上下文工程绝非静态的书面准则，而是贯穿任务全生命周期的可计算、可观测、可调优的动态运行体系。本节提供三大核心工程决策沙盘，供架构师与开发者在本地进行参数推演与方案验证。
+      </p>
+
+      <!-- 沙盘 1: 运行时轨道与排错定位器 -->
+      <div class="sandbox-container">
+        <div class="sandbox-header">
+          <span class="sandbox-badge">沙盘 1 · 运行时交互与排错</span>
+          <h3 class="sandbox-title">六大核心能力运行时轨道与排错定位器</h3>
+          <p class="sandbox-desc">
+            切换一次任务运行链中的 6 个交接环节，实时查看该阶段的调度职责、执行动作、必须产出的可检查工件，以及出现异常时的反向排错动作。
+          </p>
+        </div>
+
+        <div class="control-panel">
+          <div class="form-group">
+            <label for="sel-stage" class="form-label">当前运行时环节</label>
+            <select id="sel-stage" class="form-select">
+              <option value="0">1. 意图澄清 (Intent Clarification)</option>
+              <option value="1">2. 证据选择 (Evidence Selection)</option>
+              <option value="2">3. 上下文装配 (Context Assembly)</option>
+              <option value="3">4. 维护外部状态 (State Persistence)</option>
+              <option value="4">5. 执行工具 (Tool Execution)</option>
+              <option value="5">6. 反馈与修正 (Feedback Loop)</option>
+            </select>
+          </div>
+          <div class="form-group" style="justify-content: flex-end;">
+            <label class="form-label">环节步进导航</label>
+            <div class="btn-group">
+              <button id="btn-prev-stage" class="btn-action">← 上一环节</button>
+              <button id="btn-next-stage" class="btn-action">下一环节 →</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="output-grid">
+          <div class="display-card">
+            <span class="display-card-label">阶段名称与调度定位</span>
+            <div id="out-pipe-title" class="display-card-val" style="color: var(--accent);">1. 意图澄清 (Intent Clarification)</div>
+            <div id="out-pipe-role" class="display-card-desc" style="font-weight: 600;">查询改造与意图对齐层 (Query Transformation &amp; Intent Alignment)</div>
+          </div>
+
+          <div class="display-card">
+            <span class="display-card-label">关键工程动作 (Action)</span>
+            <div id="out-pipe-action" class="display-card-desc">识别用户多层意图，执行重写（去歧义/去干扰）、扩展（补全关键词）、分解（拆分子目标）或启动查询 Agent 跨库探索。</div>
+          </div>
+
+          <div class="display-card">
+            <span class="display-card-label">必须交付的可检查产物 (Artifacts)</span>
+            <div id="out-pipe-artifact" class="display-card-desc" style="color: var(--emerald);">① 保留用户原话的规范化意图；② 不可越过的范围条件（时间/业务口径）；③ 说明“何种结果算完成”的验收句。</div>
+          </div>
+
+          <div class="display-card">
+            <span class="display-card-label">典型故障表征 (Failure Signal)</span>
+            <div id="out-pipe-error" class="display-card-desc" style="color: var(--rose);">回答跑偏、答非所问、答出空泛概括，或在多目标中丢失关键限定条件。</div>
+          </div>
+
+          <div class="display-card" style="grid-column: 1 / -1;">
+            <span class="display-card-label">反向排错与定位动作 (Triage Sequence)</span>
+            <div id="out-pipe-triage" class="display-card-desc" style="color: var(--accent); font-weight: 600;">先查入口意图层！检查是否误解了用户原话，核对是否遗漏了范围条件与验收句，排查查询重写是否过度删除了关键语境。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 2: 切块策略与检索方案决策引擎 -->
+      <div class="sandbox-container">
+        <div class="sandbox-header">
+          <span class="sandbox-badge">沙盘 2 · 检索与切块工程决策</span>
+          <h3 class="sandbox-title">切块策略与检索方案工程决策器</h3>
+          <p class="sandbox-desc">
+            根据文档内在结构、内容变化频率与系统端到端延迟容忍度，动态推导匹配的最佳切块方案、切块时机与任务级评测重心。
+          </p>
+        </div>
+
+        <div class="control-panel">
+          <div class="form-group">
+            <label for="sel-chunk-doc" class="form-label">文档结构特征</label>
+            <select id="sel-chunk-doc" class="form-select">
+              <option value="clear">结构清楚 (Markdown/层级标题/API规范)</option>
+              <option value="loose">结构松散 (自然叙述散文/工单/对话记录)</option>
+              <option value="code">代码工程 (函数/类/抽象语法树 AST)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="sel-chunk-freq" class="form-label">内容更新频率</label>
+            <select id="sel-chunk-freq" class="form-select">
+              <option value="static">静态稳定 (知识库/历史文档/规章制度)</option>
+              <option value="dynamic">频繁变化 (实时资讯/业务流水/动态流)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="sel-chunk-latency" class="form-label">延迟与成本诉求</label>
+            <select id="sel-chunk-latency" class="form-select">
+              <option value="low">低时延优先 (&lt;200ms 首轮极速响应)</option>
+              <option value="balanced">精度优先 (可接受首轮深度计算)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="output-grid">
+          <div class="display-card">
+            <span class="display-card-label">推荐切块方案</span>
+            <div id="out-chunk-name" class="display-card-val" style="color: var(--accent);">按 Markdown / 标题层级递归切块 (Heading-Aware Recursive Chunking)</div>
+          </div>
+
+          <div class="display-card">
+            <span class="display-card-label">切块时机 (Pre vs Post)</span>
+            <div id="out-chunk-timing" class="display-card-val" style="color: var(--emerald);">离线预切块 (Pre-chunking)</div>
+          </div>
+
+          <div class="display-card">
+            <span class="display-card-label">预估检索命中精度 (Precision)</span>
+            <div id="out-chunk-prec" class="display-card-val" style="color: var(--emerald);">89% (高，自然契合技术文档排版逻辑)</div>
+          </div>
+
+          <div class="display-card">
+            <span class="display-card-label">预估语境完整度 (Completeness)</span>
+            <div id="out-chunk-context" class="display-card-val" style="color: var(--cyan);">86% (良好，以章节标题为天然语义边界)</div>
+          </div>
+
+          <div class="display-card" style="grid-column: 1 / -1;">
+            <span class="display-card-label">方案核心原理与架构选型说明</span>
+            <div id="out-chunk-desc" class="display-card-desc">基于 H1/H2/H3 标题与自然段落逐级递归切分，设置 512~1024 Token 块并保留 10%~15% 重叠（Overlap），工程性价比极高。</div>
+          </div>
+
+          <div class="display-card" style="grid-column: 1 / -1;">
+            <span class="display-card-label">任务级评测验收清单 (Task Evaluation)</span>
+            <div id="out-chunk-eval" class="display-card-desc" style="color: var(--amber); font-weight: 500;">准备 10~20 个标准业务技术问答，检查召回片段是否包含了小标题限定，段落前置假设是否被完整保留。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 3: 上下文窗口注意力预算与风险模拟器 -->
+      <div class="sandbox-container">
+        <div class="sandbox-header">
+          <span class="sandbox-badge">沙盘 3 · 注意力预算治理</span>
+          <h3 class="sandbox-title">上下文窗口注意力预算与长上下文风险模拟器</h3>
+          <p class="sandbox-desc">
+            模拟 128k 上下文窗口内系统提示、动态检索证据、多轮历史对话与工具描述的 Token 分配，实时评估四类长上下文风险（污染、分心、混乱、冲突）并给出卸载优化策略。
+          </p>
+        </div>
+
+        <div class="control-panel">
+          <div class="form-group">
+            <label for="range-budget-prompt" class="form-label">
+              <span>系统提示词与规则 (System Prompt)</span>
+              <span id="val-budget-prompt" style="color: var(--accent);">2,500 Tokens</span>
+            </label>
+            <input type="range" id="range-budget-prompt" min="500" max="8000" step="500" value="2500" class="form-range">
+          </div>
+
+          <div class="form-group">
+            <label for="range-budget-docs" class="form-label">
+              <span>检索证据与背景文档 (Retrieved Evidence)</span>
+              <span id="val-budget-docs" style="color: var(--cyan);">12,000 Tokens</span>
+            </label>
+            <input type="range" id="range-budget-docs" min="1000" max="60000" step="1000" value="12000" class="form-range">
+          </div>
+
+          <div class="form-group">
+            <label for="range-budget-history" class="form-label">
+              <span>多轮历史对话消息 (Conversation History)</span>
+              <span id="val-budget-history" style="color: var(--amber);">8,000 Tokens</span>
+            </label>
+            <input type="range" id="range-budget-history" min="500" max="40000" step="500" value="8000" class="form-range">
+          </div>
+
+          <div class="form-group">
+            <label for="range-budget-tools" class="form-label">
+              <span>工具描述与 Schema (Tool Definitions)</span>
+              <span id="val-budget-tools" style="color: var(--emerald);">3,500 Tokens</span>
+            </label>
+            <input type="range" id="range-budget-tools" min="500" max="12000" step="500" value="3500" class="form-range">
+          </div>
+
+          <div class="form-group" style="grid-column: 1 / -1; display: flex; align-items: flex-end;">
+            <button id="btn-reset-budget" class="btn-action">重置为基准健康配比</button>
+          </div>
+        </div>
+
+        <div class="output-grid">
+          <div class="display-card">
+            <span class="display-card-label">总已占用 Token (128k 窗口)</span>
+            <div id="out-budget-used" class="display-card-val" style="color: var(--text-primary);">26,000 / 128,000 Tokens (20.3%)</div>
+          </div>
+
+          <div class="display-card">
+            <span class="display-card-label">剩余注意力 / 生成空间</span>
+            <div id="out-budget-rem" class="display-card-val" style="color: var(--emerald);">102,000 Tokens (79.7% 充裕)</div>
+          </div>
+
+          <div class="display-card">
+            <span class="display-card-label">错误污染风险 (Pollution Risk)</span>
+            <div id="out-risk-pollution" class="display-card-val" style="color: var(--emerald);">22/100 (健康安全)</div>
+            <div class="display-card-desc">主要由未压缩的深层历史消息与过时失效数据引起。</div>
+          </div>
+
+          <div class="display-card">
+            <span class="display-card-label">注意力分心风险 (Distraction Risk)</span>
+            <div id="out-risk-distract" class="display-card-val" style="color: var(--emerald);">23/100 (低分心风险)</div>
+            <div class="display-card-desc">主要由大量低信噪比证据碎片与海量工具声明引起。</div>
+          </div>
+
+          <div class="display-card">
+            <span class="display-card-label">相似材料混乱风险 (Confusion Risk)</span>
+            <div id="out-risk-confuse" class="display-card-val" style="color: var(--emerald);">21/100 (低混乱风险)</div>
+            <div class="display-card-desc">主要由相似实体片段重叠与多版本文档交叉引起。</div>
+          </div>
+
+          <div class="display-card">
+            <span class="display-card-label">规则冲突风险 (Conflict Risk)</span>
+            <div id="out-risk-conflict" class="display-card-val" style="color: var(--emerald);">28/100 (低冲突风险)</div>
+            <div class="display-card-desc">主要由膨胀的系统指令与工具约束自相矛盾引起。</div>
+          </div>
+
+          <div class="display-card" style="grid-column: 1 / -1;">
+            <span class="display-card-label">上下文工程动态优化与卸载建议 (Offloading Guidance)</span>
+            <div id="out-budget-advice" class="display-card-desc" style="color: var(--accent); font-weight: 600;">当前注意力预算配比处于健康区间（总占用仅 20.3%），为模型推理留出了近 80% 的充裕思考与输出空间，且未发现明显的提示词膨胀或历史累积风险。</div>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+
+      <!-- 页脚元数据 -->
+      <footer class="article-footer" style="margin-top: 60px; padding-top: 30px; border-top: 1px solid var(--border); text-align: center; font-size: 12px; color: var(--text-muted);">
+        <p><strong>Weaviate 上下文工程系统地图与六大能力白皮书</strong> | 架构白皮书规范 2026</p>
+        <p>基于 Weaviate 官方工程白皮书深度技术消化与实证建模 · 遵循自包含零依赖单文件交付规范</p>
+        <p>生成日期：2026年9月4日 | 知识库归档：<code>AIKnowledge/Weaviate上下文工程系统地图与六大能力白皮书_20260904.html</code></p>
+      </footer>
+    </main>
+  </div>
+
+  <!-- 内联核心交互逻辑与沙盘计算引擎 -->
+
+    <script>
+    (function() {
+      // DOM 选择器助手（统一使用 byId，严禁使用 $ 别名以避免触发未渲染 LaTeX 误报）
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // ==========================================
+      // 1. 阅读进度条与滚动监听
+      // ==========================================
+      window.addEventListener("scroll", function() {
+        var doc = document.documentElement;
+        var top = doc.scrollTop || (document.body && document.body.scrollTop) || 0;
+        var height = doc.scrollHeight - doc.clientHeight;
+        var progressEl = byId("read-progress");
+        if (progressEl && height > 0) {
+          var pct = Math.min(100, Math.max(0, (top / height) * 100));
+          progressEl.style.width = pct + "%";
+        }
+      });
+
+      // ==========================================
+      // 2. 双主题切换 (Light/Dark)
+      // ==========================================
+      var themeBtn = byId("btn-theme-toggle");
+      if (themeBtn) {
+        themeBtn.addEventListener("click", function() {
+          var root = document.documentElement;
+          var cur = root.getAttribute("data-theme") || "light";
+          var target = cur === "dark" ? "light" : "dark";
+          root.setAttribute("data-theme", target);
+          try {
+            if (window.localStorage) {
+              window.localStorage.setItem("ai_whitepaper_theme", target);
+            }
+          } catch(e) {}
+        });
+
+        try {
+          if (window.localStorage) {
+            var savedTheme = window.localStorage.getItem("ai_whitepaper_theme");
+            if (savedTheme) {
+              document.documentElement.setAttribute("data-theme", savedTheme);
+            }
+          }
+        } catch(e) {}
+      }
+
+      // 打印按钮
+      var printBtn = byId("btn-print");
+      if (printBtn) {
+        printBtn.addEventListener("click", function() {
+          window.print();
+        });
+      }
+
+      // 目录移动端开关
+      var tocToggleBtn = byId("btn-toc-toggle");
+      var tocEl = byId("sidebar-toc-panel");
+      if (tocToggleBtn && tocEl) {
+        tocToggleBtn.addEventListener("click", function() {
+          if (tocEl.style.display === "none") {
+            tocEl.style.display = "block";
+          } else {
+            tocEl.style.display = "none";
+          }
+        });
+      }
+
+      // ==========================================
+      // 3. 目录滚动高亮 (ScrollSpy)
+      // ==========================================
+      var tocLinks = document.querySelectorAll(".toc-item a");
+      window.addEventListener("scroll", function() {
+        var fromTop = window.scrollY + 100;
+        var currentSectionId = "";
+        var sections = document.querySelectorAll("section[id]");
+        for (var i = 0; i < sections.length; i++) {
+          var sec = sections[i];
+          if (sec.offsetTop <= fromTop) {
+            currentSectionId = sec.id;
+          }
+        }
+        if (currentSectionId) {
+          for (var j = 0; j < tocLinks.length; j++) {
+            var link = tocLinks[j];
+            var href = link.getAttribute("href");
+            var item = link.parentElement;
+            if (href === "#" + currentSectionId) {
+              item.classList.add("active");
+            } else {
+              item.classList.remove("active");
+            }
+          }
+        }
+      });
+
+      // ==========================================
+      // 4. 沙盘 1：六大能力运行时轨道与排错定位器
+      // ==========================================
+      var pipelineData = [
+        {
+          title: "1. 意图澄清 (Intent Clarification)",
+          role: "查询改造与意图对齐层 (Query Transformation & Intent Alignment)",
+          action: "识别用户多层意图，执行重写（去歧义/去干扰）、扩展（补全关键词）、分解（拆分子目标）或启动查询 Agent 跨库探索。",
+          artifact: "① 保留用户原话的规范化意图；② 不可越过的范围条件（时间/业务口径）；③ 说明“何种结果算完成”的验收句。",
+          error: "回答跑偏、答非所问、答出空泛概括，或在多目标中丢失关键限定条件。",
+          triage: "先查入口意图层！检查是否误解了用户原话，核对是否遗漏了范围条件与验收句，排查查询重写是否过度删除了关键语境。"
+        },
+        {
+          title: "2. 证据选择 (Evidence Selection)",
+          role: "知识检索与动态切块层 (Retrieval & Precision Chunking)",
+          action: "基于规范化意图在向量库、关系库、全文索引中进行混合检索与重排（Rerank），平衡检索精度与语境完整度的甜点区。",
+          artifact: "覆盖核心答案且带有完整限定语境的原始文档片段集合，附带可溯源的元数据与段落位置。",
+          error: "事实错误、产生幻觉、缺失关键业务指标或最新数据，出现张冠李戴。",
+          triage: "查检索到的原始证据！检查切块是否太小丢失主语，或太大被稀释；检查是否缺少重排或知识库缺少最新增量。"
+        },
+        {
+          title: "3. 上下文装配 (Context Assembly)",
+          role: "注意力预算与动态提示装配中枢 (Attention Budget & Prompt Assembly)",
+          action: "在有限窗口内科学分配注意力预算：裁减静态提示词，注入高信号证据，挂载当前步骤必需工具，预留思考与生成空间。",
+          artifact: "本轮高信号装配上下文：包含精简系统指令、当前任务工作状态、精选证据、最小工具描述及输出格式合同。",
+          error: "模型分心（关注次要信息）、混乱（相似资料冲突）、规则冲突（前后指令自相矛盾）或输出被截断。",
+          triage: "检查上下文窗口预算占用；审计是否塞入冗余聊天历史或无关文档；检查是否加载了十几个相似工具造成模型选择瘫痪。"
+        },
+        {
+          title: "4. 维护外部状态 (State Persistence)",
+          role: "跨轮长程记忆与外部状态管理 (Memory Tiering & State Offloading)",
+          action: "将暂时不用的细节卸载到外部；把已确认的决定、未完成步骤、中间产物写入工作状态（Working State）与长期记忆分层。",
+          artifact: "轻量级结构化任务状态：包含目标、已完成步骤、关键决定、未解决问题、证据存储位置。",
+          error: "多轮对话中反复推翻旧决定、忘记先前约束、重复询问用户已给出的信息、陷入失忆循环。",
+          triage: "检查状态持久化机制是否工作；核对记忆写入门与冲突合并逻辑；验证工作记忆是否在每一轮正确持久化并按需取回。"
+        },
+        {
+          title: "5. 执行工具 (Tool Execution)",
+          role: "外部行动与协议执行引擎 (Tool Calling & MCP Protocol)",
+          action: "Agent 根据决策生成标准结构化参数，经过安全边界与鉴权检查后执行工具调用，捕获真实世界返回值或系统报错。",
+          artifact: "格式完备的工具调用日志、参数结构体、外部系统执行凭证与原始返回值摘要（Observation）。",
+          error: "工具用错（选错工具）、参数格式错误（漏填必填项/单位混淆）、越权调用或外部调用超时崩溃。",
+          triage: "检查工具合同（Tool Contract）的动词描述、参数类型、单位与必填说明；检查工具发现与筛选机制是否精准。"
+        },
+        {
+          title: "6. 反馈与修正 (Feedback Loop)",
+          role: "观察校验与自愈控制循环 (Observation Validation & Self-Healing)",
+          action: "校验工具返回的 Observation 是否符合预期；若执行报错，将错误信息作为观察结果回传，引导模型反思修正参数重试。",
+          artifact: "校验通过的执行成果或结构化错误诊断，附带明确的控制转移指令：继续执行 / 更换策略 / 询问用户 / 终结停止。",
+          error: "死循环重试、遇到报错无法自我修正、即使执行失败也假装成功、无法判断任务何时结束。",
+          triage: "检查 Observation 截断与反馈管道；核实是否将错误堆栈原样送回模型进行参数自我修正；检查停止条件是否明确。"
+        }
+      ];
+
+      function updatePipelineStage(idx) {
+        var stage = pipelineData[idx];
+        if (!stage) return;
+        byId("out-pipe-title").textContent = stage.title;
+        byId("out-pipe-role").textContent = stage.role;
+        byId("out-pipe-action").textContent = stage.action;
+        byId("out-pipe-artifact").textContent = stage.artifact;
+        byId("out-pipe-error").textContent = stage.error;
+        byId("out-pipe-triage").textContent = stage.triage;
+        var sel = byId("sel-stage");
+        if (sel && sel.value !== String(idx)) {
+          sel.value = String(idx);
+        }
+      }
+
+      var selStage = byId("sel-stage");
+      if (selStage) {
+        selStage.addEventListener("change", function(e) {
+          updatePipelineStage(parseInt(e.target.value, 10));
+        });
+      }
+
+      var btnPrevStage = byId("btn-prev-stage");
+      if (btnPrevStage) {
+        btnPrevStage.addEventListener("click", function() {
+          var cur = parseInt(byId("sel-stage").value, 10);
+          var next = (cur - 1 + pipelineData.length) % pipelineData.length;
+          updatePipelineStage(next);
+        });
+      }
+
+      var btnNextStage = byId("btn-next-stage");
+      if (btnNextStage) {
+        btnNextStage.addEventListener("click", function() {
+          var cur = parseInt(byId("sel-stage").value, 10);
+          var next = (cur + 1) % pipelineData.length;
+          updatePipelineStage(next);
+        });
+      }
+
+      // ==========================================
+      // 5. 沙盘 2：切块策略决策引擎
+      // ==========================================
+      function updateChunkStrategy() {
+        var doc = byId("sel-chunk-doc").value;
+        var freq = byId("sel-chunk-freq").value;
+        var latency = byId("sel-chunk-latency").value;
+
+        var name = "";
+        var timing = "";
+        var prec = "";
+        var context = "";
+        var desc = "";
+        var evalText = "";
+
+        if (doc === "code") {
+          name = "按代码结构/AST与函数切块 (AST / Function-Level Structural Chunking)";
+          timing = freq === "dynamic" ? "轻量级离线预切块 + 增量更新" : "离线预切块 (Pre-chunking)";
+          prec = "94% (极高，代码单元与调用边界清晰)";
+          context = "88% (完整保留函数签名、注释与依赖作用域)";
+          desc = "依据语言语法树（AST）按类、函数、接口边界切分，天然保留语法完整性与上下文语义，避免将代码逻辑横切两半。";
+          evalText = "测试检索返回片段是否包含完整的输入参数、类型定义及调用返回值；验证跨函数依赖时能否追溯调用链路。";
+        } else if (doc === "clear") {
+          if (freq === "dynamic" && latency === "balanced") {
+            name = "层级切块 + 动态后切块 (Hierarchical & Dynamic Post-chunking)";
+            timing = "动态后切块 (Post-chunking) + 预建概要索引";
+            prec = "92% (高，针对当前问题动态提取精准颗粒)";
+            context = "95% (极高，自上而下同时持有摘要、父章节与叶子段落)";
+            desc = "先保持文档层级结构（Parent-Child Document），首轮快速命中父章节摘要，在需要深挖时针对当前问题做二次动态切块提取。";
+            evalText = "验证复杂综合类问题能否定位整章，细节提问能否精确定位到段落，且上下文不丢失父级标题约束。";
+          } else {
+            name = "按 Markdown / 标题层级递归切块 (Heading-Aware Recursive Chunking)";
+            timing = "离线预切块 (Pre-chunking)";
+            prec = "89% (高，自然契合技术文档排版逻辑)";
+            context = "86% (良好，以章节标题为天然语义边界)";
+            desc = "基于 H1/H2/H3 标题与自然段落逐级递归切分，设置 512~1024 Token 块并保留 10%~15% 重叠（Overlap），工程性价比极高。";
+            evalText = "准备 10~20 个标准业务技术问答，检查召回片段是否包含了小标题限定，段落前置假设是否被完整保留。";
+          }
+        } else {
+          // loose
+          if (latency === "low") {
+            name = "递归句子窗口切块 + 重排 (Recursive Sentence-Window Chunking + Rerank)";
+            timing = "离线预切块 (Pre-chunking)";
+            prec = "82% (良好，借助重排器补偿语义模糊)";
+            context = "80% (良好，句子窗口提供基础语境)";
+            desc = "针对无结构纯散文或对话记录，按段落和换行递归切分，单块约 300~500 Token，检索时召回 Top-20 后经轻量 Cross-Encoder 重排取 Top-5。";
+            evalText = "人工抽检无明显主题词的长难问题，核验重排后置顶的前 3 个片段是否直接包含解答核心。";
+          } else {
+            name = "语义/LLM 边界感知切块 或 Late Chunking (Semantic / Late Chunking)";
+            timing = freq === "dynamic" ? "动态后置计算 (Late Chunking Embedding)" : "深度离线预切块";
+            prec = "95% (极高，捕捉隐藏在长文本深处的微妙意图)";
+            context = "92% (极高，向量表示提前吸收全局文档注意力)";
+            desc = "Late Chunking 先让长文本通过完整 Transformer 编码器获取全局注意力状态，再切分 pooling 得到子块向量；兼具全局语境与微观命中。";
+            evalText = "测试跨越多个段落的隐式因果关系推理题，检查召回的向量能否避开词面重复但语义无关的干扰段落。";
+          }
+        }
+
+        byId("out-chunk-name").textContent = name;
+        byId("out-chunk-timing").textContent = timing;
+        byId("out-chunk-prec").textContent = prec;
+        byId("out-chunk-context").textContent = context;
+        byId("out-chunk-desc").textContent = desc;
+        byId("out-chunk-eval").textContent = evalText;
+      }
+
+      var selChunkDoc = byId("sel-chunk-doc");
+      var selChunkFreq = byId("sel-chunk-freq");
+      var selChunkLatency = byId("sel-chunk-latency");
+      if (selChunkDoc && selChunkFreq && selChunkLatency) {
+        selChunkDoc.addEventListener("change", updateChunkStrategy);
+        selChunkFreq.addEventListener("change", updateChunkStrategy);
+        selChunkLatency.addEventListener("change", updateChunkStrategy);
+      }
+
+      // ==========================================
+      // 6. 沙盘 3：上下文窗口注意力预算与风险模拟器
+      // ==========================================
+      function updateBudgetSimulator() {
+        var pPrompt = parseInt(byId("range-budget-prompt").value, 10);
+        var pDocs = parseInt(byId("range-budget-docs").value, 10);
+        var pHistory = parseInt(byId("range-budget-history").value, 10);
+        var pTools = parseInt(byId("range-budget-tools").value, 10);
+
+        // 更新滑块标签
+        byId("val-budget-prompt").textContent = pPrompt.toLocaleString() + " Tokens";
+        byId("val-budget-docs").textContent = pDocs.toLocaleString() + " Tokens";
+        byId("val-budget-history").textContent = pHistory.toLocaleString() + " Tokens";
+        byId("val-budget-tools").textContent = pTools.toLocaleString() + " Tokens";
+
+        var totalWindow = 128000;
+        var totalUsed = pPrompt + pDocs + pHistory + pTools;
+        var remaining = totalWindow - totalUsed;
+        var usedPct = ((totalUsed / totalWindow) * 100).toFixed(1);
+        var remPct = ((remaining / totalWindow) * 100).toFixed(1);
+
+        byId("out-budget-used").textContent = totalUsed.toLocaleString() + " / " + totalWindow.toLocaleString() + " Tokens (" + usedPct + "%)";
+        if (remaining >= 0) {
+          byId("out-budget-rem").textContent = remaining.toLocaleString() + " Tokens (" + remPct + "% 充裕)";
+          byId("out-budget-rem").style.color = "var(--emerald)";
+        } else {
+          byId("out-budget-rem").textContent = "窗口超载！超出 " + Math.abs(remaining).toLocaleString() + " Tokens";
+          byId("out-budget-rem").style.color = "var(--rose)";
+        }
+
+        // 风险计算
+        var rPollution = Math.min(99, Math.round((pHistory / 40000) * 60 + (pDocs / 60000) * 25 + (pPrompt / 8000) * 15));
+        var rDistract = Math.min(99, Math.round((pDocs / 60000) * 55 + (pTools / 12000) * 35 + (pHistory / 40000) * 10));
+        var rConfuse = Math.min(99, Math.round((pDocs / 60000) * 45 + (pHistory / 40000) * 40 + (pTools / 12000) * 15));
+        var rConflict = Math.min(99, Math.round((pPrompt / 8000) * 50 + (pTools / 12000) * 30 + (pHistory / 40000) * 20));
+
+        function getLevel(score) {
+          if (score < 30) return score + "/100 (低风险/安全)";
+          if (score < 60) return score + "/100 (中等警戒)";
+          return score + "/100 (高危风险！)";
+        }
+
+        byId("out-risk-pollution").textContent = getLevel(rPollution);
+        byId("out-risk-pollution").style.color = rPollution >= 60 ? "var(--rose)" : (rPollution >= 30 ? "var(--amber)" : "var(--emerald)");
+
+        byId("out-risk-distract").textContent = getLevel(rDistract);
+        byId("out-risk-distract").style.color = rDistract >= 60 ? "var(--rose)" : (rDistract >= 30 ? "var(--amber)" : "var(--emerald)");
+
+        byId("out-risk-confuse").textContent = getLevel(rConfuse);
+        byId("out-risk-confuse").style.color = rConfuse >= 60 ? "var(--rose)" : (rConfuse >= 30 ? "var(--amber)" : "var(--emerald)");
+
+        byId("out-risk-conflict").textContent = getLevel(rConflict);
+        byId("out-risk-conflict").style.color = rConflict >= 60 ? "var(--rose)" : (rConflict >= 30 ? "var(--amber)" : "var(--emerald)");
+
+        // 建议
+        var advice = "";
+        if (remaining < 20000) {
+          advice = "警告：窗口剩余空间不足 20,000 Tokens！模型将严重缺乏推理思考、规划与长回答的生成余量，极易发生截断与判断退化。必须立即实施上下文卸载！";
+        } else if (pPrompt > 4000) {
+          advice = "系统提示词过长（>4000T），建议借鉴 Claude Code 经验削减静态规则至 2000T 以内，采用最少必要原则，将具体业务规范下沉至按需加载的专用工具或 Skill。";
+        } else if (pHistory > 15000) {
+          advice = "历史对话轮次累积过深（>15000T），错误信息反复污染风险极高！强烈建议启用上下文卸载（Context Offloading），将多轮细节压缩为结构化任务状态，只保留最近 3 轮必要交互。";
+        } else if (pTools > 6000) {
+          advice = "工具描述占用过多预算（>6000T），模型可能在十几个相似工具中产生混淆与瘫痪。建议依据意图动态过滤工具列表，单轮仅挂载与当前步骤直接相关的 3~5 个工具。";
+        } else if (pDocs > 30000) {
+          advice = "检索证据注入过量（>30000T），严重挤压模型注意力并增加分心概率。建议收紧检索 Top-K，增加 Reranker 过滤低质片段，或采用层级摘要引导演进。";
+        } else {
+          advice = "当前注意力预算配比处于健康区间（总占用仅 " + usedPct + "%），为模型推理留出了近 " + remPct + "% 的充裕思考与输出空间，且未发现明显的提示词膨胀或历史累积风险。";
+        }
+        byId("out-budget-advice").textContent = advice;
+      }
+
+      var rPrompt = byId("range-budget-prompt");
+      var rDocs = byId("range-budget-docs");
+      var rHistory = byId("range-budget-history");
+      var rTools = byId("range-budget-tools");
+      if (rPrompt && rDocs && rHistory && rTools) {
+        rPrompt.addEventListener("input", updateBudgetSimulator);
+        rDocs.addEventListener("input", updateBudgetSimulator);
+        rHistory.addEventListener("input", updateBudgetSimulator);
+        rTools.addEventListener("input", updateBudgetSimulator);
+      }
+
+      var btnReset = byId("btn-reset-budget");
+      if (btnReset) {
+        btnReset.addEventListener("click", function() {
+          byId("range-budget-prompt").value = 2500;
+          byId("range-budget-docs").value = 12000;
+          byId("range-budget-history").value = 8000;
+          byId("range-budget-tools").value = 3500;
+          updateBudgetSimulator();
+        });
+      }
+
+      // 页面载入初始化
+      updatePipelineStage(0);
+      updateChunkStrategy();
+      updateBudgetSimulator();
+    })();
+    </script>
+    
+</body>
+</html>

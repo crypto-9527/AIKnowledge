@@ -1,0 +1,1988 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>一个 24/7 代理团队如何成形：SpaceXAI 工程师 Lauren Tan 把工程判断写进系统 - 架构约束与验证规范白皮书</title>
+  <style>
+    /* ==========================================================================
+       CSS 变量与双主题色彩系统（零外部依赖，断网完全可用）
+       ========================================================================== */
+    :root {
+      --bg-canvas: #FAF7F2;
+      --bg-card: #FFFFFF;
+      --bg-card-subtle: #F5EFEB;
+      --bg-card-hover: #ECE4DC;
+      --border-color: #E2D9CF;
+      --border-subtle: #EBE4DC;
+      --text-primary: #2C2623;
+      --text-secondary: #6B625B;
+      --text-tertiary: #968D84;
+      --accent: #D97757;
+      --accent-hover: #C26344;
+      --accent-light: rgba(217, 119, 87, 0.12);
+      --emerald: #2E7D32;
+      --emerald-light: rgba(46, 125, 50, 0.12);
+      --amber: #D97706;
+      --amber-light: rgba(217, 119, 6, 0.12);
+      --rose: #C62828;
+      --rose-light: rgba(198, 40, 40, 0.12);
+      --cyan: #0284C7;
+      --cyan-light: rgba(2, 132, 199, 0.12);
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 10px 24px rgba(0,0,0,0.12);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --toc-width: 270px;
+      --container-max: 1260px;
+    }
+
+    [data-theme="dark"] {
+      --bg-canvas: #181715;
+      --bg-card: #21201D;
+      --bg-card-subtle: #2A2824;
+      --bg-card-hover: #33302B;
+      --border-color: #383531;
+      --border-subtle: #2F2C28;
+      --text-primary: #EAE6E1;
+      --text-secondary: #ABA39A;
+      --text-tertiary: #7D756C;
+      --accent: #E08264;
+      --accent-hover: #EB9377;
+      --accent-light: rgba(224, 130, 100, 0.18);
+      --emerald: #4EAA52;
+      --emerald-light: rgba(78, 170, 82, 0.18);
+      --amber: #F59E0B;
+      --amber-light: rgba(245, 158, 11, 0.18);
+      --rose: #EF5350;
+      --rose-light: rgba(239, 83, 80, 0.18);
+      --cyan: #38BDF8;
+      --cyan-light: rgba(56, 189, 248, 0.18);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.25);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
+      --shadow-lg: 0 10px 24px rgba(0,0,0,0.45);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      scroll-behavior: smooth;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      line-height: 1.75;
+      font-size: 1.0625rem;
+      transition: background-color 0.25s ease, color 0.25s ease;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 顶部进度条与导航 */
+    .top-progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--cyan));
+      width: 0%;
+      z-index: 1000;
+      transition: width 0.1s linear;
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      background-color: var(--bg-canvas);
+      border-bottom: 1px solid var(--border-color);
+      z-index: 900;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      padding: 0.75rem 1.5rem;
+    }
+
+    .header-inner {
+      max-width: var(--container-max);
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.55rem;
+      background: var(--accent-light);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .brand-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-action {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 0.4rem 0.8rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .btn-action:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+      border-color: var(--accent);
+    }
+
+    /* 整体布局架构 */
+    .layout-wrapper {
+      max-width: var(--container-max);
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+      display: flex;
+      gap: 2.5rem;
+      flex: 1;
+      width: 100%;
+    }
+
+    /* 侧边 TOC */
+    .sidebar-toc {
+      width: var(--toc-width);
+      flex-shrink: 0;
+      position: sticky;
+      top: 5rem;
+      height: calc(100vh - 6rem);
+      overflow-y: auto;
+      padding-right: 0.5rem;
+      font-size: 0.875rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .sidebar-toc::-webkit-scrollbar {
+      width: 4px;
+    }
+    .sidebar-toc::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 4px;
+    }
+
+    .toc-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-tertiary);
+      margin-bottom: 0.25rem;
+    }
+
+    .toc-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .toc-link {
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 0.35rem 0.6rem;
+      border-radius: var(--radius-sm);
+      transition: all 0.15s ease;
+      line-height: 1.4;
+      display: block;
+      border-left: 2px solid transparent;
+    }
+
+    .toc-link:hover {
+      color: var(--text-primary);
+      background: var(--bg-card-subtle);
+    }
+
+    .toc-link.active {
+      color: var(--accent);
+      background: var(--accent-light);
+      border-left-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .toc-sub {
+      padding-left: 1.25rem;
+      font-size: 0.8125rem;
+    }
+
+    /* 主内容区 */
+    .main-content {
+      flex: 1;
+      min-width: 0;
+      max-width: 890px;
+    }
+
+    /* 专著封面区 */
+    .doc-hero {
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .meta-tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .meta-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.65rem;
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      font-size: 0.8125rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .doc-title {
+      font-family: var(--font-serif);
+      font-size: 2.375rem;
+      font-weight: 700;
+      line-height: 1.25;
+      color: var(--text-primary);
+      margin-bottom: 1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .doc-lead {
+      font-size: 1.15rem;
+      line-height: 1.65;
+      color: var(--text-secondary);
+      margin-bottom: 1.5rem;
+      font-weight: 400;
+    }
+
+    .author-signature-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .author-info {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .author-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--amber));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFF;
+      font-weight: 700;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+
+    .author-details {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .author-name {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 0.95rem;
+    }
+
+    .author-title {
+      font-size: 0.8125rem;
+      color: var(--text-tertiary);
+    }
+
+    /* 文本排版样式 */
+    h2 {
+      font-family: var(--font-serif);
+      font-size: 1.625rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 2.75rem 0 1.25rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border-color);
+      scroll-margin-top: 5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 2rem 0 0.85rem;
+      scroll-margin-top: 5rem;
+    }
+
+    p {
+      margin-bottom: 1.25rem;
+      color: var(--text-primary);
+    }
+
+    ul, ol {
+      margin: 0 0 1.5rem 1.5rem;
+      color: var(--text-primary);
+    }
+
+    li {
+      margin-bottom: 0.5rem;
+      line-height: 1.65;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      transition: color 0.15s ease;
+    }
+
+    a:hover {
+      color: var(--accent-hover);
+    }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.875em;
+      padding: 0.15rem 0.4rem;
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--accent);
+    }
+
+    pre {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin: 1.5rem 0;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: inherit;
+    }
+
+    /* 原文专属优雅 Callout 引用卡片 */
+    .callout-box {
+      margin: 1.75rem 0;
+      padding: 1.25rem 1.5rem;
+      border-radius: var(--radius-md);
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-left: 4px solid var(--accent);
+      box-shadow: var(--shadow-sm);
+      position: relative;
+    }
+
+    .callout-box.info {
+      border-left-color: var(--cyan);
+      background: var(--cyan-light);
+      border-color: rgba(2, 132, 199, 0.25);
+    }
+
+    .callout-box.highlight {
+      border-left-color: var(--accent);
+      background: var(--accent-light);
+      border-color: rgba(217, 119, 87, 0.25);
+    }
+
+    .callout-box.warning {
+      border-left-color: var(--amber);
+      background: var(--amber-light);
+      border-color: rgba(217, 119, 6, 0.25);
+    }
+
+    .callout-box.success {
+      border-left-color: var(--emerald);
+      background: var(--emerald-light);
+      border-color: rgba(46, 125, 50, 0.25);
+    }
+
+    .callout-header {
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--text-primary);
+      margin-bottom: 0.65rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .callout-content {
+      color: var(--text-secondary);
+      font-size: 0.9625rem;
+      line-height: 1.65;
+    }
+
+    .callout-content p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* 现代表格系统 */
+    .table-container {
+      margin: 2rem 0;
+      overflow-x: auto;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+      background: var(--bg-card);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.9375rem;
+    }
+
+    thead {
+      background: var(--bg-card-subtle);
+      border-bottom: 2px solid var(--border-color);
+    }
+
+    th {
+      padding: 0.85rem 1.15rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: 0.02em;
+    }
+
+    td {
+      padding: 0.85rem 1.15rem;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      vertical-align: top;
+      line-height: 1.55;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: var(--bg-card-hover);
+    }
+
+    /* 核心数据透镜卡片矩阵 */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin: 1.75rem 0;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.25rem 1rem;
+      text-align: center;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .metric-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+    }
+
+    .metric-value {
+      font-family: var(--font-serif);
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.1;
+      margin-bottom: 0.35rem;
+    }
+
+    .metric-label {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric-sub {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+      margin-top: 0.35rem;
+    }
+
+    /* 内联 SVG 架构图展示容器 */
+    .diagram-figure {
+      margin: 2.25rem 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.5rem 1.25rem;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .diagram-svg-wrap {
+      width: 100%;
+      max-width: 820px;
+      overflow-x: auto;
+    }
+
+    .diagram-svg-wrap svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .diagram-caption {
+      margin-top: 1rem;
+      font-size: 0.875rem;
+      color: var(--text-tertiary);
+      text-align: center;
+      font-weight: 500;
+    }
+
+    /* 原生 MathML 与数学公式排版 */
+    .math-block {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin: 1.5rem 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      overflow-x: auto;
+    }
+
+    .math-desc {
+      font-size: 0.8125rem;
+      color: var(--text-tertiary);
+      font-weight: 500;
+    }
+
+    /* 动态交互沙盘容器 */
+    .sandbox-container {
+      margin: 2.5rem 0;
+      background: var(--bg-card);
+      border: 2px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      box-shadow: var(--shadow-md);
+    }
+
+    .sandbox-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .sandbox-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.6rem;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-size: 0.75rem;
+      font-weight: 700;
+      border-radius: var(--radius-sm);
+      text-transform: uppercase;
+    }
+
+    .sandbox-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .sandbox-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.75rem;
+    }
+
+    @media (max-width: 768px) {
+      .sandbox-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sandbox-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .control-label-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .control-slider {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      background: var(--border-color);
+      border-radius: 3px;
+      outline: none;
+      transition: background 0.2s;
+    }
+
+    .control-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      transition: transform 0.1s;
+    }
+
+    .control-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    .checkbox-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.65rem;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      margin-top: 0.2rem;
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .sandbox-results {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .result-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0;
+      border-bottom: 1px dashed var(--border-color);
+      font-size: 0.9rem;
+    }
+
+    .result-item:last-child {
+      border-bottom: none;
+    }
+
+    .result-label {
+      color: var(--text-secondary);
+    }
+
+    .result-value {
+      font-weight: 700;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 1rem;
+    }
+
+    .result-value.accent {
+      color: var(--accent);
+    }
+
+    .result-value.emerald {
+      color: var(--emerald);
+    }
+
+    .result-value.rose {
+      color: var(--rose);
+    }
+
+    .verdict-box {
+      padding: 0.85rem 1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.875rem;
+      line-height: 1.5;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+    }
+
+    /* 页脚 */
+    .site-footer {
+      border-top: 1px solid var(--border-color);
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      font-size: 0.875rem;
+      color: var(--text-tertiary);
+      background: var(--bg-card);
+      margin-top: 4rem;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 1024px) {
+      .sidebar-toc {
+        display: none;
+      }
+      .layout-wrapper {
+        padding: 1.5rem 1rem 3rem;
+      }
+    }
+
+    /* 打印样式适配 */
+    @media print {
+      .top-progress-bar,
+      .site-header,
+      .sidebar-toc,
+      .btn-action,
+      .sandbox-controls {
+        display: none !important;
+      }
+      body {
+        background: #FFF !important;
+        color: #000 !important;
+      }
+      .layout-wrapper {
+        padding: 0 !important;
+        max-width: 100% !important;
+      }
+      .main-content {
+        max-width: 100% !important;
+      }
+      .callout-box, .diagram-figure, .sandbox-container {
+        break-inside: avoid;
+        border-color: #CCC !important;
+        box-shadow: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 顶部阅读进度条 -->
+  <div id="top-progress-bar" class="top-progress-bar"></div>
+
+  <!-- 站点顶栏 -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand-group">
+        <span class="brand-badge">SpaceXAI / Cursor</span>
+        <span class="brand-title">全天候代理团队架构约束与验证规范白皮书</span>
+      </div>
+      <div class="header-actions">
+        <button id="btn-toc-toggle" class="btn-action" type="button" title="展开/收起目录">目录</button>
+        <button id="btn-theme-toggle" class="btn-action" type="button" title="切换深浅色彩主题">切换主题</button>
+        <button id="btn-print" class="btn-action" type="button" title="打印/导出 PDF">打印</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 页面主结构容器 -->
+  <div class="layout-wrapper">
+    
+    <!-- 侧边栏 TOC 导航 -->
+    <aside id="sidebar-toc" class="sidebar-toc">
+      <div class="toc-title">文档章节索引</div>
+      <nav class="toc-nav">
+        <a class="toc-link" href="#sec-overview">执行摘要与核心透镜</a>
+        <a class="toc-link" href="#sec-600pr-foundation">一、20 个自动合并 vs 600 个重构 PR</a>
+        <a class="toc-link" href="#sec-dune-constraints">二、让正确路径成为最短路径：Dune 架构</a>
+        <a class="toc-link toc-sub" href="#sec-dune-colocation">2.1 功能代码物理共置</a>
+        <a class="toc-link toc-sub" href="#sec-dune-process">2.2 Electron 进程硬边界</a>
+        <a class="toc-link toc-sub" href="#sec-dune-anti-patterns">2.3 坏捷径与危险模式直接封禁</a>
+        <a class="toc-link" href="#sec-ci-migration">三、把人工提醒改造成 CI：工程判断前置</a>
+        <a class="toc-link toc-sub" href="#sec-ci-ladder">3.1 人工判断五级迁移阶梯</a>
+        <a class="toc-link toc-sub" href="#sec-rust-analogy">3.2 编译器的机械淘汰价值</a>
+        <a class="toc-link" href="#sec-verification-limits">四、验证能力决定并行上限：自运行产品</a>
+        <a class="toc-link toc-sub" href="#sec-human-switchboard">4.1 终结“人类转接员”并发瓶颈</a>
+        <a class="toc-link toc-sub" href="#sec-feature-map">4.2 功能地图（Feature Map）寻路</a>
+        <a class="toc-link toc-sub" href="#sec-pstack-spec">4.3 PStack 架构与验证技能规范</a>
+        <a class="toc-link" href="#sec-skills-test">五、Skills 也要被测试：从失败中进化</a>
+        <a class="toc-link toc-sub" href="#sec-skill-unit-test">5.1 代理的单元测试与隔离沙箱</a>
+        <a class="toc-link toc-sub" href="#sec-blind-eval">5.2 隐蔽评测与防作弊盲测机制</a>
+        <a class="toc-link" href="#sec-graduated-trust">六、从本地观察到自动合并：逐级购买信任</a>
+        <a class="toc-link toc-sub" href="#sec-benny-case">6.1 Benny 代理复现分诊案例</a>
+        <a class="toc-link toc-sub" href="#sec-automerge-gates">6.2 自动合并的六大不可动摇准入门槛</a>
+        <a class="toc-link" href="#sec-productivity-myth">七、PR 数量不是生产率：可学与不可照抄</a>
+        <a class="toc-link toc-sub" href="#sec-metr-findings">7.1 METR 生产率实验与度量边界</a>
+        <a class="toc-link toc-sub" href="#sec-greenfield-brownfield">7.2 绿地与棕地代码库改造策略</a>
+        <a class="toc-link" href="#sec-interactive-sandboxes">八、可计算工程实证沙盘</a>
+        <a class="toc-link toc-sub" href="#sec-sandbox-1">8.1 原子化 PR 拆分与审查/排障模型</a>
+        <a class="toc-link toc-sub" href="#sec-sandbox-2">8.2 人工转接员 vs 验证闭环排队论</a>
+        <a class="toc-link toc-sub" href="#sec-sandbox-3">8.3 团队逐级授权门限评估器</a>
+        <a class="toc-link" href="#sec-references">九、文献引证与工程档案</a>
+      </nav>
+    </aside>
+
+    <!-- 主体正文区 -->
+    <main class="main-content">
+
+      <!-- 专著封面与元数据 -->
+      <article class="doc-hero">
+        <div class="meta-tag-row">
+          <span class="meta-chip">深度实证专著</span>
+          <span class="meta-chip">基准日: 2026-09-04</span>
+          <span class="meta-chip">架构: Dune &amp; PStack</span>
+          <span class="meta-chip">代码库治理</span>
+          <span class="meta-chip">零外部依赖单文件</span>
+        </div>
+        
+        <h1 class="doc-title">一个 24/7 代理团队如何成形：SpaceXAI 工程师 Lauren Tan 把工程判断写进系统</h1>
+        
+        <p class="doc-lead">
+          一夜自动合并 20 个 PR 的前面，是 600 多个重构 PR。Lauren Tan 展示了架构约束、CI 机械校验、验证技能与逐级授权怎样组成一支持续工作的全天候代理团队。
+        </p>
+
+        <div class="author-signature-card">
+          <div class="author-info">
+            <div class="author-avatar">LT</div>
+            <div class="author-details">
+              <span class="author-name">Lauren Tan（<a href="https://x.com/poteto" target="_blank" rel="noopener noreferrer">@poteto</a>）</span>
+              <span class="author-title">SpaceXAI / Cursor 核心工程师 · 前 Meta React 核心团队 / Netflix 架构师</span>
+            </div>
+          </div>
+          <div class="meta-chip">
+            信息源：<a href="https://best.xiaohu.ai/article/cursor-agent-team-24x7/" target="_blank" rel="noopener noreferrer">Grok Bot Team Workshop</a>
+          </div>
+        </div>
+      </article>
+
+      <!-- 核心数据透镜卡片矩阵 -->
+      <section id="sec-overview">
+        <h2>执行摘要与核心透镜</h2>
+        <p>
+          “我几乎不再看代码了。”Lauren Tan 能这样工作，是因为架构约束、CI 和验证流程已经承担了大量原本需要人类工程师逐行盯住的检查。GrokBot 让她可以组织一组各自拥有身份的独立代理，自己更像管理者一样协调它们。
+        </p>
+        <p>
+          完整工作坊展示了如何构建 GrokBot 团队，以及代理怎样彻底改变了工程编码方式。在剖析具体实现前，必须先看清一组支撑系统运转的基石数据：
+        </p>
+
+        <div class="metric-grid">
+          <div class="metric-card">
+            <div class="metric-value">600+</div>
+            <div class="metric-label">地基重构 PR</div>
+            <div class="metric-sub">系统成形前的前置重构投入</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">20</div>
+            <div class="metric-label">一夜自动合并 PR</div>
+            <div class="metric-sub">系统成熟后的单夜无人值守吞吐</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">~1000</div>
+            <div class="metric-label">单月合并 PR 总数</div>
+            <div class="metric-sub">高频原子化交付与回滚保障</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">16.6ms</div>
+            <div class="metric-label">渲染每帧预算 (60FPS)</div>
+            <div class="metric-sub">Electron 进程硬边界隔离红线</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 第一章 -->
+      <section id="sec-600pr-foundation">
+        <h2>一、一夜自动合并 20 个 PR，前面是 600 多个重构 PR</h2>
+        <p>
+          Lauren 的主体分享从现场第六分钟开始。她接手的是一套真实运行、又带着绿地项目典型风险的 GrokBot 代码库：原型生成得很快，代码却没有稳定护栏。
+        </p>
+
+        <div class="callout-box info">
+          <div class="callout-header">
+            <span>📹 想先看完整原始分享吗？</span>
+          </div>
+          <div class="callout-content">
+            <p>
+              完整工作坊中文字幕版，保留原始画面、声音和英文字幕；中文字幕采用单行大字并贴近原英文字幕。
+            </p>
+          </div>
+        </div>
+
+        <p>
+          Lauren 说，她已经很少亲自看代码。某天早上醒来，大约 20 个 PR 已由代理自动合并；上一个月她提交了约 1000 个 PR，当月才到第 12 天，又接近 800 个。
+        </p>
+        <p>
+          这些数字都来自她的现场自述，公开视频没有附上可独立审计的仓库和 PR 清单。它们可以说明交付规模，却不能直接证明代码价值、缺陷率或普遍生产率。
+        </p>
+        <p>
+          她还解释了为什么主动让代理拆分任务：单个 PR 可能只有几十行，也可能达到数百乃至上千行，并没有固定上限。她看重的是让每次提交尽量原子化地说明一小块改动，使 Git 历史继续成为理解上下文、回滚改动和定位缺陷的工具，而非做高 PR 数量。一个四万行的大 PR 即使合并成功，也很难回答问题究竟从哪里开始。
+        </p>
+        <p>
+          真正值得先看的，是这四个数字之间的因果关系。
+        </p>
+
+        <div class="callout-box highlight">
+          <div class="callout-header">
+            <span>💡 一夜 20 个自动合并 PR 之前，团队付出了什么？</span>
+          </div>
+          <div class="callout-content">
+            <p>
+              Lauren 现场自述，建立系统前完成 600 多个重构 PR；系统成熟后曾一夜自动合并约 20 个 PR，上月约 1000 个 PR，当月第 12 天接近 800 个。
+            </p>
+          </div>
+        </div>
+
+        <p>
+          20 个自动合并 PR 是输出端，600 多个重构 PR 是基础设施端。中间是一套重新设计过的代码库，单靠更聪明的提示词填不上这段距离。
+        </p>
+        <p>
+          GrokBot 最初是一个快速生成的绿地应用。速度很快，架构却会自然长成“代理当时最方便怎么做，就怎么做”的样子。每个任务都能局部完成，长期叠加后，目录、依赖、进程和状态管理开始互相缠绕。代理也许还能继续改，人类却越来越难理解和信任它。
+        </p>
+        <p>
+          Lauren 的选择是为代理重建工作环境。她把这套 Electron 架构叫作 <strong>Dune</strong>。目标是减少代理每次做决定的数量，让结构替它承担抽象原则。
+        </p>
+      </section>
+
+      <!-- 第二章 -->
+      <section id="sec-dune-constraints">
+        <h2>二、让正确路径成为最短路径：Dune 如何约束代理</h2>
+        <p>
+          Dune 有一个极强的设计判断：<strong>代理喜欢走捷径，那就把最短路径设计成正确路径。</strong>
+        </p>
+        <p>
+          这句话比“给 AI 写一份更完整的编码规范”更具体。编码规范要求代理每次都记住、理解并主动服从；架构约束则直接改变它能看到的选项。
+        </p>
+
+        <div class="callout-box success">
+          <div class="callout-header">
+            <span>🛡️ Dune 怎样让代理更难走错路？</span>
+          </div>
+          <div class="callout-content">
+            <p>
+              Dune 通过按功能共置代码、隔离 Electron 进程、检查依赖图并禁用代理常滥用的模式，让最短实现路径更接近正确路径。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="sec-dune-colocation">2.1 第一层：功能物理共置（Colocation）</h3>
+        <p>
+          一个功能的大部分代码放在同一目录，代理不必跨多个共享目录寻找状态、组件和业务逻辑。它只需要识别“我正在改新手引导”，就能把主要工作限制在对应功能目录（如 <code>features/onboarding/</code>）内。这消除了全局状态膨胀与跨目录迷航，将大语言模型的注意力上下文严格约束在当前切片。
+        </p>
+
+        <h3 id="sec-dune-process">2.2 第二层：进程边界硬隔离（Process Boundaries）</h3>
+        <p>
+          Electron 的主进程和渲染进程承担截然不同的职责。计算或 I/O 一旦误入渲染侧，就会和界面绘制抢时间。在 60 FPS 刷新率下，每帧仅有约 <strong>16.6 毫秒</strong> 预算，任何阻塞性计算越界都会导致界面掉帧与无响应。Dune 强制使用明确的目录结构与导入依赖图检查（Dependency Graph Check），在编译与静态分析阶段物理切断依赖穿越。
+        </p>
+
+        <h3 id="sec-dune-anti-patterns">2.3 第三层：封禁已知高危模式（Anti-Pattern Banning）</h3>
+        <p>
+          Lauren 采取了两个极其激进但效果显著的做法：
+        </p>
+        <ul>
+          <li><strong>禁止直接使用 <code>useEffect</code></strong>：消除因生命周期混淆引起的重复触发、竞态条件与内存泄漏。</li>
+          <li><strong>禁止普通代码注释</strong>：模型极易将某一次 PR 评审中的临时纠结或历史变更背景写成永久性注释，留下与当前代码演进脱节的噪声。</li>
+        </ul>
+        <p>
+          这些规则未必适合所有团队，但背后的方法论完全可以迁移：<strong>找到代理最常走的坏捷径，先问能否通过 API 设计、目录隔离、类型系统或依赖关系，让它在物理层面上根本走不进去。</strong>
+        </p>
+
+        <!-- 架构图 1：Dune 架构拓扑 -->
+        <div class="diagram-figure">
+          <div class="diagram-svg-wrap">
+            <svg viewBox="0 0 820 380" xmlns="http://www.w3.org/2000/svg">
+              <!-- 背景底板 -->
+              <rect x="10" y="10" width="380" height="355" rx="10" fill="var(--bg-card-subtle)" stroke="var(--rose)" stroke-width="1.5" stroke-dasharray="4,4"/>
+              <rect x="420" y="10" width="390" height="355" rx="10" fill="var(--bg-card-subtle)" stroke="var(--emerald)" stroke-width="2"/>
+              
+              <!-- 标题区域 -->
+              <text x="30" y="42" fill="var(--rose)" font-size="16" font-weight="bold">❌ 未治理代码库：坏捷径与依赖缠绕</text>
+              <text x="440" y="42" fill="var(--emerald)" font-size="16" font-weight="bold">✅ Dune 架构：最短路径即正确路径</text>
+
+              <!-- 左侧：混乱架构 -->
+              <rect x="30" y="65" width="160" height="60" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1"/>
+              <text x="45" y="90" fill="var(--text-primary)" font-size="13" font-weight="600">全局共享 Store</text>
+              <text x="45" y="110" fill="var(--text-tertiary)" font-size="11">状态膨胀 / 隐式耦合</text>
+
+              <rect x="215" y="65" width="160" height="60" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1"/>
+              <text x="230" y="90" fill="var(--text-primary)" font-size="13" font-weight="600">散落的 UI 组件</text>
+              <text x="230" y="110" fill="var(--text-tertiary)" font-size="11">跨目录疯狂搜索</text>
+
+              <rect x="30" y="150" width="345" height="85" rx="6" fill="rgba(198, 40, 40, 0.08)" stroke="var(--rose)" stroke-width="1"/>
+              <text x="45" y="175" fill="var(--rose)" font-size="13" font-weight="bold">渲染进程直接执行 Node I/O &amp; 重计算</text>
+              <text x="45" y="198" fill="var(--text-secondary)" font-size="12">60 FPS 预算击穿 (16.6ms) → 界面彻底卡顿冻结</text>
+              <text x="45" y="218" fill="var(--text-tertiary)" font-size="11">代理走快捷方式：直接 require('fs') 侵入 Render</text>
+
+              <rect x="30" y="255" width="345" height="90" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1"/>
+              <text x="45" y="280" fill="var(--text-primary)" font-size="13" font-weight="600">滥用 useEffect 与陈旧注释</text>
+              <text x="45" y="302" fill="var(--text-secondary)" font-size="12">死循环触发、竞态条件、虚假历史注释</text>
+              <text x="45" y="324" fill="var(--rose)" font-size="11" font-weight="bold">结果：人类对代理丧失信任，陷入逐行看代码泥潭</text>
+
+              <!-- 右侧：Dune 架构 -->
+              <rect x="440" y="65" width="350" height="95" rx="6" fill="var(--bg-card)" stroke="var(--accent)" stroke-width="1.5"/>
+              <text x="455" y="90" fill="var(--accent)" font-size="14" font-weight="bold">1. 功能代码物理共置 (Feature Colocation)</text>
+              <text x="455" y="112" fill="var(--text-secondary)" font-size="12"><code>features/onboarding/</code> 独占组件、状态与逻辑</text>
+              <text x="455" y="132" fill="var(--text-tertiary)" font-size="11">代理无需跨越全局搜索，上下文高度内聚且零迷航</text>
+
+              <!-- 进程隔离栅栏 -->
+              <rect x="440" y="175" width="165" height="85" rx="6" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="1"/>
+              <text x="450" y="200" fill="var(--cyan)" font-size="13" font-weight="bold">主进程 (Main)</text>
+              <text x="450" y="222" fill="var(--text-secondary)" font-size="11">系统 I/O / 本地文件</text>
+              <text x="450" y="242" fill="var(--text-tertiary)" font-size="11">重算任务托管</text>
+
+              <line x1="612" y1="217" x2="633" y2="217" stroke="var(--emerald)" stroke-width="2" stroke-dasharray="3,3"/>
+              <text x="610" y="208" fill="var(--emerald)" font-size="10" font-weight="bold">IPC</text>
+
+              <rect x="640" y="175" width="150" height="85" rx="6" fill="var(--bg-card)" stroke="var(--emerald)" stroke-width="1"/>
+              <text x="650" y="200" fill="var(--emerald)" font-size="13" font-weight="bold">渲染进程 (Render)</text>
+              <text x="650" y="222" fill="var(--text-secondary)" font-size="11">专注 UI 纯净绘制</text>
+              <text x="650" y="242" fill="var(--emerald)" font-size="11" font-weight="bold">稳保 60 FPS 丝滑</text>
+
+              <rect x="440" y="275" width="350" height="70" rx="6" fill="rgba(46, 125, 50, 0.08)" stroke="var(--emerald)" stroke-width="1"/>
+              <text x="455" y="298" fill="var(--emerald)" font-size="13" font-weight="bold">3. 依赖图检查 + 封禁坏捷径</text>
+              <text x="455" y="320" fill="var(--text-secondary)" font-size="12">依赖跨越 CI 拦截 | 禁用 useEffect | 禁止普通注释</text>
+            </svg>
+          </div>
+          <div class="diagram-caption">图 1：Dune 架构的物理共置与 Electron 双进程硬隔离机制</div>
+        </div>
+      </section>
+
+      <!-- 第三章 -->
+      <section id="sec-ci-migration">
+        <h2>三、把人工提醒改造成 CI：人的判断如何提前进入系统</h2>
+        <p>
+          <strong>代码审查里反复出现的同一句话，是一条尚未被编译进系统的规则。</strong>
+        </p>
+        <p>
+          如果工程师每周都要在 PR 中评论“这个依赖不能从渲染进程引入”、“这里不能直接读共享状态”、“这个功能必须放进自己的目录”，团队其实是在用最昂贵、最慢的方式执行约束：<strong>等错误发生，再让人发现。</strong>
+        </p>
+
+        <h3 id="sec-ci-ladder">3.1 人工判断向系统编译的五级迁移阶梯</h3>
+        <p>
+          Lauren 给出了清晰的承载方式迁移路线。人类工程判断从口头语言逐步硬化为机械结构：
+        </p>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>人工判断（软约束）</th>
+                <th>更可靠的承载方式（硬约束）</th>
+                <th>代理失败时发生什么</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>“请按这种目录组织功能”</td>
+                <td><strong>脚手架、固定目录和注册机制</strong></td>
+                <td>最容易复制的现有模式就是合规模式</td>
+              </tr>
+              <tr>
+                <td>“这里不能跨进程导入”</td>
+                <td><strong>依赖图检查、类型边界</strong></td>
+                <td>CI 直接报错并阻断合并</td>
+              </tr>
+              <tr>
+                <td>“不要再写这种 React 模式”</td>
+                <td><strong>lint 规则或编译器诊断</strong></td>
+                <td>在提交前得到精确的语法与模式错误</td>
+              </tr>
+              <tr>
+                <td>“完成前请运行真实功能”</td>
+                <td><strong>验证 Skill 和物理完成条件</strong></td>
+                <td>没有可核验的物证就不能声称完成</td>
+              </tr>
+              <tr>
+                <td>“请记住我们的团队习惯”</td>
+                <td>Rules、AGENTS.md、Skills 配置文件</td>
+                <td>提供上下文指引，但仍可能被遗忘</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          最后一行至关重要。Rules、Skills 和 BugBot 都有显著价值，但它们本质上是较软的约束。大语言模型代理可能漏读、曲解或在复杂长任务中遗忘上下文。<strong>架构、类型系统、编译器和 CI 会给出绝对确定性的机械结果，不能靠一句“我已经遵守”绕过去。</strong>
+        </p>
+
+        <h3 id="sec-rust-analogy">3.2 编译器的机械淘汰价值</h3>
+        <p>
+          Lauren 用 Rust 举了一个具体例子：严格的编译器和借用检查器（Borrow Checker）会在代码审查前淘汰掉整整一大类内存和并发错误。这个例子不要求所有团队改用 Rust，它深刻说明：<strong>技术栈本身决定了多少工程判断能在人工介入前被机械执行。</strong>
+        </p>
+        <p>
+          于是，人类并没有退出工程判断。人的工作位置发生了根本性转移：<strong>从逐个 PR 重复提醒，移到提前设计接口、错误空间和通过条件。</strong>
+        </p>
+        <p>
+          这种前置设计会消耗早期的重构时间和 token，但回报绝不仅仅属于最强大的前沿模型。边界足够明确后，能力较弱的模型、新加入团队的工程师，甚至不熟悉完整代码库的产品经理和设计师，也能在同一套护栏内安全地贡献代码。
+        </p>
+
+        <!-- 架构图 2：迁移阶梯模型 -->
+        <div class="diagram-figure">
+          <div class="diagram-svg-wrap">
+            <svg viewBox="0 0 820 320" xmlns="http://www.w3.org/2000/svg">
+              <!-- 5 级阶梯 -->
+              <!-- 阶梯 1 -->
+              <rect x="40" y="240" width="130" height="60" rx="6" fill="rgba(198, 40, 40, 0.15)" stroke="var(--rose)" stroke-width="1.5"/>
+              <text x="55" y="265" fill="var(--rose)" font-size="12" font-weight="bold">L1. 人工口头提醒</text>
+              <text x="55" y="285" fill="var(--text-tertiary)" font-size="10">代码评审反复拉扯</text>
+
+              <!-- 阶梯 2 -->
+              <rect x="195" y="190" width="135" height="110" rx="6" fill="rgba(217, 119, 6, 0.15)" stroke="var(--amber)" stroke-width="1.5"/>
+              <text x="208" y="215" fill="var(--amber)" font-size="12" font-weight="bold">L2. 提示词软约束</text>
+              <text x="208" y="235" fill="var(--text-secondary)" font-size="10">Rules / AGENTS.md</text>
+              <text x="208" y="255" fill="var(--text-tertiary)" font-size="10">仍可能漏读或遗忘</text>
+
+              <!-- 阶梯 3 -->
+              <rect x="355" y="140" width="135" height="160" rx="6" fill="rgba(2, 132, 199, 0.15)" stroke="var(--cyan)" stroke-width="1.5"/>
+              <text x="368" y="165" fill="var(--cyan)" font-size="12" font-weight="bold">L3. 脚手架与共置</text>
+              <text x="368" y="185" fill="var(--text-secondary)" font-size="10">固定目录与注册机制</text>
+              <text x="368" y="205" fill="var(--text-tertiary)" font-size="10">复制即可合规</text>
+
+              <!-- 阶梯 4 -->
+              <rect x="515" y="90" width="135" height="210" rx="6" fill="rgba(224, 130, 100, 0.18)" stroke="var(--accent)" stroke-width="1.5"/>
+              <text x="528" y="115" fill="var(--accent)" font-size="12" font-weight="bold">L4. 依赖图与类型</text>
+              <text x="528" y="135" fill="var(--text-secondary)" font-size="10">越界导入阻断</text>
+              <text x="528" y="155" fill="var(--text-tertiary)" font-size="10">CI 直接红脸拦截</text>
+
+              <!-- 阶梯 5 -->
+              <rect x="675" y="40" width="125" height="260" rx="6" fill="rgba(46, 125, 50, 0.18)" stroke="var(--emerald)" stroke-width="2"/>
+              <text x="685" y="65" fill="var(--emerald)" font-size="12" font-weight="bold">L5. 机械编译器</text>
+              <text x="685" y="85" fill="var(--text-secondary)" font-size="10">Rust 借用检查器</text>
+              <text x="685" y="105" fill="var(--emerald)" font-size="10" font-weight="bold">零漏洞机械淘汰</text>
+              <text x="685" y="125" fill="var(--text-tertiary)" font-size="10">前置错误空间设计</text>
+
+              <!-- 底部演进指示箭头 -->
+              <line x1="40" y1="312" x2="790" y2="312" stroke="var(--border-color)" stroke-width="2"/>
+              <text x="320" y="325" fill="var(--text-tertiary)" font-size="11">约束硬度提升：从昂贵的人工补漏 → 确定性的机械淘汰 →</text>
+            </svg>
+          </div>
+          <div class="diagram-caption">图 2：工程判断向 CI 与编译器推进的五级阶梯模型</div>
+        </div>
+      </section>
+
+      <!-- 第四章 -->
+      <section id="sec-verification-limits">
+        <h2>四、验证能力决定并行上限：代理必须能自己运行产品</h2>
+        <p>
+          架构可以让代码更整洁，CI 可以挡住已知坏模式，但两者仍<strong>不能证明用户看到的功能真正可用</strong>。
+        </p>
+        <p>
+          Lauren 把验证称为代理工具箱里最重要的能力。这里的“验证”远不止跑单元测试。代理要能够：<strong>启动应用，进入用户报告的界面，执行交互操作，复现问题，采集 CPU trace 或 heap snapshot，完成代码修改，再沿着完全相同的路径检查问题是否真正消失。</strong>
+        </p>
+
+        <div class="callout-box warning">
+          <div class="callout-header">
+            <span>🔍 代理怎样独立证明一个产品问题已经修复？</span>
+          </div>
+          <div class="callout-content">
+            <p>
+              代理必须启动真实产品，用功能地图找到入口，复现问题并保存证据，修改后沿同一路径回归，最后留下可检查的完成证据。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="sec-human-switchboard">4.1 终结“人类转接员”的并发雪崩</h3>
+        <p>
+          如果这条回路缺失任何一段，人类就会沦为极其悲惨的“转接员”：代理写代码，人打开本地开发版本；人发现按钮毫无反应，再复制控制台错误粘贴给代理；代理修改后，人重新点击测试一遍。
+        </p>
+        <p>
+          <strong>一个代理时，人类还能勉强配合；十个代理并发工作时，同一个人会被瞬间彻底堵死。</strong> 因此，决定团队能够并发调度多少代理的核心瓶颈，不是模型的吞吐速度，而是代理的独立验证闭环。
+        </p>
+
+        <h3 id="sec-feature-map">4.2 功能地图（Feature Map）：抹平语义断层</h3>
+        <p>
+          功能地图解决的是“代理不知道产品具体长在哪里”的问题。用户报告往往非常模糊：“左侧边栏很卡”或者发一张截图和三个问号；但在代码库里，根本没有任何一个文件叫“用户看到的左侧边栏”。
+        </p>
+        <p>
+          功能地图从用户视角记录入口、子功能、快捷键、DOM 选择器和代码位置的映射关系，让模糊的问题报告能够精确落地为可操作的执行路径。
+        </p>
+
+        <h3 id="sec-pstack-spec">4.3 PStack 架构与验证技能规范</h3>
+        <p>
+          这套思路后来沉淀为 PStack。Cursor 官方公开的开源仓库规范保留了完全一致的铁律（参见 Cursor 官方技能 <a href="https://github.com/cursor/plugins/blob/main/pstack/skills/create-verification-skill/SKILL.md" target="_blank" rel="noopener noreferrer"><code>create-verification-skill</code></a>）：
+        </p>
+        <ol>
+          <li>从代码库识别用户实际接触的界面与入口；</li>
+          <li>为核心功能建立精准的功能地图；</li>
+          <li>物理启动应用产品实例；</li>
+          <li>驱动至少一个完整功能交互；</li>
+          <li>保存录屏、Trace 或快照物理证据；</li>
+          <li>清理测试环境并二次核验取证结果真实存在。</li>
+        </ol>
+        <p>
+          <strong>没有亲自跑过的验证 Skill，只能算作草稿。</strong>
+        </p>
+
+        <!-- 架构图 3：PStack 验证闭环 -->
+        <div class="diagram-figure">
+          <div class="diagram-svg-wrap">
+            <svg viewBox="0 0 820 320" xmlns="http://www.w3.org/2000/svg">
+              <rect x="20" y="30" width="115" height="70" rx="8" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1.5"/>
+              <text x="32" y="60" fill="var(--text-primary)" font-size="12" font-weight="bold">模糊 Issue 报告</text>
+              <text x="32" y="80" fill="var(--text-tertiary)" font-size="10">截图 / 现象描述</text>
+
+              <line x1="135" y1="65" x2="165" y2="65" stroke="var(--accent)" stroke-width="2"/>
+
+              <rect x="165" y="30" width="135" height="70" rx="8" fill="var(--bg-card)" stroke="var(--accent)" stroke-width="1.5"/>
+              <text x="178" y="60" fill="var(--accent)" font-size="12" font-weight="bold">功能地图寻路</text>
+              <text x="178" y="80" fill="var(--text-secondary)" font-size="10">DOM 选择器 / 快捷键</text>
+
+              <line x1="300" y1="65" x2="330" y2="65" stroke="var(--accent)" stroke-width="2"/>
+
+              <rect x="330" y="30" width="135" height="70" rx="8" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="1.5"/>
+              <text x="345" y="60" fill="var(--cyan)" font-size="12" font-weight="bold">真实产品自启动</text>
+              <text x="345" y="80" fill="var(--text-secondary)" font-size="10">Electron 实例运行</text>
+
+              <line x1="465" y1="65" x2="495" y2="65" stroke="var(--accent)" stroke-width="2"/>
+
+              <rect x="495" y="30" width="140" height="70" rx="8" fill="var(--bg-card)" stroke="var(--amber)" stroke-width="1.5"/>
+              <text x="508" y="60" fill="var(--amber)" font-size="12" font-weight="bold">交互复现与取证</text>
+              <text x="508" y="80" fill="var(--text-secondary)" font-size="10">CPU trace / 快照</text>
+
+              <line x1="635" y1="65" x2="665" y2="65" stroke="var(--accent)" stroke-width="2"/>
+
+              <rect x="665" y="30" width="135" height="70" rx="8" fill="var(--bg-card)" stroke="var(--emerald)" stroke-width="2"/>
+              <text x="678" y="60" fill="var(--emerald)" font-size="12" font-weight="bold">闭环回归验证</text>
+              <text x="678" y="80" fill="var(--text-secondary)" font-size="10">原路径验证 + 留存物证</text>
+
+              <!-- 底部对比卡片 -->
+              <rect x="20" y="140" width="370" height="150" rx="8" fill="rgba(198, 40, 40, 0.08)" stroke="var(--rose)" stroke-width="1.5"/>
+              <text x="40" y="170" fill="var(--rose)" font-size="14" font-weight="bold">传统无验证：人类转接员瓶颈</text>
+              <text x="40" y="195" fill="var(--text-secondary)" font-size="12">人类充当代理与真实环境之间的低效测试人肉开关</text>
+              <text x="40" y="218" fill="var(--text-secondary)" font-size="12">1 个代理勉强配合；10 个代理并发时人类直接过载熔断</text>
+              <text x="40" y="245" fill="var(--rose)" font-size="12" font-weight="bold">实际并发上限：N ≤ 2 个代理（排队论崩溃）</text>
+
+              <rect x="430" y="140" width="370" height="150" rx="8" fill="rgba(46, 125, 50, 0.08)" stroke="var(--emerald)" stroke-width="1.5"/>
+              <text x="450" y="170" fill="var(--emerald)" font-size="14" font-weight="bold">PStack 闭环验证：人类仅审查证据</text>
+              <text x="450" y="195" fill="var(--text-secondary)" font-size="12">代理提交 PR 时已附带录屏、测试结果与 CPU trace</text>
+              <text x="450" y="218" fill="var(--text-secondary)" font-size="12">人类审查时间从 25 分钟/PR 压缩至 3 分钟/PR 决策</text>
+              <text x="450" y="245" fill="var(--emerald)" font-size="12" font-weight="bold">实际并发上限：N ≥ 15 个代理持续稳定工作</text>
+            </svg>
+          </div>
+          <div class="diagram-caption">图 3：PStack 真实产品验证闭环与人类瓶颈突破</div>
+        </div>
+      </section>
+
+      <!-- 第五章 -->
+      <section id="sec-skills-test">
+        <h2>五、Skills 也要被测试：PStack 如何从代理失败中长出来</h2>
+        <p>
+          Lauren 强调，PStack 并不是坐在会议室里先构思出一套宏大的方法论，再把它拆包分装成 Skills。<strong>它完全是从观察代理的失败细节中长出来的。</strong>
+        </p>
+        <ul>
+          <li>代理没有读取相关代码就自信地下结论 → 提炼出强制先检索物理证据的 Skill；</li>
+          <li>代理不会操控真实桌面应用 → 研发 Control Glass 与基于像素/界面的验证 Skill；</li>
+          <li>代理找不到用户口中的功能模块 → 补充用户态功能地图。</li>
+        </ul>
+
+        <div class="callout-box highlight">
+          <div class="callout-header">
+            <span>⚙️ 一条团队经验怎样变成经过测试的 Skill？</span>
+          </div>
+          <div class="callout-content">
+            <p>
+              团队先观察代理失败，再把改进写成 Skill，制定评分标准，让不同模型在隔离环境执行，并用回归结果判断 Skill 是否真的改善表现。
+            </p>
+          </div>
+        </div>
+
+        <h3 id="sec-skill-unit-test">5.1 代理的单元测试：Skill 评测体系</h3>
+        <p>
+          Skill 写出来仍未结束。Lauren 把评测理解成<strong>“针对代理的单元测试”</strong>：
+        </p>
+        <ol>
+          <li>先为特定任务制定清晰的定量评分标准；</li>
+          <li>在隔离目录或 <code>git worktree</code> 中并行启动多个子代理；</li>
+          <li>让不同的底层基座模型执行同一项任务；</li>
+          <li>由协调代理或独立裁判模型进行交叉评分；</li>
+          <li>修改优化 Skill 提示与脚本后重新回归运行，观察是否更稳定地导向预期目标。</li>
+        </ol>
+
+        <h3 id="sec-blind-eval">5.2 隐蔽评测与防作弊盲测机制</h3>
+        <p>
+          她甚至会给评测目录起极其普通的随机名字，<strong>避免代理意识到自己正在参加考试后改变行为策略</strong>。如果一条 Skill 只有在代理明确知道自己在被评测时才生效，那么在实际工程中它就是不可靠的。
+        </p>
+        <p>
+          这确立了团队资产质量的真正分水岭：<strong>Skill 的质量不能靠文档字数多寡来证明，而要看第一次接触代码库的弱模型代理能否严格按它完成任务并留存证据。</strong>
+        </p>
+        <p>
+          这套循环从根本上重塑了团队知识的形态。过去散落在资深架构师口头提醒、代码审查评论以及线上事故复盘里的碎片经验，被系统性沉淀为可分发、可执行、可评分且可自动回归的工程软件资产。
+        </p>
+      </section>
+
+      <!-- 第六章 -->
+      <section id="sec-graduated-trust">
+        <h2>六、从本地观察到自动合并：信任必须逐级购买</h2>
+        <p>
+          Lauren 没有建议任何团队在第一天就盲目启动成百上千个云端代理。她的推进节奏恰恰相反：<strong>从本地开始，打开工具调用跟踪，仔细观察代理究竟读了什么、漏掉了什么、怎样在细微处失败，再逐步补充架构护栏、验证机制与 Skill。</strong>
+        </p>
+
+        <h3 id="sec-benny-case">6.1 Benny 代理：云端桌面独立分诊实践</h3>
+        <p>
+          当本地验证稳定成熟后，工作流才逐步迁移至云端。她举了一个叫 <strong>Benny</strong> 的自动化代理：
+        </p>
+        <p>
+          用户错误报告到来后，Benny 在云端启动独立桌面环境，运行 Cursor 应用，使用同一套操控 Skill 尝试自主复现，并进一步比对判断主分支是否其实已经修复了该问题。在现场演示案例中，Benny 确认该缺陷已在主分支修复，它交回的是完整的复现录屏、环境状态与免修改发版建议，而非一句毫无依据的“可能是这里”。
+        </p>
+
+        <div class="callout-box warning">
+          <div class="callout-header">
+            <span>🚪 代理获得自动合并权限前要跨过哪些门？</span>
+          </div>
+          <div class="callout-content">
+            <p>
+              代理权限从本地观察、受控改动、独立验证、云端执行、错误分诊逐步上升到自动合并；每级都要求更强证据与更短回滚路径。
+            </p>
+          </div>
+        </div>
+
+        <p>
+          公开版 Cursor Cloud Agents 的商业实现已高度工程化：每个代理运行在独立的隔离虚拟机中，克隆授权仓库，在独立分支工作，并以 Draft PR 形式交接；网络出口、安全凭据与权限审计均由平台机制保证（可参阅 <a href="https://prod.cursor.com/docs/cloud-agent/security" target="_blank" rel="noopener noreferrer">Cursor 安全说明</a>）。
+        </p>
+
+        <h3 id="sec-automerge-gates">6.2 自动合并的六大不可动摇准入门槛</h3>
+        <p>
+          自动合并比云端运行跨越了最危险的一道红线。前者关乎代理在何处计算，后者决定代码能否直接污染生产环境主分支。要开放自动合并权限，团队必须实证满足六大准入门槛：
+        </p>
+        <ol>
+          <li><strong>任务边界高度收敛</strong>：改动范围严格受限，禁止跨模块肆意重构；</li>
+          <li><strong>架构硬约束机械拦截</strong>：如 Dune 架构阻断跨进程依赖与危险生命周期调用；</li>
+          <li><strong>代理具备真实运行验证能力</strong>：必须能自启应用并留下通过证据；</li>
+          <li><strong>失败与排查证据链完整</strong>：包括控制台日志、CPU Profile、录屏物证；</li>
+          <li><strong>极短的原子化回滚路径</strong>：单个 PR 原子化，Git 能够一键干净回滚；</li>
+          <li><strong>生产环境全链路可观测监控</strong>：上线后异常指标能被即时捕获。</li>
+        </ol>
+
+        <!-- 架构图 4：逐级授权阶梯 -->
+        <div class="diagram-figure">
+          <div class="diagram-svg-wrap">
+            <svg viewBox="0 0 820 280" xmlns="http://www.w3.org/2000/svg">
+              <!-- 六级阶梯水平推进 -->
+              <rect x="20" y="160" width="115" height="90" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1.5"/>
+              <text x="32" y="185" fill="var(--text-primary)" font-size="12" font-weight="bold">L1. 本地观察</text>
+              <text x="32" y="205" fill="var(--text-tertiary)" font-size="10">只读探索</text>
+              <text x="32" y="225" fill="var(--text-tertiary)" font-size="10">观察调用与失败</text>
+
+              <rect x="150" y="135" width="115" height="115" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1.5"/>
+              <text x="162" y="160" fill="var(--text-primary)" font-size="12" font-weight="bold">L2. 受控改动</text>
+              <text x="162" y="180" fill="var(--text-secondary)" font-size="10">单点切片修改</text>
+              <text x="162" y="200" fill="var(--text-tertiary)" font-size="10">人类单次审批</text>
+
+              <rect x="280" y="110" width="115" height="140" rx="6" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="1.5"/>
+              <text x="292" y="135" fill="var(--cyan)" font-size="12" font-weight="bold">L3. 独立验证</text>
+              <text x="292" y="155" fill="var(--text-secondary)" font-size="10">PStack 自启动</text>
+              <text x="292" y="175" fill="var(--text-tertiary)" font-size="10">提交物证包</text>
+
+              <rect x="410" y="85" width="120" height="165" rx="6" fill="var(--bg-card)" stroke="var(--amber)" stroke-width="1.5"/>
+              <text x="422" y="110" fill="var(--amber)" font-size="12" font-weight="bold">L4. 云端隔离</text>
+              <text x="422" y="130" fill="var(--text-secondary)" font-size="10">独立 VM 执行</text>
+              <text x="422" y="150" fill="var(--text-tertiary)" font-size="10">密钥与网络隔离</text>
+
+              <rect x="545" y="60" width="125" height="190" rx="6" fill="var(--bg-card)" stroke="var(--accent)" stroke-width="1.5"/>
+              <text x="557" y="85" fill="var(--accent)" font-size="12" font-weight="bold">L5. 智能分诊</text>
+              <text x="557" y="105" fill="var(--text-secondary)" font-size="10">Benny 独立复现</text>
+              <text x="557" y="125" fill="var(--text-tertiary)" font-size="10">主分支核实发版</text>
+
+              <rect x="685" y="30" width="120" height="220" rx="6" fill="rgba(46, 125, 50, 0.15)" stroke="var(--emerald)" stroke-width="2"/>
+              <text x="695" y="55" fill="var(--emerald)" font-size="12" font-weight="bold">L6. 自动合并</text>
+              <text x="695" y="75" fill="var(--emerald)" font-size="10" font-weight="bold">24/7 持续交付</text>
+              <text x="695" y="95" fill="var(--text-secondary)" font-size="10">极短原子回滚</text>
+              <text x="695" y="115" fill="var(--text-tertiary)" font-size="10">线上实时监控</text>
+
+              <line x1="20" y1="260" x2="805" y2="260" stroke="var(--border-color)" stroke-width="2"/>
+              <text x="280" y="274" fill="var(--text-tertiary)" font-size="11">信任购买阶梯：每提升一级，都需要更硬的机械护栏与证据 →</text>
+            </svg>
+          </div>
+          <div class="diagram-caption">图 4：信任逐级购买的六阶权限门限演进模型</div>
+        </div>
+      </section>
+
+      <!-- 第七章 -->
+      <section id="sec-productivity-myth">
+        <h2>七、PR 数量不是生产率：这套方法能学什么，不能照抄什么</h2>
+        <p>
+          这场分享极易被误读为一套简单的“高效高产秘诀”：多花点 Token、把代码库全量重构一遍、开启自动合并，然后用成百上千个 PR 数量在汇报中炫耀生产率。
+        </p>
+        <p>
+          <strong>PR 数量仅仅记录了改动被切分成了多少份。</strong> 一个普通任务可以切分成十个小 PR，十个小 PR 也有可能全都是无足轻重的微小修复。PR 计数从未自动包含缺陷率、返工损耗、回滚成本、用户真实价值以及长期的架构维护负担。
+        </p>
+
+        <h3 id="sec-metr-findings">7.1 METR 生产率实验更新的警示</h3>
+        <p>
+          METR 在 2026 年更新其开发者生产率实验时给出了一个极具清醒视角的边界：晚 2025 工具在原始统计数据中确实出现了某种加速迹象，但参与者样本偏差、相对较低的激励报酬以及<strong>多人同时并行运行多个代理所造成的精确计时极度困难</strong>，让研究团队认为这些数据仅能提供微弱的幅度证据（详见 <a href="https://metr.org/blog/2026-02-24-uplift-update/" target="_blank" rel="noopener noreferrer">METR 研究更新</a>）。METR 甚至专门指出：<strong>并行代理让“一个特定任务到底消耗了多少人类精力时间”变得前所未有地难以测量。</strong>
+        </p>
+        <p>
+          因此，团队衡量真实的工程生产率必须建立六维综合度量体系：
+        </p>
+        <ul>
+          <li><strong>需求到可验证结果的端到端周期时间</strong>；</li>
+          <li><strong>每项任务的人工介入与转接摩擦次数</strong>；</li>
+          <li><strong>线上缺陷率与紧急回滚频率</strong>；</li>
+          <li><strong>验收证据包的完备度与可追溯性</strong>；</li>
+          <li><strong>提交改动的可逆性与原子化程度</strong>；</li>
+          <li><strong>对业务最终核心指标的实质贡献</strong>。</li>
+        </ul>
+
+        <h3 id="sec-greenfield-brownfield">7.2 绿地与棕地代码库改造策略</h3>
+        <p>
+          全新代码库（绿地）与既有历史工程（棕地）绝不能盲目采用相同的改造套路：
+        </p>
+        <ul>
+          <li><strong>全新绿地项目</strong>：最容易快速生成，也最容易在缺乏护栏时迅速失控退化。它最适合从第一天起就针对代理设计 Dune 式的进程隔离与物理共置边界。</li>
+          <li><strong>成熟棕地项目</strong>：如果原本就拥有严格的静态类型系统、高覆盖率的自动化测试套件和成熟的分支权限规约，它可能已经比很多杂乱的新项目更适合代理工作。<strong>全面推倒重写通常是灾难性的，只有在旧架构完全无法提供机械防御、且重构能够分阶段小步验证时才值得启动。</strong></li>
+        </ul>
+        <p>
+          Lauren 还指出，传统大型科技公司历经多年、为海量水平不一人类工程师构建的框架约定、分支准入与防呆防误设施，恰好能近乎零成本地用来约束代理。<strong>代理工程并不是凭空诞生的一门玄学，大量最高效的基础设施，本质上正是人类软件工程严谨经验的复用与转译。</strong>
+        </p>
+
+        <div class="callout-box success">
+          <div class="callout-header">
+            <span>📋 这套方法哪些能复制，哪些不能从个案外推？</span>
+          </div>
+          <div class="callout-content">
+            <p>
+              <strong>可复制的是：</strong>架构护栏（Dune）、端到端验证闭环（PStack）、Skill 隔离评测与逐级购买信任。<br>
+              <strong>不可盲目照抄的是：</strong>轻率推倒重写既有代码库；绝不能从 PR 数量推导真实代码质量、业务价值与普遍生产率；单机 Token 与过夜成本也必须依据自身团队经济模型独立核算。
+            </p>
+          </div>
+        </div>
+
+        <p>
+          一支 24/7 全天候工作的代理团队，从来没有消灭人类的工程判断。<strong>它只是把人的判断从深夜疲惫不堪地逐行审查代码，提前搬到了白天设计系统架构、划定错误空间、定义物理完成条件和检查真实证据的地方。</strong>
+        </p>
+      </section>
+
+      <!-- 第八章：交互实证沙盘 -->
+      <section id="sec-interactive-sandboxes">
+        <h2>八、可计算工程实证沙盘</h2>
+        <p>
+          拒绝模糊定性，拥抱数学实证。以下三个沙盘基于前述推导构建，所有参数计算均严格绑定物理公式，拒绝虚假数值。
+        </p>
+
+        <!-- 沙盘 1：原子化 PR 拆分模型 -->
+        <div id="sec-sandbox-1" class="sandbox-container">
+          <div class="sandbox-header">
+            <span class="sandbox-badge">实证模型 1</span>
+            <span class="sandbox-title">原子化 PR 拆分与审查/排障成本排队计算器</span>
+          </div>
+          <div class="sandbox-grid">
+            <div class="sandbox-controls">
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>单功能总代码行数 (L)</span>
+                  <span id="val-m1-lines">2000 行</span>
+                </div>
+                <input id="range-m1-lines" class="control-slider" type="range" min="400" max="8000" step="200" value="2000">
+              </div>
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>切分原子 PR 数量 (k)</span>
+                  <span id="val-m1-k">8 个 PR</span>
+                </div>
+                <input id="range-m1-k" class="control-slider" type="range" min="1" max="25" step="1" value="8">
+              </div>
+              <p class="math-desc">
+                数学形式：单 PR 缺陷率 <math><msub><mi>P</mi><mtext>defect</mtext></msub><mo>=</mo><mn>1</mn><mo>−</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>α</mi><mo>·</mo><mi>l</mi></mrow></msup></math>；Git 排障时间 <math><msub><mi>T</mi><mtext>triage</mtext></msub><mo>=</mo><msub><mi>T</mi><mn>0</mn></msub><mo>+</mo><mi>β</mi><mo>·</mo><mi>l</mi><mi>ln</mi><mo>(</mo><mn>1</mn><mo>+</mo><mi>l</mi><mo>)</mo></math>。
+              </p>
+            </div>
+            <div class="sandbox-results">
+              <div>
+                <div class="result-item">
+                  <span class="result-label">单 PR 平均改动行数 (l)</span>
+                  <span id="out-m1-lines" class="result-value">250.0 行</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">单 PR 引入缺陷概率 (P)</span>
+                  <span id="out-m1-pdef" class="result-value accent">31.3%</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">若发生缺陷排查回滚耗时</span>
+                  <span id="out-m1-triage" class="result-value">74.1 分钟</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">CI 流水线固定开销 (4m/PR)</span>
+                  <span id="out-m1-ci" class="result-value">32.0 分钟</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">期望总工程损耗时间</span>
+                  <span id="out-m1-total" class="result-value emerald">217.3 分钟</span>
+                </div>
+              </div>
+              <div id="out-m1-verdict" class="verdict-box">
+                分析结论：当前拆分粒度良好，避开了 40,000 行巨型 PR 带来的回滚排障黑洞，处于高吞吐平衡区间。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 沙盘 2：排队论雪崩模型 -->
+        <div id="sec-sandbox-2" class="sandbox-container">
+          <div class="sandbox-header">
+            <span class="sandbox-badge">实证模型 2</span>
+            <span class="sandbox-title">人类转接员 vs 验证闭环并行承载力排队论模型</span>
+          </div>
+          <div class="sandbox-grid">
+            <div class="sandbox-controls">
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>无验证人工转接测试耗时</span>
+                  <span id="val-m2-manual">25 分钟/PR</span>
+                </div>
+                <input id="range-m2-manual" class="control-slider" type="range" min="10" max="45" step="5" value="25">
+              </div>
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>PStack 自验证审查耗时</span>
+                  <span id="val-m2-pstack">3 分钟/PR</span>
+                </div>
+                <input id="range-m2-pstack" class="control-slider" type="range" min="1" max="10" step="1" value="3">
+              </div>
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>并发代理团队规模 (N)</span>
+                  <span id="val-m2-agents">6 个 Agent</span>
+                </div>
+                <input id="range-m2-agents" class="control-slider" type="range" min="1" max="20" step="1" value="6">
+              </div>
+              <p class="math-desc">
+                基准假设：单代理平均交付周期 60 分钟。排队论稳定性条件：利用率 <math><mi>ρ</mi><mo>=</mo><mfrac><mrow><mi>N</mi><mo>·</mo><mi>T</mi></mrow><mn>60</mn></mfrac><mo>&lt;</mo><mn>1</mn></math>。
+              </p>
+            </div>
+            <div class="sandbox-results">
+              <div>
+                <div class="result-item">
+                  <span class="result-label">传统转接员负荷利用率</span>
+                  <span id="out-m2-rho-no" class="result-value rose">250.0%</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">PStack 自验证负荷利用率</span>
+                  <span id="out-m2-rho-pstack" class="result-value emerald">30.0%</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">转接模式最大可承受代理数</span>
+                  <span id="out-m2-nmax-no" class="result-value">2 个</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">PStack 模式最大可承受代理数</span>
+                  <span id="out-m2-nmax-pstack" class="result-value emerald">20 个</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">有效工程并行上限提升</span>
+                  <span id="out-m2-mult" class="result-value accent">8.3 倍</span>
+                </div>
+              </div>
+              <div id="out-m2-verdict" class="verdict-box">
+                状态：传统转接模式利用率已达 250.0%（彻底过载雪崩），而 PStack 模式仅占人类 30.0% 精力，完美印证“验证能力决定并行上限”。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 沙盘 3：逐级授权评估器 -->
+        <div id="sec-sandbox-3" class="sandbox-container">
+          <div class="sandbox-header">
+            <span class="sandbox-badge">实证模型 3</span>
+            <span class="sandbox-title">代理团队逐级授权门限评估器 (Graduated Trust Evaluator)</span>
+          </div>
+          <div class="sandbox-grid">
+            <div class="sandbox-controls">
+              <div class="control-label-row">
+                <span>当前团队已具备的工程护栏基建</span>
+              </div>
+              <div class="checkbox-list">
+                <label class="checkbox-item">
+                  <input id="chk-m3-arch" type="checkbox" checked>
+                  <span><strong>1. 架构硬隔离</strong>（功能物理共置、Electron 进程边界检查）</span>
+                </label>
+                <label class="checkbox-item">
+                  <input id="chk-m3-verify" type="checkbox" checked>
+                  <span><strong>2. 真实产品验证闭环</strong>（自启动应用、自动复现、物证快照）</span>
+                </label>
+                <label class="checkbox-item">
+                  <input id="chk-m3-map" type="checkbox" checked>
+                  <span><strong>3. 功能地图寻路</strong>（DOM 选择器与用户入口映射清晰）</span>
+                </label>
+                <label class="checkbox-item">
+                  <input id="chk-m3-cloud" type="checkbox">
+                  <span><strong>4. 云端独立沙箱</strong>（独立 VM、凭据与网络出口审计隔离）</span>
+                </label>
+                <label class="checkbox-item">
+                  <input id="chk-m3-revert" type="checkbox">
+                  <span><strong>5. 原子化极短回滚路径</strong>（小提交、Git 历史清晰可独立 revert）</span>
+                </label>
+                <label class="checkbox-item">
+                  <input id="chk-m3-obs" type="checkbox">
+                  <span><strong>6. 生产全链路可观测性</strong>（线上实时告警与熔断回退兜底）</span>
+                </label>
+              </div>
+            </div>
+            <div class="sandbox-results">
+              <div>
+                <div class="result-item">
+                  <span class="result-label">综合安全与护栏得分</span>
+                  <span id="out-m3-score" class="result-value accent">60 分</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">建议最大安全授权级别</span>
+                  <span id="out-m3-level" class="result-value emerald">Level 3: 独立验证</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">当前准入授权状态标签</span>
+                  <span id="out-m3-badge" class="result-value">受控本地验证</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">自动合并阻断核心红线</span>
+                  <span id="out-m3-gate" class="result-value rose">未就绪 (缺少云端与回滚)</span>
+                </div>
+              </div>
+              <div id="out-m3-action" class="verdict-box">
+                行动建议：具备本地验证能力，可安全开放本地 PR 建议与验证报告提交；严禁开放云端自动合并，需补齐云端 VM 沙箱与原子化回滚路径。
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 第九章：文献引证 -->
+      <section id="sec-references">
+        <h2>九、文献引证与工程档案</h2>
+        <ul>
+          <li><strong>GrokBot Team Workshop with Lauren Tan</strong>: SpaceXAI 工程师 Lauren Tan 架构与代理团队完整公开工作坊，来源：<a href="https://best.xiaohu.ai/article/cursor-agent-team-24x7/" target="_blank" rel="noopener noreferrer">https://best.xiaohu.ai/article/cursor-agent-team-24x7/</a></li>
+          <li><strong>Cursor Plugins &amp; Verification Skill</strong>: Cursor 官方开源生态规范 <code>create-verification-skill</code>，来源：<a href="https://github.com/cursor/plugins/blob/main/pstack/skills/create-verification-skill/SKILL.md" target="_blank" rel="noopener noreferrer">GitHub cursor/plugins/pstack</a></li>
+          <li><strong>Cursor Cloud Agents Security Documentation</strong>: Cursor 官方云端多代理安全与架构边界白皮书，来源：<a href="https://prod.cursor.com/docs/cloud-agent/security" target="_blank" rel="noopener noreferrer">https://prod.cursor.com/docs/cloud-agent/security</a></li>
+          <li><strong>METR Developer Productivity Uplift Experiment (2026 Update)</strong>: METR 2026 年针对前沿 AI 辅助工程与多代理并行生产率更新报告，来源：<a href="https://metr.org/blog/2026-02-24-uplift-update/" target="_blank" rel="noopener noreferrer">https://metr.org/blog/2026-02-24-uplift-update/</a></li>
+        </ul>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- 页脚 -->
+  <footer class="site-footer">
+    <p>《Cursor全天候代理团队架构约束与验证规范白皮书》· 依据 SpaceXAI 工程师 Lauren Tan 真实工程复盘与 Dune/PStack 架构提炼</p>
+    <p style="margin-top: 0.5rem; font-size: 0.8125rem;">严格执行自包含单文件规范 · 零外部网络依赖 · 存储路径: /Users/yangkejin/Documents/Openai/AIKnowledge/</p>
+  </footer>
+
+  <!-- 原生 JavaScript 交互逻辑 -->
+  <script>
+    (function() {
+      "use strict";
+
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // 1. 主题切换与持久化逻辑
+      var btnTheme = byId("btn-theme-toggle");
+      if (btnTheme) {
+        btnTheme.addEventListener("click", function() {
+          var current = document.documentElement.getAttribute("data-theme") || "dark";
+          var target = current === "dark" ? "light" : "dark";
+          document.documentElement.setAttribute("data-theme", target);
+          try {
+            localStorage.setItem("ai-knowledge-theme", target);
+          } catch (e) {}
+        });
+      }
+
+      // 2. 目录切换与打印
+      var btnToc = byId("btn-toc-toggle");
+      var sidebarToc = byId("sidebar-toc");
+      if (btnToc && sidebarToc) {
+        btnToc.addEventListener("click", function() {
+          var isHidden = window.getComputedStyle(sidebarToc).display === "none";
+          sidebarToc.style.display = isHidden ? "flex" : "none";
+        });
+      }
+
+      var btnPrint = byId("btn-print");
+      if (btnPrint) {
+        btnPrint.addEventListener("click", function() {
+          window.print();
+        });
+      }
+
+      // 3. 阅读进度条更新与 TOC 高亮联动
+      window.addEventListener("scroll", function() {
+        var topBar = byId("top-progress-bar");
+        if (topBar) {
+          var scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+          var scrollHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+          var progress = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+          topBar.style.width = Math.min(100, Math.max(0, progress)) + "%";
+        }
+
+        // TOC 联动高亮
+        var sections = document.querySelectorAll("section[id], article[id]");
+        var links = document.querySelectorAll(".toc-link");
+        var activeId = "";
+        for (var i = 0; i < sections.length; i++) {
+          var rect = sections[i].getBoundingClientRect();
+          if (rect.top <= 120 && rect.bottom >= 120) {
+            activeId = sections[i].getAttribute("id");
+            break;
+          }
+        }
+        if (activeId) {
+          for (var j = 0; j < links.length; j++) {
+            var href = links[j].getAttribute("href");
+            if (href === "#" + activeId) {
+              links[j].classList.add("active");
+            } else {
+              links[j].classList.remove("active");
+            }
+          }
+        }
+      });
+
+      // 4. 沙盘 1：原子化 PR 拆分计算器
+      function updateM1() {
+        var rLines = byId("range-m1-lines");
+        var rK = byId("range-m1-k");
+        if (!rLines || !rK) return;
+
+        var L = parseFloat(rLines.value);
+        var k = parseFloat(rK.value);
+        byId("val-m1-lines").textContent = L + " 行";
+        byId("val-m1-k").textContent = k + " 个 PR";
+
+        var l = L / k;
+        var alpha = 0.0015;
+        var T0 = 5.0;
+        var beta = 0.05;
+        var T_ci = 4.0;
+
+        var p_def = 1.0 - Math.exp(-alpha * l);
+        var t_triage = T0 + beta * l * Math.log(1.0 + l);
+        var ci_total = k * T_ci;
+        var exp_triage = k * p_def * t_triage;
+        var total_cost = ci_total + exp_triage;
+
+        byId("out-m1-lines").textContent = l.toFixed(1) + " 行";
+        byId("out-m1-pdef").textContent = (p_def * 100).toFixed(1) + "%";
+        byId("out-m1-triage").textContent = t_triage.toFixed(1) + " 分钟";
+        byId("out-m1-ci").textContent = ci_total.toFixed(1) + " 分钟";
+        byId("out-m1-total").textContent = total_cost.toFixed(1) + " 分钟";
+
+        var verdict = byId("out-m1-verdict");
+        if (l > 800) {
+          verdict.textContent = "警告：单个 PR 规模偏大（" + l.toFixed(0) + " 行），缺陷定位与回滚成本急剧恶化，极易陷入排障黑洞。";
+        } else if (l < 100) {
+          verdict.textContent = "提示：切分过于碎片（" + l.toFixed(0) + " 行），CI 流水线队列与合并开销将超过排障收益。";
+        } else {
+          verdict.textContent = "分析结论：当前拆分粒度良好（" + l.toFixed(0) + " 行），避开了巨型 PR 回滚黑洞，处于高吞吐平衡区间。";
+        }
+      }
+
+      var rM1Lines = byId("range-m1-lines");
+      var rM1K = byId("range-m1-k");
+      if (rM1Lines) rM1Lines.addEventListener("input", updateM1);
+      if (rM1K) rM1K.addEventListener("input", updateM1);
+
+      // 5. 沙盘 2：排队论雪崩模型
+      function updateM2() {
+        var rMan = byId("range-m2-manual");
+        var rPst = byId("range-m2-pstack");
+        var rAgents = byId("range-m2-agents");
+        if (!rMan || !rPst || !rAgents) return;
+
+        var T_man = parseFloat(rMan.value);
+        var T_pst = parseFloat(rPst.value);
+        var N = parseFloat(rAgents.value);
+        var T_agent = 60.0;
+
+        byId("val-m2-manual").textContent = T_man + " 分钟/PR";
+        byId("val-m2-pstack").textContent = T_pst + " 分钟/PR";
+        byId("val-m2-agents").textContent = N + " 个 Agent";
+
+        var rho_no = (N * T_man) / T_agent;
+        var rho_pst = (N * T_pst) / T_agent;
+        var nmax_no = Math.floor(T_agent / T_man);
+        var nmax_pst = Math.floor(T_agent / T_pst);
+        var mult = T_man / T_pst;
+
+        byId("out-m2-rho-no").textContent = (rho_no * 100).toFixed(1) + "%";
+        byId("out-m2-rho-pstack").textContent = (rho_pst * 100).toFixed(1) + "%";
+        byId("out-m2-nmax-no").textContent = nmax_no + " 个";
+        byId("out-m2-nmax-pstack").textContent = nmax_pst + " 个";
+        byId("out-m2-mult").textContent = mult.toFixed(1) + " 倍";
+
+        var v = byId("out-m2-verdict");
+        if (rho_no >= 1.0) {
+          v.textContent = "状态：传统转接模式利用率已达 " + (rho_no * 100).toFixed(1) + "%（彻底过载雪崩），而 PStack 模式仅占人类 " + (rho_pst * 100).toFixed(1) + "% 精力，印证'验证能力决定并行上限'。";
+        } else {
+          v.textContent = "状态：低并发下人类尚能人工转接（利用率 " + (rho_no * 100).toFixed(1) + "%），但引入 PStack 后可释放约 " + mult.toFixed(1) + " 倍审查生产力。";
+        }
+      }
+
+      var rM2Man = byId("range-m2-manual");
+      var rM2Pst = byId("range-m2-pstack");
+      var rM2Ag = byId("range-m2-agents");
+      if (rM2Man) rM2Man.addEventListener("input", updateM2);
+      if (rM2Pst) rM2Pst.addEventListener("input", updateM2);
+      if (rM2Ag) rM2Ag.addEventListener("input", updateM2);
+
+      // 6. 沙盘 3：逐级授权评估器
+      function updateM3() {
+        var cArch = byId("chk-m3-arch");
+        var cVerify = byId("chk-m3-verify");
+        var cMap = byId("chk-m3-map");
+        var cCloud = byId("chk-m3-cloud");
+        var cRevert = byId("chk-m3-revert");
+        var cObs = byId("chk-m3-obs");
+        if (!cArch) return;
+
+        var score = 0;
+        if (cArch.checked) score += 20;
+        if (cVerify.checked) score += 25;
+        if (cMap.checked) score += 15;
+        if (cCloud.checked) score += 15;
+        if (cRevert.checked) score += 15;
+        if (cObs.checked) score += 10;
+
+        byId("out-m3-score").textContent = score + " 分";
+
+        var levelEl = byId("out-m3-level");
+        var badgeEl = byId("out-m3-badge");
+        var gateEl = byId("out-m3-gate");
+        var actionEl = byId("out-m3-action");
+
+        if (score >= 95 && cArch.checked && cVerify.checked && cRevert.checked && cObs.checked) {
+          levelEl.textContent = "Level 6: 自动合并 (24/7)";
+          badgeEl.textContent = "全自主持续合并";
+          gateEl.textContent = "全通门限已就绪";
+          actionEl.textContent = "架构硬边界、验证闭环、原子回滚与全链路监控均已就绪，可安全开放受限主分支自动合并。";
+        } else if (score >= 75 && cCloud.checked) {
+          levelEl.textContent = "Level 4/5: 云端隔离与分诊";
+          badgeEl.textContent = "云端沙箱执行";
+          gateEl.textContent = "阻断：缺少原子回滚或监控";
+          actionEl.textContent = "允许代理在独立 VM 运行与复现问题，但禁止自动合入主干，仍需人工一键合并。";
+        } else if (score >= 45 && cVerify.checked) {
+          levelEl.textContent = "Level 3: 独立验证";
+          badgeEl.textContent = "受控本地验证";
+          gateEl.textContent = "未就绪 (缺少云端与回滚)";
+          actionEl.textContent = "具备本地验证能力，可安全开放本地 PR 建议与验证报告提交；严禁开放云端自动合并。";
+        } else if (score >= 20) {
+          levelEl.textContent = "Level 2: 受控改动";
+          badgeEl.textContent = "单次人工确认";
+          gateEl.textContent = "硬阻断：缺少验证闭环";
+          actionEl.textContent = "代理尚无法自运行产品取证，必须严格限制在只读或单次人工审查确认模式。";
+        } else {
+          levelEl.textContent = "Level 1: 本地观察";
+          badgeEl.textContent = "只读观察模式";
+          gateEl.textContent = "硬阻断：无基础护栏";
+          actionEl.textContent = "基础设施极度匮乏，仅允许代理进行只读代码检索，切勿开放任何写入或合并权限。";
+        }
+      }
+
+      var chks = ["chk-m3-arch", "chk-m3-verify", "chk-m3-map", "chk-m3-cloud", "chk-m3-revert", "chk-m3-obs"];
+      for (var k = 0; k < chks.length; k++) {
+        var c = byId(chks[k]);
+        if (c) c.addEventListener("change", updateM3);
+      }
+
+      // 首次加载初始化
+      updateM1();
+      updateM2();
+      updateM3();
+    })();
+  </script>
+</body>
+</html>

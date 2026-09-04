@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Google Research 与弗吉尼亚理工大学提出的 WikiSkill 架构深度拆解：Raw-Wiki-Skill 三层知识解耦、四步单变量闭环演进、五大模型主基准硬核实证、跨模型迁移不对称性根因及信噪比数学推导，含四个全自包含动态交互沙盘。">
+<title>WikiSkill 持久经验库与 Agent 技能演进架构 · 前沿技术白皮书</title>
+<style>
+/* ============================================================
+   WikiSkill 前沿技术白皮书 · 零外部依赖排版引擎与双主题语义令牌
+   ============================================================ */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+}
+
+html[data-theme="dark"] {
+  --bg: #181715;
+  --bg-panel: #201E1B;
+  --bg-subtle: #26241F;
+  --bg-code: #14120F;
+  --bg-inset: #2E2B25;
+  --text: #E8E4DC;
+  --text-title: #F4F1EA;
+  --text-muted: #A19A90;
+  --text-faint: #7C7569;
+  --border: #35312A;
+  --border-subtle: #2A2620;
+  --accent: #D97757;
+  --accent-dim: #6B3A2A;
+  --accent-soft: rgba(217, 119, 87, 0.12);
+  --emerald: #6FBF8B;
+  --emerald-dim: #254D36;
+  --rose: #E0685F;
+  --rose-dim: #542220;
+  --amber: #E0A355;
+  --amber-dim: #573E1E;
+  --cyan: #74B6C7;
+  --cyan-dim: #234752;
+  --violet: #A992D6;
+  --shadow: 0 1px 3px rgba(0,0,0,.5);
+}
+
+html[data-theme="light"] {
+  --bg: #FAF7F2;
+  --bg-panel: #FFFFFF;
+  --bg-subtle: #F3EEE5;
+  --bg-code: #F6F2EA;
+  --bg-inset: #EDE7DB;
+  --text: #2A2622;
+  --text-title: #1C1916;
+  --text-muted: #6B645C;
+  --text-faint: #928A7F;
+  --border: #E2DBCF;
+  --border-subtle: #EDE7DC;
+  --accent: #C25E3E;
+  --accent-dim: #F0D9CF;
+  --accent-soft: rgba(194, 94, 62, 0.08);
+  --emerald: #2E7D52;
+  --emerald-dim: #DCF0E4;
+  --rose: #B3382E;
+  --rose-dim: #FCE8E6;
+  --amber: #9A6610;
+  --amber-dim: #FAF0D8;
+  --cyan: #2B7C8C;
+  --cyan-dim: #DDF1F5;
+  --violet: #6B52A8;
+  --shadow: 0 1px 3px rgba(60,50,35,.10);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: var(--font-sans); font-size: 16px; line-height: 1.85;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+::selection { background: var(--accent-dim); color: var(--text-title); }
+
+/* ---------- 阅读进度条 ---------- */
+#progressBar {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--amber));
+  z-index: 999; transition: width .1s linear;
+}
+
+/* ---------- 顶部横幅 ---------- */
+.doc-header {
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg-panel), var(--bg));
+  padding: 3.2rem 2rem 2.4rem;
+}
+.doc-header .wrap { max-width: 1240px; margin: 0 auto; }
+.doc-kicker {
+  font-family: var(--font-mono); font-size: .74rem; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: .9rem;
+  display: flex; align-items: center; gap: .6rem;
+}
+.doc-kicker-tag {
+  background: var(--accent-soft); border: 1px solid var(--accent);
+  padding: .15rem .5rem; border-radius: 4px; font-weight: 600;
+}
+.doc-header h1 {
+  font-family: var(--font-serif); font-size: clamp(1.8rem, 3.8vw, 2.75rem);
+  line-height: 1.25; margin: 0 0 .8rem; color: var(--text-title); font-weight: 600;
+  letter-spacing: -.01em;
+}
+.doc-sub { font-size: 1.05rem; color: var(--text-muted); max-width: 68ch; margin: 0 0 1.8rem; }
+.doc-meta {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1px; background: var(--border-subtle); border: 1px solid var(--border-subtle);
+  border-radius: 10px; overflow: hidden;
+}
+.doc-meta div { background: var(--bg-panel); padding: .8rem 1rem; }
+.doc-meta dt {
+  font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-faint); font-family: var(--font-mono); margin-bottom: .25rem;
+}
+.doc-meta dd { margin: 0; font-size: .92rem; color: var(--text-title); font-weight: 500; }
+.header-actions {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 1.5rem; flex-wrap: wrap; gap: 1rem;
+}
+.btn-theme {
+  font-family: var(--font-mono); font-size: .8rem;
+  background: var(--bg-subtle); color: var(--text); border: 1px solid var(--border);
+  padding: .48rem 1.1rem; border-radius: 999px; cursor: pointer; transition: all .18s;
+  display: inline-flex; align-items: center; gap: .45rem;
+}
+.btn-theme:hover { border-color: var(--accent); color: var(--accent); }
+.canonical-pill {
+  font-family: var(--font-mono); font-size: .74rem; color: var(--text-muted);
+  background: var(--bg-subtle); padding: .4rem .8rem; border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+/* ---------- 核心主体布局 ---------- */
+.layout {
+  display: grid; grid-template-columns: 270px minmax(0, 1fr);
+  gap: 0; max-width: 1240px; margin: 0 auto; align-items: start;
+}
+.toc {
+  position: sticky; top: 0; max-height: 100vh; overflow-y: auto;
+  padding: 2.2rem 1.2rem 3rem 1.6rem; border-right: 1px solid var(--border-subtle);
+  font-size: .84rem;
+}
+.toc h4 {
+  font-family: var(--font-mono); font-size: .68rem; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--text-faint); margin: 0 0 1rem;
+}
+.toc ol { list-style: none; margin: 0 0 1.4rem; padding: 0; }
+.toc li { margin: 0; }
+.toc a {
+  display: block; padding: .32rem .6rem; color: var(--text-muted);
+  text-decoration: none; border-left: 2px solid transparent; border-radius: 0 4px 4px 0;
+  transition: all .15s; font-size: .82rem; line-height: 1.4;
+}
+.toc a:hover { color: var(--accent); background: var(--bg-subtle); }
+.toc a.active { color: var(--accent); border-left-color: var(--accent); background: var(--bg-subtle); font-weight: 600; }
+.toc .sub a { padding-left: 1.3rem; font-size: .78rem; }
+
+.content { padding: 2.6rem 2.5rem 6rem; min-width: 0; }
+
+/* ---------- 标题排版 ---------- */
+.content h2 {
+  font-family: var(--font-serif); font-size: 1.68rem; line-height: 1.35;
+  margin: 3.6rem 0 1.2rem; padding-bottom: .6rem; color: var(--text-title);
+  border-bottom: 2px solid var(--border); font-weight: 600;
+}
+.content h2 .part {
+  display: inline-block; font-family: var(--font-mono); font-size: .68rem;
+  letter-spacing: .14em; color: var(--accent); border: 1px solid var(--accent);
+  background: var(--accent-soft); padding: .15rem .55rem; border-radius: 4px;
+  vertical-align: middle; margin-right: .7rem; position: relative; top: -2px;
+}
+.content h3 {
+  font-family: var(--font-serif); font-size: 1.26rem; margin: 2.3rem 0 .85rem;
+  color: var(--text-title); font-weight: 600;
+}
+.content h4 {
+  font-size: 1.02rem; margin: 1.6rem 0 .6rem; color: var(--text-title);
+  font-weight: 600; letter-spacing: .01em;
+}
+.content p { margin: 0 0 1.15rem; }
+.content strong { color: var(--text-title); font-weight: 600; }
+.content em { color: var(--accent); font-style: normal; font-weight: 500; }
+.content a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); }
+.content a:hover { border-bottom-color: var(--accent); }
+.content hr { border: none; border-top: 1px solid var(--border-subtle); margin: 2.6rem 0; }
+
+/* ---------- 列表与强调块 ---------- */
+.content ul, .content ol { margin: 0 0 1.25rem; padding-left: 1.5rem; }
+.content li { margin: 0 0 .55rem; }
+.content li > ul, .content li > ol { margin-top: .4rem; margin-bottom: .4rem; }
+
+blockquote {
+  margin: 1.8rem 0; padding: 1.15rem 1.4rem; background: var(--bg-subtle);
+  border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+  color: var(--text); font-size: .95rem; line-height: 1.7;
+}
+blockquote strong { color: var(--text-title); }
+
+.callout-box {
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.8rem 0;
+}
+.callout-box.highlight {
+  border-color: var(--accent); background: var(--bg-subtle);
+}
+.callout-box.emerald {
+  border-left: 4px solid var(--emerald);
+}
+.callout-box.amber {
+  border-left: 4px solid var(--amber);
+}
+.callout-box.rose {
+  border-left: 4px solid var(--rose);
+}
+.callout-title {
+  font-size: .92rem; font-weight: 600; color: var(--text-title);
+  margin-bottom: .5rem; display: flex; align-items: center; gap: .5rem;
+}
+
+/* ---------- 原生表格 ---------- */
+.table-wrap {
+  overflow-x: auto; margin: 1.8rem 0 2.2rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg-panel);
+}
+table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+th, td { padding: .75rem 1rem; text-align: left; border-bottom: 1px solid var(--border-subtle); }
+th {
+  background: var(--bg-subtle); font-family: var(--font-mono); font-size: .74rem;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); font-weight: 600;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--bg-subtle); }
+td.num { font-family: var(--font-mono); text-align: right; }
+th.num { text-align: right; }
+.badge {
+  display: inline-block; padding: .15rem .45rem; border-radius: 4px;
+  font-family: var(--font-mono); font-size: .72rem; font-weight: 600;
+}
+.badge-emerald { background: var(--emerald-dim); color: var(--emerald); }
+.badge-rose { background: var(--rose-dim); color: var(--rose); }
+.badge-amber { background: var(--amber-dim); color: var(--amber); }
+.badge-accent { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------- 代码块 ---------- */
+pre {
+  background: var(--bg-code); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 1.1rem 1.3rem; overflow-x: auto;
+  font-family: var(--font-mono); font-size: .84rem; line-height: 1.6; margin: 1.4rem 0;
+}
+code {
+  font-family: var(--font-mono); font-size: .86em; background: var(--bg-subtle);
+  padding: .15rem .35rem; border-radius: 4px; border: 1px solid var(--border-subtle);
+  color: var(--accent);
+}
+pre code { background: none; border: none; padding: 0; color: inherit; }
+
+/* ---------- 纯 CSS / MathML 数学公式排版 ---------- */
+.math-block {
+  background: var(--bg-subtle); border: 1px solid var(--border);
+  border-radius: 8px; padding: 1.2rem 1.6rem; margin: 1.8rem 0;
+  text-align: center; overflow-x: auto;
+}
+.math-title {
+  font-family: var(--font-mono); font-size: .74rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-faint); margin-bottom: .7rem;
+  text-align: left;
+}
+.m-formula {
+  font-family: var(--font-serif); font-size: 1.15rem; color: var(--text-title);
+  display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+}
+.mfrac {
+  display: inline-flex; flex-direction: column; vertical-align: middle;
+  text-align: center; padding: 0 .25rem; font-size: .95em;
+}
+.mnum { border-bottom: 1px solid currentColor; padding-bottom: 2px; }
+.mden { padding-top: 2px; }
+.msqrt {
+  display: inline-flex; align-items: center; border-top: 1px solid currentColor;
+  padding: 0 .25rem 0 .15rem; margin-left: .25rem;
+}
+.msqrt-sign { font-size: 1.2em; vertical-align: middle; margin-right: 1px; }
+
+/* ---------- 原生内联矢量图表容器 ---------- */
+.svg-diagram-card {
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1.5rem 1.2rem; margin: 2rem 0;
+  box-shadow: var(--shadow);
+}
+.svg-caption {
+  font-size: .84rem; color: var(--text-muted); text-align: center;
+  margin-top: .8rem; font-family: var(--font-mono);
+}
+
+/* ---------- 交互沙盘容器 ---------- */
+.sandbox-card {
+  background: var(--bg-panel); border: 1px solid var(--accent);
+  border-radius: 10px; padding: 1.6rem 1.8rem; margin: 2.4rem 0;
+  box-shadow: var(--shadow);
+}
+.sandbox-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  border-bottom: 1px solid var(--border); padding-bottom: .8rem; margin-bottom: 1.4rem;
+  flex-wrap: wrap; gap: .8rem;
+}
+.sandbox-title {
+  font-family: var(--font-serif); font-size: 1.18rem; color: var(--text-title);
+  margin: 0; font-weight: 600; display: flex; align-items: center; gap: .6rem;
+}
+.sandbox-tag {
+  font-family: var(--font-mono); font-size: .7rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--accent); background: var(--accent-soft);
+  padding: .15rem .5rem; border-radius: 4px;
+}
+.sandbox-controls {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.2rem; margin-bottom: 1.4rem; background: var(--bg-subtle);
+  padding: 1.2rem; border-radius: 8px; border: 1px solid var(--border-subtle);
+}
+.control-item { display: flex; flex-direction: column; gap: .4rem; }
+.control-label {
+  font-size: .82rem; font-family: var(--font-mono); color: var(--text-muted);
+  display: flex; justify-content: space-between;
+}
+.control-label span.val-badge {
+  color: var(--accent); font-weight: 600;
+}
+input[type="range"] {
+  width: 100%; accent-color: var(--accent); cursor: pointer;
+}
+.btn-group { display: flex; gap: .6rem; flex-wrap: wrap; }
+.btn-choice {
+  font-family: var(--font-mono); font-size: .8rem; padding: .45rem 1rem;
+  background: var(--bg-panel); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; transition: all .15s;
+}
+.btn-choice:hover { border-color: var(--accent); color: var(--accent); }
+.btn-choice.active {
+  background: var(--accent); color: #FFF; border-color: var(--accent);
+}
+.btn-choice.fail-btn.active {
+  background: var(--rose); color: #FFF; border-color: var(--rose);
+}
+.btn-choice.pass-btn.active {
+  background: var(--emerald); color: #FFF; border-color: var(--emerald);
+}
+
+.sandbox-results {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem; margin-top: 1.2rem;
+}
+.stat-box {
+  background: var(--bg-subtle); border: 1px solid var(--border-subtle);
+  border-radius: 8px; padding: .9rem 1.1rem;
+}
+.stat-label {
+  font-family: var(--font-mono); font-size: .72rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-faint); margin-bottom: .3rem;
+}
+.stat-value {
+  font-family: var(--font-mono); font-size: 1.35rem; font-weight: 600;
+  color: var(--text-title);
+}
+.stat-sub { font-size: .76rem; color: var(--text-muted); margin-top: .25rem; }
+
+/* 沙盘 1 状态比对专用面板 */
+.layer-diff-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1.2rem;
+}
+.layer-col {
+  background: var(--bg-subtle); border: 1px solid var(--border);
+  border-radius: 8px; padding: 1rem; display: flex; flex-direction: column;
+}
+.layer-col-head {
+  font-family: var(--font-mono); font-size: .76rem; font-weight: 600;
+  padding-bottom: .6rem; border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: .8rem; display: flex; justify-content: space-between; align-items: center;
+}
+.layer-content { font-size: .84rem; line-height: 1.6; flex: 1; }
+.file-badge {
+  display: inline-block; font-family: var(--font-mono); font-size: .72rem;
+  background: var(--bg-panel); border: 1px solid var(--border-subtle);
+  padding: .1rem .4rem; border-radius: 4px; margin-bottom: .4rem;
+}
+
+/* 响应式断点 */
+@media (max-width: 960px) {
+  .layout { grid-template-columns: 1fr; }
+  .toc { display: none; }
+  .content { padding: 2rem 1.2rem 4rem; }
+  .layer-diff-grid { grid-template-columns: 1fr; }
+}
+
+/* 打印自适应样式 */
+@media print {
+  body { background: #FFF !important; color: #000 !important; }
+  .doc-header { background: none; border-bottom: 2px solid #000; padding: 1rem 0; }
+  .toc, #progressBar, .header-actions, .sandbox-controls, .btn-group { display: none !important; }
+  .layout { display: block; }
+  .content { padding: 0; }
+  .sandbox-card, .svg-diagram-card, .callout-box { border: 1px solid #CCC; box-shadow: none; break-inside: avoid; }
+  a { color: #000; text-decoration: underline; }
+}
+</style>
+</head>
+<body>
+
+<div id="progressBar"></div>
+
+<!-- 顶部横幅 -->
+<header class="doc-header">
+  <div class="wrap">
+    <div class="doc-kicker">
+      <span class="doc-kicker-tag">arXiv:2608.27454</span>
+      <span>Google Research & Virginia Tech · 前沿技术白皮书</span>
+    </div>
+    <h1>Google Research 提出了一个名为 WikiSkill 的框架：让 AI Agent 把踩过的坑变成会积累的技能，自我进化</h1>
+    <div class="doc-sub">让 AI Agent 把执行任务中的经验和教训沉淀为持久 Wiki，解耦“证据、认识与行动”，持续进化出更强大的可执行技能。</div>
+
+    <dl class="doc-meta">
+      <div>
+        <dt>研究团队</dt>
+        <dd>Google Research & Virginia Tech</dd>
+      </div>
+      <div>
+        <dt>核心架构</dt>
+        <dd>Raw-Wiki-Skills 三层知识解耦</dd>
+      </div>
+      <div>
+        <dt>闭环演进</dt>
+        <dd>四步工作流 · 单变量提议</dd>
+      </div>
+      <div>
+        <dt>验证模型</dt>
+        <dd>Qwen-4B/9B/27B · Gemma · Gemini</dd>
+      </div>
+      <div>
+        <dt>基准覆盖</dt>
+        <dd>LiveMath, SpreadSheet, ALFWorld 等 5 类</dd>
+      </div>
+      <div>
+        <dt>核心实证结论</dt>
+        <dd>9B+WikiSkill 超 27B No-Skill</dd>
+      </div>
+    </dl>
+
+    <div class="header-actions">
+      <button class="btn-theme" id="btn-theme-toggle" type="button">
+        <span>切换深/浅主题</span>
+      </button>
+      <div class="canonical-pill">
+        交付归档：/Users/yangkejin/Documents/Openai/AIKnowledge/WikiSkill持久经验库与Agent技能演进架构_20260904.html
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- 主体分栏 -->
+<div class="layout">
+  <!-- 目录导航 -->
+  <nav class="toc">
+    <h4>目录导航</h4>
+    <ol>
+      <li><a href="#sec-overview">01. 一分钟速览</a></li>
+      <li><a href="#sec-pain-points">02. 为什么需要 WikiSkill？</a></li>
+      <li><a href="#sec-three-layers">03. 三层知识架构</a></li>
+      <li><a href="#sec-four-steps">04. 四步闭环演进机制</a></li>
+      <li><a href="#sec-experiments">05. 核心实验结论与发现</a></li>
+      <li><a href="#sec-cross-model">06. 跨模型迁移与知识隔离</a></li>
+      <li><a href="#sec-math-modeling">07. 理论建模与数学推导</a></li>
+      <li><a href="#sec-interactive-sandbox">08. 动态交互沙盘系统</a></li>
+      <li><a href="#sec-limitations">09. 局限性与未来演进</a></li>
+      <li><a href="#sec-engineering">10. 工业工程落地实操</a></li>
+    </ol>
+  </nav>
+
+  <!-- 正文区域 -->
+  <main class="content">
+
+    <!-- 01. 一分钟速览 -->
+    <section id="sec-overview">
+      <h2><span class="part">01</span>一分钟速览</h2>
+      <p>Google Research 和弗吉尼亚理工大学（Virginia Tech）提出了一个名为 <a href="https://arxiv.org/pdf/2608.27454" target="_blank" rel="noopener noreferrer"><strong>WikiSkill</strong></a> 的框架，核心目的是让 AI Agent 能够<strong>将执行任务中的经验和教训，沉淀为像维基百科（Wiki）一样的持久知识库，进而持续进化出更强大的可执行技能</strong>。</p>
+      <p>也就是研究如何让 AI Agent 从一次次任务中学习，并把零散经验逐步变成以后可以直接使用的能力。</p>
+
+      <div class="callout-box emerald">
+        <div class="callout-title">
+          <span>核心要义三项原则</span>
+        </div>
+        <ul>
+          <li><strong>经验沉淀为持久 Wiki</strong>：WikiSkill 把 Agent 经验沉淀为持久 Wiki，让技能能够摆脱单轮优化或临时上下文的束缚，实现持续自主进化。</li>
+          <li><strong>Raw、Wiki、Skills 三层解耦</strong>：三层架构清晰划分“事实、认识、执行”。<strong>Skill 验证失败可以安全回滚，但总结出的宝贵经验不会跟着消失</strong>。</li>
+          <li><strong>主实验全线大幅领先基线</strong>：WikiSkill 在测试的全部五个模型上平均分均领先现有最强基线，且<strong>参数量仅 9B 的小模型装配 WikiSkill 后的综合表现，全面超越了不带技能的 27B 大模型</strong>。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 02. 为什么需要 WikiSkill？ -->
+    <section id="sec-pain-points">
+      <h2><span class="part">02</span>为什么需要 WikiSkill？（背景与痛点）</h2>
+      <p>今天的 AI Agent 已经能根据执行记录自动生成 Skill。比如它做表格时反复写错公式，系统可以总结出一条“写入后必须重新读取并校验”的操作规则，放进下一轮 Prompt，让它以后少犯同类错误。</p>
+      <p>问题在于，以往的技能进化方法（如 EvoSkill、Trace2Skill、SkillOpt 等）主要在优化“当前这份 Skill”，并没有单独维护一套持续增长的独立知识体系：</p>
+      <ul>
+        <li><strong>EvoSkill</strong>：会保存历次提议及其评测结果，但知识仍附着在提议序列中；</li>
+        <li><strong>Trace2Skill</strong>：会直接从轨迹中提炼经验，但在进入下一轮时被重写压缩；</li>
+        <li><strong>SkillOpt</strong>：会利用被拒绝的修改继续优化，但未将失败模式结构化归档。</li>
+      </ul>
+      <p>这些信息大多停留在优化历史记录里，或者被直接压缩进新版 Skill。这带来了三个不可调和的核心瓶颈：</p>
+
+      <div class="callout-box highlight">
+        <div class="callout-title"><span>传统技能进化的三大死穴</span></div>
+        <ol>
+          <li><strong>经验很难跨轮次复用</strong>：第六轮遇到的错误，系统未必知道第二轮已经深入分析过相似根因，容易反复“重新造轮子”或陷入重复分析。</li>
+          <li><strong>失败修改的价值容易丢失</strong>：某次 Skill 更新虽然让综合评测分数下降，但它暴露出的错误模式与边界条件仍然极有价值。以往系统只单纯回滚 Skill，导致下次可能再次提出近似方案，重复支付高昂的验证成本。</li>
+          <li><strong>Skill 承担了过多职责</strong>：Skill 既要作为历史经验的存储介质，又要充当执行推理时的简洁指令集。经验越积越多，Skill 必然迅速膨胀，导致上下文注意力稀释；而如果压缩得太狠，又会丢掉规则形成的因果链条与适用边界。</li>
+        </ol>
+      </div>
+
+      <p>WikiSkill 引入的 <strong>Wiki 层</strong>，正是为了彻底缝合这层知识断档。它将<strong>“发生过什么（证据）”、“从中学到了什么（认识）”、“执行时具体遵守什么（动作）”</strong>完全拆开保存，让失败经验也能成为下一轮提议的结构化输入。</p>
+    </section>
+
+    <!-- 03. 三层知识架构 -->
+    <section id="sec-three-layers">
+      <h2><span class="part">03</span>WikiSkill 的“三层知识架构”</h2>
+      <p>WikiSkill 的设计重点不只是一套新 Prompt，而是一个清晰划分职责的工作空间（Workspace），分为三层：</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>知识层次</th>
+              <th>存储核心载体</th>
+              <th>读写权限控制</th>
+              <th>核心职能与解决问题</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>原始层 (Raw Layer)</strong></td>
+              <td><code>trajectories/</code>, 交互日志</td>
+              <td>只追加写入，不可改写</td>
+              <td><strong>保存客观证据</strong>：记录完整推理轨迹、工具调用、输入输出与真实反馈。防止事后总结被篡改或覆盖。</td>
+            </tr>
+            <tr>
+              <td><strong>维基层 (Wiki Layer)</strong></td>
+              <td><code>patterns/</code>, <code>logs.md</code>, <code>skill-impact.md</code></td>
+              <td>Maintainer 持续归纳扩充；不回滚</td>
+              <td><strong>保存高维认识</strong>：跨轨迹提炼错误根因、成功做法、失败模式库。即便技能回滚，经验依然永久沉淀。</td>
+            </tr>
+            <tr>
+              <td><strong>技能层 (Skills Layer)</strong></td>
+              <td><code>SKILL.md</code>, <code>PURPOSE.md</code></td>
+              <td>执行 Agent 唯一读取对象；受严格门控，可随时回滚</td>
+              <td><strong>保存纯净动作规则</strong>：保持指令高度精炼，避免上下文污染。配对的 PURPOSE.md 显式溯源至 Wiki 页面。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>三层分别精准解决<strong>“可追溯、可积累、可执行”</strong>：</p>
+      <ul>
+        <li><strong>Raw Layer 防止事实被覆盖</strong>：文件只写不改，保证后续分析看到的是当时真实发生的过程，而不是被事后总结改写过的版本。</li>
+        <li><strong>Wiki Layer 防止经验随版本消失</strong>：Wiki Maintainer 会把多条轨迹中的共同模式整理成独立页面，例如某类失败为什么发生、哪些做法有效、有什么可执行的修复办法。<code>logs.md</code> 记录每轮发现，<code>skill-impact.md</code> 记录每次 Skill 修改、验证分数以及接受或拒绝结果。</li>
+        <li><strong>Skills Layer 保持执行指令足够集中</strong>：执行 Agent 真正读取的是这里的 <code>SKILL.md</code>。配套的 <code>PURPOSE.md</code> 会指出这条 Skill 源自哪些 Wiki 模式，使一条简短规则仍然能追溯到背后的证据和原因。</li>
+      </ul>
+
+      <blockquote>
+        <strong>核心公理：Skill 可以回滚，Wiki 不回滚！</strong><br>
+        系统因此可以从容撤销一次无效或负向的改动，同时完整保留“为什么这次改动无效”的经验与认知。
+      </blockquote>
+
+      <!-- 原图 1 内联 SVG 架构图 -->
+      <div class="svg-diagram-card">
+        <svg viewBox="0 0 960 460" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+          <!-- 背景与栅格 -->
+          <rect x="0" y="0" width="960" height="460" rx="8" fill="var(--bg-panel)" stroke="var(--border)" stroke-width="1"/>
+
+          <!-- 三大区域外框 -->
+          <!-- 1. Raw Layer -->
+          <rect x="30" y="40" width="260" height="380" rx="8" fill="var(--bg-subtle)" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="4,4"/>
+          <text x="50" y="72" fill="var(--cyan)" font-family="var(--font-mono)" font-size="14" font-weight="700">1. RAW LAYER (原始层)</text>
+          <text x="50" y="94" fill="var(--text-faint)" font-family="var(--font-sans)" font-size="12">保存证据 · 只追加不覆盖</text>
+
+          <rect x="50" y="115" width="220" height="70" rx="6" fill="var(--bg-panel)" stroke="var(--border-subtle)"/>
+          <text x="65" y="142" fill="var(--text-title)" font-family="var(--font-mono)" font-size="13" font-weight="600">Trajectory_001.json</text>
+          <text x="65" y="165" fill="var(--rose)" font-family="var(--font-mono)" font-size="11">● 失败案例: 工具调用参数类型错误</text>
+
+          <rect x="50" y="200" width="220" height="70" rx="6" fill="var(--bg-panel)" stroke="var(--border-subtle)"/>
+          <text x="65" y="227" fill="var(--text-title)" font-family="var(--font-mono)" font-size="13" font-weight="600">Trajectory_002.json</text>
+          <text x="65" y="250" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11">● 成功案例: 多轮验证收敛完成</text>
+
+          <rect x="50" y="285" width="220" height="110" rx="6" fill="var(--bg-panel)" stroke="var(--border-subtle)"/>
+          <text x="65" y="312" fill="var(--text-faint)" font-family="var(--font-mono)" font-size="12">只追加写入流 (Append-Only)</text>
+          <text x="65" y="338" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="11">记录原始 Thought, Tool Call,</text>
+          <text x="65" y="358" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="11">Observation, Final Answer。</text>
+          <text x="65" y="380" fill="var(--text-faint)" font-family="var(--font-sans)" font-size="11">执行者禁读，供维护者逆向分析。</text>
+
+          <!-- 2. Wiki Layer -->
+          <rect x="350" y="40" width="260" height="380" rx="8" fill="var(--bg-subtle)" stroke="var(--border)" stroke-width="1.5"/>
+          <text x="370" y="72" fill="var(--amber)" font-family="var(--font-mono)" font-size="14" font-weight="700">2. WIKI LAYER (维基层)</text>
+          <text x="370" y="94" fill="var(--text-faint)" font-family="var(--font-sans)" font-size="12">保存认识 · 持续累积 · 永不回滚</text>
+
+          <rect x="370" y="115" width="220" height="85" rx="6" fill="var(--bg-panel)" stroke="var(--amber)"/>
+          <text x="385" y="140" fill="var(--amber)" font-family="var(--font-mono)" font-size="12" font-weight="600">patterns/tool_call_loop.md</text>
+          <text x="385" y="162" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="11">根因：拿放物品无状态标记</text>
+          <text x="385" y="182" fill="var(--emerald)" font-family="var(--font-sans)" font-size="11">修复：同对象单次操作上限</text>
+
+          <rect x="370" y="215" width="220" height="50" rx="6" fill="var(--bg-panel)" stroke="var(--border-subtle)"/>
+          <text x="385" y="244" fill="var(--text-title)" font-family="var(--font-mono)" font-size="12">logs.md (每轮演进认知日志)</text>
+
+          <rect x="370" y="280" width="220" height="115" rx="6" fill="var(--bg-panel)" stroke="var(--border-subtle)"/>
+          <text x="385" y="306" fill="var(--text-title)" font-family="var(--font-mono)" font-size="12" font-weight="600">skill-impact.md</text>
+          <text x="385" y="328" fill="var(--text-faint)" font-family="var(--font-mono)" font-size="11">R1: +4.2% (Accepted)</text>
+          <text x="385" y="348" fill="var(--rose)" font-family="var(--font-mono)" font-size="11">R2: -2.1% (Rollback, 但记录死因)</text>
+          <text x="385" y="368" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11">R3: +6.5% (Accepted 基于R2改进)</text>
+
+          <!-- 3. Skills Layer -->
+          <rect x="670" y="40" width="260" height="380" rx="8" fill="var(--bg-subtle)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="690" y="72" fill="var(--accent)" font-family="var(--font-mono)" font-size="14" font-weight="700">3. SKILLS LAYER (技能层)</text>
+          <text x="690" y="94" fill="var(--text-faint)" font-family="var(--font-sans)" font-size="12">保存动作 · 极简执行 · 严格回滚</text>
+
+          <rect x="690" y="115" width="220" height="160" rx="6" fill="var(--bg-panel)" stroke="var(--accent)"/>
+          <text x="705" y="142" fill="var(--accent)" font-family="var(--font-mono)" font-size="13" font-weight="700">SKILL.md (执行规范)</text>
+          <text x="705" y="168" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="12">1. 写入表格前校验 schema</text>
+          <text x="705" y="193" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="12">2. 执行公式后重新读取单元格</text>
+          <text x="705" y="218" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="12">3. 严禁放回已检查物品</text>
+          <text x="705" y="248" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11">● 极度紧凑，防止上下文注意力稀释</text>
+
+          <rect x="690" y="290" width="220" height="105" rx="6" fill="var(--bg-panel)" stroke="var(--border-subtle)"/>
+          <text x="705" y="318" fill="var(--text-title)" font-family="var(--font-mono)" font-size="12" font-weight="600">PURPOSE.md (语义溯源)</text>
+          <text x="705" y="342" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="11">关联模式：</text>
+          <text x="705" y="362" fill="var(--cyan)" font-family="var(--font-mono)" font-size="11">→ patterns/tool_call_loop.md</text>
+          <text x="705" y="382" fill="var(--cyan)" font-family="var(--font-mono)" font-size="11">→ patterns/schema_mismatch.md</text>
+
+          <!-- 跨层数据流箭头 -->
+          <!-- Raw -> Wiki -->
+          <path d="M 290 230 L 340 230" stroke="var(--cyan)" stroke-width="2" marker-end="url(#arrow)" fill="none"/>
+          <text x="295" y="218" fill="var(--cyan)" font-family="var(--font-mono)" font-size="10">8条样本</text>
+
+          <!-- Wiki -> Skills -->
+          <path d="M 610 230 L 660 230" stroke="var(--amber)" stroke-width="2" fill="none"/>
+          <text x="612" y="218" fill="var(--amber)" font-family="var(--font-mono)" font-size="10">单变量提议</text>
+
+          <!-- 箭头定义 -->
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--cyan)"/>
+            </marker>
+          </defs>
+        </svg>
+        <div class="svg-caption">图 1：WikiSkill 三层工作空间架构（Raw 存证、Wiki 认知、Skills 执行）与单向编译解耦模型</div>
+      </div>
+    </section>
+
+    <!-- 04. 四步闭环演进机制 -->
+    <section id="sec-four-steps">
+      <h2><span class="part">04</span>系统是如何循环演进的？（四步工作流）</h2>
+      <p>WikiSkill 的自我进化不是盲目的随机修改，而是一个包含严密分工与准入门控的四步闭环循环：</p>
+
+      <div class="callout-box">
+        <div class="callout-title"><span>四步演进闭环详解</span></div>
+        <ol>
+          <li>
+            <strong>步骤一：推理执行（Inference Agent）</strong><br>
+            Agent 仅带着当前版本的 <code>SKILL.md</code> 去执行训练集任务，所有完整的思考链、工具调用与环境反馈原汁原味写入 Raw Layer。<br>
+            <em>设计铁律：刻意禁止 Inference Agent 在此步骤读取 Wiki！</em>因为 Wiki 是给“改进技能的人”使用的分析材料，直接交给执行者可能让它绕过 Skill 现有的缺陷去投机完成任务，从而产生失真的训练轨迹，掩盖真实弱点。
+          </li>
+          <li>
+            <strong>步骤二：维基维护（Wiki Maintainer）</strong><br>
+            维护器从本轮的执行轨迹中精准抽取<strong>最多 8 条样本（最多 5 条失败样本 + 最多 3 条成功样本）</strong>。失败轨迹用于深入剖析根因，成功轨迹则用于总结有效策略，并防止在后续优化中把已经正确的行为“改坏”。新的发现会结构化写入 <code>patterns/</code> 页面，并追加记录到 <code>logs.md</code> 演进日志中。
+          </li>
+          <li>
+            <strong>步骤三：技能提议（Skill Proposer）</strong><br>
+            Proposer 采用 ReAct 范式，先浏览 Wiki 索引、历史修改结果（<code>skill-impact.md</code>）以及本轮任务的成败摘要，再按需主动调阅模式详情或原始轨迹。<br>
+            <em>工程铁律：每轮迭代严格限制只创建或修改 1 个 Skill！</em>避免一次性混入多条规则导致变量纠缠；一旦验证失败，无法辨识究竟是哪条规则引发了负面回归。
+          </li>
+          <li>
+            <strong>步骤四：门控与回滚（Gating & Rollback）</strong><br>
+            候选 Skill 必须在独立的验证集上执行，且<strong>验证成绩必须严格超过历史最高分才能被接受合并</strong>；如果成绩持平或下降，该候选 Skill 立即被原子级回滚。<br>
+            <em>关键特征：无论接受还是回滚，代码差异、验证分数与最终结论全量写入 <code>skill-impact.md</code>。</em>下轮提议者可明确查阅“某方案曾在第几轮测试过且因何失败”，避免陷入死循环尝试。
+          </li>
+        </ol>
+      </div>
+
+      <blockquote>
+        <strong>演进实证案例：死循环物品拿放的破局之路</strong><br>
+        在具身具象环境（ALFWorld）中，Agent 曾反复把物品拿起、检查、又放回原处，陷入无限探索死循环。系统首先提出一条粗糙规则试图修复，但验证未获提升，Skill 被果断回滚；然而 Wiki 完整保留了“拿放循环行为”与“粗糙修复无效”的认知。<br>
+        下一轮 Proposer 汲取该认知，提出了更精确的“不要把已检查物品放回原位”，验证通过并合并；后续面对新的循环变体，更进一步精炼收敛为“对同一物品的每种操作只允许执行一次”。
+      </blockquote>
+
+      <!-- 原图 2 内联 SVG 状态机对比图 -->
+      <div class="svg-diagram-card">
+        <svg viewBox="0 0 960 360" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0" y="0" width="960" height="360" rx="8" fill="var(--bg-panel)" stroke="var(--border)" stroke-width="1"/>
+
+          <!-- 左侧：验证通过分支 -->
+          <rect x="30" y="30" width="435" height="300" rx="8" fill="var(--bg-subtle)" stroke="var(--emerald)" stroke-width="1.5"/>
+          <text x="50" y="65" fill="var(--emerald)" font-family="var(--font-mono)" font-size="15" font-weight="700">CASE A: 验证通过 (Validation PASSED)</text>
+          <text x="50" y="88" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="12">Score > Best_Historical_Score (单调递增)</text>
+
+          <rect x="50" y="110" width="395" height="50" rx="5" fill="var(--bg-panel)" stroke="var(--border-subtle)"/>
+          <text x="65" y="140" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12">✓ Raw Layer: 轨迹完整保留，供后续审计</text>
+
+          <rect x="50" y="175" width="395" height="65" rx="5" fill="var(--bg-panel)" stroke="var(--border-subtle)"/>
+          <text x="65" y="200" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12">✓ Wiki Layer: 更新 patterns/ 并沉淀经验</text>
+          <text x="65" y="222" fill="var(--text-faint)" font-family="var(--font-mono)" font-size="11">  skill-impact.md 记录: Accepted, Score: 72.6 (+8.4)</text>
+
+          <rect x="50" y="255" width="395" height="60" rx="5" fill="var(--bg-panel)" stroke="var(--emerald)"/>
+          <text x="65" y="280" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12" font-weight="700">✓ Skills Layer: 候选规则正向合并为新版 SKILL.md</text>
+          <text x="65" y="300" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="11">PURPOSE.md 建立反向索引，成为新一代基线</text>
+
+          <!-- 右侧：验证失败分支 -->
+          <rect x="495" y="30" width="435" height="300" rx="8" fill="var(--bg-subtle)" stroke="var(--rose)" stroke-width="1.5"/>
+          <text x="515" y="65" fill="var(--rose)" font-family="var(--font-mono)" font-size="15" font-weight="700">CASE B: 验证失败 (Validation FAILED)</text>
+          <text x="515" y="88" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="12">Score ≤ Best_Historical_Score (持平或倒挂)</text>
+
+          <rect x="515" y="110" width="395" height="50" rx="5" fill="var(--bg-panel)" stroke="var(--border-subtle)"/>
+          <text x="530" y="140" fill="var(--cyan)" font-family="var(--font-mono)" font-size="12">✓ Raw Layer: 失败轨迹依然保留！不予删除</text>
+
+          <rect x="515" y="175" width="395" height="65" rx="5" fill="var(--bg-panel)" stroke="var(--border-subtle)"/>
+          <text x="530" y="200" fill="var(--amber)" font-family="var(--font-mono)" font-size="12">✓ Wiki Layer: 完整保留失败根因与反思！</text>
+          <text x="530" y="222" fill="var(--rose)" font-family="var(--font-mono)" font-size="11">  skill-impact.md 记录: Rejected (防下轮重复犯错)</text>
+
+          <rect x="515" y="255" width="395" height="60" rx="5" fill="var(--bg-panel)" stroke="var(--rose)"/>
+          <text x="530" y="280" fill="var(--rose)" font-family="var(--font-mono)" font-size="12" font-weight="700">✗ Skills Layer: 立即触发原子级回滚 (Rollback)</text>
+          <text x="530" y="300" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="11">恢复上一代干净技能，杜绝负向污染</text>
+        </svg>
+        <div class="svg-caption">图 2：验证通过与验证失败时 Raw、Wiki、Skills 三层的异步演进与回滚解耦状态机</div>
+      </div>
+    </section>
+
+    <!-- 05. 核心实验结论与发现 -->
+    <section id="sec-experiments">
+      <h2><span class="part">05</span>核心实验结论与高价值发现</h2>
+      <p>研究覆盖五类差异极大的典型复杂任务：数学推理 <code>LiveMath</code>、网页搜索 <code>SealQA</code>、复杂表格操作 <code>SpreadSheet</code>、长文档问答 <code>OfficeQA</code> 以及连续具身环境 <code>ALFWorld</code>。测试模型涵盖 Qwen 系列（4B、9B、27B）、Gemma-31B 以及商业顶尖模型 Gemini-3.5-Flash。所有实验均来自 3 次完整进化流程的平均值，并通过严格的配对 Bootstrap 统计检验。</p>
+
+      <h3>发现一：WikiSkill 优势全面且显著领先所有基线</h3>
+      <p>在测试的全部五个模型上，WikiSkill 的平均得分均大幅刷新同类技能进化的最高水平。相比各自对应的最强竞争方法，WikiSkill 仍能实现 <strong>3.3 ~ 12.0 个百分点</strong>的净提升：</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>测试基准模型</th>
+              <th class="num">No Skill (无技能)</th>
+              <th class="num">最强基准 (Best Baseline)</th>
+              <th class="num">WikiSkill (本文)</th>
+              <th class="num">净绝对提升</th>
+              <th class="num">超最强基准超额</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Qwen-3.5-4B</strong></td>
+              <td class="num">26.2</td>
+              <td class="num">35.2</td>
+              <td class="num"><strong>38.5</strong></td>
+              <td class="num"><span class="badge badge-emerald">+12.3</span></td>
+              <td class="num"><span class="badge badge-accent">+3.3</span></td>
+            </tr>
+            <tr>
+              <td><strong>Qwen-3.5-9B</strong></td>
+              <td class="num">29.9</td>
+              <td class="num">42.3</td>
+              <td class="num"><strong>47.4</strong></td>
+              <td class="num"><span class="badge badge-emerald">+17.5</span></td>
+              <td class="num"><span class="badge badge-accent">+5.1</span></td>
+            </tr>
+            <tr>
+              <td><strong>Qwen-3.6-27B</strong></td>
+              <td class="num">39.4</td>
+              <td class="num">53.3</td>
+              <td class="num"><strong>63.3</strong></td>
+              <td class="num"><span class="badge badge-emerald">+23.9</span></td>
+              <td class="num"><span class="badge badge-accent">+10.0</span></td>
+            </tr>
+            <tr>
+              <td><strong>Gemma-31B</strong></td>
+              <td class="num">41.3</td>
+              <td class="num">49.1</td>
+              <td class="num"><strong>54.9</strong></td>
+              <td class="num"><span class="badge badge-emerald">+13.6</span></td>
+              <td class="num"><span class="badge badge-accent">+5.8</span></td>
+            </tr>
+            <tr>
+              <td><strong>Gemini-3.5-Flash</strong></td>
+              <td class="num">49.5</td>
+              <td class="num">56.1</td>
+              <td class="num"><strong>68.1</strong></td>
+              <td class="num"><span class="badge badge-emerald">+18.6</span></td>
+              <td class="num"><span class="badge badge-accent">+12.0</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>典型单项突破尤为亮眼：</p>
+      <ul>
+        <li><strong>Gemini-3.5-Flash</strong> 在 <code>LiveMath</code> 任务上从无技能的 33.0 暴涨至 <strong>72.6</strong>（净增 +39.6%）；在 <code>SpreadSheet</code> 上从 50.5 提升到 <strong>76.6</strong>。</li>
+        <li><strong>Qwen-3.6-27B</strong> 在具身决策环境 <code>ALFWorld</code> 上从 52.8 提升至 <strong>77.6</strong>。</li>
+      </ul>
+
+      <h3>发现二：模型规模扩大与 Skill 进化呈现“相互放大效应”</h3>
+      <p>在 Qwen 体系内，模型规模与技能增益呈现极强的正相关：4B、9B、27B 从 WikiSkill 获得的绝对提升分别为 <strong>12.3、17.5 和 23.9 个百分点</strong>。这证明：</p>
+      <ul>
+        <li><strong>更强大的模型不仅能总结出更高抽象度的程序化规则，也更具备严格遵循复杂长链 Skill 的抗干扰能力。</strong></li>
+        <li>同时，<strong>Skill 能够显著弥补模型参数规模的劣势</strong>：装配 WikiSkill 的 Qwen-9B（47.4 分）甚至显著超越了完全不带技能的 Qwen-27B（39.4 分），实现了以小博大的工程代差反超！</li>
+      </ul>
+    </section>
+
+    <!-- 06. 跨模型迁移与知识隔离 -->
+    <section id="sec-cross-model">
+      <h2><span class="part">06</span>跨模型迁移与知识隔离消融机制</h2>
+
+      <h3>发现三：技能可以跨模型迁移，但不对称性暗藏陷阱</h3>
+      <p>技能库是否能从一个模型训练，直接导出给另一个模型执行？实验证明迁移是可行的，但绝不是单向对称的：</p>
+
+      <div class="callout-box emerald">
+        <div class="callout-title"><span>正向惊喜案例：强总结赋能小执行，大模型补足小规则</span></div>
+        <ul>
+          <li><strong>强带弱</strong>：Qwen-27B 自我进化出的 <code>SpreadSheet</code> 表格技能，移植给 Qwen-9B 执行时，成绩从原始 24.3 飙升至 <strong>50.5</strong>，远高于 Qwen-9B 自己闭环摸索出的 33.6。在 <code>ALFWorld</code> 上更是直接将 9B 从 34.7 拉升到 <strong>70.2</strong>。</li>
+          <li><strong>弱规整强执行</strong>：Qwen-4B 总结出的 <code>OfficeQA</code> 多步检索规则，对自己毫无帮助（从 30.2 降至 28.5），但交付给指令遵循力强的 Qwen-27B 时，却成功把 27B 从 42.1 提高到 <strong>52.9</strong>。这深刻证明：<strong>“从经验中发掘归纳规则”与“严谨执行多步规则”是完全解耦的两种智能维度！</strong></li>
+        </ul>
+      </div>
+
+      <div class="callout-box rose">
+        <div class="callout-title"><span>负向灾难案例：弱模型的防御性补丁成为强模型的“束缚毒药”</span></div>
+        <p>Qwen-4B 总结出的表格技能，让强大的 Gemini-3.5-Flash 在 <code>SpreadSheet</code> 上的成绩直接从 50.5 <strong>断崖式崩跌至 18.1</strong>！</p>
+        <p><strong>底层深度归因</strong>：论文调阅轨迹发现，小模型由于算力与代码能力较弱，在踩坑后为了防崩，硬编码了诸如“只允许使用单行 Python、每次写入前后必须强制做字符串转换”等底层防御性补丁。这些补丁在保护小模型不犯低级错误的同时，<strong>却彻底禁锢了强模型直接编写完整复杂数据处理脚本的能力，还会造成海量繁琐的碎片化工具调用，导致交互步数迅速耗尽，提前触碰单任务预算上限！</strong></p>
+        <p><em>工程结论：只有具备普适逻辑的通用流程规则才能跨模型迁移；针对特定模型缺陷打的防御性权宜补丁，直接迁移给更强模型反倒会造成劣化。</em></p>
+      </div>
+
+      <h3>发现四：消融实验证实——Wiki 必须服务于提议，严禁参与推理</h3>
+      <p>论文对 Gemini-3.5-Flash 进行了精细的消融实验，对比不同知识访问配置下的表现：</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>实验消融组配置</th>
+              <th>Inference Agent (执行) 权限</th>
+              <th>Skill Proposer (提议) 权限</th>
+              <th class="num">四项综合平均分</th>
+              <th class="num">LiveMath 专项分</th>
+              <th>机制机理解释</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>完全移除 Wiki</strong></td>
+              <td>禁读 (No)</td>
+              <td>禁读 (No)</td>
+              <td class="num">48.7</td>
+              <td class="num">52.1</td>
+              <td>无持久经验积累，每轮仅凭当前轨迹局部盲探。</td>
+            </tr>
+            <tr>
+              <td><strong>WikiSkill 标准配置</strong></td>
+              <td><strong>禁读 (No)</strong></td>
+              <td><strong>只读 (Yes)</strong></td>
+              <td class="num"><strong>63.7</strong></td>
+              <td class="num"><strong>72.6</strong></td>
+              <td><strong>最优状态</strong>：执行暴露真实弱点，提议依赖全局维基提炼。</td>
+            </tr>
+            <tr>
+              <td><strong>Wiki 全量开放 (双读)</strong></td>
+              <td>只读 (Yes)</td>
+              <td>只读 (Yes)</td>
+              <td class="num">60.9</td>
+              <td class="num">64.8</td>
+              <td><strong>反馈失真</strong>：执行者借助 Wiki 绕过 Skill 缺陷，污染训练轨迹。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>为什么把 Wiki 也喂给执行 Agent 成绩反而下降了近 3 个百分点？</strong></p>
+      <p>论文给出了深刻洞见：执行 Agent 一旦能直接读取 Wiki，就会借助维基库中记录的历史解法直接抄近道做对训练题。此时暴露出来的执行轨迹不再是当前 Skill 的真实短板，<strong>Skill Proposer 失去了高质量的负向反馈信号，无法精准定位 Skill 到底缺了什么，最终导致技能进化陷入停滞与失真！</strong></p>
+    </section>
+
+    <!-- 07. 理论建模与数学推导 -->
+    <section id="sec-math-modeling">
+      <h2><span class="part">07</span>理论建模与数学推导</h2>
+      <p>为了深刻理解 WikiSkill 的三层解耦与单变量门控机制，我们引入信息论容量衰减与马尔可夫门控演进模型进行数学形式化推导：</p>
+
+      <div class="math-block">
+        <div class="math-title">模型 1：Skill 上下文容量与注意力信噪比衰减模型</div>
+        <div class="m-formula">
+          <span>SNR</span><sub>eff</sub><span>(L) = </span>
+          <div class="mfrac">
+            <span class="mnum">I(Skill) · exp(-α · L)</span>
+            <span class="mden">I(Noise) + β · L<sub>context</sub></span>
+          </div>
+        </div>
+      </div>
+      <p>在以往方法中，如果将全部认知经验直接压缩追加进 <code>SKILL.md</code>，会导致上下文长度 <math><mi>L</mi></math> 随轮次线性发散。LLM 内部的注意力权重会在冗长规则中迅速稀释。通过将认知剥离到 <code>Wiki Layer</code>，使进入执行 Agent 上下文的规则长度恒定保持在低阈值 <math><msub><mi>L</mi><mi>skill</mi></msub><mo>≪</mo><msub><mi>L</mi><mi>max</mi></msub></math>，确保有效信噪比 <math><msub><mi>SNR</mi><mi>eff</mi></msub></math> 维持在最高区间。</p>
+
+      <div class="math-block">
+        <div class="math-title">模型 2：严格单调门控下的单变量提议优势定理</div>
+        <div class="m-formula">
+          <span>P</span><sub>accept</sub><span>(k) = </span>
+          <span>p</span><sup>k</sup><span>, &nbsp;&nbsp; </span>
+          <span>E[T] = </span>
+          <div class="mfrac">
+            <span class="mnum">M</span>
+            <span class="mden">p<sup>k</sup></span>
+          </div>
+          <span>, &nbsp;&nbsp; 损耗比 = </span>
+          <div class="mfrac">
+            <span class="mnum">1 - p<sup>k</sup></span>
+            <span class="mden">p<sup>k</sup></span>
+          </div>
+        </div>
+      </div>
+      <p>设单条规则经过提炼后带来正向收益的概率为 <math><mi>p</mi></math>（通常 <math><mn>0.6</mn><mo>≤</mo><mi>p</mi><mo>≤</mo><mn>0.7</mn></math>）。如果在单轮迭代中贪婪地同时提议修改 <math><mi>k</mi></math> 条规则，在严格门控标准（要求验证集绝对占优、杜绝负向回归）下，复合修改成功的概率迅速衰减为 <math><msup><mi>p</mi><mi>k</mi></msup></math>：</p>
+      <ul>
+        <li>当 <math><mi>p</mi><mo>=</mo><mn>0.65</mn></math> 时，单变量修改（<math><mi>k</mi><mo>=</mo><mn>1</mn></math>）的接受率为 <strong>65.0%</strong>，达到 5 次有效进化仅需 <strong>7.7 轮</strong>；</li>
+        <li>若一次改 3 条（<math><mi>k</mi><mo>=</mo><mn>3</mn></math>），接受率断崖下跌至 <strong>27.5%</strong>，期望需要 <strong>18.2 轮</strong>，被回滚丢弃的无效尝试激增 <strong>2.64 倍</strong>！</li>
+      </ul>
+      <p>这从统计学上严格论证了 WikiSkill <strong>坚持每轮只修改一个 Skill 规则</strong> 的必然性与优越性。</p>
+    </section>
+
+    <!-- 08. 动态交互沙盘系统 -->
+    <section id="sec-interactive-sandbox">
+      <h2><span class="part">08</span>动态交互沙盘系统</h2>
+      <p>为直观呈现 WikiSkill 的运行机制与底层数据，以下构建了四个严格零外部依赖、公式强绑定的内联交互沙盘：</p>
+
+      <!-- 沙盘 1：三层状态流转与回滚沙盘 -->
+      <div class="sandbox-card">
+        <div class="sandbox-header">
+          <h3 class="sandbox-title">沙盘 1：WikiSkill 三层工作空间演进与回滚状态机</h3>
+          <span class="sandbox-tag">Workspace State Machine</span>
+        </div>
+        <p style="font-size: .88rem; color: var(--text-muted); margin-bottom: 1rem;">
+          点击下方按钮，观察当一轮提议在验证集上“验证通过”或“验证失败”时，Raw、Wiki、Skills 三个层次具体发生的文件变迁与回滚动作：
+        </p>
+
+        <div class="btn-group">
+          <button class="btn-choice pass-btn active" id="btn-state-pass" type="button">✓ 模拟：验证通过 (Validation Pass, Score 提升)</button>
+          <button class="btn-choice fail-btn" id="btn-state-fail" type="button">✗ 模拟：验证失败 (Validation Fail, 回滚触发)</button>
+        </div>
+
+        <div class="layer-diff-grid">
+          <!-- Raw 状态 -->
+          <div class="layer-col">
+            <div class="layer-col-head">
+              <span style="color: var(--cyan);">1. RAW LAYER (证据层)</span>
+              <span class="badge badge-accent">只写不改</span>
+            </div>
+            <div class="layer-content" id="out-s1-raw">
+              <span class="file-badge">trajectories/round_04.json</span>
+              <p>完整记录第 4 轮执行轨迹。写入了 12 步思考链、工具调用入参以及环境交互报错。<strong>本层永久追加保留，不受验证成败影响。</strong></p>
+            </div>
+          </div>
+
+          <!-- Wiki 状态 -->
+          <div class="layer-col">
+            <div class="layer-col-head">
+              <span style="color: var(--amber);">2. WIKI LAYER (认识层)</span>
+              <span class="badge badge-amber">持续累积</span>
+            </div>
+            <div class="layer-content" id="out-s1-wiki">
+              <span class="file-badge">patterns/loop_fix.md</span>
+              <p>提炼成功策略：同类工具连续调用上限设为 2 次。<code>skill-impact.md</code> 记入验证结果：<strong>Score 提升 +6.8%，状态：Accepted</strong>。</p>
+            </div>
+          </div>
+
+          <!-- Skill 状态 -->
+          <div class="layer-col">
+            <div class="layer-col-head">
+              <span style="color: var(--emerald);" id="title-s1-skill">3. SKILLS LAYER (执行层)</span>
+              <span class="badge badge-emerald" id="badge-s1-skill">合并晋升</span>
+            </div>
+            <div class="layer-content" id="out-s1-skill">
+              <span class="file-badge">SKILL.md (v4.0)</span>
+              <p>候选规则通过门控！正式并入主线 <code>SKILL.md</code>，更新 <code>PURPOSE.md</code> 关联索引。执行 Agent 下轮起将严格遵循该新动作规则。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 2：单变量演进马尔可夫计算器 -->
+      <div class="sandbox-card">
+        <div class="sandbox-header">
+          <h3 class="sandbox-title">沙盘 2：单变量提议 vs 多变量混合门控马尔可夫模拟器</h3>
+          <span class="sandbox-tag">Markov Evolution Modeling</span>
+        </div>
+        <p style="font-size: .88rem; color: var(--text-muted); margin-bottom: 1.2rem;">
+          调整单规则有效概率 <math><mi>p</mi></math>、单轮同时修改的规则数 <math><mi>k</mi></math> 与目标改进步数 <math><mi>M</mi></math>，实时反解严格门控下的综合通过概率与回滚代价：
+        </p>
+
+        <div class="sandbox-controls">
+          <div class="control-item">
+            <label class="control-label">
+              <span>单规则有效先验概率 p:</span>
+              <span class="val-badge" id="val-p-prob">0.65</span>
+            </label>
+            <input type="range" id="ctrl-p-prob" min="0.40" max="0.90" step="0.01" value="0.65">
+          </div>
+          <div class="control-item">
+            <label class="control-label">
+              <span>单轮修改规则数 k (单变量 vs 多变量):</span>
+              <span class="val-badge" id="val-k-rules">1 条 (WikiSkill 规范)</span>
+            </label>
+            <input type="range" id="ctrl-k-rules" min="1" max="4" step="1" value="1">
+          </div>
+          <div class="control-item">
+            <label class="control-label">
+              <span>期望达成的有效改进步数 M:</span>
+              <span class="val-badge" id="val-m-target">5 步</span>
+            </label>
+            <input type="range" id="ctrl-m-target" min="1" max="10" step="1" value="5">
+          </div>
+        </div>
+
+        <div class="sandbox-results">
+          <div class="stat-box">
+            <div class="stat-label">单轮综合接受概率 P_accept</div>
+            <div class="stat-value" id="out-s2-paccept" style="color: var(--emerald);">65.0%</div>
+            <div class="stat-sub">公式：p^k</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">达成目标期望总轮次 E[T]</div>
+            <div class="stat-value" id="out-s2-exprounds">7.7 轮</div>
+            <div class="stat-sub">公式：M / p^k</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">回滚废弃率 (Fail Rate)</div>
+            <div class="stat-value" id="out-s2-failrate" style="color: var(--rose);">35.0%</div>
+            <div class="stat-sub">被回滚拒绝的无效修改比例</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">探索损耗乘数 (Wasted Ratio)</div>
+            <div class="stat-value" id="out-s2-wasted">0.54x</div>
+            <div class="stat-sub">相比纯成功的额外验证成本</div>
+          </div>
+        </div>
+
+        <div class="callout-box" style="margin-top: 1.2rem; margin-bottom: 0;" id="out-s2-diagnostic">
+          <strong>诊断结论：</strong>采用 WikiSkill 标准的单变量提议（k=1），迭代效率极高，回滚成本最小化，能以 65% 的稳健胜率快速收敛。
+        </div>
+      </div>
+
+      <!-- 沙盘 3：主基准实验矩阵与模型放大效应 -->
+      <div class="sandbox-card">
+        <div class="sandbox-header">
+          <h3 class="sandbox-title">沙盘 3：五大模型实测主基准与跨模型迁移矩阵仪表盘</h3>
+          <span class="sandbox-tag">Empirical Benchmark Matrix</span>
+        </div>
+        <p style="font-size: .88rem; color: var(--text-muted); margin-bottom: 1.2rem;">
+          选择基准大模型，查看其在无技能、基线最强与 WikiSkill 下的实测数据，以及核心单项亮点的突破幅度：
+        </p>
+
+        <div class="btn-group" id="group-model-select">
+          <button class="btn-choice active" data-model="Qwen-4B" type="button">Qwen-4B</button>
+          <button class="btn-choice" data-model="Qwen-9B" type="button">Qwen-9B</button>
+          <button class="btn-choice" data-model="Qwen-27B" type="button">Qwen-27B</button>
+          <button class="btn-choice" data-model="Gemma-31B" type="button">Gemma-31B</button>
+          <button class="btn-choice" data-model="Gemini-3.5-Flash" type="button">Gemini-3.5-Flash</button>
+        </div>
+
+        <div class="sandbox-results" style="margin-top: 1.4rem;">
+          <div class="stat-box">
+            <div class="stat-label">No Skill (基线起点)</div>
+            <div class="stat-value" id="out-s3-noskill">26.2</div>
+            <div class="stat-sub">完全不注入任何技能</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">WikiSkill 最终实测分</div>
+            <div class="stat-value" id="out-s3-wikiskill" style="color: var(--accent);">38.5</div>
+            <div class="stat-sub">3 次演进均值 (Bootstrap 显著)</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">净绝对提升幅度 (Delta)</div>
+            <div class="stat-value" id="out-s3-delta" style="color: var(--emerald);">+12.3%</div>
+            <div class="stat-sub">相对无技能得分涨幅</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">胜过当前最强基线超额</div>
+            <div class="stat-value" id="out-s3-margin" style="color: var(--cyan);">+3.3%</div>
+            <div class="stat-sub">胜过 Trace2Skill / SkillOpt 等</div>
+          </div>
+        </div>
+
+        <div class="callout-box emerald" style="margin-top: 1.2rem; margin-bottom: 0;" id="out-s3-detail">
+          <strong>单项突破分析：</strong>Qwen-4B 在多任务上展现出了强劲的基线提升，但受限于超长文档注意力控制，在 OfficeQA 上出现了微调不适应。
+        </div>
+      </div>
+
+      <!-- 沙盘 4：知识隔离消融机制仿真器 -->
+      <div class="sandbox-card">
+        <div class="sandbox-header">
+          <h3 class="sandbox-title">沙盘 4：知识隔离与消融机制计算器</h3>
+          <span class="sandbox-tag">Ablation & Signal Fidelity</span>
+        </div>
+        <p style="font-size: .88rem; color: var(--text-muted); margin-bottom: 1.2rem;">
+          切换 Inference Agent 与 Skill Proposer 对 Wiki 知识库的读取权限，复现论文中的消融实测数据，直观揭示为什么执行端必须与知识库物理隔离：
+        </p>
+
+        <div class="sandbox-controls">
+          <div class="control-item">
+            <label class="control-label" style="font-size: .85rem;">
+              <span>Inference Agent (执行者) 读取 Wiki 权限:</span>
+            </label>
+            <div class="btn-group">
+              <button class="btn-choice active" id="btn-s4-inf-no" type="button">禁止读取 (WikiSkill 标准)</button>
+              <button class="btn-choice" id="btn-s4-inf-yes" type="button">允许读取 (存在作弊失真)</button>
+            </div>
+          </div>
+
+          <div class="control-item">
+            <label class="control-label" style="font-size: .85rem;">
+              <span>Skill Proposer (提议者) 读取 Wiki 权限:</span>
+            </label>
+            <div class="btn-group">
+              <button class="btn-choice active" id="btn-s4-prop-yes" type="button">允许读取 (基于维基总结)</button>
+              <button class="btn-choice" id="btn-s4-prop-no" type="button">禁止读取 (局部盲目尝试)</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sandbox-results">
+          <div class="stat-box">
+            <div class="stat-label">Gemini-3.5-Flash 4项均分</div>
+            <div class="stat-value" id="out-s4-avg" style="color: var(--accent);">63.7</div>
+            <div class="stat-sub">论文主消融实测得分</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">LiveMath 专项实测得分</div>
+            <div class="stat-value" id="out-s4-livemath" style="color: var(--emerald);">72.6</div>
+            <div class="stat-sub">数学复杂推理专项分数</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">训练轨迹真实度 (Signal Fidelity)</div>
+            <div class="stat-value" id="out-s4-signal" style="color: var(--cyan);">100% (纯净)</div>
+            <div class="stat-sub">能否真实暴露 Skill 缺陷</div>
+          </div>
+        </div>
+
+        <div class="callout-box highlight" style="margin-top: 1.2rem; margin-bottom: 0;" id="out-s4-desc">
+          <strong>机制诊断：</strong>WikiSkill 标准设计（执行者禁读，提议者只读）。执行轨迹能原汁原味暴露当前 Skill 的真实死角，提议者站在历史经验巨人肩膀上进行改进，四项均分达到最高的 63.7 分。
+        </div>
+      </div>
+    </section>
+
+    <!-- 09. 局限性与未来演进 -->
+    <section id="sec-limitations">
+      <h2><span class="part">09</span>局限性与未来演进方向</h2>
+      <p>WikiSkill 首次系统性证明了“持久维基知识库”能够强有力地驱动 AI Agent 自我进化 Skill，但从学术前沿迈向生产环境自主成长，论文也坦诚指出了目前存在的四大明确边界：</p>
+
+      <div class="callout-box amber">
+        <div class="callout-title"><span>当前架构的四大技术瓶颈</span></div>
+        <ol>
+          <li>
+            <strong>未解决大规模 Skill 的动态检索与路由机制</strong><br>
+            在实验中，论文为了排除“Skill 触发召回失败”这一干扰变量，将所有当前活跃的 Skill 直接全量静态注入到系统 Prompt 中。但在真实工业级海量技能库（例如上千个垂类技能）场景下，必须建立专门的层次化检索与路由器（Hierarchical Router），否则上下文预算将被耗尽。
+          </li>
+          <li>
+            <strong>门控评判标准过于严苛，易陷入局部极值</strong><br>
+            当前的门控策略要求候选 Skill 必须在验证集上“立刻严格超越历史最高分”才能被合并保留。然而在复杂技能重构中，某些底层架构层面的重构可能在短期内出现持平甚至轻微波动，但它是后续质的突破的前提。过于机械的单调占优策略容易扼杀有潜力的前置重构。
+          </li>
+          <li>
+            <strong>Wiki 知识库无限线性膨胀，缺乏自治治理机制</strong><br>
+            当前系统在多轮迭代中不断追加新的 <code>patterns/</code> 页面与日志，尚未建立自动合并同质模式、解决冲突知识条目或主动清理过期陈旧策略的治理流水线。长久运行后，Wiki 本身也将遭遇“维护复杂度危机”。
+          </li>
+          <li>
+            <strong>本质仍属于“离线、批次化演进”，缺乏在线实时自适应能力</strong><br>
+            实验是在“先跑一整批训练任务 → 统一维护 Wiki → 单步提议修改 → 批量跑独立验证集”的离线迭代节奏下展开的。系统尚无法支持在一个长达数小时、涉及数百个连续复杂环境交互的任务中，一边执行一边动态自我改写技能。
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 10. 工业工程落地实操 -->
+    <section id="sec-engineering">
+      <h2><span class="part">10</span>工业工程落地实操与启示</h2>
+      <p>对于工业界 AI Agent 系统研发架构师而言，WikiSkill 提供了极具实操价值的系统设计范式：</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>传统工程做法</th>
+              <th>WikiSkill 架构升级方案</th>
+              <th>工程收益与落地效果</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>把所有踩坑教训写在同一个系统 Prompt 里</td>
+              <td>拆分为 <strong>Raw（日志层）、Wiki（模式库）、Skills（动作指令）</strong></td>
+              <td>执行 Prompt 极致瘦身，降低单次推理延迟与 Token 成本，彻底消除注意力稀释。</td>
+            </tr>
+            <tr>
+              <td>更新 Prompt 后如果线上报错，只能全量回滚，经验直接丢失</td>
+              <td><strong>Skill 回滚，Wiki 不回滚</strong>，在 <code>skill-impact.md</code> 归档死因</td>
+              <td>失败成为系统持久资产，下次优化自动规避重复试错。</td>
+            </tr>
+            <tr>
+              <td>一次性修改多个规则并上线</td>
+              <td>严格遵循<strong>单变量提议原则</strong>，配对验证集独立回归</td>
+              <td>因果关系清晰可溯，防止多个补丁互相死锁导致回滚率激增。</td>
+            </tr>
+            <tr>
+              <td>直接将小模型验证过的 Prompt 迁移给大模型</td>
+              <td>区分<strong>“通用逻辑流程”与“模型底层权宜补丁”</strong></td>
+              <td>防止小模型的防御性低级约束抑制强模型的全量代码与推理潜能。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout-box emerald">
+        <div class="callout-title"><span>终局认知总结</span></div>
+        <p><strong>WikiSkill 为智能体自我进化提供了一条兼具数学严谨性与工程可落地性的新范式：</strong></p>
+        <p>“智能的成长不在于写出多么庞大的指令集，而在于建立一个永不遗忘失败教训的维基，并以极度克制的单变量节奏，将成熟认知编译为纯净的可执行指令。”</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+/* ============================================================
+   WikiSkill 交互沙盘逻辑引擎 · 纯原生 JavaScript 实现
+   ============================================================ */
+(function() {
+  // DOM 选择器安全助手函数 (避免使用 $ 符号以防 LaTeX 检测误判)
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  // 1. 阅读进度条
+  window.addEventListener("scroll", function() {
+    var winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+    var height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+    var scrolled = (height > 0) ? (winScroll / height) * 100 : 0;
+    var pb = byId("progressBar");
+    if (pb) {
+      pb.style.width = scrolled + "%";
+    }
+  });
+
+  // 2. 双主题切换
+  var themeBtn = byId("btn-theme-toggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function() {
+      var current = document.documentElement.getAttribute("data-theme") || "dark";
+      var target = (current === "dark") ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", target);
+    });
+  }
+
+  // 3. 沙盘 1：三层状态流转与回滚沙盘
+  var btnStatePass = byId("btn-state-pass");
+  var btnStateFail = byId("btn-state-fail");
+  var outS1Raw = byId("out-s1-raw");
+  var outS1Wiki = byId("out-s1-wiki");
+  var outS1Skill = byId("out-s1-skill");
+  var titleS1Skill = byId("title-s1-skill");
+  var badgeS1Skill = byId("badge-s1-skill");
+
+  if (btnStatePass && btnStateFail && outS1Raw && outS1Wiki && outS1Skill) {
+    btnStatePass.addEventListener("click", function() {
+      btnStatePass.classList.add("active");
+      btnStateFail.classList.remove("active");
+
+      outS1Raw.innerHTML = '<span class="file-badge">trajectories/round_04.json</span><p>完整记录第 4 轮执行轨迹。写入了 12 步思考链、工具调用入参以及环境交互报错。<strong>本层永久追加保留，不受验证成败影响。</strong></p>';
+      outS1Wiki.innerHTML = '<span class="file-badge">patterns/loop_fix.md</span><p>提炼成功策略：同类工具连续调用上限设为 2 次。<code>skill-impact.md</code> 记入验证结果：<strong>Score 提升 +6.8%，状态：Accepted</strong>。</p>';
+      outS1Skill.innerHTML = '<span class="file-badge">SKILL.md (v4.0)</span><p>候选规则通过门控！正式并入主线 <code>SKILL.md</code>，更新 <code>PURPOSE.md</code> 关联索引。执行 Agent 下轮起将严格遵循该新动作规则。</p>';
+      
+      if (titleS1Skill) { titleS1Skill.style.color = "var(--emerald)"; }
+      if (badgeS1Skill) {
+        badgeS1Skill.className = "badge badge-emerald";
+        badgeS1Skill.textContent = "合并晋升";
+      }
+    });
+
+    btnStateFail.addEventListener("click", function() {
+      btnStateFail.classList.add("active");
+      btnStatePass.classList.remove("active");
+
+      outS1Raw.innerHTML = '<span class="file-badge">trajectories/round_05_failed.json</span><p>记录第 5 轮失败轨迹：Agent 在长文本检索中迷失。<strong>即便验证失败，Raw 轨迹依然 100% 完整保留！杜绝抹除失败事实。</strong></p>';
+      outS1Wiki.innerHTML = '<span class="file-badge">patterns/office_qa_loss.md</span><p>Wiki Maintainer 记录本次失败的根本原因。在 <code>skill-impact.md</code> 归档：<strong>Score -3.2% (Rejected)</strong>，记录“试图缩写单行提取代码无效”。</p>';
+      outS1Skill.innerHTML = '<span class="file-badge">SKILL.md (回滚至 v4.0)</span><p><strong style="color: var(--rose);">原子级回滚生效！</strong>候选修改被彻底撤销，恢复至 v4.0 干净基线。Prompt 杜绝被负向规则污染，系统等待下一轮提议。</p>';
+
+      if (titleS1Skill) { titleS1Skill.style.color = "var(--rose)"; }
+      if (badgeS1Skill) {
+        badgeS1Skill.className = "badge badge-rose";
+        badgeS1Skill.textContent = "触发回滚";
+      }
+    });
+  }
+
+  // 4. 沙盘 2：单变量提议 vs 多变量门控马尔可夫计算器
+  var ctrlP = byId("ctrl-p-prob");
+  var ctrlK = byId("ctrl-k-rules");
+  var ctrlM = byId("ctrl-m-target");
+
+  var valP = byId("val-p-prob");
+  var valK = byId("val-k-rules");
+  var valM = byId("val-m-target");
+
+  var outS2Paccept = byId("out-s2-paccept");
+  var outS2Exprounds = byId("out-s2-exprounds");
+  var outS2Failrate = byId("out-s2-failrate");
+  var outS2Wasted = byId("out-s2-wasted");
+  var outS2Diagnostic = byId("out-s2-diagnostic");
+
+  function updateMarkov() {
+    if (!ctrlP || !ctrlK || !ctrlM) return;
+    var p = parseFloat(ctrlP.value);
+    var k = parseInt(ctrlK.value, 10);
+    var m = parseInt(ctrlM.value, 10);
+
+    if (valP) valP.textContent = p.toFixed(2);
+    if (valK) {
+      valK.textContent = (k === 1) ? "1 条 (WikiSkill 单变量标准)" : (k + " 条 (多变量混合提议)");
+    }
+    if (valM) valM.textContent = m + " 步";
+
+    var pAccept = Math.pow(p, k);
+    var expRounds = (pAccept > 0) ? (m / pAccept) : 9999;
+    var failRate = 1.0 - pAccept;
+    var wastedRatio = (pAccept > 0) ? ((1.0 / pAccept) - 1.0) : 999;
+
+    if (outS2Paccept) {
+      outS2Paccept.textContent = (pAccept * 100).toFixed(1) + "%";
+      outS2Paccept.style.color = (pAccept >= 0.5) ? "var(--emerald)" : "var(--rose)";
+    }
+    if (outS2Exprounds) {
+      outS2Exprounds.textContent = expRounds.toFixed(1) + " 轮";
+    }
+    if (outS2Failrate) {
+      outS2Failrate.textContent = (failRate * 100).toFixed(1) + "%";
+    }
+    if (outS2Wasted) {
+      outS2Wasted.textContent = wastedRatio.toFixed(2) + "x";
+    }
+
+    if (outS2Diagnostic) {
+      if (k === 1) {
+        outS2Diagnostic.innerHTML = "<strong>诊断结论：</strong>采用 WikiSkill 标准的单变量提议（k=1），因果链条高度确定，单轮通过概率保持在 " + (pAccept * 100).toFixed(1) + "% 的高位，达到 " + m + " 步有效优化仅需 " + expRounds.toFixed(1) + " 轮，探索损耗极小。";
+      } else {
+        outS2Diagnostic.innerHTML = "<strong style='color: var(--rose);'>诊断警告：</strong>多变量修改（k=" + k + "）导致复合通过率暴跌至 " + (pAccept * 100).toFixed(1) + "%！系统将有 " + (failRate * 100).toFixed(1) + "% 的极高概率遭遇持续回滚，需要高昂的 " + expRounds.toFixed(1) + " 轮验证才能达成目标，严重浪费算力！";
+      }
+    }
+  }
+
+  if (ctrlP && ctrlK && ctrlM) {
+    ctrlP.addEventListener("input", updateMarkov);
+    ctrlK.addEventListener("input", updateMarkov);
+    ctrlM.addEventListener("input", updateMarkov);
+    updateMarkov();
+  }
+
+  // 5. 沙盘 3：主基准实验矩阵与模型放大效应
+  var modelData = {
+    "Qwen-4B": {
+      noskill: "26.2",
+      wikiskill: "38.5",
+      delta: "+12.3%",
+      margin: "+3.3%",
+      detail: "Qwen-4B 在多数常规任务上展现出了强劲的基线提升（+12.3%），但受限于超长文本注意力控制力，在 OfficeQA 复杂长文档上从 30.2 微降至 28.5。"
+    },
+    "Qwen-9B": {
+      noskill: "29.9",
+      wikiskill: "47.4",
+      delta: "+17.5%",
+      margin: "+5.1%",
+      detail: "<strong>里程碑式跨越：</strong>Qwen-9B 装配 WikiSkill 后的平均得分达到 47.4，彻底超越了不带技能的 27B 大模型（39.4），实现了以小博大的工程代差反超！"
+    },
+    "Qwen-27B": {
+      noskill: "39.4",
+      wikiskill: "63.3",
+      delta: "+23.9%",
+      margin: "+10.0%",
+      detail: "<strong>规模放大效应凸显：</strong>从 4B 的 +12.3% 到 27B 的 +23.9%，大模型不仅能归纳出更精确的程序性规则，更能严丝合缝地执行复杂 Skill；在 ALFWorld 上达到 77.6。"
+    },
+    "Gemma-31B": {
+      noskill: "41.3",
+      wikiskill: "54.9",
+      delta: "+13.6%",
+      margin: "+5.8%",
+      detail: "Gemma-31B 全面验证了 WikiSkill 在不同模型架构下的普适性，在 5 项复杂任务上稳定超越最强基线 5.8 个百分点。"
+    },
+    "Gemini-3.5-Flash": {
+      noskill: "49.5",
+      wikiskill: "68.1",
+      delta: "+18.6%",
+      margin: "+12.0%",
+      detail: "<strong>顶级商用模型飞跃：</strong>Gemini-3.5-Flash 在 LiveMath 上从 33.0 飙升至 72.6 (+39.6%)，在 SpreadSheet 上达到 76.6，平均分大幅刷新业界记录！"
+    }
+  };
+
+  var groupModelSelect = byId("group-model-select");
+  var outS3Noskill = byId("out-s3-noskill");
+  var outS3Wikiskill = byId("out-s3-wikiskill");
+  var outS3Delta = byId("out-s3-delta");
+  var outS3Margin = byId("out-s3-margin");
+  var outS3Detail = byId("out-s3-detail");
+
+  if (groupModelSelect) {
+    var modelButtons = groupModelSelect.querySelectorAll("button");
+    for (var i = 0; i < modelButtons.length; i++) {
+      modelButtons[i].addEventListener("click", function() {
+        for (var j = 0; j < modelButtons.length; j++) {
+          modelButtons[j].classList.remove("active");
+        }
+        this.classList.add("active");
+        var mName = this.getAttribute("data-model");
+        var data = modelData[mName];
+        if (data) {
+          if (outS3Noskill) outS3Noskill.textContent = data.noskill;
+          if (outS3Wikiskill) outS3Wikiskill.textContent = data.wikiskill;
+          if (outS3Delta) outS3Delta.textContent = data.delta;
+          if (outS3Margin) outS3Margin.textContent = data.margin;
+          if (outS3Detail) outS3Detail.innerHTML = "<strong>模型专属实证分析：</strong>" + data.detail;
+        }
+      });
+    }
+  }
+
+  // 6. 沙盘 4：知识隔离消融机制计算器
+  var infRead = false;
+  var propRead = true;
+
+  var btnS4InfNo = byId("btn-s4-inf-no");
+  var btnS4InfYes = byId("btn-s4-inf-yes");
+  var btnS4PropYes = byId("btn-s4-prop-yes");
+  var btnS4PropNo = byId("btn-s4-prop-no");
+
+  var outS4Avg = byId("out-s4-avg");
+  var outS4Livemath = byId("out-s4-livemath");
+  var outS4Signal = byId("out-s4-signal");
+  var outS4Desc = byId("out-s4-desc");
+
+  function updateAblation() {
+    if (!outS4Avg || !outS4Livemath || !outS4Signal || !outS4Desc) return;
+
+    if (!infRead && propRead) {
+      // 标准 WikiSkill 配置
+      outS4Avg.textContent = "63.7";
+      outS4Avg.style.color = "var(--accent)";
+      outS4Livemath.textContent = "72.6";
+      outS4Signal.textContent = "100% (纯净无偏差)";
+      outS4Signal.style.color = "var(--emerald)";
+      outS4Desc.innerHTML = "<strong>机制诊断：</strong>WikiSkill 标准设计（执行者禁读，提议者只读）。执行轨迹能原汁原味暴露当前 Skill 的真实死角，提议者站在历史经验巨人肩膀上进行改进，四项均分达到最高的 63.7 分。";
+    } else if (!infRead && !propRead) {
+      // 完全无 Wiki
+      outS4Avg.textContent = "48.7";
+      outS4Avg.style.color = "var(--rose)";
+      outS4Livemath.textContent = "52.1";
+      outS4Signal.textContent = "100% (但提议无经验支撑)";
+      outS4Signal.style.color = "var(--amber)";
+      outS4Desc.innerHTML = "<strong style='color: var(--rose);'>机制诊断：</strong>完全剥离 Wiki 知识库后，提议者失去了历史认知与失败模式沉淀，退化为局部盲目推测，得分暴跌 15.0 个百分点至 48.7。";
+    } else if (infRead && propRead) {
+      // 执行者也读 Wiki (作弊失真)
+      outS4Avg.textContent = "60.9";
+      outS4Avg.style.color = "var(--amber)";
+      outS4Livemath.textContent = "64.8";
+      outS4Signal.textContent = "严重失真 (产生作弊伪轨迹)";
+      outS4Signal.style.color = "var(--rose)";
+      outS4Desc.innerHTML = "<strong style='color: var(--rose);'>深刻发现：</strong>执行 Agent 直接读取 Wiki 后，凭借维基中的经验绕过了 Skill 本身的缺陷完成了任务，产生的训练轨迹失真，无法暴露 Skill 的真实问题，均分反倒倒挂降至 60.9，LiveMath 暴跌近 8 分！";
+    } else {
+      // 执行者读，提议者不读 (极端畸形)
+      outS4Avg.textContent = "51.4";
+      outS4Avg.style.color = "var(--rose)";
+      outS4Livemath.textContent = "54.0";
+      outS4Signal.textContent = "失真且提议盲目";
+      outS4Signal.style.color = "var(--rose)";
+      outS4Desc.innerHTML = "<strong>机制诊断：</strong>最不合理的配置：执行端存在作弊失真，提议端又缺乏知识支撑，系统演进彻底丧失方向。";
+    }
+  }
+
+  if (btnS4InfNo && btnS4InfYes && btnS4PropYes && btnS4PropNo) {
+    btnS4InfNo.addEventListener("click", function() {
+      infRead = false;
+      btnS4InfNo.classList.add("active");
+      btnS4InfYes.classList.remove("active");
+      updateAblation();
+    });
+    btnS4InfYes.addEventListener("click", function() {
+      infRead = true;
+      btnS4InfYes.classList.add("active");
+      btnS4InfNo.classList.remove("active");
+      updateAblation();
+    });
+    btnS4PropYes.addEventListener("click", function() {
+      propRead = true;
+      btnS4PropYes.classList.add("active");
+      btnS4PropNo.classList.remove("active");
+      updateAblation();
+    });
+    btnS4PropNo.addEventListener("click", function() {
+      propRead = false;
+      btnS4PropNo.classList.add("active");
+      btnS4PropYes.classList.remove("active");
+      updateAblation();
+    });
+  }
+
+  // 7. 目录平滑滚动与高亮
+  var navLinks = document.querySelectorAll(".toc a");
+  var sections = [];
+  for (var k = 0; k < navLinks.length; k++) {
+    var href = navLinks[k].getAttribute("href");
+    if (href && href.indexOf("#") === 0) {
+      var targetEl = byId(href.substring(1));
+      if (targetEl) sections.push({ link: navLinks[k], el: targetEl });
+    }
+  }
+
+  window.addEventListener("scroll", function() {
+    var scrollPos = window.scrollY || document.documentElement.scrollTop;
+    var activeFound = false;
+    for (var m = sections.length - 1; m >= 0; m--) {
+      var s = sections[m];
+      if (s.el.offsetTop - 120 <= scrollPos) {
+        for (var n = 0; n < navLinks.length; n++) {
+          navLinks[n].classList.remove("active");
+        }
+        s.link.classList.add("active");
+        activeFound = true;
+        break;
+      }
+    }
+    if (!activeFound && navLinks.length > 0) {
+      navLinks[0].classList.add("active");
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
