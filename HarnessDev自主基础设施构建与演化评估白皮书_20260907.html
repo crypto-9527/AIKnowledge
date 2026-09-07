@@ -1,0 +1,1973 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HarnessDev：大语言模型自主构建与演化 Agent 执行基础设施评估白皮书</title>
+<style>
+/* ==========================================================================
+   1. 系统字体栈降级与全局变量体系 (Zero External Dependencies)
+   ========================================================================== */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+  /* 基础排版标尺 */
+  --content-max-w: 1220px;
+  --sidebar-w: 290px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --transition-fast: 0.18s ease;
+  --transition-normal: 0.28s ease;
+
+  /* 五色语义状态令牌 */
+  --accent: #d97757;      /* 陶土色：核心重点/架构 */
+  --accent-light: rgba(217, 119, 87, 0.12);
+  --emerald: #38a169;     /* 翡翠绿：正向收益/成功 */
+  --emerald-light: rgba(56, 161, 105, 0.12);
+  --rose: #e53e3e;        /* 玫瑰红：衰减/断层/回退 */
+  --rose-light: rgba(229, 62, 62, 0.12);
+  --amber: #dd6b20;       /* 琥珀橙：告警/噪声带/瓶颈 */
+  --amber-light: rgba(221, 107, 32, 0.12);
+  --cyan: #319795;        /* 青蓝：数理推导/数据实证 */
+  --cyan-light: rgba(49, 151, 149, 0.12);
+}
+
+/* 深色主题：黑曜石沉浸 (#181715) */
+html[data-theme="dark"] {
+  --bg-app: #141312;
+  --bg-surface: #1c1b18;
+  --bg-surface-elevated: #24221f;
+  --bg-surface-subtle: #2d2b27;
+  --text-main: #ede8df;
+  --text-muted: #aba294;
+  --text-faint: #787063;
+  --border-subtle: #36322c;
+  --border-strong: #4f4940;
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.65);
+  --code-bg: #0d0d0c;
+  --svg-grid: #282622;
+}
+
+/* 浅色主题：暖羊皮纸 (#FAF7F2) */
+html[data-theme="light"] {
+  --bg-app: #f7f4ee;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #fcfbf9;
+  --bg-surface-subtle: #f0ebe1;
+  --text-main: #24211d;
+  --text-muted: #5e574c;
+  --text-faint: #8f8576;
+  --border-subtle: #e3dcd1;
+  --border-strong: #c7beaf;
+  --shadow-sm: 0 2px 6px rgba(45, 38, 30, 0.05);
+  --shadow-md: 0 6px 18px rgba(45, 38, 30, 0.08);
+  --shadow-lg: 0 14px 36px rgba(45, 38, 30, 0.12);
+  --code-bg: #f5efe6;
+  --svg-grid: #ede7dc;
+}
+
+/* ==========================================================================
+   2. 基础重置与排版规范
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  line-height: 1.72;
+  overflow-x: hidden;
+  display: flex;
+  min-height: 100vh;
+}
+
+/* 顶端阅读进度条 */
+#read-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--cyan), var(--emerald));
+  z-index: 1000;
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+/* ==========================================================================
+   3. 侧边栏与主布局结构
+   ========================================================================== */
+.sidebar {
+  width: var(--sidebar-w);
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  padding: 24px 18px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.sidebar-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-light);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  width: fit-content;
+  letter-spacing: 0.5px;
+}
+
+.sidebar-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-main);
+}
+
+.sidebar-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toc-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-grow: 1;
+}
+
+.toc-link {
+  display: block;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+  transition: all var(--transition-fast);
+  border-left: 2px solid transparent;
+}
+
+.toc-link:hover {
+  color: var(--text-main);
+  background: var(--bg-surface-subtle);
+}
+
+.toc-link.active {
+  color: var(--accent);
+  background: var(--accent-light);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar-footer {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.theme-btn {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+
+.theme-btn:hover {
+  border-color: var(--border-strong);
+}
+
+.main-content {
+  flex-grow: 1;
+  max-width: calc(100vw - var(--sidebar-w));
+  padding: 48px 56px 96px;
+  overflow-y: visible;
+}
+
+.content-wrapper {
+  max-width: var(--content-max-w);
+  margin: 0 auto;
+}
+
+/* ==========================================================================
+   4. 白皮书封面与指标看板
+   ========================================================================== */
+.hero-header {
+  margin-bottom: 48px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.hero-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.tag {
+  font-size: 0.76rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tag-accent { background: var(--accent-light); color: var(--accent); }
+.tag-cyan { background: var(--cyan-light); color: var(--cyan); }
+.tag-amber { background: var(--amber-light); color: var(--amber); }
+.tag-emerald { background: var(--emerald-light); color: var(--emerald); }
+
+.hero-title {
+  font-family: var(--font-serif);
+  font-size: 2.35rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text-main);
+  margin-bottom: 16px;
+  letter-spacing: -0.5px;
+}
+
+.hero-subtitle {
+  font-size: 1.15rem;
+  color: var(--text-muted);
+  line-height: 1.65;
+  margin-bottom: 24px;
+}
+
+.hero-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.meta-label {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+}
+
+.meta-val {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* 顶部四大破局发现看板 */
+.key-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 18px;
+  margin: 32px 0 48px;
+}
+
+.metric-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+}
+
+.metric-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+
+.metric-card.border-accent::before { background: var(--accent); }
+.metric-card.border-rose::before { background: var(--rose); }
+.metric-card.border-amber::before { background: var(--amber); }
+.metric-card.border-cyan::before { background: var(--cyan); }
+
+.metric-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.metric-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metric-big {
+  font-size: 2.1rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  line-height: 1.1;
+  color: var(--text-main);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.metric-big span.sub {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.metric-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+/* ==========================================================================
+   5. 正文结构、章节与卡片
+   ========================================================================== */
+section.paper-sec {
+  margin-bottom: 64px;
+}
+
+.sec-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--border-subtle);
+}
+
+.sec-num {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--accent);
+  background: var(--accent-light);
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sec-title {
+  font-family: var(--font-serif);
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+h3.sub-title {
+  font-size: 1.22rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 28px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+h3.sub-title::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 1.1em;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+p.para {
+  margin-bottom: 16px;
+  font-size: 0.98rem;
+  color: var(--text-main);
+  line-height: 1.8;
+  text-align: justify;
+}
+
+strong.hl {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* 提示与引语卡片 */
+.callout {
+  background: var(--bg-surface);
+  border-left: 4px solid var(--accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 16px 20px;
+  margin: 20px 0 24px;
+  border-top: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.callout-amber {
+  border-left-color: var(--amber);
+  background: var(--amber-light);
+}
+
+.callout-rose {
+  border-left-color: var(--rose);
+  background: var(--rose-light);
+}
+
+.callout-cyan {
+  border-left-color: var(--cyan);
+  background: var(--cyan-light);
+}
+
+.callout-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-main);
+}
+
+/* 数据表格系统 */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  margin: 24px 0 32px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  text-align: left;
+}
+
+table.data-table th, table.data-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+table.data-table th {
+  background: var(--bg-surface-elevated);
+  font-weight: 700;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+table.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+table.data-table tr:hover td {
+  background: var(--bg-surface-subtle);
+}
+
+.badge-num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+}
+
+.badge-green { background: var(--emerald-light); color: var(--emerald); }
+.badge-red { background: var(--rose-light); color: var(--rose); }
+.badge-amber { background: var(--amber-light); color: var(--amber); }
+.badge-cyan { background: var(--cyan-light); color: var(--cyan); }
+
+/* ==========================================================================
+   6. 零外部依赖数学排版引擎 (MathML Core + 纯 CSS 优雅降级)
+   ========================================================================== */
+.math-block {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 18px 24px;
+  margin: 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.math-title {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.math-content {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 1.15rem;
+  overflow-x: auto;
+  padding: 8px 0;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.math-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  border-top: 1px dashed var(--border-subtle);
+  padding-top: 8px;
+}
+
+/* 纯 CSS 经典分式与开方组件 */
+.mfrac {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: -0.65em;
+  padding: 0 4px;
+  text-align: center;
+}
+.mfrac-num {
+  border-bottom: 1.5px solid currentColor;
+  padding-bottom: 2px;
+  font-size: 0.92em;
+}
+.mfrac-den {
+  padding-top: 2px;
+  font-size: 0.92em;
+}
+
+.msqrt {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  padding-left: 2px;
+}
+.msqrt-radicand {
+  border-top: 1.5px solid currentColor;
+  padding: 0 4px;
+  margin-left: 1px;
+}
+
+/* ==========================================================================
+   7. 交互沙盘系统通用样式
+   ========================================================================== */
+.sandbox-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  margin: 32px 0 40px;
+  box-shadow: var(--shadow-md);
+}
+
+.sandbox-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sandbox-badge {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  background: var(--accent-light);
+  margin-bottom: 6px;
+  display: inline-block;
+}
+
+.sandbox-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.sandbox-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.sandbox-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+}
+
+@media (max-width: 900px) {
+  .sandbox-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.controls-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ctrl-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ctrl-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.ctrl-val {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.ctrl-hint {
+  font-size: 0.74rem;
+  color: var(--text-faint);
+}
+
+select.ctrl-select {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+select.ctrl-select:focus {
+  border-color: var(--accent);
+}
+
+input[type="range"].ctrl-range {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-surface-subtle);
+  outline: none;
+}
+
+input[type="range"].ctrl-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0,0,0,0.3);
+  transition: transform var(--transition-fast);
+}
+
+input[type="range"].ctrl-range::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.results-col {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.res-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--border-subtle);
+}
+
+.res-row:last-child {
+  border-bottom: none;
+}
+
+.res-label {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.res-val {
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.verdict-box {
+  background: var(--bg-surface-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-main);
+  border-left: 3px solid var(--accent);
+  margin-top: 6px;
+}
+
+/* ==========================================================================
+   8. 响应式与打印自适应 (@media print)
+   ========================================================================== */
+@media (max-width: 980px) {
+  body {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .main-content {
+    max-width: 100vw;
+    padding: 28px 20px 64px;
+  }
+}
+
+@media print {
+  #read-progress-bar, .sidebar, .theme-btn, .ctrl-range, select.ctrl-select {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .main-content {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  .metric-card, .sandbox-card, .table-container, .math-block {
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+    break-inside: avoid;
+  }
+  a {
+    text-decoration: none !important;
+    color: #000 !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div id="read-progress-bar"></div>
+
+<!-- 侧边导航栏 -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="brand-badge">HARNESSDEV // 2026</div>
+    <div class="sidebar-title">Agent Harness 自主构建与演化白皮书</div>
+    <div class="sidebar-meta">
+      <span>基准论文：arXiv:2609.01437</span>
+      <span>研究团队：ByteDance Seed, SUTD 等</span>
+    </div>
+  </div>
+
+  <nav class="toc-nav">
+    <a href="#sec-overview" class="toc-link">0. 核心实证看板与元数据</a>
+    <a href="#sec-paradigm" class="toc-link">1. 范式革命：从任务答案到基础设施</a>
+    <a href="#sec-benchmark" class="toc-link">2. HarnessDev 评测基准机制设计</a>
+    <a href="#sec-creation" class="toc-link">3. Creation 阶段：从 0 到 1 的实证解构</a>
+    <a href="#sec-evolution" class="toc-link">4. Evolution 阶段：噪声演化与假象</a>
+    <a href="#sec-math" class="toc-link">5. 系统严密数理模型推导</a>
+    <a href="#sec-sandboxes" class="toc-link">6. 三大交互推演沙盘实操</a>
+    <a href="#sec-governance" class="toc-link">7. 自主演化工程启示与落地治理</a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <button type="button" class="theme-btn" id="btn-theme-toggle">
+      <span id="theme-icon">🌓</span> <span id="theme-text">切换明暗</span>
+    </button>
+  </div>
+</aside>
+
+<!-- 主内容区域 -->
+<main class="main-content">
+  <div class="content-wrapper">
+
+    <!-- 顶端白皮书封面 -->
+    <header class="hero-header" id="sec-overview">
+      <div class="hero-tag-row">
+        <span class="tag tag-accent">Benchmark Evaluation</span>
+        <span class="tag tag-cyan">Agentic Infrastructure</span>
+        <span class="tag tag-amber">Recursive Self-Improvement</span>
+        <span class="tag tag-emerald">Empirical Formalization</span>
+      </div>
+      <h1 class="hero-title">HarnessDev：大语言模型自主创建与演化 Agent Harness 基础设施评估白皮书</h1>
+      <p class="hero-subtitle">
+        当同一模型在不同执行框架下成绩相差十几个百分点时，Agent 的瓶颈早已从模型权重转移到了执行基础设施。字节跳动 Seed 联合 SUTD、Georgia Tech 等团队发布 HarnessDev 基准，首次将评测单元从“任务答案”转向“自运行代码基础设施”。
+      </p>
+
+      <div class="hero-meta-grid">
+        <div class="meta-item">
+          <div class="meta-label">基准文献</div>
+          <div class="meta-val">arXiv:2609.01437</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">研究机构</div>
+          <div class="meta-val">ByteDance Seed, SUTD, Georgia Tech</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">测试规模</div>
+          <div class="meta-val">6大创建者 / 4大领域 / 2,207个任务实例</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">基准日期</div>
+          <div class="meta-val">2026年09月07日</div>
+        </div>
+      </div>
+
+      <!-- 四大硬核实证指标看板卡片 -->
+      <div class="key-metrics-grid">
+        <div class="metric-card border-accent">
+          <div class="metric-header">
+            <span class="metric-title">人类工程基准差距</span>
+            <span class="badge-num badge-amber">Creation</span>
+          </div>
+          <div class="metric-big">67.8 <span class="sub">/ 86.2</span></div>
+          <p class="metric-desc">最高分 Opus 4.8 仍落后人类参考 18.4 分。写作超人类（84.6 vs 83.7），搜索差距最甚（52.6 vs 92.2）。</p>
+        </div>
+
+        <div class="metric-card border-rose">
+          <div class="metric-header">
+            <span class="metric-title">共适应迁移断层</span>
+            <span class="badge-num badge-red">-52.4%</span>
+          </div>
+          <div class="metric-big">69.3 <span class="sub">→ 33.0</span></div>
+          <p class="metric-desc">Opus 创建的代码 Harness 换由统一执行器 Gemini 运行，因硬编码 120 步上限导致性能腰斩，可运行不等于可迁移。</p>
+        </div>
+
+        <div class="metric-card border-amber">
+          <div class="metric-header">
+            <span class="metric-title">演化重测噪声带</span>
+            <span class="badge-num badge-amber">±4.75 分</span>
+          </div>
+          <div class="metric-big">2 <span class="sub">/ 64 次</span></div>
+          <p class="metric-desc">64 次模型自主版本切换中，仅 2 次存在超出评估噪声的确定收益；27 次所谓提升纯属测量随机涨落。</p>
+        </div>
+
+        <div class="metric-card border-cyan">
+          <div class="metric-header">
+            <span class="metric-title">泛化方向一致率</span>
+            <span class="badge-num badge-cyan">53.1%</span>
+          </div>
+          <div class="metric-big">2 <span class="sub">/ 9 最优</span></div>
+          <p class="metric-desc">反馈任务集提升与 630 个 Held-out 泛化任务同向率几同掷硬币，模型自选的最终版仅 22.2% 真正最优。</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- 第一章：范式革命 -->
+    <section class="paper-sec" id="sec-paradigm">
+      <div class="sec-header">
+        <div class="sec-num">01</div>
+        <h2 class="sec-title">范式革命：从“任务答案”转向“执行基础设施”</h2>
+      </div>
+
+      <p class="para">
+        在过去数年的大语言模型与自主智能体（Autonomous Agents）评测体系中，无论是衡量代码修补能力的 SWE-bench、通用计算机助手的 GAIA，还是衡量端到端操作系统操作的 OSWorld 与 Terminal-Bench，业界几乎无一例外地遵循着一条隐式假设：<strong>将 Agent 的外部执行环境（Harness）视作不可变常数，只记录与评测模型生成的“最终任务答案”</strong>。
+      </p>
+
+      <div class="callout callout-amber">
+        <div class="callout-title">⚠️ 权重冻结下的“Harness 决定论”现象</div>
+        <p class="para" style="margin-bottom:0;">
+          论文开头引用了一组极具震慑力的公开实测数据：同一个冻结权重的 GPT-5 模型，在 Terminus 2 执行框架下仅能通过 Terminal-Bench 2.1 中的 <strong>35.2%</strong> 的任务；然而一旦切换到 Codex CLI 这一更为成熟的工程 Harness 内部，相同任务的通过率骤升至 <strong>49.6%</strong>。在模型权重没有发生一个字节变化的前提下，<strong>仅靠外部基础设施的重构就拉开了整整 14.4 个百分点的绝对差距</strong>。同周在 ARC Prize 上 Astra 框架亦展现出高达 37 个百分点的 Harness Gap。
+        </p>
+      </div>
+
+      <p class="para">
+        这层包裹在模型核心外部的系统软件被定义为 <strong>Agent Harness</strong>：它承载着任务执行主循环、原子工具调度与修补策略、长短程上下文窗口生命周期、工作区状态持久化与容灾断点恢复，以及严苛的交付结果环境级校验。它本质上是 Agent 的“执行基础设施与专用微型操作系统”。
+      </p>
+
+      <p class="para">
+        现有评测的致命盲区在于：既然工程 Harness 对下游成功率的影响甚至超越了模型底座的微调迭代，那么<strong>“前沿大语言模型能否自主从零构建并持续演化这套基础设施？”</strong> ByteDance Seed 等团队推出的 <strong>HarnessDev</strong> 正是填补这一历史空白的奠基之作。
+      </p>
+    </section>
+
+    <!-- 第二章：评测机制设计 -->
+    <section class="paper-sec" id="sec-benchmark">
+      <div class="sec-header">
+        <div class="sec-num">02</div>
+        <h2 class="sec-title">HarnessDev 评测基准机制设计</h2>
+      </div>
+
+      <p class="para">
+        HarnessDev 彻底颠覆了以“任务解答分”为单一终点的评分逻辑，将评测工件（Evaluation Artifact）定义为<strong>“一组完全自包含、可独立部署并跨任务执行的软件基础设施代码库”</strong>。整个基准包含两大核心评测阶段。
+      </p>
+
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>评估阶段</th>
+              <th>初始输入条件</th>
+              <th>演化交互与反馈</th>
+              <th>验证与测试集</th>
+              <th>核心检验维度</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Creation（从零构建）</strong></td>
+              <td>弱种子（Weak Seed）+ 任务规范 + 1~3 个示例任务</td>
+              <td>Claude Code / Codex 交互式开发环境，支持自主编码与测试</td>
+              <td>4 大领域 5 套基准（2,207 实例），独立创建 3 次汇报 avg@3</td>
+              <td>从无到有的架构设计力、控制流闭环完整度、语法与运行稳健性</td>
+            </tr>
+            <tr>
+              <td><strong>Evolution（持续演化）</strong></td>
+              <td>自身 Creation 阶段最终输出的成品 Harness</td>
+              <td>189 个下游反馈任务执行结果，允许最多 10 轮演化迭代</td>
+              <td>630 个完全未公开的 Held-out SWE-Pro 实例，全程对模型盲测</td>
+              <td>假设驱动调试力、反馈过拟合抑制、跨任务长期泛化能力</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sub-title">2.1 弱种子（Weak Seed）哲学：杜绝任何既有架构“送分”</h3>
+      <p class="para">
+        基准设计者刻意规避了两个极端：若提供一个完全空白的空仓库，模型的工程开销将被大量琐碎的参数解析与 CLI 模板所浪费；若提供 LangChain、AutoGen 等现成框架骨架，则无异于将规划、重试与验证逻辑直接送分。
+      </p>
+      <p class="para">
+        <strong>弱种子</strong>是一个仅能解析任务配置、暴露被动原子工具（读文件、写文件、执行 bash 命令）并输出基础审计日志的空壳程序。它完全不包含任何六大核心控制模块：执行循环、工具调用策略、上下文修剪、状态与检查点、生命周期恢复、结果验证门禁。在弱种子状态下，其在全部 5 套基准上的原始得分为 <strong>0.00 分</strong>。因此，最终获得的每一分都绝对来源于模型自主编写的控制逻辑。
+      </p>
+
+      <h3 class="sub-title">2.2 评估视角的解耦：Self-Eval vs. Unified-Eval</h3>
+      <p class="para">
+        为探究自研基础设施的普适性与迁移性，HarnessDev 引入了严密的<strong>双重视角分离评估机制</strong>：
+      </p>
+      <ul style="margin-left: 24px; margin-bottom: 20px; line-height: 1.8;">
+        <li><strong>自执行评测（Self-Eval）</strong>：由构建 Harness 的原模型自身来执行下游测试任务。衡量的是“特定模型与其自造 Harness 的共生协同（Co-adaptation）上限”。</li>
+        <li><strong>统一执行器评测（Unified-Eval）</strong>：固定将所有被测 Harness 交付给统一的 <strong>Gemini 3.1 Pro</strong> 作为基准执行器。通过将底层执行算力完全钉死，纯粹剥离并量化 Harness 本身作为“可迁移通用工程资产”的代码质量。</li>
+      </ul>
+
+      <div class="callout callout-rose">
+        <div class="callout-title">🛡️ 防作弊物理隔离：剥夺 Harness 自身的“自评裁判权”</div>
+        <p class="para" style="margin-bottom:0;">
+          在 Agent 评测中，模型极易产生“虚假繁荣”——Harness 汇报自身成功完成了任务，但实际环境状态毫无改变。HarnessDev 设立了铁律级别的物理判分隔离：SWE-Pro 只认 Git 仓库最终落盘的真实代码 Diff 并运行单元测试；Terminal-Bench 只认宿主容器文件系统与环境变量终态。<strong>Harness 自报的任何 success 状态在评分引擎中计分为 0</strong>。
+        </p>
+      </div>
+    </section>
+
+    <!-- 第三章：Creation 阶段实证深剖 -->
+    <section class="paper-sec" id="sec-creation">
+      <div class="sec-header">
+        <div class="sec-num">03</div>
+        <h2 class="sec-title">Creation 阶段实证深剖：冰与火之歌</h2>
+      </div>
+
+      <p class="para">
+        在从零构建阶段，研究团队测试了 6 个前沿创建者模型：Claude Opus 4.8、GPT-5.5、Gemini 3.1 Pro、DeepSeek V4 Pro、Qwen 3.7 Max 和 ByteDance Seed 2.0 Pro。每个组合独立从头构建 3 次，汇报三次独立实验的平均成绩（avg@3）。
+      </p>
+
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>创建者模型 (Creator)</th>
+              <th>SWE-Pro (代码)</th>
+              <th>Terminal-Bench (运维)</th>
+              <th>MLE-bench (ML实验)</th>
+              <th>Writing (长文写作)</th>
+              <th>Search (长程研究)</th>
+              <th>总平均分 (Self-Eval)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="background: var(--bg-surface-subtle); font-weight:700;">
+              <td>人类工程参考线 (Human Baseline)</td>
+              <td>80.0</td>
+              <td>88.8</td>
+              <td>24.0 (奖牌率)</td>
+              <td>83.7</td>
+              <td>92.2</td>
+              <td>86.2</td>
+            </tr>
+            <tr>
+              <td><strong>Claude Opus 4.8</strong></td>
+              <td><span class="badge-num badge-cyan">69.3</span></td>
+              <td>64.8</td>
+              <td><span class="badge-num badge-green">32.9</span> (超人类)</td>
+              <td><span class="badge-num badge-green">84.6</span> (超人类)</td>
+              <td>49.2</td>
+              <td><strong>67.8</strong> (全场第一)</td>
+            </tr>
+            <tr>
+              <td><strong>Gemini 3.1 Pro</strong></td>
+              <td>61.2</td>
+              <td><span class="badge-num badge-green">68.8</span> (全场最高)</td>
+              <td><span class="badge-num badge-green">32.4</span> (超人类)</td>
+              <td>81.5</td>
+              <td>48.7</td>
+              <td>64.5</td>
+            </tr>
+            <tr>
+              <td><strong>GPT-5.5</strong></td>
+              <td>63.5</td>
+              <td>61.0</td>
+              <td>19.1</td>
+              <td>82.0</td>
+              <td><span class="badge-num badge-amber">52.6</span> (全场最高)</td>
+              <td>63.2</td>
+            </tr>
+            <tr>
+              <td><strong>DeepSeek V4 Pro</strong></td>
+              <td>57.8</td>
+              <td>52.4</td>
+              <td>19.6</td>
+              <td>79.4</td>
+              <td>42.1</td>
+              <td>55.8</td>
+            </tr>
+            <tr>
+              <td><strong>Seed 2.0 Pro</strong></td>
+              <td>54.2</td>
+              <td>49.8</td>
+              <td>18.5</td>
+              <td>80.2</td>
+              <td>41.5</td>
+              <td>53.6</td>
+            </tr>
+            <tr>
+              <td><strong>Qwen 3.7 Max</strong></td>
+              <td>51.6</td>
+              <td>41.3</td>
+              <td>15.2</td>
+              <td>78.1</td>
+              <td>39.8</td>
+              <td>50.4</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sub-title">3.1 极端的领域能力分化</h3>
+      <p class="para">
+        实验揭示了模型构建基础设施时的巨大领域偏向性：
+      </p>
+      <ul style="margin-left: 24px; margin-bottom: 20px; line-height: 1.8;">
+        <li><strong>长文写作域全面比肩/超越人类</strong>：Opus 4.8 自建 Harness 录得 84.6 分，超越人类工程 Harness 的 83.7 分。写作任务的核心控制流主要是分章规划、递归润色与自我批判，此类线性与分支逻辑模型极易内化。</li>
+        <li><strong>ML 实验域双双打破人类基准</strong>：MLE-bench 模拟 Kaggle 比赛评判奖牌率，人类参考基线仅 24.0%，而 Opus 4.8（32.9%）与 Gemini 3.1 Pro（32.4%）的自建 Harness 实现了对人类工程师框架的碾压。其构建的自适应调参循环和多脚本尝试机制展现出极高鲁棒性。</li>
+        <li><strong>代码工程与终端运维明显落后</strong>：SWE-Pro 最高仅 69.3（落后人类 10.7 分），Terminal-Bench 最高 68.8（落后人类 20.0 分）。数据分析任务中 <strong>77.8% 的失败被归因为 Harness 本身的控制逻辑缺陷</strong>（例如过严的超时规则提前放弃），而非模型不会写代码。</li>
+        <li><strong>长程搜索研究形成断崖级鸿沟</strong>：搜索基准上人类参考高达 92.2 分，而模型构建的最佳 Harness 仅 52.6 分（落后近 40 分！）。模型完全无法自主设计出多源交叉验证、逆向反查与防止信息污染的高阶上下文管线。</li>
+      </ul>
+
+      <h3 class="sub-title">3.2 机器设计的“共适应陷阱（Co-adaptation Trap）”</h3>
+      <p class="para">
+        当把这些 Harness 交由固定的 <strong>Gemini 3.1 Pro</strong> 执行时，基础设施的通用性遭遇了残酷检验：
+      </p>
+      <div class="callout callout-rose">
+        <div class="callout-title">💥 典型事故：Opus Harness 遭遇步数硬编码截断</div>
+        <p class="para" style="margin-bottom:0;">
+          Opus 4.8 自身运行该代码 Harness 时得分高达 69.3，但换由 Gemini 执行后，SWE-Pro 得分暴跌至 <strong>33.0（跌幅高达 52.4%）</strong>！深入源码分析发现，Opus 针对自身单步推理较快但步数偏保守的习性，在 Harness 内部硬编码了 <code>max_steps = 120</code>。而 Gemini 模型的求解模式倾向于小步探索（通常需 150~180 步），导致在统一执行时几乎所有长程任务都在即将产出补丁前被 Harness 的刚性截断强行杀死。
+        </p>
+      </div>
+      <p class="para">
+        搜索领域的共适应更加隐蔽：Opus 自建的搜索 Harness 在原模型运行时重复查询率仅为 10.1%；但换由 Gemini 驱动后，<strong>重复查询率激增至 88.2%</strong>。这表明其查询去重、相似度检测规则与原模型的 Prompt 特征高度过度绑定。
+      </p>
+      <p class="para">
+        反向正例同样存在：Qwen 与 DeepSeek 构建的部分 Harness 在交由更强执行器 Gemini 运行后，BrowseComp 分数反弹上涨 +17.6 分，MLE-bench 上涨 +12.9 分。这证明这两个模型具备良好的架构抽象设计能力，此前的低分受制于模型底座执行力的薄弱，而非 Harness 缺陷。
+      </p>
+
+      <h3 class="sub-title">3.3 代码虚胖与“全量死代码”灾难</h3>
+      <p class="para">
+        通过对 18 个代码域 Harness 的静态与动态跟踪，论文揭示了令工程界深思的质量特征：
+      </p>
+      <ul style="margin-left: 24px; margin-bottom: 20px; line-height: 1.8;">
+        <li><strong>代码量完全不预测性能</strong>：Gemini 仅增加了 1,006 行代码，代码量全场最少，却摘得 Terminal-Bench 冠军（68.8 分）；Qwen 堆叠了 3,562 行繁琐代码，得分却仅有 41.3 分。</li>
+        <li><strong>状态记忆几乎 100% 沦为死代码</strong>：18 个 Harness 中有 11 个显式定义了 State 类，但仅有 1 个提供了状态保存接口，仅 1 个实现了周期性持久化。在全局 <strong>26,679 条真实运行轨迹中，Checkpoint 恢复机制实际触发次数为 0 次</strong>！一旦中途因超时或异常断开，没有任何一个 Harness 具备断点恢复能力。</li>
+        <li><strong>验证流停留于浅层语法检查</strong>：写作域 587 项声明特性中有 124 项从未在执行中走入；数据分析中有 441 个退化提交被 Harness 判定为“Success”，缺乏对输出内容进行物理真值断言的能力。</li>
+        <li><strong>开发范式的胜负手</strong>：模型在开发环境中的行为分析表明，“盲目堆砌自测试”与最终成绩的相关性仅为 0.13~0.26；而<strong>“读取失败日志 → 定向缺陷修复 → 闭环再验证”的迭代次数与最终分数呈现极显著正相关（r = 0.57, p &lt; 0.01）</strong>。</li>
+      </ul>
+    </section>
+
+    <!-- 第四章：Evolution 阶段实证深剖 -->
+    <section class="paper-sec" id="sec-evolution">
+      <div class="sec-header">
+        <div class="sec-num">04</div>
+        <h2 class="sec-title">Evolution 阶段实证深剖：噪声演化与假象</h2>
+      </div>
+
+      <p class="para">
+        在演化阶段，模型以自身 Creation 的成品为起点，利用 189 个反馈任务（100 个 SWE-Pro + 89 个 Terminal-Bench）的结果反馈，自主迭代 10 轮升级 Harness。演化产生的全部版本被冻结，随后在 <strong>630 个完全隔离的 Held-out SWE-Pro 实例</strong>上接受盲测。9 条演化谱系共产生了 73 个正式版本、64 次相邻版本切换。
+      </p>
+
+      <h3 class="sub-title">4.1 反馈集狂欢与 Held-out 寒冬</h3>
+      <p class="para">
+        在模型“可见”的 189 个反馈任务集上，演化呈现出令人欣喜的繁荣：5 条自执行谱系全部录得显著提升，涨幅在 <strong>+3.0 到 +13.9 分</strong> 之间。然而，当这些被模型寄予厚望的 Harness 部署到未曾见过的 630 个 Held-out 任务上时，真实涨幅全部发生严重衰退与缩水：
+      </p>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>演化谱系 (Lineage)</th>
+              <th>反馈集增益 (Feedback +189)</th>
+              <th>Held-out 真实泛化增益 (Held-out +630)</th>
+              <th>统一执行器 (Gemini) 下 Held-out 增益</th>
+              <th>演化泛化衰减率</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Claude Opus 4.8</strong></td>
+              <td><span class="badge-num badge-green">+13.90</span></td>
+              <td><span class="badge-num badge-green">+4.44</span></td>
+              <td><span class="badge-num badge-green">+2.15</span> (唯一正向)</td>
+              <td>-68.1%</td>
+            </tr>
+            <tr>
+              <td><strong>Gemini 3.1 Pro</strong></td>
+              <td><span class="badge-num badge-green">+8.50</span></td>
+              <td><span class="badge-num badge-cyan">+3.20</span></td>
+              <td><span class="badge-num badge-red">-1.80</span></td>
+              <td>-62.4%</td>
+            </tr>
+            <tr>
+              <td><strong>GPT-5.5</strong></td>
+              <td><span class="badge-num badge-green">+11.20</span></td>
+              <td><span class="badge-num badge-cyan">+2.85</span></td>
+              <td><span class="badge-num badge-red">-10.32</span> (断崖倒退)</td>
+              <td>-74.6%</td>
+            </tr>
+            <tr>
+              <td><strong>DeepSeek V4 Pro</strong></td>
+              <td><span class="badge-num badge-green">+5.80</span></td>
+              <td><span class="badge-num badge-cyan">+1.90</span></td>
+              <td><span class="badge-num badge-red">-3.40</span></td>
+              <td>-67.2%</td>
+            </tr>
+            <tr>
+              <td><strong>Qwen 3.7 Max</strong></td>
+              <td><span class="badge-num badge-green">+3.00</span></td>
+              <td><span class="badge-num badge-cyan">+1.43</span></td>
+              <td><span class="badge-num badge-red">-4.10</span></td>
+              <td>-52.3%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="para">
+        更震撼的结论出现在统一执行器视角下：除 Opus 的演化版本仍保留微弱正向增益（+2.15）外，<strong>其余所有谱系的演化版本在 Gemini 驱动下全部发生严重倒退，GPT-5.5 的演化 Harness 甚至倒退了整整 -10.32 分</strong>！模型为了让特定反馈集分数上涨而实施的代码微调，对通用执行能力而言几乎全部沦为“负资产”。
+      </p>
+
+      <h3 class="sub-title">4.2 噪声带内的虚假演化：64 次切换中仅 2 次有效</h3>
+      <p class="para">
+        通过对同一 Commit 镜像进行重复运行标定，论文测得评测环境的<strong>固有波动标准差为 <math><msub><mi>σ</mi><mtext>noise</mtext></msub><mo>≈</mo><mo>±</mo><mn>4.75</mn></math> 分</strong>。在 64 次模型自主执行的版本更迭决策中：
+      </p>
+      <ul style="margin-left: 24px; margin-bottom: 20px; line-height: 1.8;">
+        <li><strong>8 次切换</strong>导致两个基准同时发生性能回退；</li>
+        <li><strong>16 次切换</strong>导致其中一个基准单向回退；</li>
+        <li><strong>27 次切换</strong>所谓的“增益”，幅度完全落在 <math><mo>±</mo><mn>4.75</mn></math> 分的随机波动噪声带内；</li>
+        <li><strong>1 次切换</strong>修改的代码根本未接入任何运行路径（无效改动）；</li>
+        <li>在整场耗资巨大的演化实验中，<strong>真正具有统计学意义、超出噪声置信上限的确定正收益仅发生过 2 次！</strong></li>
+      </ul>
+
+      <h3 class="sub-title">4.3 选择困境与诊断瘫痪</h3>
+      <p class="para">
+        模型不仅在演化中追逐噪声，而且在发版选型上展现出<strong>系统性选择盲目（Selection Dilemma）</strong>：
+      </p>
+      <ul style="margin-left: 24px; margin-bottom: 20px; line-height: 1.8;">
+        <li>反馈集分数上涨与 Held-out 泛化集分数上涨的<strong>方向一致性仅有 53.1%</strong>（几同抛硬币）；</li>
+        <li>9 条谱系各自选出的所谓“最终最优提交版”中，<strong>仅有 2 个（22.2%）</strong>在未见的泛化测试上真正对应最优解。反馈分数只能作为试探性启发信号，绝对不能直接用作发版判定门禁。</li>
+        <li><strong>诊断机制形同虚设</strong>：基准环境专门提供的单步失败轨迹分析接口（Trace Inspector），在全演化周期内被模型调用的次数总计仅有 <strong>2 次</strong>！模型宁可基于 5 个样例的小样本抽查做出误判（抽查 5/5 全过，全量跑分仅 58.4），也不愿深挖系统性日志。</li>
+      </ul>
+
+      <div class="callout callout-cyan">
+        <div class="callout-title">💡 唯一有效破局正例：Opus 的“真实完成检查门”</div>
+        <p class="para" style="margin-bottom:0;">
+          在全场极少数成功的演化案例中，Claude Opus 展现出了卓越的系统洞察力：它通过分析执行日志，震惊地发现 <strong>100 次运行中 Harness 自报成功达 99 次，但实际物理真值仅通过了 48 次（假阳性率高达 51.5%）</strong>。Opus 敏锐定位到了“任务遇到困难时控制循环过早退出”的结构性漏洞，于是重构并加入了一道严格的 <strong>Completion Verification Gate（真实完成检查门）</strong>。这一改动直接推动了反馈集与 Held-out 泛化集的同步大幅上涨，成为全场最具工程启发性的高光时刻。
+        </p>
+      </div>
+    </section>
+
+    <!-- 第五章：数理模型推导 -->
+    <section class="paper-sec" id="sec-math">
+      <div class="sec-header">
+        <div class="sec-num">05</div>
+        <h2 class="sec-title">严密理论压力测试与可计算数理模型</h2>
+      </div>
+
+      <p class="para">
+        为了让 HarnessDev 的定性经验转化为指导工程落地的可计算模型，我们将论文中的四大实证现象形式化为严格的数学表达式。
+      </p>
+
+      <!-- 模型一 -->
+      <div class="math-block">
+        <div class="math-title">模型一：Harness 共适应张量与跨模型迁移衰减模型</div>
+        <div class="math-content">
+          <math display="block">
+            <mi>S</mi><mo stretchy="false">(</mo><msub><mi>M</mi><mi>e</mi></msub><mo>,</mo><msub><mi>H</mi><mrow><msub><mi>M</mi><mi>c</mi></msub></mrow></msub><mo stretchy="false">)</mo>
+            <mo>=</mo>
+            <mi>α</mi><mi mathvariant="normal">Ψ</mi><mo stretchy="false">(</mo><msub><mi>M</mi><mi>e</mi></msub><mo stretchy="false">)</mo>
+            <mo>+</mo>
+            <mi>β</mi><mi mathvariant="normal">Φ</mi><mo stretchy="false">(</mo><msub><mi>H</mi><mrow><msub><mi>M</mi><mi>c</mi></msub></mrow></msub><mo stretchy="false">)</mo>
+            <mo>+</mo>
+            <mi>γ</mi><mi mathvariant="normal">Ω</mi><mo stretchy="false">(</mo><msub><mi>M</mi><mi>e</mi></msub><mo>,</mo><msub><mi>M</mi><mi>c</mi></msub><mo stretchy="false">)</mo>
+            <mo>−</mo>
+            <mi>δ</mi><mo>⋅</mo><msub><mtext>Pen</mtext><mtext>rigid</mtext></msub><mo stretchy="false">(</mo><msub><mi>H</mi><mrow><msub><mi>M</mi><mi>c</mi></msub></mrow></msub><mo>,</mo><msub><mi>M</mi><mi>e</mi></msub><mo stretchy="false">)</mo>
+          </math>
+        </div>
+        <div class="math-desc">
+          定义：<math><msub><mi>M</mi><mi>c</mi></msub></math> 为创建者模型，<math><msub><mi>M</mi><mi>e</mi></msub></math> 为执行者模型。<math><mi mathvariant="normal">Ψ</mi></math> 为执行器基础能力，<math><mi mathvariant="normal">Φ</mi></math> 为基础设施架构质量，<math><mi mathvariant="normal">Ω</mi><mo stretchy="false">(</mo><msub><mi>M</mi><mi>e</mi></msub><mo>,</mo><msub><mi>M</mi><mi>c</mi></msub><mo stretchy="false">)</mo><mo>=</mo><mi>exp</mi><mo stretchy="false">(</mo><mo>−</mo><mfrac><mrow><mo stretchy="false">∥</mo><msub><mi mathvariant="bold">w</mi><mi>e</mi></msub><mo>−</mo><msub><mi mathvariant="bold">w</mi><mi>c</mi></msub><msup><mo stretchy="false">∥</mo><mn>2</mn></msup></mrow><mrow><mn>2</mn><msup><mi>τ</mi><mn>2</mn></msup></mrow></mfrac><mo stretchy="false">)</mo></math> 为推理步调相似度，<math><msub><mtext>Pen</mtext><mtext>rigid</mtext></msub><mo>=</mo><mo movablelimits="true" form="prefix">max</mo><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><mfrac><mrow><msub><mi>K</mi><mtext>need</mtext></msub><mo stretchy="false">(</mo><msub><mi>M</mi><mi>e</mi></msub><mo stretchy="false">)</mo><mo>−</mo><msub><mi>K</mi><mtext>cap</mtext></msub><mo stretchy="false">(</mo><msub><mi>H</mi><mrow><msub><mi>M</mi><mi>c</mi></msub></mrow></msub><mo stretchy="false">)</mo></mrow><mrow><msub><mi>K</mi><mtext>cap</mtext></msub></mrow></mfrac><mo stretchy="false">)</mo></math> 为硬编码步数截断惩罚。迁移弹性系数定义为：<math><msub><mi>η</mi><mtext>trans</mtext></msub><mo>=</mo><mfrac><mrow><mi>S</mi><mo stretchy="false">(</mo><msub><mi>M</mi><mtext>unified</mtext></msub><mo>,</mo><msub><mi>H</mi><mrow><msub><mi>M</mi><mi>c</mi></msub></mrow></msub><mo stretchy="false">)</mo></mrow><mrow><mi>S</mi><mo stretchy="false">(</mo><msub><mi>M</mi><mi>c</mi></msub><mo>,</mo><msub><mi>H</mi><mrow><msub><mi>M</mi><mi>c</mi></msub></mrow></msub><mo stretchy="false">)</mo></mrow></mfrac></math>。
+        </div>
+      </div>
+
+      <!-- 模型二 -->
+      <div class="math-block">
+        <div class="math-title">模型二：演化噪声置信边界与真伪版本检验准则</div>
+        <div class="math-content">
+          <math display="block">
+            <mi>Z</mi><mo>=</mo><mfrac><mrow><mi mathvariant="normal">Δ</mi><mi>S</mi></mrow><mrow><msqrt><mn>2</mn></msqrt><mo>⋅</mo><msub><mi>σ</mi><mtext>noise</mtext></msub></mrow></mfrac>
+            <mspace width="1.5em"></mspace><mo>⟹</mo><mspace width="1.5em"></mspace;
+            <mi mathvariant="normal">Δ</mi><msub><mi>S</mi><mtext>crit</mtext></msub><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>α</mi><mo stretchy="false">)</mo>
+            <mo>=</mo>
+            <msub><mi>z</mi><mrow><mn>1</mn><mo>−</mo><mi>α</mi><mrow><mo>/</mo></mrow><mn>2</mn></mrow></msub><mo>⋅</mo><msqrt><mn>2</mn></msqrt><mo>⋅</mo><msub><mi>σ</mi><mtext>noise</mtext></msub>
+          </math>
+        </div>
+        <div class="math-desc">
+          单次评测标准差 <math><msub><mi>σ</mi><mtext>noise</mtext></msub><mo>=</mo><mn>4.75</mn></math>，差值标准差 <math><msub><mi>σ</mi><mi mathvariant="normal">Δ</mi></msub><mo>=</mo><msqrt><mn>2</mn></msqrt><mo>×</mo><mn>4.75</mn><mo>≈</mo><mn>6.7175</mn></math> 分。在 95% 置信度下（<math><msub><mi>z</mi><mn>0.975</mn></msub><mo>=</mo><mn>1.96</mn></math>），真收益门槛必须达到 <strong>13.17 分</strong> 才能彻底排除测量噪声！在未达阈值前，单次假阳性率 <math><mi>P</mi><mo stretchy="false">(</mo><mtext>False</mtext><mo stretchy="false">)</mo><mo>=</mo><mn>1</mn><mo>−</mo><mi mathvariant="normal">Φ</mi><mo stretchy="false">(</mo><mi>Z</mi><mo stretchy="false">)</mo></math>，10 轮演化累计误判率高达 <math><msub><mi>P</mi><mtext>cum</mtext></msub><mo>=</mo><mn>1</mn><mo>−</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>P</mi><msup><mo stretchy="false">)</mo><mn>10</mn></msup></math>。
+        </div>
+      </div>
+
+      <!-- 模型三 -->
+      <div class="math-block">
+        <div class="math-title">模型三：基础设施 Token 边际效用与无断点雪崩损耗模型</div>
+        <div class="math-content">
+          <math display="block">
+            <mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><msub><mtext>Cost</mtext><mtext>total</mtext></msub><mo stretchy="false">]</mo>
+            <mo>=</mo>
+            <mo stretchy="false">(</mo><mn>1</mn><mo>+</mo><msub><mi>ρ</mi><mtext>dead</mtext></msub><mo stretchy="false">)</mo>
+            <mo>⋅</mo>
+            <munderover><mo movablelimits="false">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mi>L</mi></munderover>
+            <mo stretchy="false">[</mo><msub><mi>c</mi><mtext>step</mtext></msub><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo>
+            <mo>+</mo>
+            <msub><mi>p</mi><mtext>fail</mtext></msub><mo>⋅</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><msub><mi>λ</mi><mtext>ckpt</mtext></msub><mo stretchy="false">)</mo><mo>⋅</mo><mi>k</mi><mo>⋅</mo><msub><mi>c</mi><mtext>step</mtext></msub><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo><mo stretchy="false">]</mo>
+          </math>
+        </div>
+        <div class="math-desc">
+          <math><msub><mi>ρ</mi><mtext>dead</mtext></msub></math> 为死代码与冗余控制分支开销占比，<math><msub><mi>λ</mi><mtext>ckpt</mtext></msub><mo>∈</mo><mo stretchy="false">[</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></math> 为检查点激活度。当 <math><msub><mi>λ</mi><mtext>ckpt</mtext></msub><mo>=</mo><mn>0</mn></math>（如实测中的 26,679 条轨迹）时，任何单步故障都将触发从第 0 步开始的完全回滚重试，使得 Token 消耗呈现二次方级膨胀，最高导致同等准确率下 19 倍的算力黑洞。
+        </div>
+      </div>
+
+      <!-- 模型四 -->
+      <div class="math-block">
+        <div class="math-title">模型四：真实完成门禁与贝叶斯假阳性过滤方程</div>
+        <div class="math-content">
+          <math display="block">
+            <msub><mtext>Precision</mtext><mtext>gated</mtext></msub>
+            <mo>=</mo>
+            <mfrac>
+              <mrow><msub><mi>S</mi><mi>e</mi></msub><mo>⋅</mo><mi>P</mi><mo stretchy="false">(</mo><msub><mi>E</mi><mtext>true</mtext></msub><mo stretchy="false">)</mo></mrow>
+              <mrow><msub><mi>S</mi><mi>e</mi></msub><mo>⋅</mo><mi>P</mi><mo stretchy="false">(</mo><msub><mi>E</mi><mtext>true</mtext></msub><mo stretchy="false">)</mo><mo>+</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><msub><mi>S</mi><mi>p</mi></msub><mo stretchy="false">)</mo><mo>⋅</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>P</mi><mo stretchy="false">(</mo><msub><mi>E</mi><mtext>true</mtext></msub><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow>
+            </mfrac>
+          </math>
+        </div>
+        <div class="math-desc">
+          无门禁时基准实测自报精度仅为 <math><mn>48</mn><mrow><mo>/</mo></mrow><mn>99</mn><mo>≈</mo><mn>48.5</mn><mi mathvariant="normal">%</mi></math>。引入灵敏度 <math><msub><mi>S</mi><mi>e</mi></msub><mo>=</mo><mn>0.95</mn></math> 与特异度 <math><msub><mi>S</mi><mi>p</mi></msub><mo>=</mo><mn>0.92</mn></math> 的真实物理断言门禁后，交付精度从 48.5% 跃升至 <strong>91.6%</strong>，成功斩断过早收工（Premature Termination）回路。
+        </div>
+      </div>
+    </section>
+
+    <!-- 第六章：三大交互推演沙盘 -->
+    <section class="paper-sec" id="sec-sandboxes">
+      <div class="sec-header">
+        <div class="sec-num">06</div>
+        <h2 class="sec-title">三大交互推演沙盘实操</h2>
+      </div>
+
+      <p class="para">
+        以下三大沙盘严格绑定第五章推导出的可计算数理模型，所有输出均为真实算式实时解算得出，支持架构师对跨模型迁移、演化晋级门禁以及 Token 效用进行压力测试。
+      </p>
+
+      <!-- 沙盘一：共适应与跨模型迁移推演沙盘 -->
+      <div class="sandbox-card">
+        <div class="sandbox-header">
+          <div>
+            <div class="sandbox-badge">SANDBOX 01 // CO-ADAPTATION</div>
+            <div class="sandbox-title">Harness 共适应与跨执行器迁移推演引擎</div>
+            <div class="sandbox-desc">模拟特定模型构建的 Harness 在交由异构模型执行时的刚性惩罚、步数截断与重复查询膨胀</div>
+          </div>
+        </div>
+
+        <div class="sandbox-grid">
+          <div class="controls-col">
+            <div class="ctrl-group">
+              <label class="ctrl-label-row" for="sel-m1-creator">
+                <span>Harness 创建者模型 (Creator)</span>
+              </label>
+              <select id="sel-m1-creator" class="ctrl-select">
+                <option value="opus" selected>Claude Opus 4.8 (注重长推理/偏保守)</option>
+                <option value="gpt5">GPT-5.5 (单体大代理架构)</option>
+                <option value="gemini">Gemini 3.1 Pro (就地精简修改型)</option>
+                <option value="deepseek">DeepSeek V4 Pro (开源高容错型)</option>
+                <option value="qwen">Qwen 3.7 Max (繁杂工具集成型)</option>
+              </select>
+              <span class="ctrl-hint">创建者的推理节奏决定了 Harness 内部的默认超时与重试偏好</span>
+            </div>
+
+            <div class="ctrl-group">
+              <label class="ctrl-label-row" for="sel-m1-executor">
+                <span>实际任务执行者模型 (Executor)</span>
+              </label>
+              <select id="sel-m1-executor" class="ctrl-select">
+                <option value="self">原模型自执行 (Self-Eval 协同基准)</option>
+                <option value="gemini" selected>固定统一执行器: Gemini 3.1 Pro</option>
+                <option value="hetero_weak">异构轻量执行器 (步骤更短易报错)</option>
+              </select>
+              <span class="ctrl-hint">检验 Harness 作为独立软件资产的跨底座可迁移性</span>
+            </div>
+
+            <div class="ctrl-group">
+              <div class="ctrl-label-row">
+                <label for="range-m1-steps">Harness 硬编码步数上限 (max_steps)</label>
+                <span class="ctrl-val" id="val-m1-steps">120 步</span>
+              </div>
+              <input type="range" id="range-m1-steps" class="ctrl-range" min="40" max="300" step="10" value="120">
+              <span class="ctrl-hint">Opus 硬编码 120 步是导致 Gemini 执行崩溃的元凶</span>
+            </div>
+
+            <div class="ctrl-group">
+              <div class="ctrl-label-row">
+                <label for="range-m1-spec">对原模型特征的过度微调度</label>
+                <span class="ctrl-val" id="val-m1-spec">75 %</span>
+              </div>
+              <input type="range" id="range-m1-spec" class="ctrl-range" min="0" max="100" step="5" value="75">
+              <span class="ctrl-hint">特化度越高，迁移到异构执行器时的刚性惩罚越大</span>
+            </div>
+          </div>
+
+          <div class="results-col">
+            <div class="res-row">
+              <span class="res-label">自执行协同基准预期分</span>
+              <span class="res-val" id="out-m1-self-score">69.3 分</span>
+            </div>
+            <div class="res-row">
+              <span class="res-label">目标执行器实际迁移分</span>
+              <span class="res-val" id="out-m1-trans-score" style="color:var(--rose);">33.0 分</span>
+            </div>
+            <div class="res-row">
+              <span class="res-label">迁移断层差距 (Gap)</span>
+              <span class="res-val" id="out-m1-gap">-36.3 分</span>
+            </div>
+            <div class="res-row">
+              <span class="res-label">迁移弹性系数 (η_transfer)</span>
+              <span class="res-val" id="out-m1-elasticity">0.476</span>
+            </div>
+            <div class="res-row">
+              <span class="res-label">搜索重复查询膨胀率</span>
+              <span class="res-val" id="out-m1-repeat-rate" style="color:var(--amber);">88.2 %</span>
+            </div>
+            <div class="verdict-box" id="out-m1-verdict">严重共适应刚性惩罚：硬编码120步上限致使迁移执行器崩溃，属于典型的脆弱型过拟合架构。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘二：演化噪声滤波与真伪版本晋级决策器 -->
+      <div class="sandbox-card">
+        <div class="sandbox-header">
+          <div>
+            <div class="sandbox-badge">SANDBOX 02 // NOISE FILTERING</div>
+            <div class="sandbox-title">演化噪声滤波与真伪版本晋级决策器</div>
+            <div class="sandbox-desc">输入反馈集录得的增量分数，实时通过双侧 Z 检验判别该版本是否属于评估噪声带内的伪优化</div>
+          </div>
+        </div>
+
+        <div class="sandbox-grid">
+          <div class="controls-col">
+            <div class="ctrl-group">
+              <div class="ctrl-label-row">
+                <label for="range-m2-gain">反馈集测得的分数增量 (ΔS)</label>
+                <span class="ctrl-val" id="val-m2-gain">+4.00 分</span>
+              </div>
+              <input type="range" id="range-m2-gain" class="ctrl-range" min="-10.0" max="25.0" step="0.5" value="4.0">
+              <span class="ctrl-hint">实测中大部分反馈集提升集中在 +3.0 ~ +8.0 分</span>
+            </div>
+
+            <div class="ctrl-group">
+              <div class="ctrl-label-row">
+                <label for="range-m2-sigma">环境单次重测标准差 (σ_noise)</label>
+                <span class="ctrl-val" id="val-m2-sigma">4.75 分</span>
+              </div>
+              <input type="range" id="range-m2-sigma" class="ctrl-range" min="1.0" max="10.0" step="0.25" value="4.75">
+              <span class="ctrl-hint">论文实测同一 commit 重测波动基线为 4.75 分</span>
+            </div>
+
+            <div class="ctrl-group">
+              <label class="ctrl-label-row" for="sel-m2-alpha">
+                <span>发版置信度标准 (Confidence Level)</span>
+              </label>
+              <select id="sel-m2-alpha" class="ctrl-select">
+                <option value="95" selected>95% 显著性 (z = 1.96, 工业发版严选)</option>
+                <option value="90">90% 显著性 (z = 1.645, 敏捷探索门槛)</option>
+                <option value="99">99% 显著性 (z = 2.576, 核心基座极高门禁)</option>
+              </select>
+              <span class="ctrl-hint">置信度越高，所需的真收益绝对门槛越高</span>
+            </div>
+
+            <div class="ctrl-group">
+              <div class="ctrl-label-row">
+                <label for="range-m2-rounds">演化迭代轮数 (Rounds)</label>
+                <span class="ctrl-val" id="val-m2-rounds">10 轮</span>
+              </div>
+              <input type="range" id="range-m2-rounds" class="ctrl-range" min="1" max="20" step="1" value="10">
+              <span class="ctrl-hint">演化轮数越多，在未达显著性时误选退化版本的累计概率越高</span>
+            </div>
+          </div>
+
+          <div class="results-col">
+            <div class="res-row">
+              <span class="res-label">标准化检验统计量 (Z-Score)</span>
+              <span class="res-val" id="out-m2-z-score">0.595</span>
+            </div>
+            <div class="res-row">
+              <span class="res-label">所需确凿真增益门槛 (ΔS_crit)</span>
+              <span class="res-val" id="out-m2-crit-threshold" style="color:var(--cyan);">13.17 分</span>
+            </div>
+            <div class="res-row">
+              <span class="res-label">单次假阳性概率 (False Alarm)</span>
+              <span class="res-val" id="out-m2-p-value" style="color:var(--amber);">27.6 %</span>
+            </div>
+            <div class="res-row">
+              <span class="res-label">多轮演化累计误选退化率</span>
+              <span class="res-val" id="out-m2-cum-false" style="color:var(--rose);">96.1 %</span>
+            </div>
+            <div class="res-row">
+              <span class="res-label">Held-out 真实留存预期增益</span>
+              <span class="res-val" id="out-m2-heldout-exp">0.65 分</span>
+            </div>
+            <div class="verdict-box" id="out-m2-verdict">噪声带幻觉演化：+4.00 分的增益完全深陷在 ±4.75 评估噪声带内（Z=0.595 < 1.96）。该版本发版将有 96.1% 概率引入退化！</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘三：Token 效用黑洞与断点容灾模拟器 -->
+      <div class="sandbox-card">
+        <div class="sandbox-header">
+          <div>
+            <div class="sandbox-badge">SANDBOX 03 // TOKEN EFFICIENCY</div>
+            <div class="sandbox-title">Token 效用黑洞与无断点容灾成本模拟器</div>
+            <div class="sandbox-desc">模拟 Checkpoint 缺失与死代码分支叠加下，长程任务崩溃重置造成的 7x~19x Token 暴增</div>
+          </div>
+        </div>
+
+        <div class="sandbox-grid">
+          <div class="controls-col">
+            <div class="ctrl-group">
+              <div class="ctrl-label-row">
+                <label for="range-m3-ckpt">Checkpoint 检查点机制激活率</label>
+                <span class="ctrl-val" id="val-m3-ckpt">0 %</span>
+              </div>
+              <input type="range" id="range-m3-ckpt" class="ctrl-range" min="0" max="100" step="5" value="0">
+              <span class="ctrl-hint">实测 26,679 条轨迹中 checkpoint 事件为 0，即完全无断点保存</span>
+            </div>
+
+            <div class="ctrl-group">
+              <div class="ctrl-label-row">
+                <label for="range-m3-steps">任务平均求解长程步数 (L)</label>
+                <span class="ctrl-val" id="val-m3-steps">45 步</span>
+              </div>
+              <input type="range" id="range-m3-steps" class="ctrl-range" min="10" max="120" step="5" value="45">
+              <span class="ctrl-hint">代码修补与长程搜索通常需要 30~80 步</span>
+            </div>
+
+            <div class="ctrl-group">
+              <div class="ctrl-label-row">
+                <label for="range-m3-failrate">单步网络/工具调用异常率</label>
+                <span class="ctrl-val" id="val-m3-failrate">6.0 %</span>
+              </div>
+              <input type="range" id="range-m3-failrate" class="ctrl-range" min="1.0" max="15.0" step="0.5" value="6.0">
+              <span class="ctrl-hint">包括工具返回非 JSON、进程挂起、API 偶发 502 等</span>
+            </div>
+
+            <div class="ctrl-group">
+              <div class="ctrl-label-row">
+                <label for="range-m3-deadcode">死代码与不可达路径比例</label>
+                <span class="ctrl-val" id="val-m3-deadcode">35 %</span>
+              </div>
+              <input type="range" id="range-m3-deadcode" class="ctrl-range" min="0" max="60" step="5" value="35">
+              <span class="ctrl-hint">写作域 124 项未执行特性、数据分析域 36 个无效分支带来的上下文膨胀</span>
+            </div>
+          </div>
+
+          <div class="results-col">
+            <div class="res-row">
+              <span class="res-label">总执行 Token 相对消耗指数</span>
+              <span class="res-val" id="out-m3-total-tokens" style="color:var(--rose);">7.11 x</span>
+            </div>
+            <div class="res-row">
+              <span class="res-label">无断点回滚报废 Token 占比</span>
+              <span class="res-val" id="out-m3-wasted-ratio">54.2 %</span>
+            </div>
+            <div class="res-row">
+              <span class="res-label">死代码路径额外消耗占比</span>
+              <span class="res-val" id="out-m3-deadcode-cost">35.0 %</span>
+            </div>
+            <div class="res-row">
+              <span class="res-label">中途崩溃完全重置损失度</span>
+              <span class="res-val" id="out-m3-crash-loss" style="color:var(--amber);">82.5 %</span>
+            </div>
+            <div class="verdict-box" id="out-m3-verdict">高危资源黑洞：0% Checkpoint 覆盖率与 35% 死代码率叠加，单次崩溃重置损失高达 82.5%，建议首要激活检查点状态保存！</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第七章：工程启示与落地治理 -->
+    <section class="paper-sec" id="sec-governance">
+      <div class="sec-header">
+        <div class="sec-num">07</div>
+        <h2 class="sec-title">自主演化工程启示与落地治理规范</h2>
+      </div>
+
+      <p class="para">
+        HarnessDev 基准不仅是学术界的评测革新，更是工业界构建下一代具备自主进化能力的 Agentic 系统（如 JIT-Agent 与 Fleet 编排平台）的核心行动纲领。基于前述实证与推导，我们提炼出四大工程铁律：
+      </p>
+
+      <div class="callout callout-amber">
+        <div class="callout-title">📌 铁律一：基础设施与执行模型深度解耦，严禁硬编码控制常量</div>
+        <p class="para" style="margin-bottom:0;">
+          Opus 120 步上限导致 Gemini 性能腰斩的教训表明，<strong>Harness 绝不可写死任何特定模型的步数上限、提示词正则或输出格式假定</strong>。必须将控制参数（如探索深度、反思阈值、最大步数）外部化为由环境动态探测（Environment Probing）驱动的配置接口，实现“模型可热插拔、Harness 跨底座可迁移”。
+        </p>
+      </div>
+
+      <div class="callout callout-rose">
+        <div class="callout-title">📌 铁律二：建立噪声门禁机制，彻底废黜“小样本自选发版”</div>
+        <p class="para" style="margin-bottom:0;">
+          在单次评测波动达 ±4.75 分的现实下，任何低于 <strong>11~13 分</strong> 的单次反馈涨幅均不可作为发版依据；抽查 5 个用例全过不仅毫无统计效力，更是导致全局崩塌的虚假安全感来源。自主演化系统必须采用统计假设检验（Z-Gating / t-test），至少进行 3 次以上独立重跑并确认 p &lt; 0.05，方可批准代码合并（Auto-Merge）。
+        </p>
+      </div>
+
+      <div class="callout callout-cyan">
+        <div class="callout-title">📌 铁律三：以物理环境真实 Diff 替代语义自评，加装 Completion Gate</div>
+        <p class="para" style="margin-bottom:0;">
+          坚决剥夺 Agent 自身对任务是否成功的自评裁判权（自报 99 次仅真过 48 次）。在 Harness 终止前，必须强制调用外部环境验证器：编译是否通过、单元测试是否全绿、Git Diff 是否满足非空且语法正确。未通过外部断言的提前退出一律视为崩溃并执行重试。
+        </p>
+      </div>
+
+      <div class="callout callout-emerald">
+        <div class="callout-title">📌 铁律四：斩断死代码，构建真实的 Checkpointing 容灾闭环</div>
+        <p class="para" style="margin-bottom:0;">
+          26,679 条轨迹零存档是当代 Agent 系统的巨大耻辱。在长程工程任务中，必须强制落地“每 N 步/每次有效工具调用落盘快照”的 WAL（Write-Ahead Logging）持久化机制。将崩溃重试从“全局归零”降级为“断点重放”，直接消灭 7~19 倍的 Token 浪费黑洞。
+        </p>
+      </div>
+
+      <p class="para" style="margin-top: 24px;">
+        将 HarnessDev 与同门研究 <strong>Aspire</strong>（解决模型自主提出可学目标与任务生成）和 <strong>S³Gym</strong>（解决自主演化沙箱环境探索）相结合，便构成了完整的 <strong>递归自我改进（Recursive Self-Improvement, RSI）闭环图谱</strong>：模型不仅能自主设定学习目标、在沙箱中探索，更掌握了自主重塑与打磨自身执行骨架（Harness）的工程能力，推动自主智能体向着具备工业韧性的自主演化系统稳步迈进。
+      </p>
+    </section>
+
+  </div>
+</main>
+
+<script>
+/**
+ * 严格遵循规范的纯原生内联逻辑
+ * 助手函数统一使用 byId，杜绝 $ 命名以避免 LaTeX 检测误判
+ * 控件与回显槽位严格 100% 接线闭环
+ */
+function byId(id) {
+  return document.getElementById(id);
+}
+
+// 1. 阅读进度条
+window.addEventListener("scroll", function() {
+  var doc = document.documentElement;
+  var top = doc.scrollTop || document.body.scrollTop;
+  var height = doc.scrollHeight - doc.clientHeight;
+  var pct = height > 0 ? (top / height) * 100 : 0;
+  byId("read-progress-bar").style.width = pct + "%";
+});
+
+// 2. 主题切换
+var btnTheme = byId("btn-theme-toggle");
+var themeIcon = byId("theme-icon");
+var themeText = byId("theme-text");
+
+btnTheme.addEventListener("click", function() {
+  var cur = document.documentElement.getAttribute("data-theme") || "dark";
+  var next = cur === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  themeIcon.textContent = next === "dark" ? "🌓" : "☀️";
+  themeText.textContent = next === "dark" ? "切换明暗" : "切换深色";
+});
+
+// 3. 侧边栏目录高亮
+var tocLinks = document.querySelectorAll(".toc-link");
+var sections = document.querySelectorAll("header.hero-header, section.paper-sec");
+
+window.addEventListener("scroll", function() {
+  var scrollPos = (document.documentElement.scrollTop || document.body.scrollTop) + 120;
+  var currentId = "";
+  for (var i = 0; i < sections.length; i++) {
+    var sec = sections[i];
+    if (sec.offsetTop <= scrollPos) {
+      currentId = sec.getAttribute("id");
+    }
+  }
+  for (var j = 0; j < tocLinks.length; j++) {
+    var link = tocLinks[j];
+    var href = link.getAttribute("href");
+    if (href === "#" + currentId) {
+      link.classList.add("active");
+    } else {
+      link.classList.remove("active");
+    }
+  }
+});
+
+// =============================================================================
+// 沙盘 1：共适应与跨模型迁移推演引擎
+// =============================================================================
+var selM1Creator = byId("sel-m1-creator");
+var selM1Executor = byId("sel-m1-executor");
+var rangeM1Steps = byId("range-m1-steps");
+var valM1Steps = byId("val-m1-steps");
+var rangeM1Spec = byId("range-m1-spec");
+var valM1Spec = byId("val-m1-spec");
+
+var outM1SelfScore = byId("out-m1-self-score");
+var outM1TransScore = byId("out-m1-trans-score");
+var outM1Gap = byId("out-m1-gap");
+var outM1Elasticity = byId("out-m1-elasticity");
+var outM1RepeatRate = byId("out-m1-repeat-rate");
+var outM1Verdict = byId("out-m1-verdict");
+
+function updateSandbox1() {
+  var creator = selM1Creator.value;
+  var executor = selM1Executor.value;
+  var steps = parseInt(rangeM1Steps.value, 10);
+  var spec = parseInt(rangeM1Spec.value, 10);
+
+  valM1Steps.textContent = steps + " 步";
+  valM1Spec.textContent = spec + " %";
+
+  // 基线自执行分
+  var baseSelfScores = {
+    opus: 69.3,
+    gpt5: 63.5,
+    gemini: 61.2,
+    deepseek: 57.8,
+    qwen: 51.6
+  };
+
+  var selfScore = baseSelfScores[creator] || 60.0;
+  var transScore = selfScore;
+  var repeatRate = 10.1;
+  var verdict = "";
+
+  if (executor === "self") {
+    transScore = selfScore;
+    repeatRate = 10.1;
+    verdict = "协同设计基准状态：创建者模型自跑自建 Harness，步数与控制流高度适配，无跨模型迁移摩擦。";
+  } else if (executor === "gemini") {
+    var specRatio = spec / 100.0;
+    if (creator === "opus") {
+      // Opus 硬编码步数对 Gemini 产生惩罚 (Gemini 通常需 160 步)
+      var stepPen = steps < 160 ? ((160 - steps) / 160) * 45.0 : 0;
+      transScore = selfScore - (stepPen * (0.6 + 0.4 * specRatio)) - (specRatio * 15.0);
+      repeatRate = 10.1 + specRatio * 78.1;
+      verdict = "严重共适应刚性惩罚：硬编码 " + steps + " 步上限致使迁移执行器崩溃，属于典型的脆弱型过拟合架构。";
+    } else if (creator === "qwen" || creator === "deepseek") {
+      // Qwen/DeepSeek 反向解耦增益
+      var gain = (creator === "qwen" ? 14.5 : 9.8) * (1.0 - specRatio * 0.5);
+      transScore = selfScore + gain;
+      repeatRate = 12.0 + specRatio * 15.0;
+      verdict = "正向解耦增益：Harness 架构本身具备通用性，换用更强执行者后性能显著提升，瓶颈原在弱底座。";
+    } else if (creator === "gemini") {
+      transScore = selfScore;
+      repeatRate = 10.1;
+      verdict = "自对照基线：Gemini 驱动自身构建的 Harness，表现平稳。";
+    } else {
+      transScore = selfScore - (12.0 * specRatio);
+      repeatRate = 25.0 + specRatio * 35.0;
+      verdict = "适度迁移衰减：异构执行器在部分特化语法与停止判断上出现轻度冲突。";
+    }
+  } else {
+    // 异构弱模型
+    transScore = selfScore * 0.65 - (spec / 100.0) * 18.0;
+    repeatRate = 35.0 + (spec / 100.0) * 45.0;
+    verdict = "严重衰退：弱执行器无法理解复杂的控制协议，大量任务在参数解析与验证阶段中断。";
+  }
+
+  if (transScore < 5.0) transScore = 5.0;
+  if (transScore > 95.0) transScore = 95.0;
+  if (repeatRate > 95.0) repeatRate = 95.0;
+
+  var gap = transScore - selfScore;
+  var elasticity = transScore / selfScore;
+
+  outM1SelfScore.textContent = selfScore.toFixed(1) + " 分";
+  outM1TransScore.textContent = transScore.toFixed(1) + " 分";
+  outM1Gap.textContent = (gap >= 0 ? "+" : "") + gap.toFixed(1) + " 分";
+  outM1Gap.style.color = gap >= 0 ? "var(--emerald)" : "var(--rose)";
+  outM1Elasticity.textContent = elasticity.toFixed(3);
+  outM1RepeatRate.textContent = repeatRate.toFixed(1) + " %";
+  outM1Verdict.textContent = verdict;
+}
+
+selM1Creator.addEventListener("change", updateSandbox1);
+selM1Executor.addEventListener("change", updateSandbox1);
+rangeM1Steps.addEventListener("input", updateSandbox1);
+rangeM1Spec.addEventListener("input", updateSandbox1);
+
+// =============================================================================
+// 沙盘 2：演化噪声滤波与真伪版本晋级决策器
+// =============================================================================
+var rangeM2Gain = byId("range-m2-gain");
+var valM2Gain = byId("val-m2-gain");
+var rangeM2Sigma = byId("range-m2-sigma");
+var valM2Sigma = byId("val-m2-sigma");
+var selM2Alpha = byId("sel-m2-alpha");
+var rangeM2Rounds = byId("range-m2-rounds");
+var valM2Rounds = byId("val-m2-rounds");
+
+var outM2ZScore = byId("out-m2-z-score");
+var outM2CritThreshold = byId("out-m2-crit-threshold");
+var outM2PValue = byId("out-m2-p-value");
+var outM2CumFalse = byId("out-m2-cum-false");
+var outM2HeldoutExp = byId("out-m2-heldout-exp");
+var outM2Verdict = byId("out-m2-verdict");
+
+// 误差函数标准实现
+function erf(x) {
+  var a1 =  0.254829592;
+  var a2 = -0.284496736;
+  var a3 =  1.421413741;
+  var a4 = -1.453152027;
+  var a5 =  1.061405429;
+  var p  =  0.3275911;
+  var sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  var t = 1.0 / (1.0 + p * x);
+  var y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return sign * y;
+}
+
+function updateSandbox2() {
+  var gain = parseFloat(rangeM2Gain.value);
+  var sigma = parseFloat(rangeM2Sigma.value);
+  var alphaVal = selM2Alpha.value;
+  var rounds = parseInt(rangeM2Rounds.value, 10);
+
+  valM2Gain.textContent = (gain >= 0 ? "+" : "") + gain.toFixed(2) + " 分";
+  valM2Sigma.textContent = sigma.toFixed(2) + " 分";
+  valM2Rounds.textContent = rounds + " 轮";
+
+  var zCrit = 1.96;
+  if (alphaVal === "90") zCrit = 1.645;
+  if (alphaVal === "99") zCrit = 2.576;
+
+  // 差值标准差 sqrt(2) * sigma
+  var diffStd = Math.sqrt(2.0) * sigma;
+  var zScore = gain / diffStd;
+  var critThreshold = zCrit * diffStd;
+
+  // 假阳性率 P(Z > zScore) 单尾上界
+  var pNorm = 0.5 * (1.0 + erf(zScore / Math.sqrt(2.0)));
+  var falseAlarmRate = Math.max(0.001, Math.min(0.999, 1.0 - pNorm));
+  var falseAlarmPct = falseAlarmRate * 100.0;
+
+  // 累计误选率
+  var cumFalse = (1.0 - Math.pow(1.0 - falseAlarmRate, rounds)) * 100.0;
+
+  // 泛化留存预期分 (考虑 53.1% 的泛化方向折损与过拟合衰减)
+  var shrinkFactor = Math.max(0.0, Math.min(1.0, gain / critThreshold));
+  var heldoutExp = gain * 0.531 * shrinkFactor;
+  if (gain < 0) heldoutExp = gain * 0.85;
+
+  var verdict = "";
+  if (gain <= 0) {
+    verdict = "确凿负向回退：版本在此次评测中明确倒退，必须坚决阻断合并。";
+  } else if (gain < diffStd * 0.8) {
+    verdict = "噪声带幻觉演化：+" + gain.toFixed(2) + " 分的增益完全深陷在 ±" + sigma.toFixed(2) + " 评估噪声带内（Z=" + zScore.toFixed(3) + " < " + zCrit + "）。该版本发版将有 " + cumFalse.toFixed(1) + "% 概率引入退化！";
+  } else if (gain < critThreshold) {
+    verdict = "临界可疑区间：有微弱正向迹象但未达到 " + alphaVal + "% 置信度门槛（需达到 +" + critThreshold.toFixed(2) + " 分），建议追加 3 次独立重跑以压低方差。";
+  } else {
+    verdict = "确凿显著正收益：增益 +" + gain.toFixed(2) + " 分突破了噪声置信边界（Z=" + zScore.toFixed(3) + " >= " + zCrit + "），为统计学上真实有效的架构进化，批准合并！";
+  }
+
+  outM2ZScore.textContent = zScore.toFixed(3);
+  outM2CritThreshold.textContent = critThreshold.toFixed(2) + " 分";
+  outM2PValue.textContent = falseAlarmPct.toFixed(1) + " %";
+  outM2CumFalse.textContent = cumFalse.toFixed(1) + " %";
+  outM2HeldoutExp.textContent = (heldoutExp >= 0 ? "+" : "") + heldoutExp.toFixed(2) + " 分";
+  outM2Verdict.textContent = verdict;
+}
+
+rangeM2Gain.addEventListener("input", updateSandbox2);
+rangeM2Sigma.addEventListener("input", updateSandbox2);
+selM2Alpha.addEventListener("change", updateSandbox2);
+rangeM2Rounds.addEventListener("input", updateSandbox2);
+
+// =============================================================================
+// 沙盘 3：Token 效用黑洞与无断点容灾成本模拟器
+// =============================================================================
+var rangeM3Ckpt = byId("range-m3-ckpt");
+var valM3Ckpt = byId("val-m3-ckpt");
+var rangeM3Steps = byId("range-m3-steps");
+var valM3Steps = byId("val-m3-steps");
+var rangeM3Failrate = byId("range-m3-failrate");
+var valM3Failrate = byId("val-m3-failrate");
+var rangeM3Deadcode = byId("range-m3-deadcode");
+var valM3Deadcode = byId("val-m3-deadcode");
+
+var outM3TotalTokens = byId("out-m3-total-tokens");
+var outM3WastedRatio = byId("out-m3-wasted-ratio");
+var outM3DeadcodeCost = byId("out-m3-deadcode-cost");
+var outM3CrashLoss = byId("out-m3-crash-loss");
+var outM3Verdict = byId("out-m3-verdict");
+
+function updateSandbox3() {
+  var ckpt = parseInt(rangeM3Ckpt.value, 10);
+  var steps = parseInt(rangeM3Steps.value, 10);
+  var failrate = parseFloat(rangeM3Failrate.value) / 100.0;
+  var deadcode = parseInt(rangeM3Deadcode.value, 10);
+
+  valM3Ckpt.textContent = ckpt + " %";
+  valM3Steps.textContent = steps + " 步";
+  valM3Failrate.textContent = (failrate * 100.0).toFixed(1) + " %";
+  valM3Deadcode.textContent = deadcode + " %";
+
+  var ckptRatio = ckpt / 100.0;
+  var deadcodeRatio = deadcode / 100.0;
+
+  // 基础消耗与重试期望
+  // 失败发生期望步数在 steps / 2 处
+  // 无断点重试惩罚权重
+  var uncheckpointedPenalty = (1.0 - ckptRatio) * (steps * failrate * 2.2);
+  var tokenMultiplier = (1.0 + deadcodeRatio) * (1.0 + uncheckpointedPenalty);
+
+  // 废弃 Token 比例
+  var wastedRatio = (uncheckpointedPenalty / (1.0 + uncheckpointedPenalty)) * 100.0;
+
+  // 崩溃重置损失度
+  var crashLoss = (1.0 - ckptRatio) * (1.0 - Math.pow(1.0 - failrate, steps)) * 100.0;
+
+  if (tokenMultiplier < 1.0) tokenMultiplier = 1.0;
+  if (tokenMultiplier > 19.5) tokenMultiplier = 19.5;
+
+  var verdict = "";
+  if (ckpt === 0 && deadcode >= 30) {
+    verdict = "高危资源黑洞：0% Checkpoint 覆盖率与 " + deadcode + "% 死代码率叠加，单次崩溃重置损失高达 " + crashLoss.toFixed(1) + "%，建议首要激活检查点状态保存！";
+  } else if (ckpt >= 80 && deadcode <= 15) {
+    verdict = "高能效生产架构：完善的断点快照机制有效阻断了长程回滚，死代码已充分剔除，Token 效用处于最优前沿面。";
+  } else {
+    verdict = "中度开销结构：部分断点能力抑制了灾难性回滚，但死代码与异常回退仍造成约 " + wastedRatio.toFixed(1) + "% 的算力浪费。";
+  }
+
+  outM3TotalTokens.textContent = tokenMultiplier.toFixed(2) + " x";
+  outM3WastedRatio.textContent = wastedRatio.toFixed(1) + " %";
+  outM3DeadcodeCost.textContent = deadcode.toFixed(1) + " %";
+  outM3CrashLoss.textContent = crashLoss.toFixed(1) + " %";
+  outM3Verdict.textContent = verdict;
+}
+
+rangeM3Ckpt.addEventListener("input", updateSandbox3);
+rangeM3Steps.addEventListener("input", updateSandbox3);
+rangeM3Failrate.addEventListener("input", updateSandbox3);
+rangeM3Deadcode.addEventListener("input", updateSandbox3);
+
+// 初始化所有沙盘以完成接线同步
+updateSandbox1();
+updateSandbox2();
+updateSandbox3();
+</script>
+</body>
+</html>

@@ -1,0 +1,1669 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="cOb4F5DrDNYhHZXMDDR2NQ">
+<head data-page-node-id="xCRkIeU5yi2WV4lABnCvvd">
+  <meta charset="utf-8" data-page-node-id="6mLE5pFdvqedeEIlWBam4Q">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="HwRqiwUXAiSq7d0vbecwTF">
+  <title>Grok Bot 团队复盘：他们如何设计 Grok Bot 的，以便让机器人能够在多个会话之间持续工作 · 交互架构白皮书</title>
+  <style>
+    /* ============================================================
+       1. 设计系统令牌：暖羊皮纸 / 黑曜石双主题 + 五色语义
+       ============================================================ */
+    :root {
+      --bg-app: #FAF7F2;
+      --bg-surface: #FFFFFF;
+      --bg-surface-raised: #FFFFFF;
+      --bg-surface-subtle: #F5F0E8;
+      --bg-surface-muted: #EBE4D8;
+      --bg-glass: rgba(250, 247, 242, 0.94);
+
+      --accent: #D97757;
+      --accent-hover: #C86545;
+      --accent-subtle: rgba(217, 119, 87, 0.10);
+      --accent-border: rgba(217, 119, 87, 0.35);
+
+      --color-emerald: #2D8A5E;
+      --color-emerald-subtle: rgba(45, 138, 94, 0.09);
+      --color-emerald-border: rgba(45, 138, 94, 0.28);
+
+      --color-rose: #C94A4A;
+      --color-rose-subtle: rgba(201, 74, 74, 0.09);
+      --color-rose-border: rgba(201, 74, 74, 0.28);
+
+      --color-amber: #C2801E;
+      --color-amber-subtle: rgba(194, 128, 30, 0.09);
+      --color-amber-border: rgba(194, 128, 30, 0.28);
+
+      --color-cyan: #3E7BA8;
+      --color-cyan-subtle: rgba(62, 123, 168, 0.09);
+      --color-cyan-border: rgba(62, 123, 168, 0.28);
+      --color-purple: #7C5CBE;
+      --color-purple-subtle: rgba(124, 92, 190, 0.10);
+      --color-purple-border: rgba(124, 92, 190, 0.30);
+
+      --text-primary: #1F1E1B;
+      --text-secondary: #59554E;
+      --text-tertiary: #878278;
+      --text-quaternary: #B0AAA0;
+
+      --border-hairline: rgba(31, 30, 27, 0.08);
+      --border-subtle: #E6DFD3;
+      --border-medium: #D4CABE;
+
+      --shadow-sm: 0 1px 3px rgba(31, 30, 27, 0.05);
+      --shadow-md: 0 4px 16px -2px rgba(31, 30, 27, 0.08), 0 2px 6px -1px rgba(31, 30, 27, 0.04);
+      --shadow-lg: 0 12px 32px -4px rgba(31, 30, 27, 0.12);
+
+      --font-serif: "Songti SC", "Noto Serif SC", "Source Han Serif SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+      --radius-xs: 4px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-full: 9999px;
+
+      --max-w: 1240px;
+      --transition-base: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    html[data-theme="dark"] {
+      --bg-app: #181715;
+      --bg-surface: #22201D;
+      --bg-surface-raised: #282622;
+      --bg-surface-subtle: #1E1C1A;
+      --bg-surface-muted: #2E2B27;
+      --bg-glass: rgba(24, 23, 21, 0.94);
+
+      --accent: #E07A5F;
+      --accent-hover: #EB8D74;
+      --accent-subtle: rgba(224, 122, 95, 0.14);
+      --accent-border: rgba(224, 122, 95, 0.40);
+
+      --color-emerald: #3DAA73;
+      --color-emerald-subtle: rgba(61, 170, 115, 0.12);
+      --color-emerald-border: rgba(61, 170, 115, 0.35);
+
+      --color-rose: #E06060;
+      --color-rose-subtle: rgba(224, 96, 96, 0.12);
+      --color-rose-border: rgba(224, 96, 96, 0.35);
+
+      --color-amber: #D89838;
+      --color-amber-subtle: rgba(216, 152, 56, 0.12);
+      --color-amber-border: rgba(216, 152, 56, 0.35);
+
+      --color-cyan: #5296C7;
+      --color-cyan-subtle: rgba(82, 150, 199, 0.12);
+      --color-cyan-border: rgba(82, 150, 199, 0.35);
+      --color-purple: #9D7BE0;
+      --color-purple-subtle: rgba(157, 123, 224, 0.14);
+      --color-purple-border: rgba(157, 123, 224, 0.40);
+
+      --text-primary: #ECE8E1;
+      --text-secondary: #B5B0A6;
+      --text-tertiary: #807B72;
+      --text-quaternary: #54504A;
+
+      --border-hairline: rgba(236, 232, 225, 0.08);
+      --border-subtle: #2F2C27;
+      --border-medium: #423E38;
+
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 6px 20px -3px rgba(0, 0, 0, 0.5), 0 2px 8px -1px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 16px 40px -6px rgba(0, 0, 0, 0.65);
+    }
+
+    /* ============================================================
+       2. 基础重置与全局排版引擎
+       ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+      line-height: 1.8;
+      text-size-adjust: 100%;
+      scroll-padding-top: 80px;
+    }
+
+    body {
+      background-color: var(--bg-app);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      transition: background-color var(--transition-base), color var(--transition-base);
+    }
+
+    /* 滚动条 */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-app); }
+    ::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: var(--radius-full); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+    /* ============================================================
+       3. 顶部固定导航条 (Navbar) 与阅读进度
+       ============================================================ */
+    #top-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-hairline);
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+    }
+
+    #scroll-progress-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 2px;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--color-cyan));
+      transition: width 0.1s ease-out;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+
+    .nav-badge {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-full);
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-control {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      padding: 6px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all var(--transition-base);
+    }
+
+    .btn-control:hover {
+      color: var(--text-primary);
+      border-color: var(--border-medium);
+      background: var(--bg-surface-raised);
+    }
+
+    /* ============================================================
+       4. 主布局结构：双栏粘性侧栏
+       ============================================================ */
+    .doc-layout {
+      display: flex;
+      max-width: var(--max-w);
+      width: 100%;
+      margin: 0 auto;
+      padding: 36px 24px 80px 24px;
+      gap: 48px;
+      flex: 1;
+    }
+
+    .doc-sidebar {
+      width: 280px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 96px;
+      max-height: calc(100vh - 120px);
+      overflow-y: auto;
+      padding-right: 12px;
+    }
+
+    .sidebar-title {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-tertiary);
+      margin-bottom: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sidebar-nav {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sidebar-nav a {
+      display: block;
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 7px 12px;
+      border-radius: var(--radius-sm);
+      line-height: 1.45;
+      transition: all var(--transition-base);
+      border-left: 2px solid transparent;
+    }
+
+    .sidebar-nav a:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface-subtle);
+    }
+
+    .sidebar-nav a.active {
+      color: var(--accent);
+      background: var(--accent-subtle);
+      border-left-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .doc-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ============================================================
+       5. 题头区域与元信息面板
+       ============================================================ */
+    .article-header {
+      margin-bottom: 44px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 36px;
+    }
+
+    .header-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .tag-pill {
+      font-size: 0.75rem;
+      padding: 3px 10px;
+      border-radius: var(--radius-full);
+      font-family: var(--font-mono);
+      font-weight: 500;
+    }
+
+    .tag-accent { background: var(--accent-subtle); color: var(--accent); border: 1px solid var(--accent-border); }
+    .tag-emerald { background: var(--color-emerald-subtle); color: var(--color-emerald); border: 1px solid var(--color-emerald-border); }
+    .tag-purple { background: var(--color-purple-subtle); color: var(--color-purple); border: 1px solid var(--color-purple-border); }
+    .tag-cyan { background: var(--color-cyan-subtle); color: var(--color-cyan); border: 1px solid var(--color-cyan-border); }
+
+    .article-title {
+      font-family: var(--font-serif);
+      font-size: 2.3rem;
+      line-height: 1.3;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .article-lead {
+      font-size: 1.15rem;
+      line-height: 1.68;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+    }
+
+    .meta-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .meta-label {
+      font-size: 0.72rem;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-family: var(--font-mono);
+    }
+
+    .meta-value {
+      font-size: 0.88rem;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .meta-value a {
+      color: var(--color-cyan);
+      text-decoration: none;
+      word-break: break-all;
+    }
+
+    .meta-value a:hover {
+      text-decoration: underline;
+    }
+
+    /* ============================================================
+       6. 正文排版与组件设计
+       ============================================================ */
+    .article-body section {
+      margin-bottom: 56px;
+      scroll-margin-top: 88px;
+    }
+
+    .article-body h2 {
+      font-family: var(--font-serif);
+      font-size: 1.65rem;
+      line-height: 1.35;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 40px 0 20px 0;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-hairline);
+      position: relative;
+    }
+
+    .article-body h2::before {
+      content: "";
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      width: 44px;
+      height: 2px;
+      background: var(--accent);
+    }
+
+    .article-body h3 {
+      font-family: var(--font-serif);
+      font-size: 1.25rem;
+      line-height: 1.4;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 28px 0 14px 0;
+    }
+
+    .article-body p {
+      margin-bottom: 20px;
+      color: var(--text-secondary);
+      font-size: 1rem;
+      text-align: justify;
+    }
+
+    .article-body strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .article-body ul, .article-body ol {
+      margin-bottom: 24px;
+      padding-left: 22px;
+      color: var(--text-secondary);
+    }
+
+    .article-body li {
+      margin-bottom: 10px;
+      line-height: 1.7;
+    }
+
+    /* 原文核心设问与解答卡片 (Callout Q&A) */
+    .qa-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-left: 4px solid var(--accent);
+      border-radius: var(--radius-md);
+      padding: 22px 24px;
+      margin: 28px 0;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .qa-question {
+      font-family: var(--font-serif);
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .qa-icon {
+      color: var(--accent);
+      flex-shrink: 0;
+      font-family: var(--font-mono);
+      font-size: 1.1rem;
+    }
+
+    .qa-answer {
+      font-size: 0.95rem;
+      line-height: 1.75;
+      color: var(--text-secondary);
+      padding-left: 26px;
+      border-top: 1px dashed var(--border-hairline);
+      padding-top: 12px;
+      font-style: normal;
+    }
+
+    /* 表格组件 */
+    .table-container {
+      overflow-x: auto;
+      margin: 28px 0;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+      background: var(--bg-surface);
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      text-align: left;
+    }
+
+    .data-table th {
+      background: var(--bg-surface-subtle);
+      color: var(--text-primary);
+      font-weight: 600;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-family: var(--font-sans);
+    }
+
+    .data-table td {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-hairline);
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .data-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .data-table tr:hover td {
+      background: var(--bg-surface-subtle);
+    }
+
+    .table-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--bg-surface-muted);
+      border-radius: var(--radius-xs);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+    }
+
+    /* 架构图解展示区 (Figure & Inline SVG) */
+    .figure-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      margin: 32px 0;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .figure-caption {
+      font-size: 0.85rem;
+      color: var(--text-tertiary);
+      text-align: center;
+      margin-top: 14px;
+      font-style: normal;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .figure-svg-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      display: flex;
+      justify-content: center;
+      background: var(--bg-surface-subtle);
+      border-radius: var(--radius-sm);
+      padding: 16px 8px;
+    }
+
+    .figure-svg-wrapper svg {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* ============================================================
+       7. 交互沙盘：Grok Bot 状态机与介入阶梯模拟器
+       ============================================================ */
+    .sandbox-container {
+      background: var(--bg-surface);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      margin: 40px 0;
+      box-shadow: var(--shadow-md);
+    }
+
+    .sandbox-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+
+    .sandbox-badge {
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
+    .sandbox-controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      margin-bottom: 28px;
+      background: var(--bg-surface-subtle);
+      padding: 20px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .ctrl-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .ctrl-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+    }
+
+    .ctrl-select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-size: 0.86rem;
+      outline: none;
+      transition: border-color var(--transition-base);
+    }
+
+    .ctrl-select:focus {
+      border-color: var(--accent);
+    }
+
+    .btn-reset-box {
+      display: flex;
+      align-items: flex-end;
+    }
+
+    .btn-action {
+      background: var(--accent);
+      color: #FFFFFF;
+      border: none;
+      padding: 9px 18px;
+      border-radius: var(--radius-sm);
+      font-size: 0.86rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      transition: background var(--transition-base);
+    }
+
+    .btn-action:hover {
+      background: var(--accent-hover);
+    }
+
+    .sim-dashboard {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 24px;
+      background: var(--bg-surface-subtle);
+      padding: 24px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .bot-preview-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+    }
+
+    .avatar-display-box {
+      width: 96px;
+      height: 96px;
+      border-radius: var(--radius-md);
+      background: var(--bg-surface-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      border: 2px solid var(--border-medium);
+      transition: all var(--transition-base);
+    }
+
+    .sim-state-pill {
+      font-size: 0.75rem;
+      padding: 3px 12px;
+      border-radius: var(--radius-full);
+      font-family: var(--font-mono);
+      font-weight: 600;
+      margin-top: 8px;
+    }
+
+    .sim-readout-col {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .readout-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+    }
+
+    .readout-label {
+      font-size: 0.72rem;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-family: var(--font-mono);
+      margin-bottom: 4px;
+    }
+
+    .readout-content {
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+
+    /* ============================================================
+       8. 页脚与打印适配
+       ============================================================ */
+    .article-footer {
+      margin-top: 64px;
+      padding-top: 32px;
+      border-top: 1px solid var(--border-subtle);
+      color: var(--text-tertiary);
+      font-size: 0.85rem;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    @media print {
+      #top-nav, .doc-sidebar, .sandbox-controls-grid, .btn-action, .btn-control { display: none !important; }
+      body { background: #FFFFFF !important; color: #000000 !important; font-size: 11pt !important; }
+      .doc-layout { padding: 0 !important; max-width: 100% !important; gap: 0 !important; }
+      .doc-main { width: 100% !important; }
+      .qa-card, .meta-box, .figure-card, .table-container, .sandbox-container {
+        break-inside: avoid;
+        box-shadow: none !important;
+        border: 1px solid #CCCCCC !important;
+      }
+      .article-title { font-size: 20pt !important; }
+      a { text-decoration: none !important; color: #000000 !important; }
+    }
+
+    @media (max-width: 980px) {
+      .doc-layout { flex-direction: column; padding: 20px 16px; gap: 24px; }
+      .doc-sidebar {
+        width: 100%;
+        position: static;
+        max-height: none;
+        display: none;
+        border-bottom: 1px solid var(--border-subtle);
+        padding-bottom: 16px;
+      }
+      .doc-sidebar.show { display: block; }
+      .sim-dashboard { grid-template-columns: 1fr; }
+      .article-title { font-size: 1.8rem; }
+    }
+  </style>
+</head>
+<body data-page-node-id="nrhajzFOF7yVhJq7Yw4Wly">
+
+  <!-- 顶部导航栏 -->
+  <nav id="top-nav" data-page-node-id="62Xw0sdRGghqBpRXcwP2hl">
+    <div class="nav-brand" data-page-node-id="DXbbKZVUaUxzQRa2BwSU0G">
+      <span data-page-node-id="cpZ6lnlmmr7GyVVBczRFsd">Grok Bot 架构复盘</span>
+      <span class="nav-badge" data-page-node-id="ppjF4Ffj40IH8450jKZqeW">PERSISTENT AGENTS</span>
+    </div>
+    <div class="nav-controls" data-page-node-id="A2qRhAE8gGXvSXccCwFV7F">
+      <button class="btn-control" id="btn-toggle-sidebar" title="展开/收起目录" data-page-node-id="vU4XHfXjFtxmj0cKLR3ZPl">📑 目录</button>
+      <button class="btn-control" id="btn-theme-toggle" title="切换显示主题" data-page-node-id="4BMvaNxNw1p904YjQJ5VLY">🌓 主题</button>
+      <button class="btn-control" id="btn-print" title="打印/导出PDF" data-page-node-id="EP6DrBe16SSA3763ER3VeM">🖨️ 打印</button>
+    </div>
+    <div id="scroll-progress-bar" data-page-node-id="AyNmKnxr2xqLSOjekYwvGr"></div>
+  </nav>
+
+  <!-- 主布局 -->
+  <div class="doc-layout" data-page-node-id="avE85gyALKChdGSTa0UHow">
+
+    <!-- 侧栏目录 -->
+    <aside class="doc-sidebar" id="doc-sidebar" data-page-node-id="mfdtiFiQHB2QOVMltEVDxq">
+      <div class="sidebar-title" data-page-node-id="tUjBk3iNXo716FmFGzMBdC">目录导航 · CONTENTS</div>
+      <ul class="sidebar-nav" data-page-node-id="ntABHPKzp6U7cWBT0IB670">
+        <li data-page-node-id="M1qMiKG4uDQCtexfF6Lz9s"><a href="#sec-overview" class="nav-link" data-page-node-id="32tBKeS1zx935gYHVVdXmD">一分钟速览</a></li>
+        <li data-page-node-id="ddpAHVZJylfsJC5xPsV7iY"><a href="#sec-origin" class="nav-link" data-page-node-id="f54S0eGXP3sbP4KG0IlGD9">起点：机器人要跨会话负责，聊天记录就不再是主角</a></li>
+        <li data-page-node-id="5tolWdoDGVMuP4wzkNlEj2"><a href="#sec-step1" class="nav-link" data-page-node-id="cW3xBmvh4pod7kC9GWrotA">第一步：把产品的基本单位从 Chat 换成 Bot</a></li>
+        <li data-page-node-id="iIwXHyRdmSYlwQwKAEqBvS"><a href="#sec-step2" class="nav-link" data-page-node-id="lJXWF6kFFHXHTkUQQ1wCxR">第二步：让用户一眼认出它是谁、正在做什么</a></li>
+        <li data-page-node-id="yc4BlLDvg9IMcJfjIqkrbW"><a href="#sec-step3" class="nav-link" data-page-node-id="g8zBkw3NUDtKUGbz7YVWkx">第三步：电脑归 Bot 使用，人只保留查看与接管权</a></li>
+        <li data-page-node-id="T6vdLmNFPBLA8gY6ltzIz0"><a href="#sec-step4" class="nav-link" data-page-node-id="n1XkxCcBJvt1nZnafJggZh">第四步：让答案长成可以直接使用的界面</a></li>
+        <li data-page-node-id="Ltk3eRB5FB4QuvKiP7aUbv"><a href="#sec-step5" class="nav-link" data-page-node-id="6HClnkYKHxkDpoRoF439Cu">第五步：给多只 Bot 划清能力、记忆与协作边界</a></li>
+        <li data-page-node-id="XrUfXOB9WYvIWDIeh9FsAV"><a href="#sec-step6" class="nav-link" data-page-node-id="8GvKiwYDQDV37Co70X8zxk">第六步：让工作由时间、事件或另一只 Bot 主动启动</a></li>
+        <li data-page-node-id="KTQjYGWeOz806AgzsGPT0U"><a href="#sec-conclusion" class="nav-link" data-page-node-id="6KKt9oqJBwQ8V3S3GA2vRv">收尾：删掉会把用户重新变成管理员的界面</a></li>
+        <li data-page-node-id="ZUxtd0LWtE3aWtkSlbE2tC"><a href="#sec-sandbox" class="nav-link" data-page-node-id="Il5AtMiSNVpkH9dlDeM6VR">交互沙盘：Grok Bot 状态机与介入阶梯模拟器</a></li>
+      </ul>
+    </aside>
+
+    <!-- 文章正文主体 -->
+    <main class="doc-main" data-page-node-id="jHpgA8wEFpIWEhwINZj9zJ">
+
+      <!-- 文章题头 -->
+      <header class="article-header" data-page-node-id="O9k9BAWv3GnFP0Z8Q8vbk7">
+        <div class="header-tags" data-page-node-id="f9Zr3Ho8Px0L5Rhxvx7BGm">
+          <span class="tag-pill tag-accent" data-page-node-id="GgPOUzJIYa3eIQtyDo7CsN">SpaceXAI 官方设计复盘</span>
+          <span class="tag-pill tag-emerald" data-page-node-id="D2K2JicLcagR4wJrhs4sN5">深度架构</span>
+          <span class="tag-pill tag-purple" data-page-node-id="loSFRLmLxgNByu1F9lCIBx">持久负责 Agent</span>
+          <span class="tag-pill tag-cyan" data-page-node-id="Jo87XCAawUqYczLyjRXD7x">人机交互 HCI</span>
+        </div>
+        <h1 class="article-title" data-page-node-id="8cEsWRGfhTQjuBOQjrUvtl">Grok Bot 团队复盘：他们如何设计 Grok Bot 的，以便让机器人能够在多个会话之间持续工作</h1>
+        <p class="article-lead" data-page-node-id="OHGWVly1bQcbiD8dd9i6r8">从聊天历史到 Bot 名册，从头像状态到独立电脑与主动触发：SpaceXAI 团队逐步解决一个机器人如何跨会话持续负责的问题。</p>
+
+        <!-- 元信息卡片 -->
+        <div class="meta-box" data-page-node-id="cJrnyCoC6mgZmfXm2TPSP7">
+          <div class="meta-item" data-page-node-id="n9q7MP4KzOY4JGHhLww0lV">
+            <span class="meta-label" data-page-node-id="1aaPCjUOdXKKje4gVEbQ3I">原始出处 (SOURCE)</span>
+            <span class="meta-value" data-page-node-id="WcNAHDx0jq5DSz6NI256qf">Designing Grok Bot for a world of persistent agents</span>
+          </div>
+          <div class="meta-item" data-page-node-id="9AIPI0qYW9p7SDYFG9FA5M">
+            <span class="meta-label" data-page-node-id="PMXsQxhRcDyGrnp1gD4emG">原文链接 (CANONICAL URL)</span>
+            <span class="meta-value" data-page-node-id="xA6FfWBgVPhRKZ8OJyVYdg"><a href="https://best.xiaohu.ai/article/designing-grok-bot-persistent-agents/" target="_blank" rel="noopener noreferrer" data-page-node-id="A9iD2JMC3hVLr3ohxOGeSz">https://best.xiaohu.ai/article/designing-grok-bot-persistent-agents/</a></span>
+          </div>
+          <div class="meta-item" data-page-node-id="5kE3vuOrpamXjdKCxlK8BQ">
+            <span class="meta-label" data-page-node-id="Ly3NEfgncs7ERXn6DijOFm">类别与语言 (CATEGORY / LANG)</span>
+            <span class="meta-value" data-page-node-id="nlB9tWRLMYMWC0luLnsFH3">深度研究 · 中文 (zh)</span>
+          </div>
+          <div class="meta-item" data-page-node-id="ihlMa1yHwYSTOlnn6lvw23">
+            <span class="meta-label" data-page-node-id="rYqnppGBiHLSZHN5RDwESG">归档日期 (ARCHIVED DATE)</span>
+            <span class="meta-value" data-page-node-id="3hTj6tg3sR2eBxsmqP5TGW">2026 年 9 月 4 日</span>
+          </div>
+        </div>
+      </header>
+
+      <article class="article-body" data-page-node-id="1MbGnBdqS6hXr9DDbplS6H">
+
+        <!-- 章节：一分钟速览 -->
+        <section id="sec-overview" data-page-node-id="uhDHJfORJT5XGeml3GACUh">
+          <h2 data-page-node-id="uFGjL81HqjjDySceClhUcA">一分钟速览</h2>
+          <ul data-page-node-id="Id6AvFGuVtalQQQ7A1j1Am">
+            <li data-page-node-id="ZUZuOEvMxf3FG2Br6kp74t"><strong data-page-node-id="ZmBzmuirFOOGcqLgv9DufR">跨会话责任绑定</strong>：Grok Bot 的设计起点是把跨会话责任绑定到稳定的 Bot，而不是继续让一次次 Chat 充当产品主对象。</li>
+            <li data-page-node-id="bs8cClaQBqpt55lMnDSfjy"><strong data-page-node-id="oVnD7fssIbnlNPWq1jEqZS">头像多维表达</strong>：头像同时承担身份、六种工作状态和最低限度的进度确认；执行细节只在用户需要时逐级展开。</li>
+            <li data-page-node-id="3UlqsosxzXVp2E33Wexdyv"><strong data-page-node-id="8Clnve3AFDHpYl3Oor5DVj">自治与介入边界</strong>：独立电脑、结构化结果和分层协作边界都服务于同一目标：让 Bot 负责执行，让人只在判断与异常时介入。</li>
+            <li data-page-node-id="4YW9wnhDcAR0M1CSyzipIK"><strong data-page-node-id="RDWi1y7OUSzhrvre5ohAZM">主动化演进</strong>：Routine 把工作的起点从用户 Prompt 扩展到时间、外部事件和另一只 Bot；团队随后继续删除会增加监督负担的界面。</li>
+          </ul>
+
+          <p data-page-node-id="1lnzE3JcvuRrwwkA8IqYGv">Grok Bot 团队从早期探索到产品上线，连续面对同一个问题：当机器人能够记住此前的工作、跨越多次会话继续负责、在后台使用自己的电脑，并在用户离开后主动开工，产品还应该围绕一段段聊天来组织吗？SpaceXAI 的官方设计复盘《Designing Grok Bot for a world of persistent agents》给出了他们的一组界面取舍。</p>
+
+          <p data-page-node-id="dCxtoDtuYanlQ0Jdgl9Mif">他们的设计理念有一条清晰的推进线：先把“谁在负责”放到界面中心，再为这个长期负责者补上身份、状态、工作空间、产物与主动触发机制；每增加一种能力，同时删掉一层会诱导用户持续监督的控制界面。</p>
+
+          <p data-page-node-id="L2RhaD9Qmn6Im63wPT2LtA">传统 AI 产品默认用户始终在场。人发出 Prompt，看着模型执行，收到回答，一轮会话结束。Grok Bot 团队要设计的对象却会长期存在。它今天接下任务，明天仍应记得上下文；没有新消息时，也可能因为时间或外部事件继续工作。于是，团队必须重新回答四类基础问题。</p>
+
+          <!-- 核心问答卡片 1 -->
+          <div class="qa-card" data-page-node-id="wERPBBBSzqOvxeJ5mPB6UZ">
+            <div class="qa-question" data-page-node-id="KdSzkcgcd6d6OtNpYiNp1i">
+              <span class="qa-icon" data-page-node-id="YK5KGb0izamQkj1Dx3yBtx">Q:</span>
+              <span data-page-node-id="7QOaBfxQPnfqN3svESG2Vw">Grok Bot 团队如何把一次性对话改造成持续负责的 Agent 系统？</span>
+            </div>
+            <div class="qa-answer" data-page-node-id="5ToPQzj1DT7TiQYSEzD4HF">
+              <strong data-page-node-id="jFUCh6KxupVNcl5EtscDkR">核心解答</strong>：设计先把谁在负责放到中心，再为 Bot 补上身份、状态、工作空间、产物和主动触发；Agent 能力逐层增加，人的监督界面逐层退出。
+            </div>
+          </div>
+        </section>
+
+        <!-- 章节：起点 -->
+        <section id="sec-origin" data-page-node-id="bXM9LVQGz8dJ3RVh7W8B51">
+          <h2 data-page-node-id="lmglD7z4ERCYQ1kvyqgRtZ">起点：机器人要跨会话负责，聊天记录就不再是主角</h2>
+          <p data-page-node-id="UtVWOCE8NcaG5yb5DSmHG6">聊天列表适合保存一次次问答，却不适合保存一项持续责任。一次对话解决后会被新会话往下推；隔一周再回来，用户通常重新开一个窗口。对于只回答眼前问题的模型，这种行为完全合理。对于理应认识用户、记得之前的工作并继续负责的 Agent，它却会把同一件事切成互不相连的历史记录。</p>
+
+          <p data-page-node-id="cnP451q8x5cmYOOmenoTco">Grok Bot 团队在开场原型中展示了另一种关系：侧边栏里不是“昨天的对话”“上周的对话”，而是 Kenny、Justin、Luke、Tyler 等不同 Bot。每个名字旁边直接出现最新进展或等待确认的事项，例如全员会议材料需要批准、销售引荐已经写好、收件箱还剩两封要回复。用户回来时先看到“谁在负责什么”，再进入与这名负责者的对话。</p>
+
+          <p data-page-node-id="SVgLBkja0fJTHGOsCWAIJk">这成为后续设计的判断基准。只要 Bot 要跨天延续工作，产品的主对象就必须稳定存在；否则所谓记忆、自动化和工具都只能挂在一堆会不断下沉的会话上。</p>
+        </section>
+
+        <!-- 章节：第一步 -->
+        <section id="sec-step1" data-page-node-id="EEWyVt5BpXmwBWOllsXic4">
+          <h2 data-page-node-id="5KLhdEPz9k7Z1Blx4LL3GZ">第一步：把产品的基本单位从 Chat 换成 Bot</h2>
+          <p data-page-node-id="VNUdeerMPwRRpoqE6EAO8v">持久 Agent 背后有模型、上下文窗口、系统提示、沙箱、连接器、权限和自动化等大量技术对象。全部暴露出来，用户就得先理解系统架构，才能交代一项工作。团队先做了一次概念压缩，只留下五个必须被用户理解的对象：</p>
+
+          <!-- 5 大核心对象表 -->
+          <div class="table-container" data-page-node-id="AABaSsWMg7VY3zAtUFhDG1">
+            <table class="data-table" data-page-node-id="zfjfcrDiiGVkBwRUrhkzw5">
+              <thead data-page-node-id="E1gsFflrHkOq82vTz6vgaS">
+                <tr data-page-node-id="UC0NrjNMppxMj51NdsEVsS">
+                  <th style="width: 25%;" data-page-node-id="SzA0CSf4thtRuCGuyNwzi7">对象 (Entity)</th>
+                  <th style="width: 75%;" data-page-node-id="dEqkgZeWQ6Ndv9TCT7Ry50">在产品中的职责 (Responsibility)</th>
+                </tr>
+              </thead>
+              <tbody data-page-node-id="rcFrvrswezZWHrAgO0zm1B">
+                <tr data-page-node-id="aNV8h2crCRqzIMDB8akkIZ">
+                  <td data-page-node-id="yeKOf3QTOaJP38ePL4w6am"><span class="table-badge" data-page-node-id="5hcL37De2h8mJppBPOwmTk">Bot</span></td>
+                  <td data-page-node-id="lhPS7nPtwyqTVH6HfqQUXU">持续存在的 Agent，拥有身份、记忆、运行环境和工具</td>
+                </tr>
+                <tr data-page-node-id="v3XuzxOUMzCeZ7ojUH6wqE">
+                  <td data-page-node-id="NGfDuKqxNM2dLdqTdUpzY6"><span class="table-badge" data-page-node-id="BFSaFIzvx0eHi68iVwOJ5R">Chat</span></td>
+                  <td data-page-node-id="inl5ZxMYSKrjqNlhu8svyM">用户与某只 Bot 沟通的窗口</td>
+                </tr>
+                <tr data-page-node-id="aMywnzpKsKYjerfzQzViWH">
+                  <td data-page-node-id="1HgZLvCOiSjBD5ocfdbUjJ"><span class="table-badge" data-page-node-id="eJc0FrMyVFG68DWGmObTrP">Prompt</span></td>
+                  <td data-page-node-id="Zt0FhRsoXVCsSADMD7we17">提供上下文或指令；可只用一次，也可保存为 Skill，或由 Routine 自动触发</td>
+                </tr>
+                <tr data-page-node-id="eZ6p8hH6C1EYQPy3WqxaYO">
+                  <td data-page-node-id="XhTcp7r5c3QEA3ESju0Rkv"><span class="table-badge" data-page-node-id="kpLYFqhEbtSd16dIf89DkZ">Tool</span></td>
+                  <td data-page-node-id="SZLcIIBmpchYb4YG77TMbI">让 Bot 通过软件、API、连接器、Shell 或电脑读取信息并采取行动</td>
+                </tr>
+                <tr data-page-node-id="ywRVapKKOpyw5dL0TrN91V">
+                  <td data-page-node-id="CrKxGCaUOIOr1ERGmDVZTa"><span class="table-badge" data-page-node-id="rXTGDBCkF88gbarsMyssUv">Artifact</span></td>
+                  <td data-page-node-id="WfDGcYodP9JohE6kp6f3kA">Bot 创建或修改的文档、设计、代码、数据等持久结果</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p data-page-node-id="zNq3GfsbGDCWgVZ0DQGyvm">五个对象中，团队最终选择 Bot 来组织产品。Bot 有名字、头像和角色称谓，记得与用户的对话，拥有自己的电脑与工具。第二天回来，用户面对的仍是同一个负责者。Chat 没有消失，只是从主界面的组织单位退回为与 Bot 沟通的入口。</p>
+
+          <!-- 核心问答卡片 2 -->
+          <div class="qa-card" data-page-node-id="Fuj9kCek4uaGiBnPxBVSoE">
+            <div class="qa-question" data-page-node-id="LWhkGyYLZtsonfuszaJ3mv">
+              <span class="qa-icon" data-page-node-id="pw1CXU36JboVxIh5xvkjhy">Q:</span>
+              <span data-page-node-id="RZKX0WCejvTJlA0zO8GkXe">为什么持续型 Agent 的主界面对象应该从 Chat 变成 Bot？</span>
+            </div>
+            <div class="qa-answer" data-page-node-id="i8bbWKVaYonUzjI0OB0nGO">
+              <strong data-page-node-id="rQP2LeoQnMtkxKmqkEB28X">核心解答</strong>：聊天历史按一次次请求和时间排列；Bot 名册按持续责任排列，把身份、记忆、工具、电脑、例行任务和当前状态绑定到同一负责者。
+            </div>
+          </div>
+
+          <p data-page-node-id="qwZbpNOM2DnB5E9zlDksA8">这个调整改变了侧边栏回答的问题。聊天历史回答“我聊过什么”，Bot 名册回答“谁在负责”。一旦工作需要跨越多次会话，第二个问题才是用户首先需要确认的事。</p>
+        </section>
+
+        <!-- 章节：第二步 -->
+        <section id="sec-step2" data-page-node-id="CGOpljkYfYmFsB5pxFzuq3">
+          <h2 data-page-node-id="M5Xo4vI2XskYzJp6FRfE3o">第二步：让用户一眼认出它是谁、正在做什么</h2>
+          <p data-page-node-id="hEprQVwwnDAlKrWQWJVdrD">Bot 变成长期对象以后，名册必须同时回答三个问题：这是谁？它在做什么？我现在需要知道多少？Grok Bot 团队把三道题都集中到头像与它周围的一小块界面里。</p>
+
+          <p data-page-node-id="iaH7e3TYSPXIqVuyqILgTF">为了让几十只 Bot 既容易区分、又像来自同一个系统，团队试过首字母、Emoji、像素画、水彩、黏土、Noritake 风格线稿、剪影和 identicon 等多套视觉系统。水彩和黏土有个性，但缩到侧边栏尺寸后细节过重；更简单的系统能融入界面，却容易让不同 Bot 看起来可以互换。最终方案保留统一的简单几何结构和富有表情的眼睛，再通过受控变化与配件形成差异。</p>
+
+          <!-- 图 1：头像视觉探索与状态机架构图 -->
+          <figure class="figure-card" data-page-node-id="xBbsiWOIdEGeYffNeAwCjk">
+            <div class="figure-svg-wrapper" data-page-node-id="BBIBzbIAO7TAoAUW5juA9u">
+              <svg viewBox="0 0 920 380" width="920" height="380" xmlns="http://www.w3.org/2000/svg" data-page-node-id="LOCBfMNFuFhVW5Z9ICFI9K">
+                <!-- 背景与网格 -->
+                <rect x="0" y="0" width="920" height="380" rx="10" fill="var(--bg-surface)" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="sK7KZq8fTJcIFC8Vb90FCB"></rect>
+                
+                <!-- 区域 1：头像视觉方向探索矩阵 (10组流派对比) -->
+                <g transform="translate(30, 24)" data-page-node-id="LcRLXlLby4X0zAuPX1m58d">
+                  <text x="0" y="16" fill="var(--text-primary)" font-size="14" font-weight="700" font-family="-apple-system, sans-serif" data-page-node-id="9m10xNAyJbhGsSbHr8JpyP">十组视觉探索方向 (Visual Explorations) 与设计收敛</text>
+                  <text x="0" y="34" fill="var(--text-tertiary)" font-size="11" font-family="-apple-system, sans-serif" data-page-node-id="gPr5hNEV52QxKMlFgyUwBu">从具象到几何收敛：水彩/黏土缩放细节过重，首字母/Emoji辨识度过弱，最终确立「几何形态 + 灵动眼神 + 受控配件」</text>
+                  
+                  <!-- 探索流派徽章标签 -->
+                  <g transform="translate(0, 50)" data-page-node-id="LU7ZULIXFPlJh4BVJNExya">
+                    <rect x="0" y="0" width="80" height="24" rx="4" fill="var(--bg-surface-muted)" data-page-node-id="gX8TeYonn6jl5GxYqUF8pG"></rect>
+                    <text x="40" y="16" fill="var(--text-secondary)" font-size="10" text-anchor="middle" font-family="monospace" data-page-node-id="PWgyBHf0XEHarzl4Fk8y3c">首字母</text>
+
+                    <rect x="88" y="0" width="80" height="24" rx="4" fill="var(--bg-surface-muted)" data-page-node-id="PTsvKIITjG8egZvdxF87HM"></rect>
+                    <text x="128" y="16" fill="var(--text-secondary)" font-size="10" text-anchor="middle" font-family="monospace" data-page-node-id="xQOAeyboJe4m6CDF3ea1Gu">Emoji</text>
+
+                    <rect x="88" y="0" width="80" height="24" rx="4" fill="var(--bg-surface-muted)" data-page-node-id="4fUXJ052p0rDZ6TOFI7XOB"></rect>
+                    <rect x="176" y="0" width="80" height="24" rx="4" fill="var(--bg-surface-muted)" data-page-node-id="Xsm2nMGc9ttZdyX5klHn6O"></rect>
+                    <text x="216" y="16" fill="var(--text-secondary)" font-size="10" text-anchor="middle" font-family="monospace" data-page-node-id="rlgeBWAY2bOFBHMOUDhqq0">像素画</text>
+
+                    <rect x="264" y="0" width="80" height="24" rx="4" fill="var(--bg-surface-muted)" data-page-node-id="DysDzZyCm1Ml1trNIShrlg"></rect>
+                    <text x="304" y="16" fill="var(--text-secondary)" font-size="10" text-anchor="middle" font-family="monospace" data-page-node-id="ZicnnynHK8TakimbD6Hwuu">水彩</text>
+
+                    <rect x="352" y="0" width="80" height="24" rx="4" fill="var(--bg-surface-muted)" data-page-node-id="LpdIIGEfyQfLgHA2GmH6xk"></rect>
+                    <text x="392" y="16" fill="var(--text-secondary)" font-size="10" text-anchor="middle" font-family="monospace" data-page-node-id="orPuwSHhrPkpTNg0q00cSN">黏土风格</text>
+
+                    <rect x="440" y="0" width="94" height="24" rx="4" fill="var(--bg-surface-muted)" data-page-node-id="e9qy8Pj9E8PSePlvDJBJ5K"></rect>
+                    <text x="487" y="16" fill="var(--text-secondary)" font-size="10" text-anchor="middle" font-family="monospace" data-page-node-id="eg3IFJDHflB7HyUFku0usr">Noritake线稿</text>
+
+                    <rect x="542" y="0" width="80" height="24" rx="4" fill="var(--bg-surface-muted)" data-page-node-id="tJGd3hqZp7A7ZCzGwfRb3F"></rect>
+                    <text x="582" y="16" fill="var(--text-secondary)" font-size="10" text-anchor="middle" font-family="monospace" data-page-node-id="Ii7guaI2xnFVa83kjgCsDk">纯剪影</text>
+
+                    <rect x="630" y="0" width="88" height="24" rx="4" fill="var(--bg-surface-muted)" data-page-node-id="X5IKDGu1dkLgaJPLB39REZ"></rect>
+                    <text x="674" y="16" fill="var(--text-secondary)" font-size="10" text-anchor="middle" font-family="monospace" data-page-node-id="pwLNXcDbiYBidownTYpaEU">Identicon</text>
+
+                    <rect x="726" y="0" width="134" height="24" rx="4" fill="var(--accent-subtle)" stroke="var(--accent)" stroke-width="1" data-page-node-id="P4fhONhpRAmItEmFQVVqFF"></rect>
+                    <text x="793" y="16" fill="var(--accent)" font-size="10" font-weight="700" text-anchor="middle" font-family="monospace" data-page-node-id="0JnbYfaoL9US1PGYs2CDTn">★ 终选统一几何体系</text>
+                  </g>
+                </g>
+
+                <!-- 分割线 -->
+                <line x1="30" y1="120" x2="890" y2="120" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="guxRUxCiecIEifjdytbCjF"></line>
+
+                <!-- 区域 2：六大工作状态生命周期机 -->
+                <g transform="translate(30, 136)" data-page-node-id="sSBCkPVNnLQya2OKOimUlB">
+                  <text x="0" y="16" fill="var(--text-primary)" font-size="14" font-weight="700" font-family="-apple-system, sans-serif" data-page-node-id="hQzdegXKDYx78QE66FhukY">同一头像表达的六种生命周期状态 (The 6 Lifecycle States)</text>
+                  <text x="0" y="34" fill="var(--text-tertiary)" font-size="11" font-family="-apple-system, sans-serif" data-page-node-id="36PBIPpXFHk2Su5s9vSbkz">通过眼睛注视、微动效与边框呼吸灯，在同一视觉锚点融合「身份识别」与「进度确认」，彻底摒弃冗余状态徽章</text>
+
+                  <!-- 6个状态卡片并排 -->
+                  <!-- 1. Idle 待命 -->
+                  <g transform="translate(0, 52)" data-page-node-id="RzkFjhb5DsIdMVA7gf3G2S">
+                    <rect x="0" y="0" width="132" height="150" rx="8" fill="var(--bg-surface-subtle)" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="xdBWYTFzOHL1f2X0H1hlem"></rect>
+                    <circle cx="66" cy="46" r="26" fill="var(--bg-surface)" stroke="var(--text-tertiary)" stroke-width="2" data-page-node-id="UZyOAlhjcQdCTRaKjQAds3"></circle>
+                    <circle cx="58" cy="44" r="3" fill="var(--text-tertiary)" data-page-node-id="ekwYppeLCtAEQ8VLcUUkzM"></circle>
+                    <circle cx="74" cy="44" r="3" fill="var(--text-tertiary)" data-page-node-id="EKMTzd6vOVzaE8GOphToLZ"></circle>
+                    <line x1="60" y1="54" x2="72" y2="54" stroke="var(--text-tertiary)" stroke-width="1.5" stroke-linecap="round" data-page-node-id="71aBqapfX147TU4M04gL4P"></line>
+                    <text x="66" y="94" fill="var(--text-primary)" font-size="12" font-weight="700" text-anchor="middle" data-page-node-id="2dUdcP16d2eJ195NOWpy2V">1. Idle (待命)</text>
+                    <text x="66" y="112" fill="var(--text-tertiary)" font-size="10" text-anchor="middle" data-page-node-id="dvgvmBANGAZVqWXXli6c9Z">静态注视 · 低息</text>
+                    <text x="66" y="128" fill="var(--text-tertiary)" font-size="10" text-anchor="middle" data-page-node-id="jlwypCXMLuEDnY6Dg5TIai">资源就绪准备开工</text>
+                  </g>
+
+                  <!-- 2. Working 工作中 -->
+                  <g transform="translate(146, 52)" data-page-node-id="l4Ov7oSjsmEPUJOrLE7tP3">
+                    <rect x="0" y="0" width="132" height="150" rx="8" fill="var(--bg-surface-subtle)" stroke="var(--accent-border)" stroke-width="1.5" data-page-node-id="ToHuHN7mPNN6DjtDBniU0t"></rect>
+                    <circle cx="66" cy="46" r="26" fill="var(--bg-surface)" stroke="var(--accent)" stroke-width="2" data-page-node-id="sGIO7HXa2RK8RcBqMxPe5i"></circle>
+                    <circle cx="59" cy="42" r="3.5" fill="var(--accent)" data-page-node-id="cYXZ8AjyCUie1s26XEmBo1"></circle>
+                    <circle cx="73" cy="42" r="3.5" fill="var(--accent)" data-page-node-id="tXNZSLYvf1zoY4fhcs3SdO"></circle>
+                    <path d="M 61 53 Q 66 56 71 53" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" data-page-node-id="iT2BnvrEE7UxLjJb1QR7iN"></path>
+                    <circle cx="66" cy="46" r="32" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.7" data-page-node-id="pfG4ca9BFCcxtTRF7a7uoH"></circle>
+                    <text x="66" y="94" fill="var(--accent)" font-size="12" font-weight="700" text-anchor="middle" data-page-node-id="aevCCluLBRqFIFsIlqRotC">2. Working (工作)</text>
+                    <text x="66" y="112" fill="var(--text-secondary)" font-size="10" text-anchor="middle" data-page-node-id="xK7m4H1Ac1jrNXy3Ir3khR">明显动态 · 脉冲</text>
+                    <text x="66" y="128" fill="var(--text-secondary)" font-size="10" text-anchor="middle" data-page-node-id="vHriFMI1VpqGV6QvrSef9F">后台独立电脑运转</text>
+                  </g>
+
+                  <!-- 3. Waiting 等待中 -->
+                  <g transform="translate(292, 52)" data-page-node-id="1lm2HxLYmNX5DbEEaWBmL2">
+                    <rect x="0" y="0" width="132" height="150" rx="8" fill="var(--bg-surface-subtle)" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="NT4EjPwJSkECTAM3a0QYY7"></rect>
+                    <circle cx="66" cy="46" r="26" fill="var(--bg-surface)" stroke="var(--color-cyan)" stroke-width="2" data-page-node-id="yBuxkrILZSYLRchgkNX7st"></circle>
+                    <circle cx="58" cy="39" r="3" fill="var(--color-cyan)" data-page-node-id="dbqiXbixBEzPVO4oRdgwe6"></circle>
+                    <circle cx="74" cy="39" r="3" fill="var(--color-cyan)" data-page-node-id="KYTLYnRpwa3BgSnphXXSBz"></circle>
+                    <line x1="62" y1="53" x2="70" y2="53" stroke="var(--color-cyan)" stroke-width="1.5" stroke-linecap="round" data-page-node-id="4PDxi4oLFMDTuXzaQySjdG"></line>
+                    <text x="66" y="94" fill="var(--color-cyan)" font-size="12" font-weight="700" text-anchor="middle" data-page-node-id="hy1ZEJ2sHs9mntBNeAJW99">3. Waiting (等待)</text>
+                    <text x="66" y="112" fill="var(--text-tertiary)" font-size="10" text-anchor="middle" data-page-node-id="5dLq4kUAyJBGKBDluWjbDr">微抬头 · 悬置</text>
+                    <text x="66" y="128" fill="var(--text-tertiary)" font-size="10" text-anchor="middle" data-page-node-id="E2mSWhIQ0ik4eMU6iVxTBt">等候外部事件/API</text>
+                  </g>
+
+                  <!-- 4. Blocked 受阻 -->
+                  <g transform="translate(438, 52)" data-page-node-id="0o2J70FOhujSaFGOzsossa">
+                    <rect x="0" y="0" width="132" height="150" rx="8" fill="var(--color-rose-subtle)" stroke="var(--color-rose-border)" stroke-width="1.5" data-page-node-id="UDGUaFeHxG3NHSBHwkHVub"></rect>
+                    <circle cx="66" cy="46" r="26" fill="var(--bg-surface)" stroke="var(--color-rose)" stroke-width="2" data-page-node-id="D04Oxk4ZePjnJ4A0wISjpR"></circle>
+                    <circle cx="58" cy="45" r="3" fill="var(--color-rose)" data-page-node-id="eGhgHRaRAIzdJNW3Xa0BHe"></circle>
+                    <circle cx="74" cy="45" r="3" fill="var(--color-rose)" data-page-node-id="EiIAUWRe9zA4VZqZJQL4h0"></circle>
+                    <line x1="56" y1="36" x2="62" y2="39" stroke="var(--color-rose)" stroke-width="1.5" stroke-linecap="round" data-page-node-id="UVyAHzAGNlYUEtApLuOEtA"></line>
+                    <line x1="76" y1="36" x2="70" y2="39" stroke="var(--color-rose)" stroke-width="1.5" stroke-linecap="round" data-page-node-id="OybtHCjMeF8sMEWYPYC5Hw"></line>
+                    <path d="M 61 56 Q 66 52 71 56" fill="none" stroke="var(--color-rose)" stroke-width="1.5" stroke-linecap="round" data-page-node-id="S7M2mGtGnMN2x81WbziIcX"></path>
+                    <text x="66" y="94" fill="var(--color-rose)" font-size="12" font-weight="700" text-anchor="middle" data-page-node-id="wZtVm18aUDkn6d8BkHbylC">4. Blocked (受阻)</text>
+                    <text x="66" y="112" fill="var(--color-rose)" font-size="10" text-anchor="middle" data-page-node-id="hRTLGAnTHvAuJRG8aTPcTl">动作受限 · 呼唤</text>
+                    <text x="66" y="128" fill="var(--color-rose)" font-size="10" text-anchor="middle" data-page-node-id="rXMS2btOYtkp2046wXszLG">需要人类介入接管</text>
+                  </g>
+
+                  <!-- 5. Thinking 思考中 -->
+                  <g transform="translate(584, 52)" data-page-node-id="WIoP5AElXtKVJUi9reSjoF">
+                    <rect x="0" y="0" width="132" height="150" rx="8" fill="var(--bg-surface-subtle)" stroke="var(--color-purple-border)" stroke-width="1" data-page-node-id="0gLROmFCzKf0O8lmnsqCOc"></rect>
+                    <circle cx="66" cy="46" r="26" fill="var(--bg-surface)" stroke="var(--color-purple)" stroke-width="2" data-page-node-id="hlqHfD2X9d9EVEUMU8dqv5"></circle>
+                    <circle cx="61" cy="40" r="3" fill="var(--color-purple)" data-page-node-id="y9fvKcP65O6pUy2WeWZaFE"></circle>
+                    <circle cx="77" cy="40" r="3" fill="var(--color-purple)" data-page-node-id="RKbwHGv2aMB8btFQrOdHsD"></circle>
+                    <circle cx="66" cy="53" r="1.5" fill="var(--color-purple)" data-page-node-id="LuZoOt9BYMxTY1E5TPDoQM"></circle>
+                    <circle cx="94" cy="24" r="2" fill="var(--color-purple)" data-page-node-id="uHqYMPSrWxfohMtJgz8A3x"></circle>
+                    <circle cx="99" cy="18" r="3.5" fill="var(--color-purple)" data-page-node-id="ZC3xPTH3icA2NHr5JW1zWG"></circle>
+                    <text x="66" y="94" fill="var(--color-purple)" font-size="12" font-weight="700" text-anchor="middle" data-page-node-id="DDy05ShlNmAXI9DNn1bpOK">5. Thinking (思考)</text>
+                    <text x="66" y="112" fill="var(--text-secondary)" font-size="10" text-anchor="middle" data-page-node-id="rxokVVLD70wAeKv2kI81t8">内部推演 · 计算</text>
+                    <text x="66" y="128" fill="var(--text-secondary)" font-size="10" text-anchor="middle" data-page-node-id="EdEulYlN5nHdkr6CCIMaFz">长程推理与规划中</text>
+                  </g>
+
+                  <!-- 6. Done 完成 -->
+                  <g transform="translate(730, 52)" data-page-node-id="b1JYxT6q8UMmEY8A5KJMC5">
+                    <rect x="0" y="0" width="130" height="150" rx="8" fill="var(--color-emerald-subtle)" stroke="var(--color-emerald-border)" stroke-width="1.5" data-page-node-id="lwCp3DDdZTNm1osZENYPZr"></rect>
+                    <circle cx="65" cy="46" r="26" fill="var(--bg-surface)" stroke="var(--color-emerald)" stroke-width="2" data-page-node-id="R59I1HOHLGCwwDTDeXGgJR"></circle>
+                    <path d="M 54 44 Q 58 40 62 44" fill="none" stroke="var(--color-emerald)" stroke-width="2" stroke-linecap="round" data-page-node-id="nEec3VgFRmMnzguSeVChnL"></path>
+                    <path d="M 68 44 Q 72 40 76 44" fill="none" stroke="var(--color-emerald)" stroke-width="2" stroke-linecap="round" data-page-node-id="So0vTQABf6s7B2R3atclYC"></path>
+                    <path d="M 59 52 Q 65 57 71 52" fill="none" stroke="var(--color-emerald)" stroke-width="2" stroke-linecap="round" data-page-node-id="NPAhvDunAApo6QoJip6vVo"></path>
+                    <text x="65" y="94" fill="var(--color-emerald)" font-size="12" font-weight="700" text-anchor="middle" data-page-node-id="qYJB7rgtbJjUbVAOCgF5dt">6. Done (完成)</text>
+                    <text x="65" y="112" fill="var(--color-emerald)" font-size="10" text-anchor="middle" data-page-node-id="EsQ6J3jSvscSCTZnuqRfzC">产物归档 · 稳定</text>
+                    <text x="65" y="128" fill="var(--color-emerald)" font-size="10" text-anchor="middle" data-page-node-id="9CSkZqeJxCFAFryNfJgTMX">恢复稳定并提交结果</text>
+                  </g>
+                </g>
+              </svg>
+            </div>
+            <figcaption class="figure-caption" data-page-node-id="o9nSPoemy5EggC3v5KY9JK">
+              <strong data-page-node-id="dRknvroKUGCoMqb1yuhh5v">图 1</strong>：官方团队探索的十组机器人头像视觉方向与生命周期六大工作状态图谱（对应原文 avatar-explorations 核心交互逻辑）
+            </figcaption>
+          </figure>
+
+          <p data-page-node-id="gJyJ9eRqpBlde95cWC3Lp1">头像随后承担了第二项任务：表达生命周期。团队列出六种状态——Idle、Working、Waiting、Blocked、Thinking、Done。Bot 接到工作时先作出响应，开始执行后进入更明显的运动；等待外部条件或需要帮助时，动作再次变化；完成后恢复稳定。状态不再需要额外的一排徽章，用户看同一个视觉对象就能同时识别身份与进度。</p>
+
+          <!-- 核心问答卡片 3 -->
+          <div class="qa-card" data-page-node-id="vnCJCvDyAcg4pieTFbetJF">
+            <div class="qa-question" data-page-node-id="jlhAXHINhDGzt1Q5nc7S9y">
+              <span class="qa-icon" data-page-node-id="p8nSztJXnfSfT8I5DE50Ax">Q:</span>
+              <span data-page-node-id="7utsi0ST9zPQ4oFnnM9Mcr">同一个 Bot 头像怎样表达从待命到完成的完整生命周期？</span>
+            </div>
+            <div class="qa-answer" data-page-node-id="RaXADzqr7XGDGnYc2FCLZh">
+              <strong data-page-node-id="3qi8SiBBE83YN62AsR2LPl">核心解答</strong>：Bot 头像依次表达待命、工作、等待、受阻、思考与完成六种状态，并在完成后恢复稳定。
+            </div>
+          </div>
+
+          <p data-page-node-id="idZr7I9GVehoXrxYiWF9PE">第三项任务是控制执行细节的可见度。标准的“三个跳动圆点”信息太少，用户无法判断 Bot 仍在工作还是已经卡住；持续展示完整活动日志又会把人拉回监工位置。团队的用户研究显示，人们追问更多细节，主要是想确认 Bot 还在工作、方向没有跑偏。最终界面先用头像运动给出最低成本的确认；需要进一步检查时，悬停才显示当前动作。</p>
+
+          <!-- 核心问答卡片 4 -->
+          <div class="qa-card" data-page-node-id="JKP7TLskDFnxO8KHGaaM0b">
+            <div class="qa-question" data-page-node-id="jBctDCRmyZsINBhfGNHNd4">
+              <span class="qa-icon" data-page-node-id="Y5g6e7KPNKbf5exa5H7stA">Q:</span>
+              <span data-page-node-id="7CiSTXjxKVU8GA1NFgXtko">执行过程应该默认展示多少，用户担忧时又怎样逐级展开？</span>
+            </div>
+            <div class="qa-answer" data-page-node-id="sXeGozU9BhHeDcyROHtwb8">
+              <strong data-page-node-id="J5A5fJw2m2AcEIRkaD5gtC">核心解答</strong>：界面先显示 Bot 仍在工作，再按需显示当前动作，最后才展开完整活动日志。
+            </div>
+          </div>
+
+          <p data-page-node-id="go9G6dMt4CbcCPA8CVFvqy">这里形成了第一条完整的设计路径：稳定头像负责“是谁”，动作状态负责“是否仍在推进”，按需出现的当前动作负责“方向是否正确”。信息量随着用户的担忧逐级增加，默认界面保持安静。</p>
+        </section>
+
+        <!-- 章节：第三步 -->
+        <section id="sec-step3" data-page-node-id="T4UcFoYSmDj3i2Qg7OV2oA">
+          <h2 data-page-node-id="3DEpanqzQ8mOGWYEU26B6N">第三步：电脑归 Bot 使用，人只保留查看与接管权</h2>
+          <p data-page-node-id="lC09CfGOyS7az1CLzMknKU">每只 Grok Bot 都有自己的电脑，可以浏览网页、处理文件和运行软件。团队很快遇到一个反直觉的问题：电脑画面越醒目，产品越像远程桌面，用户越容易把时间花在观看和操控上。</p>
+
+          <p data-page-node-id="i8eyPt5MCZWwn2wrVmgZjc">他们比较了四种布局：浮窗容易打开，却会遮住对话；并排视图持续暴露执行过程，鼓励用户盯着看；模态窗口适合短暂查看，却把 Bot 的工作空间变成一次打断；全屏给电脑足够空间，但会完全挤走对话。四种方案都没有解决所有权问题——界面仍在暗示这是一台需要用户照看的电脑。</p>
+
+          <!-- 核心问答卡片 5 -->
+          <div class="qa-card" data-page-node-id="ERe83BmYU9tfCw0xyZqtJZ">
+            <div class="qa-question" data-page-node-id="M1Jv4F7OlDGOIaeHn9SELO">
+              <span class="qa-icon" data-page-node-id="IPExjXI1vuFmblmkfJjCmh">Q:</span>
+              <span data-page-node-id="Y4PKvrwfmHJur31uDCtozt">为什么浮窗、并排、模态和全屏都不足以解决 Bot 电脑的所有权问题？</span>
+            </div>
+            <div class="qa-answer" data-page-node-id="ETiX9a0N7mMyEv0XohCOHr">
+              <strong data-page-node-id="vf3Od2MjIsTAXlWPDaS0Xq">核心解答</strong>：浮窗遮挡对话，并排诱导持续观看，模态造成打断，全屏挤走对话；四者都暗示电脑仍由用户管理。
+            </div>
+          </div>
+
+          <p data-page-node-id="B1DMxEK42QGakXgSc6mzWR">最终方案把介入拆成三层：</p>
+          <ul data-page-node-id="5pNfa6N4o7oClMbuApie8P">
+            <li data-page-node-id="8bGVauWRS2S7mJ7HE2oPvQ"><strong data-page-node-id="jwhvcxKrQezBjNXCAB4ZbU">Status</strong>：电脑运行时，标题栏图标变成紫色；用户只知道工作区正在使用。</li>
+            <li data-page-node-id="6KZ4oGlfnz5EDKBH0lndyl"><strong data-page-node-id="R5EFNWWcI5JVQgnTqVL8W1">Preview</strong>：需要上下文时，打开固定侧栏观察工作，不离开当前对话。</li>
+            <li data-page-node-id="YkcKcZD4Ve2bGJFEJxNhOk"><strong data-page-node-id="3ucHsCiGMSd1dl2Oognwu8">Takeover</strong>：Bot 碰到必须由人处理的问题时，用户全屏接管，完成操作后再把控制权交还。</li>
+          </ul>
+
+          <p data-page-node-id="ZY4fsZ3SHCLmUm5gPThp0k">Status 还可以按需展开 Bot 的当前动作。于是，三层介入按信息量拆成四级检查路径：状态、当前动作、预览、接管。</p>
+
+          <!-- 核心问答卡片 6 -->
+          <div class="qa-card" data-page-node-id="pz4oud85LeEuAGpl8hi1EY">
+            <div class="qa-question" data-page-node-id="HBItJzTYBhFxY4OCc96GPa">
+              <span class="qa-icon" data-page-node-id="HclBEaUQGn3j9o2NAqW6iN">Q:</span>
+              <span data-page-node-id="4m6HdDmzgqWQkSshOfnMJ9">用户怎样从最低成本的状态确认，逐级深入到完整接管？</span>
+            </div>
+            <div class="qa-answer" data-page-node-id="SfFNNISLjqBagSHON4AJmo">
+              <strong data-page-node-id="srket6lE0cyYR7OKTjJFAj">核心解答</strong>：默认先由头像状态确认 Bot 仍在工作，需要时查看当前动作，再打开工作区预览；只有 Bot 需要帮助时才进入全屏接管。
+            </div>
+          </div>
+
+          <p data-page-node-id="ERF7tEYAy9p1SzRIowVzn0">三层访问把“随时可检查”和“必须持续围观”分开。Bot 电脑还拥有随时间变化的壁纸，早晨更亮、夜间更暗。这个细节不是单纯装饰，它帮助用户把工作区理解为 Bot 自己的环境，而不是自己桌面的远程镜像。</p>
+
+          <!-- 图 2：昼夜壁纸演化与三层介入架构 -->
+          <figure class="figure-card" data-page-node-id="2HXEoEh47jTHY2ZQn7He6Q">
+            <div class="figure-svg-wrapper" data-page-node-id="Ei2b0a4Aj1PpyGLPq7FUhK">
+              <svg viewBox="0 0 920 370" width="920" height="370" xmlns="http://www.w3.org/2000/svg" data-page-node-id="YOlfSOFZDh1PP3NLzPemuH">
+                <rect x="0" y="0" width="920" height="370" rx="10" fill="var(--bg-surface)" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="JcV4XW4Mm8Ase293QY9Ew8"></rect>
+                
+                <!-- 顶部：五种昼夜壁纸状态 -->
+                <g transform="translate(30, 24)" data-page-node-id="1yFD6FyKMQvAQMvm52MFHi">
+                  <text x="0" y="16" fill="var(--text-primary)" font-size="14" font-weight="700" font-family="-apple-system, sans-serif" data-page-node-id="x6Rv7PxSswKoPFn80bNu8e">机器人独立电脑的五种昼夜壁纸演变 (Wallpaper Cycle)</text>
+                  <text x="0" y="34" fill="var(--text-tertiary)" font-size="11" font-family="-apple-system, sans-serif" data-page-node-id="HuCWvmTN2ulgIRCaQVXtTz">壁纸随时间与光线自主变换：明示虚拟电脑是 Bot 专属的自治工作环境，而非用户主机的远程镜像</text>
+
+                  <!-- 5个壁纸窗口 -->
+                  <!-- 1. Dawn 黎明 -->
+                  <g transform="translate(0, 48)" data-page-node-id="SYTrRDbHfRO2BdIYPQDqPo">
+                    <rect x="0" y="0" width="160" height="96" rx="6" fill="#1C2130" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="KuJpywnuFn7DpqD16SBCml"></rect>
+                    <rect x="2" y="2" width="156" height="70" rx="4" fill="#24334C" data-page-node-id="YrN7SC8GGeZUYZUDtFnBG2"></rect>
+                    <circle cx="80" cy="55" r="14" fill="#E88B6E" opacity="0.8" data-page-node-id="6fvSGwySg3qS4bOQIx7DQN"></circle>
+                    <rect x="2" y="74" width="156" height="20" fill="#161A24" data-page-node-id="vu775pbaVDHUtUhpl0UDY1"></rect>
+                    <text x="80" y="88" fill="#ECE8E1" font-size="10" font-weight="600" text-anchor="middle" data-page-node-id="1grZK7oQSaTWBGxYPSFJsF">Dawn (05:00-08:00)</text>
+                  </g>
+
+                  <!-- 2. Morning 晨曦 -->
+                  <g transform="translate(175, 48)" data-page-node-id="McQsFB40hHl6hsydC1G7pe">
+                    <rect x="0" y="0" width="160" height="96" rx="6" fill="#E8F1F5" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="g0QrLBA6f7vWxSjmVLAUYw"></rect>
+                    <rect x="2" y="2" width="156" height="70" rx="4" fill="#CDE1ED" data-page-node-id="uSDqqeytIEUxUvZkkfB8zI"></rect>
+                    <circle cx="80" cy="45" r="16" fill="#F4BA62" data-page-node-id="5n79T60y6tVCS1na1yXl2U"></circle>
+                    <rect x="2" y="74" width="156" height="20" fill="#B4CCD9" data-page-node-id="QFwdu1fLu2DIGF0sXy5AnT"></rect>
+                    <text x="80" y="88" fill="#1F1E1B" font-size="10" font-weight="600" text-anchor="middle" data-page-node-id="D6x4UgI0XSZjjeDpG4E3n5">Morning (08:00-11:30)</text>
+                  </g>
+
+                  <!-- 3. Noon 正午 -->
+                  <g transform="translate(350, 48)" data-page-node-id="mleO6nj2xPZfhk9a6aJSeZ">
+                    <rect x="0" y="0" width="160" height="96" rx="6" fill="#FFFFFF" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="3uzswCDosQ9JM3L8IpYkAV"></rect>
+                    <rect x="2" y="2" width="156" height="70" rx="4" fill="#90C9EF" data-page-node-id="QMljeKybT3Vp1IKs14yWRE"></rect>
+                    <circle cx="80" cy="30" r="18" fill="#FFF275" data-page-node-id="sGSKkMSJ2oan6aCc7mAswQ"></circle>
+                    <rect x="2" y="74" width="156" height="20" fill="#E0EFF8" data-page-node-id="adOs3jjnyWV5yc4NPjN05a"></rect>
+                    <text x="80" y="88" fill="#1F1E1B" font-size="10" font-weight="600" text-anchor="middle" data-page-node-id="LbMynSytoz2m4EHQTIp0MP">Noon (11:30-15:30)</text>
+                  </g>
+
+                  <!-- 4. Dusk 黄昏 -->
+                  <g transform="translate(525, 48)" data-page-node-id="9MUAUZ2Fl1kaH6gbKd7epu">
+                    <rect x="0" y="0" width="160" height="96" rx="6" fill="#2D2136" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="AsMgSpoZnmKDHVtWND4kV1"></rect>
+                    <rect x="2" y="2" width="156" height="70" rx="4" fill="#6A3B5E" data-page-node-id="T7YfRJHFKPipywYOmHoMrX"></rect>
+                    <circle cx="80" cy="50" r="15" fill="#E86C50" data-page-node-id="D5xyvXCevAVUXsSOEvJLQR"></circle>
+                    <rect x="2" y="74" width="156" height="20" fill="#211828" data-page-node-id="rXcyZpZA8kBA9OFHdSFXq8"></rect>
+                    <text x="80" y="88" fill="#ECE8E1" font-size="10" font-weight="600" text-anchor="middle" data-page-node-id="CE7NyEcpXACIKO2G4ywEml">Dusk (15:30-19:00)</text>
+                  </g>
+
+                  <!-- 5. Night 深夜 -->
+                  <g transform="translate(700, 48)" data-page-node-id="aEE4PnR14dtkjUlQg8tabA">
+                    <rect x="0" y="0" width="160" height="96" rx="6" fill="#0E121B" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="A65h5jNFhGDqWTBToHViRF"></rect>
+                    <rect x="2" y="2" width="156" height="70" rx="4" fill="#131926" data-page-node-id="1FEcCs8mF0ltQImzFyxLZa"></rect>
+                    <circle cx="110" cy="32" r="10" fill="#D7E0EA" data-page-node-id="BmrtFrQYBlx5JCFLPIDqCD"></circle>
+                    <circle cx="106" cy="30" r="9" fill="#131926" data-page-node-id="49Lrv9p6bvnqN1heVRv6yK"></circle>
+                    <rect x="2" y="74" width="156" height="20" fill="#0A0D14" data-page-node-id="iA7jFLvhD5AXlCOBaLmZBO"></rect>
+                    <text x="80" y="88" fill="#A5B2C2" font-size="10" font-weight="600" text-anchor="middle" data-page-node-id="Hy3poDklGLdbXD6eQ2i3iP">Night (19:00-05:00)</text>
+                  </g>
+                </g>
+
+                <!-- 分割线 -->
+                <line x1="30" y1="184" x2="890" y2="184" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="M6KJjlPTvpYqKsxznnRp9J"></line>
+
+                <!-- 底部：三层介入机制与四级检查阶梯 -->
+                <g transform="translate(30, 200)" data-page-node-id="8YD0LkqXug9S3Ly2ALkMn2">
+                  <text x="0" y="16" fill="var(--text-primary)" font-size="14" font-weight="700" font-family="-apple-system, sans-serif" data-page-node-id="QVDMtNFcx5ibabHyeCvXQd">人机所有权与四级渐进披露阶梯 (The 4 Inspection Levels)</text>
+                  <text x="0" y="34" fill="var(--text-tertiary)" font-size="11" font-family="-apple-system, sans-serif" data-page-node-id="bMbjMzSvKyJsfdsaRDBRHa">信息暴露与监督压力正相关：从最低成本的无扰状态，按需展开至完整接管</text>
+
+                  <!-- 4个检查层级卡片 -->
+                  <!-- Level 1: Status 紫色图标 -->
+                  <g transform="translate(0, 50)" data-page-node-id="wCYBioqgBJmptNbNNsNpoO">
+                    <rect x="0" y="0" width="205" height="90" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--color-purple-border)" stroke-width="1.5" data-page-node-id="STWJiH0E0GCOQ5ajxYxptN"></rect>
+                    <rect x="12" y="12" width="24" height="24" rx="4" fill="var(--color-purple)" data-page-node-id="bhK8S4nWsCWJgOi3ZhfDjT"></rect>
+                    <text x="24" y="28" fill="#FFF" font-size="12" font-weight="bold" text-anchor="middle" data-page-node-id="VzJyct27JSvWe1SQSSJ8Rs">★</text>
+                    <text x="44" y="28" fill="var(--color-purple)" font-size="12" font-weight="700" data-page-node-id="NgdLiVcUbxGFvKjTI3dxtL">Level 1: 状态图标</text>
+                    <text x="14" y="54" fill="var(--text-secondary)" font-size="10" data-page-node-id="8k96Wz7M6jGRebELcKSjBN">标题栏常驻紫色呼吸图标</text>
+                    <text x="14" y="72" fill="var(--text-tertiary)" font-size="10" data-page-node-id="o5PutPWscQ5TCRfH5dZfyQ">获知工作区正在运行，零打扰</text>
+                  </g>
+
+                  <!-- Level 2: Action 悬停动作 -->
+                  <g transform="translate(225, 50)" data-page-node-id="uzj1d3yFBlEDgg2Pqn22lP">
+                    <rect x="0" y="0" width="205" height="90" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--border-subtle)" stroke-width="1" data-page-node-id="UDJ2UDjak3E3a1HQlUjPaN"></rect>
+                    <text x="14" y="28" fill="var(--text-primary)" font-size="12" font-weight="700" data-page-node-id="tGOAnqfq6BFoyjlXCaN6Cp">Level 2: 悬停当前动作</text>
+                    <text x="14" y="54" fill="var(--text-secondary)" font-size="10" data-page-node-id="1B99pMoGxB80s0OpKck0Ec">鼠标悬停单行查看动作摘要</text>
+                    <text x="14" y="72" fill="var(--text-tertiary)" font-size="10" data-page-node-id="CMvG63DmtUx4WvfoTJx1HQ">确认方向未偏，无需读整日志</text>
+                  </g>
+
+                  <!-- Level 3: Preview 侧栏预览 -->
+                  <g transform="translate(450, 50)" data-page-node-id="4f0H7iJcHdGe7Ae7d9naRz">
+                    <rect x="0" y="0" width="205" height="90" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--color-cyan-border)" stroke-width="1" data-page-node-id="MshQ4zu174qJczcDhzsUIS"></rect>
+                    <text x="14" y="28" fill="var(--color-cyan)" font-size="12" font-weight="700" data-page-node-id="k3HIJD1fq78XoXGNBPog9y">Level 3: 固定侧栏预览</text>
+                    <text x="14" y="54" fill="var(--text-secondary)" font-size="10" data-page-node-id="G7hPVMfQKAUxpipv8dKVPP">展开右侧小窗查看操作画面</text>
+                    <text x="14" y="72" fill="var(--text-tertiary)" font-size="10" data-page-node-id="l5PMNDk6y4MIKQQfjyzyIR">不中断对话，兼顾全局上下文</text>
+                  </g>
+
+                  <!-- Level 4: Takeover 全屏接管 -->
+                  <g transform="translate(675, 50)" data-page-node-id="GmbKBSAbgQnpI18lxzrCVZ">
+                    <rect x="0" y="0" width="185" height="90" rx="6" fill="var(--color-rose-subtle)" stroke="var(--color-rose-border)" stroke-width="1.5" data-page-node-id="L0VHOPSuT71BcsThgyIHnC"></rect>
+                    <text x="14" y="28" fill="var(--color-rose)" font-size="12" font-weight="700" data-page-node-id="u5QB7LSTpDR3dYMrC6hrZr">Level 4: 全屏人工接管</text>
+                    <text x="14" y="54" fill="var(--text-secondary)" font-size="10" data-page-node-id="bd2wWgrMmjUo0VM1xFkzdl">验证码/敏感授权时强介入</text>
+                    <text x="14" y="72" fill="var(--color-rose)" font-size="10" data-page-node-id="SFv5jiE0L79bOinO4VyQ9v">处理完毕立即交还控制权</text>
+                  </g>
+                </g>
+              </svg>
+            </div>
+            <figcaption class="figure-caption" data-page-node-id="w7cKIa8PA3IZmbScw3kO0p">
+              <strong data-page-node-id="r3VJ8xSI2CmAQPpz0rwGO8">图 2</strong>：官方为机器人电脑设计的五种昼夜壁纸状态与四级渐进披露介入阶梯（对应原文 wallpaper-cycle 与三层介入架构）
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- 章节：第四步 -->
+        <section id="sec-step4" data-page-node-id="CoMy2bqffj7jaPmuBCAUr2">
+          <h2 data-page-node-id="InvaobC0kBNVHe8FEAQ6MY">第四步：让答案长成可以直接使用的界面</h2>
+          <p data-page-node-id="leMBuhI4WaZT7j3iSBv6Yw">早期 Grok Bot 几乎用散文回答所有请求：五天天气被写成一段话，一组任务也由文字逐项描述。信息可能没有错，重新整理日期、状态、负责人和下一步操作的负担却回到了用户身上。</p>
+
+          <p data-page-node-id="Hzp6XguNTQaRYGT8VTENJZ">团队因此把“信息的形状”视为答案的一部分。适合解释的内容继续用文字；需要比较、扫描或直接操作的内容改用内联卡片和组件。邮件组件同时呈现收件人、主题、正文，以及发送和放弃按钮。创建 Routine、修改设置、向另一只 Bot 发消息等动作，则可以作为系统事件直接进入对话时间线。</p>
+
+          <!-- 核心问答卡片 7 -->
+          <div class="qa-card" data-page-node-id="xI9415hPu7AibZMPa3NDzR">
+            <div class="qa-question" data-page-node-id="JYmXlJcfNv7WhxSwm0XhRj">
+              <span class="qa-icon" data-page-node-id="D4YjGKEw1d5tswBSJj1urA">Q:</span>
+              <span data-page-node-id="oEGj4bR79gJRnZdEFaVDqQ">为什么天气、任务和邮件不该全部被压成一段自然语言？</span>
+            </div>
+            <div class="qa-answer" data-page-node-id="OhKTrp2mXWUYcQAz5KkGav">
+              <strong data-page-node-id="VriHPW1LW53kRAsFQSmVkJ">核心解答</strong>：天气以数据卡片呈现，任务以状态列表呈现，邮件以包含收件人、主题、正文和发送动作的组件呈现。
+            </div>
+          </div>
+
+          <p data-page-node-id="TTIdmiHK6oKddXsVbkqDhZ">时间线由此不再只有自然语言。对话、系统事件、交互对象和可视化共享同一段上下文。用户既能看到双方说了什么，也能确认动作是否真的发生、结果处于什么状态、下一步是否需要自己处理。Artifact 也因此不只是一个附件，而是把聊天里的承诺变成可检查成果的界面单位。</p>
+        </section>
+
+        <!-- 章节：第五步 -->
+        <section id="sec-step5" data-page-node-id="PCzBS5GmQDgYP1chEqoSyK">
+          <h2 data-page-node-id="BQyIzksO36O1fK4GfCHmdM">第五步：给多只 Bot 划清能力、记忆与协作边界</h2>
+          <p data-page-node-id="ZX4pPwfu7CUOhCm8ejsWTV">用户创建多只 Bot 后，系统需要解决两组相反的需求：浏览网页、处理文档和发送邮件等能力应当复用；法律、财务、设计等角色的长期上下文又不能混成一大块记忆。</p>
+
+          <p data-page-node-id="kZniLWpxjvfJs0hCtIvoaF">Grok Bot 最终让能力与上下文遵循不同边界：</p>
+          <ul data-page-node-id="7pdbVvjdj6NFvWDZSNHHsl">
+            <li data-page-node-id="ADuc4OQ1cdcuiJ5qan4X4w"><strong data-page-node-id="ddgBAVZ7HNebjt1LUy19gv">Tools 与 Skills 属于账户层</strong>，多只 Bot 可以共享通用能力。</li>
+            <li data-page-node-id="5CTGPMWZAdy1n0bYzE6ztK"><strong data-page-node-id="xzjhg1B2QxSe1SqPw8wAcG">Memory 与 Routines 属于 Bot 层</strong>，长期知识和持续职责跟着具体角色走。</li>
+            <li data-page-node-id="QLTdfGoPzdcLOENlxcb0Wq"><strong data-page-node-id="G8iEXdbIA2Sp85t5REbiMn">Group Chat 属于共同任务</strong>，跨角色项目只共享完成协作所需的上下文。</li>
+          </ul>
+
+          <!-- 核心问答卡片 8 -->
+          <div class="qa-card" data-page-node-id="z89N57DyYrsYoxMsfM5eQK">
+            <div class="qa-question" data-page-node-id="MYfOlFvLqwHHDEwDenTCS5">
+              <span class="qa-icon" data-page-node-id="G3XytcZgze6E8nxWxuCwBu">Q:</span>
+              <span data-page-node-id="DpCfr0NbRU3BleHLHTWOdO">多只 Bot 的通用能力、长期记忆与项目共享上下文分别应该放在哪里？</span>
+            </div>
+            <div class="qa-answer" data-page-node-id="yn0RASH1lwrhCayXYABs00">
+              <strong data-page-node-id="HhT7EDIbwL8wFF6LS3mJTo">核心解答</strong>：Tools 和 Skills 在账户层复用；Memory 和 Routines 跟随具体 Bot；Group Chat 提供项目共享上下文；协调 Bot 处理日常路由，只把需要判断的事项交给用户。
+            </div>
+          </div>
+
+          <p data-page-node-id="BnT71h2h1MZrSwO946ipGS">一些用户还会建立类似 Chief of Staff 的协调 Bot，把方向交给它，由它调度多个专业角色。团队考虑过仪表盘、任务分派板和显式交接控件，但这些界面会把路由工作重新交给用户。最终方向是让协调 Bot 处理日常分发，只在需要判断时把人叫回来。</p>
+
+          <p data-page-node-id="hrRb83gFofCHdboDJimOos">这一步决定了多 Agent 究竟是一个团队，还是六个需要分别照看的聊天窗口。能力可以广泛共享，角色记忆保持隔离，共同项目只交换必要事实，人的注意力才不会被日常搬运耗尽。</p>
+        </section>
+
+        <!-- 章节：第六步 -->
+        <section id="sec-step6" data-page-node-id="BdYpFHuki94Kxo5yTlotK9">
+          <h2 data-page-node-id="ZfoblkgbraqkgPAUCmWo6H">第六步：让工作由时间、事件或另一只 Bot 主动启动</h2>
+          <p data-page-node-id="vbLibuhXnPkvB2ZfNZFvZW">一个 Bot 即使能记住过去，只要每次都等用户发 Prompt 才开始，仍然没有真正承担持续责任。Routine 让用户预先定义一项长期工作，在时间到达或事件发生时自动唤醒 Bot。</p>
+
+          <p data-page-node-id="DQXSAURTV706xcb7lFFyen">触发器覆盖固定时刻、工作日、每周和每月周期，也包括 GitHub 的 Issue、PR、Push、检查失败与工作流事件，Slack 的新消息和表情反应，以及项目管理工具中的状态变化。另一只 Bot 同样可以发起工作。Prompt 仍能启动会话，但不再垄断工作的起点。</p>
+
+          <!-- 核心问答卡片 9 -->
+          <div class="qa-card" data-page-node-id="987t5lVM8oy7rJwjXqC2it">
+            <div class="qa-question" data-page-node-id="COR6X1cogzSSEgikw1yOZX">
+              <span class="qa-icon" data-page-node-id="2iuALxlV8ZdMZDH9eBiDx4">Q:</span>
+              <span data-page-node-id="4iAvizHIA61sUfwnSZQmts">没有新的用户 Prompt 时，工作怎样继续并在需要时把人叫回来？</span>
+            </div>
+            <div class="qa-answer" data-page-node-id="CSLWzyiVhZi4CplLXo3nT8">
+              <strong data-page-node-id="dIgyvlj0gvEWIMW1Tt27SX">核心解答</strong>：工作可以由用户 Prompt、时间、外部事件或另一只 Bot 启动；Routine 唤醒 Bot，结果写回时间线，只有异常或判断需要用户介入。
+            </div>
+          </div>
+
+          <p data-page-node-id="30iuGPUZ8vL4tgo2AoFWZk">团队最初把 Routines 放在次级设置里，后来将它移进 Bot 的主界面。原因很直接：既然主动工作是核心能力，用户就必须看到哪些持续职责正在运行、最近执行了什么、结果留在哪里，以及哪个异常需要处理。对话时间线于是也成为一份责任记录，既容纳人发起的请求，也容纳无人在线时发生的工作。</p>
+
+          <p data-page-node-id="NlWARzuy7Iion5qpNFyzQr">记忆让 Bot 第二天还认识这项工作，Routine 让它第二天能够自己继续。跨会话持续工作需要两者同时成立。</p>
+        </section>
+
+        <!-- 章节：收尾 -->
+        <section id="sec-conclusion" data-page-node-id="3B02SvsuPV7e0B0ghQlm81">
+          <h2 data-page-node-id="GzyNYbChEH57LOzzi67RS6">收尾：删掉会把用户重新变成管理员的界面</h2>
+          <p data-page-node-id="uiRVG7rFu8p0GhA5LHMuDU">复盘的最后，团队写到项目后期的大量工作其实是删除：窗口与面板控制、电脑视图选项、Agent 元数据都被压缩或拿掉。他们还设置了约 50 只 Bot/账户、6 只 Bot/群聊的实际上限。每个决定都接受同一个测试：它是否帮助用户委派，还是只增加一个需要管理的对象？</p>
+
+          <p data-page-node-id="AGEGStWGzFXKshEJxs2X7l">沿着这条标准回看，前面的设计选择并非一组孤立功能。Bot 名册建立稳定责任；头像让进度可见；按需披露减少查日志；独立电脑把执行留给 Bot；结构化组件让结果可直接使用；分层边界降低多 Bot 协调成本；Routine 让工作无需等待下一条 Prompt。它们共同服务于同一件事：用户离开以后，责任、上下文和工作仍然能够继续。</p>
+
+          <p data-page-node-id="w6b9JMKNTNoHhzsaiGFsFP">这份官方复盘没有证明 Grok Bot 已经能在所有场景可靠地承担长期任务。它给出的价值是一套具体的产品判断：如果界面仍以一次会话为中心，如果用户还要不断追问进度、翻看完整日志、搬运上下文并手工触发下一步，那么机器人即使具备更强模型能力，也还没有在产品层面成为一个跨会话工作的长期负责者。</p>
+        </section>
+
+        <!-- 章节：交互沙盘组件 -->
+        <section id="sec-sandbox" data-page-node-id="N55rFxJmu7TtGBZqzSRYHe">
+          <div class="sandbox-container" data-page-node-id="5q4vMkZLCMOchIoieuhBzP">
+            <div class="sandbox-header" data-page-node-id="8kCkVoZTDmQCZhIkkF11Mm">
+              <div data-page-node-id="ugR68x5fYjVFbt7Y6AFHq2">
+                <h3 style="margin: 0; font-size: 1.25rem;" data-page-node-id="DKS7wFUgEoT5OYkwEcn1E3">交互沙盘：Grok Bot 状态机与四级介入阶梯模拟器</h3>
+                <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: var(--text-secondary);" data-page-node-id="7v9jZnbGBeXljqIINe1vyU">动态体验 SpaceXAI 团队确立的持久负责者交互模型、生命周期驱动与人机控制权转移</p>
+              </div>
+              <span class="sandbox-badge" data-page-node-id="6s5cvmMAlKk1aZItHxTYHx">INTERACTIVE SANDBOX</span>
+            </div>
+
+            <!-- 控制面板 -->
+            <div class="sandbox-controls-grid" data-page-node-id="hEZBfNvebMnpr0aNxmxG7H">
+              <div class="ctrl-group" data-page-node-id="wZT0I9ovqHHQ4sO3iMJ6tb">
+                <label class="ctrl-label" for="sel-bot" data-page-node-id="61idrl0vlECbQP6VUVuXQm">选择负责 Bot (Agent Selection)</label>
+                <select id="sel-bot" class="ctrl-select" data-page-node-id="LQOtJW7VkSqKE1GCNFlJR0">
+                  <option value="kenny" data-page-node-id="VBUMpBJmJCLOidXZQ4l4oO">Kenny (项目主理人 · 统筹协调)</option>
+                  <option value="justin" data-page-node-id="apLO988wGWVIoMBK38XGSz">Justin (销售引荐 · 邮件推进)</option>
+                  <option value="luke" data-page-node-id="OTdh3RbNO0TxjnrkcIBIRA">Luke (工程师 · 代码审查与构建)</option>
+                  <option value="tyler" data-page-node-id="qu0CNcdWLbkNMtmyfrei0B">Tyler (运营 · 收件箱与会议管理)</option>
+                </select>
+              </div>
+
+              <div class="ctrl-group" data-page-node-id="9V3YFFB4UC9LE7zhmz5tvQ">
+                <label class="ctrl-label" for="sel-state" data-page-node-id="rWtS3fx5TN7AO9NK1Zlvsq">生命周期工作状态 (Lifecycle State)</label>
+                <select id="sel-state" class="ctrl-select" data-page-node-id="1zuzCZslB57ip5oxMUbaW4">
+                  <option value="idle" data-page-node-id="EowdfqXcilCc4GzkMFi7G6">Idle (待命空闲)</option>
+                  <option value="working" selected data-page-node-id="PoJvO6aRdh50YmeQS9xhd4">Working (执行任务中)</option>
+                  <option value="waiting" data-page-node-id="RU4bvAcRjqycWWqtB0Snb1">Waiting (等待外部条件)</option>
+                  <option value="blocked" data-page-node-id="vTzNEiE6x5clZYSyIwW8AN">Blocked (流程受阻异常)</option>
+                  <option value="thinking" data-page-node-id="8EW1QpdBVXwz5p0BDxcmD3">Thinking (长程规划推演)</option>
+                  <option value="done" data-page-node-id="GpfWY4Hm7zzHUfV8slJICs">Done (任务产物归档)</option>
+                </select>
+              </div>
+
+              <div class="ctrl-group" data-page-node-id="sGPSQne7jBm5E0DfK0BQYo">
+                <label class="ctrl-label" for="sel-level" data-page-node-id="ejqZYX4la1iosDUV0ENsDv">信息披露与介入阶梯 (Inspection Level)</label>
+                <select id="sel-level" class="ctrl-select" data-page-node-id="VGO4GZMqKJzoMsvO7hR1w0">
+                  <option value="1" data-page-node-id="g4Gp6mqZGtWRPluusWtDQh">Level 1: 状态指示 (紫色工作区状态)</option>
+                  <option value="2" data-page-node-id="8WNVJLRkORPYXLsAfZMKgy">Level 2: 动作悬停 (按需查看当前动作)</option>
+                  <option value="3" selected data-page-node-id="emAyzHeBan9IWOPgXv1Ct9">Level 3: 侧栏预览 (固定侧栏无扰查看)</option>
+                  <option value="4" data-page-node-id="VDWvhZ9YlFoeWUiq6nM3uY">Level 4: 人工接管 (全屏接管处理异常)</option>
+                </select>
+              </div>
+
+              <div class="ctrl-group" data-page-node-id="94qStlbT5DQkV7xHUTMeL5">
+                <label class="ctrl-label" for="sel-trigger" data-page-node-id="MknqBMnLOCcPNos4hsJl5J">工作启动触发源 (Initiation Source)</label>
+                <select id="sel-trigger" class="ctrl-select" data-page-node-id="FmCfoKXUZhZsw5j4x3AF7Z">
+                  <option value="prompt" data-page-node-id="9EZBCIahleQJ5ah7uJDIPH">用户主动 Prompt 唤醒</option>
+                  <option value="routine_time" selected data-page-node-id="oVk9e6rLwVwu1Cn2J35kuO">Routine 时间调度 (如每天 09:00)</option>
+                  <option value="routine_event" data-page-node-id="xz98iflQxI9NBloBWoXZyU">外部系统事件 (GitHub PR / Slack)</option>
+                  <option value="other_bot" data-page-node-id="8DMIke5MIwkDwyeDhxmYPo">跨角色协同 Bot 派发 (Chief of Staff)</option>
+                </select>
+              </div>
+
+              <div class="btn-reset-box" data-page-node-id="huRJkHQXQaKLqVKQsNHMl7">
+                <button id="btn-sim-reset" class="btn-action" data-page-node-id="QoPPFDCG62i5Azd3CWb1yS">重置基线状态</button>
+              </div>
+            </div>
+
+            <!-- 动态演示仪表盘 -->
+            <div class="sim-dashboard" data-page-node-id="i2SeHZgZjxt1nics7mDc9h">
+              <!-- 左侧：Bot 头像与状态卡片 -->
+              <div class="bot-preview-card" data-page-node-id="FGfNdqXzqaZNuwuJ1pI7UD">
+                <div class="avatar-display-box" class="avatar-display-box" data-page-node-id="OzwwI72GVdgUXgoollBDJJ">
+                  <!-- SVG 动态眼神与头像 -->
+                  <svg class="avatar-svg" width="64" height="64" viewBox="0 0 64 64" data-page-node-id="LJZ6tvbZ0zVL0bYWpkfIPJ">
+                    <circle cx="32" cy="32" r="26" fill="var(--bg-surface)" stroke="var(--accent)" stroke-width="2.5" id="sim-avatar-bg" data-page-node-id="2dHrtaElCvnaSOOs3vXoj0"></circle>
+                    <!-- 眼睛 -->
+                    <circle cx="24" cy="30" r="3.5" fill="var(--accent)" id="sim-eye-l" data-page-node-id="1GGimQnMDpHjOgsqb27WkT"></circle>
+                    <circle cx="40" cy="30" r="3.5" fill="var(--accent)" id="sim-eye-r" data-page-node-id="algzysG5bV7UP8CYRNfOLU"></circle>
+                    <!-- 嘴部/微表情 -->
+                    <path d="M 27 40 Q 32 44 37 40" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" id="sim-mouth" data-page-node-id="PhlWqmY4mQWKBHH4eNZ98n"></path>
+                  </svg>
+                </div>
+                <h4 id="sim-bot-name" style="margin: 0; font-size: 1.1rem; color: var(--text-primary);" data-page-node-id="2D4BdJ2eLH0iZDHHGhxOSJ">Kenny</h4>
+                <div id="sim-bot-role" style="font-size: 0.8rem; color: var(--text-tertiary); margin-top: 2px;" data-page-node-id="SPulN6Xs52HF8GpMQvG2dy">全员会议材料与统筹调度</div>
+                <div id="sim-state-badge" class="sim-state-pill" style="background: var(--accent-subtle); color: var(--accent); border: 1px solid var(--accent-border);" data-page-node-id="KBAaJGSqlC2Cn7bahtYfCS">Working (工作中)</div>
+              </div>
+
+              <!-- 右侧：状态机与界面心智回显 -->
+              <div class="sim-readout-col" data-page-node-id="Us7LFz1WuM2WkuMls1xx6u">
+                <div class="readout-card" data-page-node-id="Z7fgDHHOwkQgAiE5QS9WVY">
+                  <div class="readout-label" data-page-node-id="O78OM3IjB2DKMntEF5O8SU">当前执行动作 (CURRENT ACTIVITY)</div>
+                  <div class="readout-content" id="sim-action-text" data-page-node-id="Y4QUCWBtRZCDSvwcd08XyF">正在后台独立电脑中汇总各部门周报并起草会议幻灯片大纲...</div>
+                </div>
+
+                <div class="readout-card" data-page-node-id="ssZPgtpE15rY0obKqLVmBO">
+                  <div class="readout-label" data-page-node-id="tAxiyJiIpU3LfXQmf71yba">界面呈现形态 (UI MANIFESTATION)</div>
+                  <div class="readout-content" id="sim-interface-level" data-page-node-id="jUf4yenuYGPjhbPHCU4Clq">侧边小窗预览：用户保持在当前对话窗口，侧栏实时投影 Bot 电脑屏幕，随时确认进度但无阻断感。</div>
+                </div>
+
+                <div class="readout-card" data-page-node-id="awwLkaNPHYLU3aXXr66iqj">
+                  <div class="readout-label" data-page-node-id="6lAY5SVCAxI9jEpdmXPZDD">所有权与心智模型 (OWNERSHIP & COGNITION)</div>
+                  <div class="readout-content" id="sim-ownership-mode" data-page-node-id="t6Wb7ATNydiNjp53f3tiRf">电脑归 Bot 自主运行；人类只保留查看权，无需充当实时全职监工。</div>
+                </div>
+
+                <div class="readout-card" data-page-node-id="JhJTT71xtAiy6wdvQr68Z9">
+                  <div class="readout-label" data-page-node-id="BvUQ2SoD4DqzNj4KGAQxd9">触发链路与责任归宿 (TRIGGER CHAIN)</div>
+                  <div class="readout-content" id="sim-trigger-source" data-page-node-id="sb5qU50N2CQa47GotgGPIS">由 Routine 周期定时唤醒，工作结果直接作为 Artifact 与系统事件回写到主时间线。</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </article>
+
+      <!-- 页脚版权与出处 -->
+      <footer class="article-footer" data-page-node-id="KbABdMiGUdzHEjzIap2P1W">
+        <div data-page-node-id="6Feg5iBrpkbFREZmCS0vuu">
+          <span data-page-node-id="Emrxwt1pnM2GUiYFbgxrOY">文档交付标准：自包含单文件 · 零外部网络依赖 · 统一知识库治理</span>
+        </div>
+        <div data-page-node-id="jFMATsFFzm0C8smDBGBTw3">
+          <span data-page-node-id="nPmtinkt2KrSO2CDMmd0eB">来源依据：《Designing Grok Bot for a world of persistent agents》· SpaceXAI</span>
+        </div>
+      </footer>
+
+    </main>
+  </div>
+
+  <!-- 内联纯原生 JavaScript -->
+  <script>
+    (function() {
+      // 辅助函数：根据 ID 获取元素，避免使用 $ 命名导致 LaTeX 检测误判
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // 1. 阅读进度条
+      function updateProgressBar() {
+        var winScroll = document.documentElement.scrollTop || document.body.scrollTop;
+        var height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        var scrolled = 0;
+        if (height > 0) {
+          scrolled = (winScroll / height) * 100;
+        }
+        var bar = byId("scroll-progress-bar");
+        if (bar) {
+          bar.style.width = scrolled + "%";
+        }
+      }
+      window.addEventListener("scroll", updateProgressBar);
+
+      // 2. 主题切换与持久化
+      var btnTheme = byId("btn-theme-toggle");
+      if (btnTheme) {
+        btnTheme.addEventListener("click", function() {
+          var currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+          var newTheme = currentTheme === "dark" ? "light" : "dark";
+          document.documentElement.setAttribute("data-theme", newTheme);
+          try {
+            localStorage.setItem("grok_bot_doc_theme", newTheme);
+          } catch(e) {}
+        });
+      }
+      try {
+        var savedTheme = localStorage.getItem("grok_bot_doc_theme");
+        if (savedTheme) {
+          document.documentElement.setAttribute("data-theme", savedTheme);
+        }
+      } catch(e) {}
+
+      // 3. 侧栏目录折叠切换 (移动端适配)
+      var btnSidebar = byId("btn-toggle-sidebar");
+      var sidebar = byId("doc-sidebar");
+      if (btnSidebar && sidebar) {
+        btnSidebar.addEventListener("click", function() {
+          sidebar.classList.toggle("show");
+        });
+      }
+
+      // 4. 打印按钮
+      var btnPrint = byId("btn-print");
+      if (btnPrint) {
+        btnPrint.addEventListener("click", function() {
+          window.print();
+        });
+      }
+
+      // 5. 滚动监听与目录高亮
+      var navLinks = document.querySelectorAll(".sidebar-nav a");
+      var sections = [];
+      for (var i = 0; i < navLinks.length; i++) {
+        var href = navLinks[i].getAttribute("href");
+        if (href && href.startsWith("#")) {
+          var sec = byId(href.substring(1));
+          if (sec) {
+            sections.push({ el: sec, link: navLinks[i] });
+          }
+        }
+      }
+
+      function highlightNav() {
+        var scrollPos = (document.documentElement.scrollTop || document.body.scrollTop) + 120;
+        for (var j = sections.length - 1; j >= 0; j--) {
+          var item = sections[j];
+          if (item.el.offsetTop <= scrollPos) {
+            for (var k = 0; k < navLinks.length; k++) {
+              navLinks[k].classList.remove("active");
+            }
+            item.link.classList.add("active");
+            break;
+          }
+        }
+      }
+      window.addEventListener("scroll", highlightNav);
+      highlightNav();
+
+      // 6. 交互沙盘逻辑联动
+      var selBot = byId("sel-bot");
+      var selState = byId("sel-state");
+      var selLevel = byId("sel-level");
+      var selTrigger = byId("sel-trigger");
+      var btnReset = byId("btn-sim-reset");
+
+      var botMeta = {
+        kenny: { name: "Kenny", role: "项目主理人 · 跨组统筹与会议准备", action: "正在独立电脑中拉取全员周会备忘录并生成执行甘特图..." },
+        justin: { name: "Justin", role: "商务负责人 · 销售引荐与客户推进", action: "正在分析潜在客户 LinkedIn 背景并起草个性化推荐邮件..." },
+        luke: { name: "Luke", role: "高级工程师 · CI/CD流水线与代码合入", action: "正在运行测试容器验证最新 PR 并分析静态代码缺陷..." },
+        tyler: { name: "Tyler", role: "行政运维 · 邮件过滤与日历排期", action: "正在筛选今日未读邮件，拦截垃圾推广并向负责人汇报紧急事项..." }
+      };
+
+      var stateMeta = {
+        idle: { label: "Idle (待命空闲)", color: "var(--text-tertiary)", bg: "var(--bg-surface-muted)", border: "var(--border-subtle)", mouth: "M 27 38 L 37 38" },
+        working: { label: "Working (执行中)", color: "var(--accent)", bg: "var(--accent-subtle)", border: "var(--accent-border)", mouth: "M 27 40 Q 32 44 37 40" },
+        waiting: { label: "Waiting (等待条件)", color: "var(--color-cyan)", bg: "var(--color-cyan-subtle)", border: "var(--color-cyan-border)", mouth: "M 28 39 L 36 39" },
+        blocked: { label: "Blocked (受阻异常)", color: "var(--color-rose)", bg: "var(--color-rose-subtle)", border: "var(--color-rose-border)", mouth: "M 27 42 Q 32 37 37 42" },
+        thinking: { label: "Thinking (长程规划)", color: "var(--color-purple)", bg: "var(--color-purple-subtle)", border: "var(--color-purple-border)", mouth: "M 30 40 A 2 2 0 1 0 34 40 A 2 2 0 1 0 30 40" },
+        done: { label: "Done (产物归档)", color: "var(--color-emerald)", bg: "var(--color-emerald-subtle)", border: "var(--color-emerald-border)", mouth: "M 26 39 Q 32 46 38 39" }
+      };
+
+      var levelMeta = {
+        "1": {
+          ui: "状态指示：标题栏常驻紫色呼吸图标，仅知晓工作区正在运行，零信息干扰。",
+          ownership: "完全自治：电脑完全归 Bot 在后台使用，人类用户安心处理眼前事务，零监督负担。"
+        },
+        "2": {
+          ui: "动作悬停：鼠标悬浮时展示当前单行操作摘要，不展开日志，快速确认方向没有跑偏。",
+          ownership: "轻度确认：用户仅在产生疑虑时单次核验推进方向，随后即刻恢复静默。"
+        },
+        "3": {
+          ui: "固定侧栏预览：对话侧栏打开虚拟电脑投影，不离开主聊天流，随时同步观察执行细节。",
+          ownership: "伴随观察：工作区作为独立侧窗存在，明确界定为 Bot 的工作环境而非用户本地桌面。"
+        },
+        "4": {
+          ui: "全屏接管：Bot 遇到验证码、支付凭据或越权操作时向用户发出呼叫，用户一键全屏接管控制权。",
+          ownership: "人机握手：人类在异常关节点介入完成关键决策，确认后即刻交还控制权让 Bot 继续自治。"
+        }
+      };
+
+      var triggerMeta = {
+        prompt: "由用户在会话窗口主动发送 Prompt 启动，Bot 接下委托并建立持续责任条目。",
+        routine_time: "由 Routine 预定周期 (如每天 09:00 或工作日) 定时唤醒，无人在线时亦可自发推进。",
+        routine_event: "由外部系统 Webhook (如 GitHub Issue 开启、PR 合入、Slack @提醒) 自动化事件触发。",
+        other_bot: "由 Chief of Staff 或其他协调 Bot 按照任务流水线跨角色自动路由分发委派。"
+      };
+
+      function updateSimulation() {
+        var b = selBot.value;
+        var s = selState.value;
+        var l = selLevel.value;
+        var t = selTrigger.value;
+
+        var curBot = botMeta[b] || botMeta.kenny;
+        var curState = stateMeta[s] || stateMeta.working;
+        var curLevel = levelMeta[l] || levelMeta["3"];
+        var curTrigger = triggerMeta[t] || triggerMeta.routine_time;
+
+        // 回写显示槽位
+        byId("sim-bot-name").textContent = curBot.name;
+        byId("sim-bot-role").textContent = curBot.role;
+        byId("sim-action-text").textContent = curBot.action;
+
+        var stateBadge = byId("sim-state-badge");
+        stateBadge.textContent = curState.label;
+        stateBadge.style.color = curState.color;
+        stateBadge.style.background = curState.bg;
+        stateBadge.style.borderColor = curState.border;
+
+        // 头像 SVG 联动
+        byId("sim-avatar-bg").setAttribute("stroke", curState.color);
+        byId("sim-eye-l").setAttribute("fill", curState.color);
+        byId("sim-eye-r").setAttribute("fill", curState.color);
+        var mouthEl = byId("sim-mouth");
+        mouthEl.setAttribute("stroke", curState.color);
+        mouthEl.setAttribute("d", curState.mouth);
+
+        byId("sim-interface-level").textContent = curLevel.ui;
+        byId("sim-ownership-mode").textContent = curLevel.ownership;
+        byId("sim-trigger-source").textContent = curTrigger;
+      }
+
+      if (selBot) selBot.addEventListener("change", updateSimulation);
+      if (selState) selState.addEventListener("change", updateSimulation);
+      if (selLevel) selLevel.addEventListener("change", updateSimulation);
+      if (selTrigger) selTrigger.addEventListener("change", updateSimulation);
+
+      if (btnReset) {
+        btnReset.addEventListener("click", function() {
+          selBot.value = "kenny";
+          selState.value = "working";
+          selLevel.value = "3";
+          selTrigger.value = "routine_time";
+          updateSimulation();
+        });
+      }
+
+      // 初始化沙盘
+      updateSimulation();
+    })();
+  </script>
+</body>
+</html>
