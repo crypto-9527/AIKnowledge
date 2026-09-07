@@ -1,0 +1,1831 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="PEItAT5VuXJnkvjJLNW5db">
+<head data-page-node-id="oxTP0JyHL8Uh44qnavdL0V">
+  <meta charset="utf-8" data-page-node-id="PsfNhsYaA5skBUJIm2cka2">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="cOgnOC3sExjGd66uhh9qB5">
+  <title>Meta 组织级第二大脑构建方法：让专家隐性经验成为 AI 能持续使用的能力</title>
+  <style>
+    /* ==========================================================================
+       1. 全局设计令牌与双主题系统 (CSS Custom Properties)
+       ========================================================================== */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+      /* 语义色调 (五色状态令牌) */
+      --accent: #D97757;          /* 陶土色 */
+      --accent-hover: #E2886A;
+      --accent-subtle: rgba(217, 119, 87, 0.12);
+      --emerald: #2E8B57;         /* 知识/稳定 */
+      --emerald-subtle: rgba(46, 139, 87, 0.14);
+      --emerald-border: #38A169;
+      --rose: #C53030;            /* 阻断/缺陷 */
+      --rose-subtle: rgba(197, 48, 48, 0.14);
+      --amber: #D69E2E;           /* 分歧/警告 */
+      --amber-subtle: rgba(214, 158, 46, 0.14);
+      --cyan: #319795;            /* 数据/配方 */
+      --cyan-subtle: rgba(49, 151, 149, 0.14);
+      --purple: #805AD5;          /* 评测/对抗审查 */
+      --purple-subtle: rgba(128, 90, 213, 0.14);
+    }
+
+    /* 深色主题 (Dark Theme - 默认黑曜石质感) */
+    html[data-theme="dark"] {
+      --bg-canvas: #141413;
+      --bg-surface: #1E1E1C;
+      --bg-surface-elevated: #282825;
+      --bg-surface-highlight: #32322E;
+      --border-soft: rgba(255, 255, 255, 0.08);
+      --border-medium: rgba(255, 255, 255, 0.16);
+      --border-hard: rgba(255, 255, 255, 0.28);
+      --text-primary: #F4F1EA;
+      --text-secondary: #B0ADA5;
+      --text-tertiary: #7D7A73;
+      --text-inverse: #141413;
+      --code-bg: #181816;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.6);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.7);
+    }
+
+    /* 浅色主题 (Light Theme - 暖羊皮纸质感) */
+    html[data-theme="light"] {
+      --bg-canvas: #FAF7F2;
+      --bg-surface: #FFFFFF;
+      --bg-surface-elevated: #F3EFE8;
+      --bg-surface-highlight: #EAE5DC;
+      --border-soft: rgba(0, 0, 0, 0.07);
+      --border-medium: rgba(0, 0, 0, 0.14);
+      --border-hard: rgba(0, 0, 0, 0.24);
+      --text-primary: #21201D;
+      --text-secondary: #58554E;
+      --text-tertiary: #8C887F;
+      --text-inverse: #FAF7F2;
+      --code-bg: #F0EAE1;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.12);
+    }
+
+    /* ==========================================================================
+       2. 基础重置与排版引擎 (Typography & Reset)
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      line-height: 1.75;
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    #reading-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--cyan));
+      width: 0%;
+      z-index: 9999;
+      transition: width 0.1s linear;
+    }
+
+    /* ==========================================================================
+       3. 左右分栏布局与侧边目录 (Layout & TOC)
+       ========================================================================== */
+    .app-sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 290px;
+      background-color: var(--bg-surface);
+      border-right: 1px solid var(--border-soft);
+      overflow-y: auto;
+      padding: 24px 18px 40px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .sidebar-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+    }
+
+    .theme-toggle-btn {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-medium);
+      color: var(--text-primary);
+      cursor: pointer;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      font-family: var(--font-sans);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .theme-toggle-btn:hover {
+      background: var(--bg-surface-highlight);
+      border-color: var(--accent);
+    }
+
+    .toc-nav {
+      flex: 1;
+    }
+
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .toc-item a {
+      display: block;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.86rem;
+      line-height: 1.45;
+      padding: 6px 10px;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+      border-left: 2px solid transparent;
+    }
+
+    .toc-item a:hover {
+      color: var(--text-primary);
+      background-color: var(--bg-surface-elevated);
+    }
+
+    .toc-item.active a {
+      color: var(--accent);
+      background-color: var(--accent-subtle);
+      border-left-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .toc-item.sub-item a {
+      padding-left: 22px;
+      font-size: 0.8rem;
+    }
+
+    .app-main {
+      margin-left: 290px;
+      flex: 1;
+      max-width: 1040px;
+      padding: 48px 56px 120px;
+      background-color: var(--bg-canvas);
+    }
+
+    .mobile-menu-toggle {
+      display: none;
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 999;
+      background: var(--accent);
+      color: #FFF;
+      border: none;
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      box-shadow: var(--shadow-lg);
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+
+    /* ==========================================================================
+       4. 排版正文规范 (Headings, Paragraphs, Blockquotes)
+       ========================================================================== */
+    .article-header {
+      margin-bottom: 40px;
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--border-medium);
+    }
+
+    .article-badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-primary { background: var(--accent-subtle); color: var(--accent); border: 1px solid rgba(217, 119, 87, 0.3); }
+    .badge-emerald { background: var(--emerald-subtle); color: var(--emerald); border: 1px solid rgba(46, 139, 87, 0.3); }
+    .badge-cyan { background: var(--cyan-subtle); color: var(--cyan); border: 1px solid rgba(49, 151, 149, 0.3); }
+    .badge-purple { background: var(--purple-subtle); color: var(--purple); border: 1px solid rgba(128, 90, 213, 0.3); }
+
+    .article-title {
+      font-family: var(--font-serif);
+      font-size: 2.35rem;
+      line-height: 1.3;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 14px;
+      letter-spacing: -0.01em;
+    }
+
+    .article-subtitle {
+      font-size: 1.15rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .article-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      padding: 16px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .meta-label { color: var(--text-tertiary); font-size: 0.75rem; text-transform: uppercase; }
+    .meta-value { color: var(--text-primary); font-weight: 500; }
+    .meta-value a { color: var(--accent); text-decoration: none; }
+    .meta-value a:hover { text-decoration: underline; }
+
+    h2 {
+      font-family: var(--font-serif);
+      font-size: 1.65rem;
+      line-height: 1.35;
+      margin-top: 48px;
+      margin-bottom: 20px;
+      color: var(--text-primary);
+      border-bottom: 1px solid var(--border-soft);
+      padding-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h2::before {
+      content: "";
+      display: inline-block;
+      width: 4px;
+      height: 1.25em;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    h3 {
+      font-size: 1.25rem;
+      line-height: 1.4;
+      margin-top: 32px;
+      margin-bottom: 14px;
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    h4 {
+      font-size: 1.05rem;
+      margin-top: 24px;
+      margin-bottom: 10px;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    p {
+      margin-bottom: 18px;
+      color: var(--text-primary);
+      font-size: 1.02rem;
+      line-height: 1.8;
+    }
+
+    strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    ul, ol {
+      margin-bottom: 20px;
+      padding-left: 26px;
+      color: var(--text-primary);
+    }
+    li {
+      margin-bottom: 8px;
+      line-height: 1.7;
+    }
+
+    blockquote {
+      margin: 24px 0;
+      padding: 18px 22px;
+      background: var(--bg-surface);
+      border-left: 4px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      color: var(--text-secondary);
+      font-size: 0.98rem;
+      line-height: 1.7;
+      box-shadow: var(--shadow-sm);
+    }
+    blockquote p:last-child {
+      margin-bottom: 0;
+    }
+
+    .callout-box {
+      margin: 24px 0;
+      padding: 20px;
+      border-radius: 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      position: relative;
+    }
+    .callout-box.callout-rule {
+      border-left: 4px solid var(--emerald);
+      background: linear-gradient(180deg, var(--emerald-subtle) 0%, var(--bg-surface) 100%);
+    }
+    .callout-box.callout-warning {
+      border-left: 4px solid var(--amber);
+      background: linear-gradient(180deg, var(--amber-subtle) 0%, var(--bg-surface) 100%);
+    }
+    .callout-box.callout-danger {
+      border-left: 4px solid var(--rose);
+      background: linear-gradient(180deg, var(--rose-subtle) 0%, var(--bg-surface) 100%);
+    }
+    .callout-box.callout-info {
+      border-left: 4px solid var(--cyan);
+      background: linear-gradient(180deg, var(--cyan-subtle) 0%, var(--bg-surface) 100%);
+    }
+
+    .callout-title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.88em;
+      background: var(--code-bg);
+      color: var(--accent);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border-soft);
+    }
+
+    .code-container {
+      margin: 24px 0;
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--code-bg);
+      border: 1px solid var(--border-medium);
+      box-shadow: var(--shadow-sm);
+    }
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      background: var(--bg-surface-elevated);
+      border-bottom: 1px solid var(--border-soft);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+    }
+    .code-copy-btn {
+      background: transparent;
+      border: 1px solid var(--border-soft);
+      color: var(--text-secondary);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .code-copy-btn:hover {
+      background: var(--bg-surface-highlight);
+      color: var(--text-primary);
+    }
+    pre {
+      padding: 16px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      line-height: 1.6;
+      color: var(--text-primary);
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      border: none;
+      color: inherit;
+      font-size: inherit;
+    }
+
+    .table-container {
+      margin: 24px 0;
+      overflow-x: auto;
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      box-shadow: var(--shadow-sm);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      text-align: left;
+    }
+    th {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      font-weight: 600;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-medium);
+    }
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-soft);
+      color: var(--text-secondary);
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr:hover td {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+    }
+
+    /* ==========================================================================
+       5. 矢量架构图容器 (SVG Diagram Containers)
+       ========================================================================== */
+    .diagram-wrapper {
+      margin: 32px 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+    .diagram-header {
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-soft);
+      padding-bottom: 10px;
+    }
+    .diagram-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .diagram-caption {
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: var(--text-tertiary);
+      line-height: 1.6;
+      text-align: center;
+    }
+    .diagram-svg-container {
+      width: 100%;
+      overflow-x: auto;
+      display: flex;
+      justify-content: center;
+    }
+    .diagram-svg-container svg {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* ==========================================================================
+       6. 动态交互沙盘容器与控件 (Interactive Sandboxes)
+       ========================================================================== */
+    .sandbox-card {
+      margin: 36px 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-hard);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: var(--shadow-md);
+      position: relative;
+    }
+    .sandbox-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border-soft);
+      padding-bottom: 14px;
+    }
+    .sandbox-tag {
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .sandbox-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 4px;
+    }
+    .sandbox-desc {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .sandbox-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 860px) {
+      .sandbox-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sandbox-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background: var(--bg-surface-elevated);
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .control-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .control-hint {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+    }
+
+    select.sandbox-select, input[type="range"].sandbox-range {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    select.sandbox-select {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border-medium);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-family: var(--font-sans);
+      font-size: 0.88rem;
+      outline: none;
+    }
+    select.sandbox-select:focus {
+      border-color: var(--accent);
+    }
+
+    .sandbox-display {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      background: var(--bg-canvas);
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+    }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px dashed var(--border-soft);
+    }
+    .metric-row:last-child {
+      border-bottom: none;
+    }
+    .metric-name {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+    .metric-value-badge {
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border-soft);
+    }
+
+    .decision-banner {
+      padding: 14px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      font-weight: 500;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .decision-banner.status-emerald {
+      background: var(--emerald-subtle);
+      border: 1px solid var(--emerald-border);
+      color: var(--emerald);
+    }
+    .decision-banner.status-rose {
+      background: var(--rose-subtle);
+      border: 1px solid var(--rose);
+      color: var(--rose);
+    }
+    .decision-banner.status-amber {
+      background: var(--amber-subtle);
+      border: 1px solid var(--amber);
+      color: var(--amber);
+    }
+
+    /* ==========================================================================
+       7. 响应式与打印样式 (@media)
+       ========================================================================== */
+    @media (max-width: 960px) {
+      .app-sidebar {
+        transform: translateX(-100%);
+      }
+      .app-sidebar.open {
+        transform: translateX(0);
+        box-shadow: var(--shadow-lg);
+      }
+      .app-main {
+        margin-left: 0;
+        padding: 32px 20px 80px;
+      }
+      .mobile-menu-toggle {
+        display: block;
+      }
+    }
+
+    @media print {
+      body {
+        background: #FFF !important;
+        color: #000 !important;
+      }
+      .app-sidebar, .mobile-menu-toggle, .theme-toggle-btn, #reading-progress, .code-copy-btn {
+        display: none !important;
+      }
+      .app-main {
+        margin-left: 0 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+      }
+      .sandbox-card, .diagram-wrapper, blockquote {
+        break-inside: avoid;
+        border: 1px solid #CCC !important;
+        box-shadow: none !important;
+      }
+      h2, h3 {
+        break-after: avoid;
+      }
+    }
+  </style>
+</head>
+<body data-page-node-id="3p86hAbc6ugmBpHpmXbwy9">
+
+  <!-- 顶部阅读进度条 -->
+  <div id="reading-progress" data-page-node-id="qNKCGXd6e4864E8XYYoNLF"></div>
+
+  <!-- 移动端抽屉开关 -->
+  <button class="mobile-menu-toggle" id="btn-mobile-menu" aria-label="切换导航菜单" data-page-node-id="E13hLR5KvDElSUuLe6etPb">☰</button>
+
+  <!-- 左侧全局导航与目录 (TOC) -->
+  <aside class="app-sidebar" id="app-sidebar" data-page-node-id="0lhFAG274NeAS7zPdybtcB">
+    <div class="sidebar-header" data-page-node-id="WkCvjIM90gb8tHJHvy6qwh">
+      <span class="sidebar-title" data-page-node-id="1VXLxejOS4D5T15oFx70dJ">知识白皮书导航</span>
+      <button class="theme-toggle-btn" id="btn-theme-toggle" title="切换深浅主题" data-page-node-id="DlnUEnvZDCBPBcP4SDx5Sj">
+        <span id="theme-icon" data-page-node-id="k76mlTENaYEqQH9gdZgYN2">☀️</span>
+        <span id="theme-text" data-page-node-id="js946a50mo0KrivI1OGdpj">浅色</span>
+      </button>
+    </div>
+
+    <nav class="toc-nav" data-page-node-id="Ms57pJaaie0a5lxOktjcs2">
+      <ul class="toc-list" id="toc-list" data-page-node-id="WTjEFnyFRNB5uwE13umEdi">
+        <li class="toc-item" data-page-node-id="XYqCyO0rFasBMRT5LLMKLJ"><a href="#sec-overview" data-page-node-id="c8uJUAUJRPor09GRMANtl5">一分钟速览与核心问题</a></li>
+        <li class="toc-item" data-page-node-id="qWgyu7Et4RS3pvLOzDIkpu"><a href="#sec-painpoints" data-page-node-id="UtRNSy03NVHhGAWHibWot8">三大专业判断核心痛点</a></li>
+        <li class="toc-item sub-item" data-page-node-id="7zgBY3OalHcRXlFr9ImgWm"><a href="#sec-painpoint-implicit" data-page-node-id="VolVG3JZ82ihNyPcHRMaFw">痛点 1：隐性经验与“为什么”</a></li>
+        <li class="toc-item sub-item" data-page-node-id="ES3uXV3JBdEKab9EXAx7vp"><a href="#sec-painpoint-stance" data-page-node-id="Bmf66F3gtIN5y13hZy7lvf">痛点 2：缺少组织权威立场</a></li>
+        <li class="toc-item sub-item" data-page-node-id="0vxLcMPnXbmtA19mgKTKZz"><a href="#sec-painpoint-rag" data-page-node-id="iVBc0RSxeGYrGwAwr9kWmi">痛点 3：普通 RAG 的推导重荷</a></li>
+        <li class="toc-item" data-page-node-id="vmXeCck177lMCsCDQO92SW"><a href="#sec-architecture" data-page-node-id="Zr3pje7hc4zRTAqnwwhdsl">系统核心设计：四大支柱</a></li>
+        <li class="toc-item sub-item" data-page-node-id="YJKesnYFSzZV0vqTQvT3mS"><a href="#sec-layer-knowledge" data-page-node-id="Xzffi0JSCscKRjkyRvATkb">支柱 1：知识架构层 (200+文件)</a></li>
+        <li class="toc-item sub-item" data-page-node-id="ja9P4sGsewSC3sBLEeIzjR"><a href="#sec-layer-recipes" data-page-node-id="1nRRbSzFHbyHa21YDH7DfV">支柱 2：组合式推理配方层</a></li>
+        <li class="toc-item sub-item" data-page-node-id="zWX3S4wDDNd4OfXZKvQzNz"><a href="#sec-hitl" data-page-node-id="8l6HYk69LubvsfUCo44R5B">人机协同：检查点与升级</a></li>
+        <li class="toc-item sub-item" data-page-node-id="r4tgYwwDOJE6Y2QmFEdaj4"><a href="#sec-layer-flywheel" data-page-node-id="SoHK1ob7AOcK7fXCkj3MAE">自进化飞轮：专家纠错编译器</a></li>
+        <li class="toc-item" data-page-node-id="OiLXgPz0f4k3OHIszj6co7"><a href="#sec-sandboxes" data-page-node-id="TXuvo5EHvTsJuJGxbSNtln">系统动态交互沙盘</a></li>
+        <li class="toc-item sub-item" data-page-node-id="yCKXL8h088s2MA4sDuCi7f"><a href="#sec-sim-attribution" data-page-node-id="B6ygGdYRR2tUaYeoCmToUS">沙盘 1：专家纠错归因决策</a></li>
+        <li class="toc-item sub-item" data-page-node-id="SqlOuTVjz6VSeHMi744VZQ"><a href="#sec-sim-token" data-page-node-id="e4w6LKZ1aZV6fIpeDeMPmY">沙盘 2：渐进式披露 Token 优化</a></li>
+        <li class="toc-item sub-item" data-page-node-id="T3pBiXFWskWj4ibSEIf5WH"><a href="#sec-sim-regression" data-page-node-id="a72b1MoZdZHyLuaMcGTNkz">沙盘 3：双阶段防退步回归门禁</a></li>
+        <li class="toc-item" data-page-node-id="McdXhVEWbrmeviGOhToSNl"><a href="#sec-results" data-page-node-id="dNZ2ZaKc4HT3tPEH6JlhHl">真实落地成效与量化指标</a></li>
+        <li class="toc-item" data-page-node-id="yRRrQDeq7ix8XZXm14pATM"><a href="#sec-implications" data-page-node-id="SaBkaDOgicXey3R6NRAYqx">企业 AI 落地启示与实施路径</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- 主体技术白皮书内容 -->
+  <main class="app-main" data-page-node-id="iBvBeNCug1MWwUsHrDg0OG">
+
+    <!-- 文章顶层头图与元数据 -->
+    <header class="article-header" data-page-node-id="8MyZJAOcfaMVasLfSe2Rv2">
+      <div class="article-badge-row" data-page-node-id="JS29VwqpStEN3VFa3nGVrh">
+        <span class="badge badge-primary" data-page-node-id="cZnwLeTja550PGK4TathvH">Engineering at Meta 2026</span>
+        <span class="badge badge-emerald" data-page-node-id="hMIdCXPSjTxsKuzzjrWHie">组织级第二大脑</span>
+        <span class="badge badge-cyan" data-page-node-id="mzowOBJjDKei396w7Wyssa">无需模型微调</span>
+        <span class="badge badge-purple" data-page-node-id="cyo9IdYBKS2E2LV8Av4tex">零回归自进化</span>
+      </div>
+
+      <h1 class="article-title" data-page-node-id="bgDGY53XIxeH2UEnqCdxwq">Meta 的组织级第二大脑构建方法：让专家隐性经验成为 AI 能持续使用的能力</h1>
+      <p class="article-subtitle" data-page-node-id="GgkIfNUx7AmRNED5AwCE9I">从三个专业判断痛点，到知识、流程、评测与反馈改进的完整系统工程设计</p>
+
+      <div class="article-meta-grid" data-page-node-id="X6aNquShN01Guu9CI8LWVF">
+        <div class="meta-item" data-page-node-id="irrNpdXBYvFQqEUA19Q3tI">
+          <span class="meta-label" data-page-node-id="JJADc0sFEKOkrhaXs9JRxM">原始来源</span>
+          <span class="meta-value" data-page-node-id="QNsiOktakXZVCl9pnzJi6o"><a href="https://engineering.fb.com/2026/09/02/ml-applications/organizational-second-brain-ai-learns-from-experts" target="_blank" rel="noopener noreferrer" data-page-node-id="WWlaBxlSrfFeGjrk7DR0HC">Engineering at Meta (2026-09-02)</a></span>
+        </div>
+        <div class="meta-item" data-page-node-id="oItywYEohbin3kD7CsAfLr">
+          <span class="meta-label" data-page-node-id="3j5BBozWri9CjNk3RtTPuI">作者团队</span>
+          <span class="meta-value" data-page-node-id="Sdp394AnfVEU6uO7nV1pAv">Shaurya Sengar, Jason Nawrocki, Jay Shah, Prashant Kommireddi</span>
+        </div>
+        <div class="meta-item" data-page-node-id="o0ag2b7Dtx75ACiEghBl75">
+          <span class="meta-label" data-page-node-id="vHmstiYgtLM0h4K6q0HH91">领域范围</span>
+          <span class="meta-value" data-page-node-id="ss4gEgPUAlOeBT2DQ2DDFV">合规审查 / 财务风控 / 专业评估</span>
+        </div>
+        <div class="meta-item" data-page-node-id="L5NnxD9NGODVdFYRMHIPvj">
+          <span class="meta-label" data-page-node-id="TG4Rtu27Pn3RCxUIbhNNJ9">核心突破</span>
+          <span class="meta-value" data-page-node-id="jHSvUT9RvYLjHIaEOuo7Gr">知识与推理双层解耦 + 闭环编译演进</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 章节 1：一分钟速览 -->
+    <section id="sec-overview" data-page-node-id="qXWCS0vsq5injIvnCbQuom">
+      <h2 data-page-node-id="cfRABR36OcpTpQgrVkGtXH">一分钟速览与核心问题</h2>
+
+      <div class="callout-box callout-info" data-page-node-id="HngBTmFLr4z9sPJgAjHxxp">
+        <div class="callout-title" data-page-node-id="pm8L18jctiuwr6nqnaO38K">📌 核心洞察摘要</div>
+        <p data-page-node-id="Om4TJsCLs4dyOSR078xNbC"><strong data-page-node-id="GzUCFrTiVkv7iiSeFf6Qyj">1. 隐性经验的本质是决策边界：</strong> 专家经验包含适用条件、判断顺序和例外边界；只留下最终结论，AI 仍难以复用。</p>
+        <p data-page-node-id="0TF7FBLiHyAObCYnHgaV3B"><strong data-page-node-id="6vD7XGlKezskxXdKw0HyoH">2. 知识陈述与推理程序分离：</strong> Meta 将组织知识与分析流程分开保存，让每个阶段按需读取依据，无需为知识更新重新训练大模型。</p>
+        <p data-page-node-id="71mPzf3FFGQWRuqKfN2Lf0"><strong data-page-node-id="Zh6RXnZnlqnnbcrSzeB1L7">3. 反馈编译与双阶段门禁：</strong> 专家纠正经过归因、修改、原案重放和回归检查，批准后同时留下更新资产与防退步测试案例。</p>
+      </div>
+
+      <p data-page-node-id="Hpyz07JaFXaCdpM4wL5ids">Meta 写了一篇技术博客，分享他们如何为合规等专业领域构建一个“组织级第二大脑”（<strong data-page-node-id="iNDB6fLZM5r4Ic44puvjtr">Organizational Second Brain</strong>）。</p>
+
+      <p data-page-node-id="YEpagWXXDglfzEwknlK1DE"><strong data-page-node-id="j2iE9xqNKZ1HM4e8Tz1a20">它要把领域专家脑子里没有完整写下来的“隐性经验”沉淀下来，让 AI 学会按照内部专家的判断方法开展分析，并且不需要重新微调或训练大模型，就能通过专家的日常反馈持续改进。</strong></p>
+
+      <p data-page-node-id="fFOHJBmK03cdPoTBVQDatf">这件事要解决的，是企业使用 AI 时一个很实际的问题：<strong data-page-node-id="yi5pSKB8tx79hQJhpqkxyx">文档已经接进去了，为什么做判断时还是得找专家？专家纠正过一次，为什么下次还可能答错？</strong></p>
+    </section>
+
+    <!-- 章节 2：当下核心痛点 -->
+    <section id="sec-painpoints" data-page-node-id="cmxxb2qLureGcFw4CFgtgK">
+      <h2 data-page-node-id="bVcXrygmGuMOsN6aoE6e7r">当下的核心痛点：为什么普通 RAG 无法胜任专业判断？</h2>
+
+      <p data-page-node-id="0ZVQ6ZeTPo6aFlyDAz11dF">在合规评估中，找到一条规定，只是工作的开始。真正费时间的是判断：<strong data-page-node-id="dS89CTpMT4oApeMr8MCVXE">这条规定适不适用于当前产品？公司过去如何处理类似情况？哪些条件必须满足？什么情况需要交给专家决定？</strong></p>
+
+      <p data-page-node-id="BLuGYAEGxuN8n2tlt0IWoU">Meta 在合规领域遇到的困难，集中在三个方面。</p>
+
+      <h3 id="sec-painpoint-implicit" data-page-node-id="OgDvz7J9MSoHkxcww9eirH">第一，专家知道怎么判断，但文档没有把“为什么”写清楚</h3>
+
+      <p data-page-node-id="HuCBDkgtEYAJG2K6AKC1Gg">“隐性经验”（Tribal / Implicit Knowledge）包括专家习惯先看什么线索、怎样排列因素的重要性、旧结论在什么条件下有效，以及什么时候应当停止推断、找人讨论。有时专家已经熟练到不会主动解释这些步骤，历史记录便只留下了最终结论。</p>
+
+      <p data-page-node-id="xv4ytNrKRO6golSyBjx7NK">例如“允许小范围试用”是一条结论，却还没有告诉后来的人：试用面向谁、使用什么数据、出了问题能不能撤回。下面用一组教学规则把这些隐藏条件具体化：<strong data-page-node-id="XgdrsUwdPqbMz8FMEJri2F">只有内部测试、模拟数据、可回退三项同时满足，才进入常规试用评审；其他情况转专项人工评审或补材料。</strong> 这是帮助理解的虚构规则，不是 Meta 的内部制度。</p>
+
+      <div class="callout-box callout-rule" data-page-node-id="oMLyFmkyTGTfxGAGVAzYMk">
+        <div class="callout-title" data-page-node-id="bogaZLfiCFc848TQhFGBzQ">⚖️ 教学案例：哪些隐藏条件会改变试用判断？</div>
+        <p data-page-node-id="DBUiNi9L38FmNcUkg4KwlR"><strong data-page-node-id="HrS9vOGxUYFlx8I85xPmgZ">进入常规试用评审的严苛准则：</strong> 内部测试、模拟数据、可回退三项同时满足。这里决定评审路径，常规评审仍需完成，并不等于已批准上线。</p>
+        <p data-page-node-id="I46hoyykXNTLZYFLV4ImZi"><strong data-page-node-id="YAIDE0gPx3ADjbjdTh5QTp">教学规则分支：</strong></p>
+        <ul data-page-node-id="80RYDYkFTVJgbfMIYSEbSV">
+          <li data-page-node-id="zpEiXvHo4YISKkF4aSKd3b">三项全满足 → 走常规试用评审流程；</li>
+          <li data-page-node-id="tisOOOrwH0gODKW7Zrnysr">已知存在对外开放、真实数据或无法回退 → 转专项人工评审；</li>
+          <li data-page-node-id="3mnDdjaAdNKDEM0yezhBHH">尚不能确认数据范围且没有已知排除条件 → 先补材料，绝不猜测条件已满足。</li>
+        </ul>
+      </div>
+
+      <p data-page-node-id="rvCVVojfojJhccYGsjYFx8">改变试用人数，未必改变评审路径；把模拟数据换成真实用户信息，即使人数不变，也可能需要另一种评审。专家经验里包含的正是这种取舍：<strong data-page-node-id="opr3KgNAAIw3Qeag1G4IRI">什么只是表面相似，什么才会改变判断。</strong></p>
+
+      <p data-page-node-id="SSqRu8AbTpWqn1EyMgnjHq">将这些经验写下来，也不只是给旧文档做摘要。摘要可能仍是“项目获准试用”；可复用的知识则要保留<strong data-page-node-id="Vp0bicQD7v2tm6XICGFERv">适用条件、排除情形、判断依据和未决问题</strong>。原文介绍了从文档中离线提炼、再用专家反馈更新的办法，但没有公开完整提炼算法；文档中没有出现、专家也从未表达的经验，不能被默认视为系统已经知道。</p>
+
+      <h3 id="sec-painpoint-stance" data-page-node-id="lFu0a1HLyNqyMLqw3aQHWQ">第二，大模型懂一般知识，却不知道这家公司采用什么标准</h3>
+
+      <p data-page-node-id="VxQVQImGr5SMgnFOnGRg6F">同样一项业务，行业里可能有几种处理方式，但公司已经基于历史经验、业务方向或风险承受能力，确定采用其中一种。</p>
+
+      <p data-page-node-id="7mOb3ic7J51Eurfuil4BNH">通用模型可以列出几种方案，却不知道公司已经做过这个选择。它给出的建议未必没有道理，但仍需要内部专家重新判断、修改。</p>
+
+      <p data-page-node-id="nREAKGqXpOwZ8TACUFhRdy"><strong data-page-node-id="hqWhh1GzzR3Bdwu2OxSUU3">缺的就是组织自己的立场（Organizational Stance）：面对这个问题，我们采用什么解释，又有哪些不能越过的边界。</strong> 即明确区分通用模型“可以怎么做”（What an organization <em data-page-node-id="3B30c6F769HGf3MrWhyZGE">could</em> do）与企业在自身语境下“应当怎么做”（What an organization <em data-page-node-id="4kNwlgu1BCUE2AZGsYZvvC">should</em> consider doing）。</p>
+
+      <h3 id="sec-painpoint-rag" data-page-node-id="ZRdWCr75hqvrNuCBq3fuGP">第三，RAG 能找资料，却不能省掉每次重新梳理判断依据的工作</h3>
+
+      <p data-page-node-id="MKBegpMGeKmKxU9HM1CS2E">RAG（检索增强生成）可以在回答前查找相关文档。但检索结果可能同时包含旧项目记录、现行规则和只适用于特殊情况的例外。</p>
+
+      <p data-page-node-id="T9sH9EzBHvpqhMy0eeB1lL">如果没有提前整理，AI 每次都要重新判断：哪份材料优先？哪些条件适用？几份资料之间有什么关系？</p>
+
+      <p data-page-node-id="8l47lZST9GAnIJ4DO4iOPr">这既费时间，也容易导致同类问题得出不一致的结论。专家纠正了一次，如果纠正只留在聊天记录中，没有进入知识或流程，下一次分析仍可能重走同一条错路。</p>
+
+      <p data-page-node-id="PAxUcudVpeGHGzvi50kPZj"><strong data-page-node-id="FM02BTNQGaoMem70NstLoD">所以，Meta 要补上的两项能力很明确：把专家使用的判断条件提前写清楚；把后续纠错真正更新到系统中，并检查更新是否有效。</strong></p>
+    </section>
+
+    <!-- 章节 3：系统核心设计四大支柱 -->
+    <section id="sec-architecture" data-page-node-id="C6b71FCFwlKwrCICckdaS7">
+      <h2 data-page-node-id="aQu03Q0DDVN0IgzxEYsFbE">系统核心设计：支撑第二大脑的四大支柱</h2>
+
+      <p data-page-node-id="orwWYHa4Z3H532SiEhrfzh">Meta 将系统拆成四层，让判断依据、执行步骤、验收标准和反馈更新各有明确职责。</p>
+
+      <div class="table-container" data-page-node-id="B60qfiQBqFeXUaKqsCdHeA">
+        <table data-page-node-id="X5UxaHsSk0NgJ2wefPAdHr">
+          <thead data-page-node-id="3gdnGRKrJaeuTOHuT9ICGe">
+            <tr data-page-node-id="W6BYq5kB9odZf5rWtwyOuc">
+              <th data-page-node-id="cphW8RqWk27iInmFEHtlYe">系统层级</th>
+              <th data-page-node-id="Dyu6OSoZ6X1s1MbTxeMgMX">核心职责</th>
+              <th data-page-node-id="jwHHVZ0Db0jyAUftdeN2AA">输入与产出物</th>
+              <th data-page-node-id="w6fPcAAVUH4q2mpyWHAlY2">解耦收益</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="jJLgDyUEzWQpBm0qhI3E3I">
+            <tr data-page-node-id="fHlVXUDOwnLKxPdrAZ0jiD">
+              <td data-page-node-id="bZxvbzUdXjHCC9MjJrInJa"><strong data-page-node-id="kuNo8vBinwOzVH7VSU88Vb">1. 知识架构层 (Knowledge)</strong></td>
+              <td data-page-node-id="kn6i0wJWgWKHZpU5GJdmM6">保存机构采用的权威判断标准、立场、术语定义与准入门槛</td>
+              <td data-page-node-id="rhVu9eEmKwCt03pM2bmk3y">200+ 结构化纯文本文件，声明 YAML 依赖图谱</td>
+              <td data-page-node-id="Z1XFqEmbfUXXsA1NMlvcOU">文件结构化，使自动化文本编辑与精确 Diff 成为可能</td>
+            </tr>
+            <tr data-page-node-id="wYHHT0iFte2KEhdS2VkvAu">
+              <td data-page-node-id="pxSN13kDQBVD6PdQBCTdig"><strong data-page-node-id="aSmIHhKdrmhZev4ljFdBjW">2. 推理配方层 (Reasoning Recipes)</strong></td>
+              <td data-page-node-id="nVDzxQW9pgJMGIx5H88iWG">规定如何分步完成分析，每一步何时加载何种知识</td>
+              <td data-page-node-id="rBM9dB3lu7dltQ5w7DhLor">命令式工作流程序，主配方调度子程序，渐进式披露</td>
+              <td data-page-node-id="cNJJvTAkCX1EAO5OglGgsT">显式操作程序使故障归因精准，区分知识缺失与流程缺陷</td>
+            </tr>
+            <tr data-page-node-id="Qgza7pZGDQgKuIIhZLJzOk">
+              <td data-page-node-id="mQBxbO4S5X898tdBu5BdqR"><strong data-page-node-id="TxrdSSQP4GiWfryc3NvOtp">3. 评测框架层 (Evaluation)</strong></td>
+              <td data-page-node-id="18qg9sKtSnkvjU6WmxfiiZ">自动化质量门禁，阻断退步与破坏性修改</td>
+              <td data-page-node-id="RCar01OmiBkxW8GaSOupQe">双盲定向重放用例 + 领域全量基准回归测试集</td>
+              <td data-page-node-id="19d3L3XE99bNod8Eq4cyIQ">严格门禁拦截副作用，保障每一次系统改动“零回归”</td>
+            </tr>
+            <tr data-page-node-id="GEZ2iVQZ5HOwmyq3v1Hr5s">
+              <td data-page-node-id="IAMJLehltONEM7DPag9ldL"><strong data-page-node-id="07clW6dwmr9ofvZZEY4AQA">4. 自改进闭环 (Self-Improvement Loop)</strong></td>
+              <td data-page-node-id="SKSPP4tWYWje0baA7DNoRv">将专家自然语言反馈编译为受控的文件修改与测试</td>
+              <td data-page-node-id="vjXWTAHWpNTV746KVoyoWZ">多智能体编译补丁、对抗审查、Linter 检查、30秒 PR 落地</td>
+              <td data-page-node-id="5oeQ4Ph1nDB2XomfiJus0Q">无需重新训练模型，专家纠错一次永久生效且持续沉淀</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 矢量架构图 1：四层系统全景图 -->
+      <div class="diagram-wrapper" data-page-node-id="gjMRTGIgDBtKvDNBzGu9uH">
+        <div class="diagram-header" data-page-node-id="tXoP2Wne4YWEVz8lbAbpyU">
+          <span class="diagram-title" data-page-node-id="pmDXKdjhhMIsrflBS7PcRc">🎨 矢量全景架构：Meta 第二大脑四大支柱依赖与自进化拓扑</span>
+          <span class="badge badge-cyan" data-page-node-id="7Cys7qM8gR3vxFdD1GBSqI">SVG 矢量图表 1</span>
+        </div>
+        <div class="diagram-svg-container" data-page-node-id="F7RER99eqHER05UACmFSQI">
+          <svg viewBox="0 0 860 380" width="860" height="380" xmlns="http://www.w3.org/2000/svg" data-page-node-id="BKErleE3LMh74mZut0SfnJ">
+            <defs data-page-node-id="DDFmd6H0XVddQjCQJ6SbH7">
+              <linearGradient id="grad-card1" x1="0" y1="0" x2="1" y2="1" data-page-node-id="qoAZqnqsqFkoQnPcr6uUOX">
+                <stop offset="0%" stop-color="#1E293B" data-page-node-id="zYI4uRxZuSVPZFx1yTHrOL" />
+                <stop offset="1%" stop-color="#0F172A" data-page-node-id="EI5t8j1LxzAqvKeFY0zgF9" />
+              </linearGradient>
+              <linearGradient id="grad-card2" x1="0" y1="0" x2="1" y2="1" data-page-node-id="DcANSaTOxAu2kh7uED48vk">
+                <stop offset="0%" stop-color="#064E3B" data-page-node-id="EYdIr7Du4RoiHQEI8M2zKK" />
+                <stop offset="1%" stop-color="#022C22" data-page-node-id="9uOCDXrGyBDBgVnPdmiccM" />
+              </linearGradient>
+              <linearGradient id="grad-card3" x1="0" y1="0" x2="1" y2="1" data-page-node-id="smQetA9kN1uA47PHuGD1Ra">
+                <stop offset="0%" stop-color="#4C1D95" data-page-node-id="1kAxFweOPmKDvZvaM8BuwB" />
+                <stop offset="1%" stop-color="#2E1065" data-page-node-id="J5cfGBBADIg7sQ0Is4qhsy" />
+              </linearGradient>
+              <linearGradient id="grad-card4" x1="0" y1="0" x2="1" y2="1" data-page-node-id="kS7VLbEKArNFil4ZOa3we3">
+                <stop offset="0%" stop-color="#7C2D12" data-page-node-id="3KX5CSsCksuNXNh8hLoqDz" />
+                <stop offset="1%" stop-color="#431407" data-page-node-id="8w4Ac1nEiLQtexWQuhfSeV" />
+              </linearGradient>
+              <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse" data-page-node-id="lrgeLyqIoaQOyHCaSu9eit">
+                <path d="M 0 1 L 8 5 L 0 9 z" fill="#D97757" data-page-node-id="hDAPLrx7FG5IF4eNCyyCZf" />
+              </marker>
+              <marker id="arrow-cyan" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse" data-page-node-id="P6gf805SPvmUFAgCWoGaz1">
+                <path d="M 0 1 L 8 5 L 0 9 z" fill="#38BDF8" data-page-node-id="T7GUhs3pXFiigaqNgSXYJl" />
+              </marker>
+            </defs>
+
+            <rect x="10" y="10" width="840" height="360" rx="12" fill="#18181B" stroke="#27272A" stroke-width="1.5" data-page-node-id="qKTODKAWCBIjw9KcAFDN5P" />
+
+            <!-- 卡片 1：知识架构层 -->
+            <g transform="translate(35, 40)" data-page-node-id="gMoAD9DJtfMEFo6H5Uuz3p">
+              <rect width="360" height="135" rx="8" fill="url(#grad-card1)" stroke="#38BDF8" stroke-width="1.5" data-page-node-id="eL2y7GM98NY3LQQmqSytaU" />
+              <rect x="12" y="12" width="28" height="28" rx="6" fill="#0284C7" data-page-node-id="ZIJmPDNEfD8IzmRzWoLM2V" />
+              <text x="26" y="31" fill="#FFF" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle" data-page-node-id="p2ONkUmcjrH8QTlsAYzlNG">1</text>
+              <text x="48" y="30" fill="#F0F9FF" font-family="sans-serif" font-weight="bold" font-size="15" data-page-node-id="GZaWUzbCf71A3kO8eQHhFa">知识系统 (Knowledge Architecture)</text>
+              <text x="16" y="60" fill="#94A3B8" font-family="sans-serif" font-size="12" data-page-node-id="u5EtVoOw257IzlBL8W21FW">• 200+ 结构化立场、术语与门禁文本</text>
+              <text x="16" y="82" fill="#94A3B8" font-family="sans-serif" font-size="12" data-page-node-id="mZF0CL9C1FnJGJZDhaphSg">• YAML Frontmatter 双向依赖图谱声明</text>
+              <text x="16" y="104" fill="#38BDF8" font-family="sans-serif" font-size="11.5" font-weight="600" data-page-node-id="5ohL11IdlSaP7B8S5ZkJMm">价值：提供机器可读标准，解耦陈述性事实</text>
+            </g>
+
+            <!-- 卡片 2：推理配方层 -->
+            <g transform="translate(465, 40)" data-page-node-id="t60baA1A0WBrKZQboYDdak">
+              <rect width="360" height="135" rx="8" fill="url(#grad-card2)" stroke="#34D399" stroke-width="1.5" data-page-node-id="BHxMjGhVM0Vd6PtOhKXAxI" />
+              <rect x="12" y="12" width="28" height="28" rx="6" fill="#059669" data-page-node-id="RBEZ5yCtHDxARC7iV47naC" />
+              <text x="26" y="31" fill="#FFF" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle" data-page-node-id="b0SJBFFxrGiQDLNvisESyu">2</text>
+              <text x="48" y="30" fill="#ECFDF5" font-family="sans-serif" font-weight="bold" font-size="15" data-page-node-id="pulIl9F4DGdSi95K3Y5TQv">推理配方层 (Reasoning Recipes)</text>
+              <text x="16" y="60" fill="#A7F3D0" font-family="sans-serif" font-size="12" data-page-node-id="ZmzAlLOLVxY0rN6KkAEmE4">• 多步骤工作流，主配方调度子程序</text>
+              <text x="16" y="82" fill="#A7F3D0" font-family="sans-serif" font-size="12" data-page-node-id="dBfBGBtSJDc09ozlM8nxUz">• 渐进式披露：每轮 Token 消耗骤降 80%</text>
+              <text x="16" y="104" fill="#34D399" font-family="sans-serif" font-size="11.5" font-weight="600" data-page-node-id="857VASvd6l90D2ewbXNQ0H">价值：步骤透明，使故障根因定位可追踪</text>
+            </g>
+
+            <!-- 卡片 3：评测框架层 -->
+            <g transform="translate(465, 205)" data-page-node-id="KAeASEBd0F4VAxJ6MVtsrf">
+              <rect width="360" height="135" rx="8" fill="url(#grad-card3)" stroke="#A78BFA" stroke-width="1.5" data-page-node-id="FJLj4XdZE2MRfgYLfVNGJL" />
+              <rect x="12" y="12" width="28" height="28" rx="6" fill="#7C3AED" data-page-node-id="EATrqX2F2CfrxMCEufc2EG" />
+              <text x="26" y="31" fill="#FFF" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle" data-page-node-id="7BEZ59asFpPPq9Q6DPARt2">3</text>
+              <text x="48" y="30" fill="#F5F3FF" font-family="sans-serif" font-weight="bold" font-size="15" data-page-node-id="7RS8Nr7xBBWulT6UJDEXvd">评测框架层 (Evaluation Framework)</text>
+              <text x="16" y="60" fill="#DDD6FE" font-family="sans-serif" font-size="12" data-page-node-id="d2fkSmCyoXJX1yoiwmX9Qp">• 阶段一：原案例双盲定向重放 (Replay)</text>
+              <text x="16" y="82" fill="#DDD6FE" font-family="sans-serif" font-size="12" data-page-node-id="cBi2weQVwX8QFNw1VihBIJ">• 阶段二：领域历史基准测试集回归拦截</text>
+              <text x="16" y="104" fill="#A78BFA" font-family="sans-serif" font-size="11.5" font-weight="600" data-page-node-id="SSM8Pwp06ih8RunyrglSu8">价值：自动化双重门禁，确保改动零退步</text>
+            </g>
+
+            <!-- 卡片 4：自改进闭环 -->
+            <g transform="translate(35, 205)" data-page-node-id="CfY2SeTSIO9Op1ddg6NIBN">
+              <rect width="360" height="135" rx="8" fill="url(#grad-card4)" stroke="#FB923C" stroke-width="1.5" data-page-node-id="gAEElge1cTGLBwDGy9vNqv" />
+              <rect x="12" y="12" width="28" height="28" rx="6" fill="#EA580C" data-page-node-id="qLnWtXit5qVvilR6YPLd3q" />
+              <text x="26" y="31" fill="#FFF" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle" data-page-node-id="ZEPk7xRp9tTYwt1yfkzJzq">4</text>
+              <text x="48" y="30" fill="#FFF7ED" font-family="sans-serif" font-weight="bold" font-size="15" data-page-node-id="R09Ck3ej8oOaUm9zgvzZYO">自改进闭环 (Self-Improvement Loop)</text>
+              <text x="16" y="60" fill="#FED7AA" font-family="sans-serif" font-size="12" data-page-node-id="7BYC2Nte8drmsGbExa6Kc1">• 根因归因：缺知识 vs 用错知识 vs 分歧</text>
+              <text x="16" y="82" fill="#FED7AA" font-family="sans-serif" font-size="12" data-page-node-id="K3HT2qIkYC9Tosx8OfSVUd">• 多智能体编译 + 对抗审查 + Linter</text>
+              <text x="16" y="104" fill="#FB923C" font-family="sans-serif" font-size="11.5" font-weight="600" data-page-node-id="ojz2UKlFRGM8R9NGH5Furc">价值：专家纠正编译为文本补丁与永久测试</text>
+            </g>
+
+            <!-- 连接拓扑箭头 -->
+            <path d="M 395 95 L 455 95" fill="none" stroke="#38BDF8" stroke-width="2" marker-end="url(#arrow-cyan)" stroke-dasharray="4,3" data-page-node-id="5OPTFcXDrg8scH5BSAJyz6" />
+            <text x="425" y="85" fill="#38BDF8" font-size="10.5" font-family="sans-serif" text-anchor="middle" data-page-node-id="4XyDOKCcYKk2SbSLElTA0F">按需读取</text>
+
+            <path d="M 645 175 L 645 195" fill="none" stroke="#34D399" stroke-width="2" marker-end="url(#arrow)" data-page-node-id="z5Dskn3Jhwk0vMSqGQXbuG" />
+            <text x="680" y="190" fill="#34D399" font-size="10.5" font-family="sans-serif" data-page-node-id="rRUyeDB7iBo5i6mhEgFu1m">输出与用例验证</text>
+
+            <path d="M 465 272 L 405 272" fill="none" stroke="#A78BFA" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="4,3" data-page-node-id="mD581nvdu9NymZlPbUrNRA" />
+            <text x="435" y="262" fill="#A78BFA" font-size="10.5" font-family="sans-serif" text-anchor="middle" data-page-node-id="o4zWjOiKHLJg1071KukedG">门禁仲裁</text>
+
+            <path d="M 120 205 L 120 185" fill="none" stroke="#FB923C" stroke-width="2.5" marker-end="url(#arrow)" data-page-node-id="5v2RAyZqo2FLmsP9zN6MIe" />
+            <text x="75" y="192" fill="#FB923C" font-size="10.5" font-family="sans-serif" font-weight="bold" data-page-node-id="fSfh0yWWDlyEuozHUJGIAr">编译写回</text>
+
+            <path d="M 280 205 L 475 165" fill="none" stroke="#FB923C" stroke-width="1.5" marker-end="url(#arrow)" stroke-dasharray="3,3" data-page-node-id="5lzQtzXYUD7N8zVQAIe5tx" />
+          </svg>
+        </div>
+        <p class="diagram-caption" data-page-node-id="uhb3JVUygOcTpdIGN88J4R">图 1：四大支柱互锁机制——知识提供标准边界，配方规定分析路径，评测拦截潜在退步，闭环将专家自然语言反馈编译为受控文件变更。</p>
+      </div>
+
+      <p data-page-node-id="nZhL3yOHPflI42KCzmPTCJ">这四层相互依赖：知识有明确的文件边界，才能精确修改；分析有明确步骤，才能定位失误；评测决定修改能否通过；改进循环则把结果更新回知识和流程。</p>
+
+      <!-- 支柱 1：知识架构层 -->
+      <h3 id="sec-layer-knowledge" data-page-node-id="cYO2RJA9KmyPV1le84RKim">支柱 1：知识架构层——把专家每次都要解释的内容，提前整理好</h3>
+
+      <p data-page-node-id="6Ud5VSq6aZgGFGeze0g3gx">Meta 先对原始文档进行离线处理，提炼其中的组织判断，整理出 <strong data-page-node-id="lSVSa1CcFYrqWhMOHwi5io">200 多个结构化文本文件</strong>。</p>
+
+      <p data-page-node-id="2ZKJFQTFngSJgETo5yYmaD">这些文件采用严格的分类法分为四类：</p>
+
+      <ul data-page-node-id="HQwG2AnluEIX4sBiAKho9m">
+        <li data-page-node-id="pR4G2h77w8ELZgZ5bvfhxv"><strong data-page-node-id="qp7Uecmmu55yIjhGl66qGd">立场文件（Position Files）：</strong> 公司对某个问题采用什么解释，适用条件和限制是什么，以及机器可执行的触发条件。</li>
+        <li data-page-node-id="8HGx4y2K9hqdMfsPy55rHF"><strong data-page-node-id="4TeHb2UTMK7M5HQdhZXqB7">分类与词汇文件（Taxonomy and Vocabulary Files）：</strong> 团队使用的术语分别是什么意思，作为全机构唯一的术语定义基准，避免同一个词被理解成不同概念。</li>
+        <li data-page-node-id="eGd8UlidLHbL18aOoEkSlI"><strong data-page-node-id="DYmvJmehy0Ey3ul0Idwyod">路由索引（Routing Indexes）：</strong> 根据当前任务的特征，找到适用的规则和分析流程，<strong data-page-node-id="Cv9iOhh4QOBzWwkN9iwfGe">减少仅凭文字嵌入相似度选资料带来的不可审计性与漂移</strong>。</li>
+        <li data-page-node-id="dlBto7ImDPHYHaF9LknDsV"><strong data-page-node-id="hWXLoeH9WCAqmYjiLEshkQ">入口检查文件（Gateway Files）：</strong> 先判断当前任务是否属于某类专业分析的适用范围，避免一上来就套错规则。</li>
+      </ul>
+
+      <!-- 矢量架构图 2：知识树与 YAML Frontmatter 结构图 -->
+      <div class="diagram-wrapper" data-page-node-id="gHB2LRD48mEcmj5vlifHKq">
+        <div class="diagram-header" data-page-node-id="NvfdYrsWUEAMQ0idXM0SHH">
+          <span class="diagram-title" data-page-node-id="k2P5J1TNBIA0oe85WqTE2Z">🎨 知识系统目录拓扑与 YAML Frontmatter 双向依赖图谱</span>
+          <span class="badge badge-cyan" data-page-node-id="goC5wz7l8FLnJHdyyq1Tje">SVG 矢量图表 2</span>
+        </div>
+        <div class="diagram-svg-container" data-page-node-id="ll6JOcLHn8UWOC3lqCJsxC">
+          <svg viewBox="0 0 860 320" width="860" height="320" xmlns="http://www.w3.org/2000/svg" data-page-node-id="CTSHt5HBhX9lTkW5j0K674">
+            <rect x="10" y="10" width="840" height="300" rx="10" fill="#18181B" stroke="#27272A" stroke-width="1.5" data-page-node-id="kL87OO8CyDRaJu3xtJBZeY" />
+
+            <!-- 左侧：文件系统目录树 -->
+            <g transform="translate(30, 30)" data-page-node-id="B2OczKIjd1GBm18DJqgK5Q">
+              <rect width="360" height="260" rx="6" fill="#1F2937" stroke="#374151" data-page-node-id="0uHMccJMIOnXc4zAYZmBzg" />
+              <text x="16" y="26" fill="#93C5FD" font-family="monospace" font-size="13" font-weight="bold" data-page-node-id="zAR5PbboV7qVMduFrdoHKY">📁 knowledge_base/</text>
+              <text x="32" y="52" fill="#E5E7EB" font-family="monospace" font-size="12" data-page-node-id="EldX2kqo6qzQkE4LBah1Rj">├── 📁 gateways/ (入口门禁)</text>
+              <text x="48" y="74" fill="#9CA3AF" font-family="monospace" font-size="11.5" data-page-node-id="V4Pz8lGEQqk87OnDB0liOo">│   └── trial_scope_gate.md</text>
+              <text x="32" y="98" fill="#E5E7EB" font-family="monospace" font-size="12" data-page-node-id="VFHdv7kKdcutqcC2Mp714q">├── 📁 positions/ (组织权威立场)</text>
+              <text x="48" y="120" fill="#F59E0B" font-family="monospace" font-size="11.5" data-page-node-id="tmizzFld8RxW8mXLZpinsU">│   ├── trial_data_boundary.md  ⭐</text>
+              <text x="48" y="142" fill="#9CA3AF" font-family="monospace" font-size="11.5" data-page-node-id="MKYTf5kbVWEgyvCVXLjUWP">│   └── rollback_guarantee.md</text>
+              <text x="32" y="166" fill="#E5E7EB" font-family="monospace" font-size="12" data-page-node-id="TspSGqw18WJhgGmylTYMN3">├── 📁 taxonomy/ (词汇术语基准)</text>
+              <text x="48" y="188" fill="#9CA3AF" font-family="monospace" font-size="11.5" data-page-node-id="HtGjnrBxepA3GFN7BCNsGV">│   └── data_sensitivity_tiers.md</text>
+              <text x="32" y="212" fill="#E5E7EB" font-family="monospace" font-size="12" data-page-node-id="PwlggnTzJVrE1bkZcZFOSP">└── 📁 routing/ (确定性路由索引)</text>
+              <text x="48" y="234" fill="#9CA3AF" font-family="monospace" font-size="11.5" data-page-node-id="sGRGo6GOYN6duPFlH1HWww">    └── review_path_router.yaml</text>
+            </g>
+
+            <!-- 右侧：YAML Frontmatter 细节卡片 -->
+            <g transform="translate(420, 30)" data-page-node-id="wjTfMLc01FbrM4S7YB7eWT">
+              <rect width="410" height="260" rx="6" fill="#111827" stroke="#F59E0B" stroke-width="1.2" data-page-node-id="tWYDoi52Ie033NzQZv0MYy" />
+              <text x="18" y="28" fill="#F59E0B" font-family="monospace" font-size="13" font-weight="bold" data-page-node-id="NCZF4NS8oi8o0Dyv5ZQ8Jn">📄 trial_data_boundary.md (文件头声明)</text>
+              <line x1="18" y1="38" x2="392" y2="38" stroke="#374151" stroke-width="1" data-page-node-id="mXVv9WKzBvMQUul6PZr0T8" />
+
+              <text x="18" y="60" fill="#9CA3AF" font-family="monospace" font-size="12" data-page-node-id="dGe26kb3RDkLhPjIMGIUiF">---</text>
+              <text x="18" y="80" fill="#6EE7B7" font-family="monospace" font-size="12" data-page-node-id="BKEpxOP56fBrxeQh6KF1zg">id:</text>
+              <text x="48" y="80" fill="#E5E7EB" font-family="monospace" font-size="12" data-page-node-id="yJjMipsjHk5K8yubZ3QvoW">pos_trial_data_boundary_v2</text>
+              <text x="18" y="100" fill="#6EE7B7" font-family="monospace" font-size="12" data-page-node-id="TfNQthDW04INHbcGEiLYUO">triggers:</text>
+              <text x="90" y="100" fill="#E5E7EB" font-family="monospace" font-size="12" data-page-node-id="KfqEX3k7eq5oHN6DEp9Xb0">[trial_application, test_data_review]</text>
+              <text x="18" y="122" fill="#6EE7B7" font-family="monospace" font-size="12" data-page-node-id="AUzPHNLE1ep39Rc1lCrMx6">depends_on:</text>
+              <text x="18" y="142" fill="#93C5FD" font-family="monospace" font-size="11.5" data-page-node-id="t26zDOGLRm14RqAQLHBLox">  - taxonomy/data_sensitivity_tiers.md</text>
+              <text x="18" y="162" fill="#93C5FD" font-family="monospace" font-size="11.5" data-page-node-id="gwxNsvqF6yLn9AEGCWaIbZ">  - gateways/trial_scope_gate.md</text>
+              <text x="18" y="184" fill="#6EE7B7" font-family="monospace" font-size="12" data-page-node-id="n0s1P6i7QyEq5F1PiRJv68">referenced_by:</text>
+              <text x="18" y="204" fill="#F472B6" font-family="monospace" font-size="11.5" data-page-node-id="mnZ35scu1n4LnhsIHjMm5i">  - recipes/trial_standard_review.yaml</text>
+              <text x="18" y="224" fill="#F472B6" font-family="monospace" font-size="11.5" data-page-node-id="rT7dxKeooU5eTovHqJe84A">  - checklists/release_safety.md</text>
+              <text x="18" y="244" fill="#9CA3AF" font-family="monospace" font-size="12" data-page-node-id="9v89BQasAdbdGUz7VKENmt">---</text>
+            </g>
+
+            <path d="M 390 125 C 405 125, 405 120, 420 120" fill="none" stroke="#F59E0B" stroke-width="2" marker-end="url(#arrow)" data-page-node-id="D91m74CJhWWgFu9tKv68Va" />
+          </svg>
+        </div>
+        <p class="diagram-caption" data-page-node-id="lnsuq4N1hAchH4FZDqQBVh">图 2：知识系统采用 YAML Frontmatter 显式维护 triggers、depends_on 与 referenced_by 双向依赖图，为自改进闭环中的影响范围分析与静态 Linter 检查提供图谱基石。</p>
+      </div>
+
+      <p data-page-node-id="kN1Jn1pwflq7qg4wr3y3xK">入口检查先回答“当前任务是否属于这个分析范围”；路由再回答“进入之后该使用哪些规则”。一段文字很相似，不代表它适用于当前任务；明确的触发条件让选用依据有据可查。</p>
+
+      <p data-page-node-id="ZhWohuydqz48aPjnXZ2ykN">沿用试用例子，一份可用的知识卡可以写成结构化文本：</p>
+
+      <div class="code-container" data-page-node-id="oQgQemIw9hMkgbOJqlqvLi">
+        <div class="code-header" data-page-node-id="aPAumw2Bx2FAx5eCFscg5A">
+          <span data-page-node-id="Ioy2gzOKJxzn4aw3DxdTHE">KNOWLEDGE-CARD: trial_review_standard.yaml</span>
+          <button class="code-copy-btn" onclick="copyCode(this)" data-page-node-id="t21n4qZsG3KlEfp9DRCwpG">复制结构</button>
+        </div>
+        <pre data-page-node-id="d8wGQk06mTk5Lg7wFNxQ3k"><code data-page-node-id="jE0KERgKvMSDUKzGb5Yim6">组织立场：满足内部测试、模拟数据、可回退，进入常规试用评审。
+适用范围：功能试用申请。
+排除情形：对外开放、使用真实用户信息，或无法回退。
+信息不足：先补齐材料，不猜测条件已经满足。
+依据：教学例子中的专家补充说明。
+使用者：试用评审流程、材料检查清单。</code></pre>
+      </div>
+
+      <p data-page-node-id="eBqmfuBmzKXI7m8fYstEgk">资料也不必全部塞进 Wiki。Meta 按照<strong data-page-node-id="ZwCfFWBYJy7oEHFmV62UVg">信息密度与使用频率</strong>严格分工：</p>
+
+      <ul data-page-node-id="LYhXXG56gRJT7seqRk55B9">
+        <li data-page-node-id="abA4oCBDP3HGdgaUrO0uY4"><strong data-page-node-id="0AlypjJGGs8EhftyUZloNj">高密度 Wiki 知识库：</strong> 经常使用的提炼规则、立场与边界，信息密度极高，驻留在结构化文件中。</li>
+        <li data-page-node-id="mqyf5DuyvKlATAA46AlIcY"><strong data-page-node-id="w62lMfWEL91D4Oegf387yL">低密度按需 RAG 检索：</strong> 具体产品规格说明书、长篇历史审计细节等，按需通过向量或关键字检索。常用不等于整份文档都要常驻上下文。</li>
+      </ul>
+
+      <!-- 支柱 2：推理配方层 -->
+      <h3 id="sec-layer-recipes" data-page-node-id="KD6A0n9zLsnGcfDsKRjGcq">支柱 2：推理配方层——把专家的分析方法写成步骤 (Recipes)</h3>
+
+      <p data-page-node-id="YqG11y9Dn4KxA2qHswUIIU">有了正确知识，AI 仍可能用错顺序、漏查条件，或者过早下结论。</p>
+
+      <p data-page-node-id="N17T77WEzMJ4kTN3CoaKAF">因此，Meta 另外建立了称为 <strong data-page-node-id="vyPeRGcGHlsk2Kq8JnhMA7">Recipes 的分析流程</strong>，规定先检查什么、在哪一步加载哪些知识，以及什么才算完成分析。</p>
+
+      <p data-page-node-id="3ntSrN6fX9nYUY6BsazhfC"><strong data-page-node-id="U3gut20AUONhZ5l3q9XlEN">核心架构原则：知识文件告诉 AI“采用什么标准”（What it knows），流程文件告诉 AI“怎样用这些标准完成这次任务”（How it reasons）。</strong> 流程引用知识文件，不把领域事实重复写进步骤；知识文件陈述立场，不规定操作程序。</p>
+
+      <p data-page-node-id="YWOF2QP61etNGV2mpgaiah">顶层流程根据任务调用不同的子流程，每个子流程负责一个分析阶段。分阶段执行时，每一步只加载当前需要的指令和资料。以教学案例为例，入口阶段先确认是不是试用申请；查标准时拿立场文件；核实条件时再查这次产品的数据范围和回退材料。</p>
+
+      <div class="callout-box callout-info" data-page-node-id="v7XY8B1nYSpeXKihZEwrnn">
+        <div class="callout-title" data-page-node-id="a0M7CMy4MClauVfZT6q4aN">💡 渐进式披露（Progressive Disclosure）的技术收益</div>
+        <p data-page-node-id="IsdJcTBp8HRq4JbJQa4EUe">不采用单次将所有 200+ 知识文件注入 Prompt 的朴素做法，而是由 Recipe 按需串行加载：入口网关 → 对应立场 → 专有证据 → 人工裁决。</p>
+        <p data-page-node-id="kDy5dcMs4XdoiG8jqmp62o"><strong data-page-node-id="QT7inUj3SF3P5H8zKmXG12">实测数据：</strong> 该设计直接将<strong data-page-node-id="nmaHCgYeZq36gFOrctslCg">每轮对话消耗的 Token 减少约 80%</strong>，同时消除了长上下文导致的“迷失在中间”（Lost in the Middle）与注意力衰减，故障归因路径清晰明确。</p>
+      </div>
+
+      <!-- 人机协同 -->
+      <h3 id="sec-hitl" data-page-node-id="NtMXwkAonaWIhIHD2prdrH">人机协同：该让专家介入的地方，明确停下来</h3>
+
+      <p data-page-node-id="XElUOwrISlSzEAGTotpRt1">Meta 强调在合规等高风险领域，AI 不是黑盒替代者，而是专家的力量倍增器。系统保留了两种贯穿全流程的人工介入方式：</p>
+
+      <ul data-page-node-id="LKqhZFj2C8iIacuNGEu298">
+        <li data-page-node-id="osDjVpKdGENL8DpnhbHbth"><strong data-page-node-id="II2gdnodGJ75NFLd5QPgHt">检查点（Checkpoints）：</strong> 设在预定的分析节点。AI 展示中间判断与引用依据，专家确认后再继续，也可以当场纠正方向。</li>
+        <li data-page-node-id="4aOEXkClT6p32MmzaBnO9B"><strong data-page-node-id="PvK9XM9vOqDTtgQ8QHqchQ">升级转人工（Escalations）：</strong> 用于无法可靠判断的情况，例如必要信息缺失，或者证据在业务上支持多种合理解释。此时系统<strong data-page-node-id="5m0qLZAHU3nSo00txw5sAu">严禁随意脑补推测</strong>，必须原样移交专家定夺。</li>
+      </ul>
+
+      <!-- 自进化飞轮 -->
+      <h3 id="sec-layer-flywheel" data-page-node-id="X6iFGDqYwA7892Sr8XLJxJ">自进化飞轮：专家纠错编译器与四大自优化阶段</h3>
+
+      <p data-page-node-id="eLw7t4YBtUbiHGGnSpxASF">系统真正积累经验的地方，是专家纠正之后发生的事情。一句“这个结论不对”，不能直接变成可靠的知识更新。Meta 把这项维护视为<strong data-page-node-id="ntWC4NLAzdX7vPQcmidymi">“编译”（A Compilation Problem）</strong>：将自然语言反馈转成精确、可检查的文件修改。</p>
+
+      <!-- 矢量架构图 3：自进化飞轮闭环 -->
+      <div class="diagram-wrapper" data-page-node-id="iUVH4Xbw45JVYkxJHQniwu">
+        <div class="diagram-header" data-page-node-id="RD6fVxUK5ExZcsFAS1FCKC">
+          <span class="diagram-title" data-page-node-id="p3xD8P3Yx2hUlb5cAf2B9i">🎨 自进化自优化飞轮：专家反馈的编译、双盲重放与永久富集</span>
+          <span class="badge badge-cyan" data-page-node-id="X8ZhNhxhISqUfvf53zOHHU">SVG 矢量图表 3</span>
+        </div>
+        <div class="diagram-svg-container" data-page-node-id="j6XrBISks5s4L0KixgcdXb">
+          <svg viewBox="0 0 860 360" width="860" height="360" xmlns="http://www.w3.org/2000/svg" data-page-node-id="0fMYJY1cIkqZFM0XvXlDnu">
+            <rect x="10" y="10" width="840" height="340" rx="10" fill="#18181B" stroke="#27272A" stroke-width="1.5" data-page-node-id="BQFUZGJM6ot9pw7BWXT9tk" />
+
+            <!-- 步骤 1：专家纠错与提取 -->
+            <g transform="translate(30, 40)" data-page-node-id="AiMP9bHLmaAhY464vWE4JJ">
+              <rect width="180" height="120" rx="8" fill="#1F2937" stroke="#60A5FA" stroke-width="1.5" data-page-node-id="a1NfZZ7H87XTarIAisYKgK" />
+              <text x="14" y="30" fill="#60A5FA" font-family="sans-serif" font-weight="bold" font-size="13" data-page-node-id="tzHe2lyvJ7kpbmIk9AFrGX">1. 交互纠错与提取</text>
+              <text x="14" y="58" fill="#D1D5DB" font-family="sans-serif" font-size="11.5" data-page-node-id="D6uNQxh0eKgWqH4DvxoxSf">专家在日常对话纠正</text>
+              <text x="14" y="78" fill="#9CA3AF" font-family="sans-serif" font-size="11" data-page-node-id="OM7unla9nDYDXYp2UzoFXT">提取实质语义批评</text>
+              <text x="14" y="98" fill="#9CA3AF" font-family="sans-serif" font-size="11" data-page-node-id="X0QQfTGS5eaLQhST1jWoUa">记录当时加载材料</text>
+            </g>
+
+            <!-- 步骤 2：根因归因 -->
+            <g transform="translate(245, 40)" data-page-node-id="72x9qf0q5TVTTeTdrcm55r">
+              <rect width="180" height="120" rx="8" fill="#1F2937" stroke="#FBBF24" stroke-width="1.5" data-page-node-id="SEVTPZIXEDiTEkJJlsfjxg" />
+              <text x="14" y="30" fill="#FBBF24" font-family="sans-serif" font-weight="bold" font-size="13" data-page-node-id="V535GSDm58ALLdK7mdSBOm">2. 核心可达性归因</text>
+              <text x="14" y="55" fill="#34D399" font-family="sans-serif" font-size="11" data-page-node-id="KmkQ7oQgs09nNoNxmBXmMg">缺资料 → 补知识</text>
+              <text x="14" y="75" fill="#F87171" font-family="sans-serif" font-size="11" data-page-node-id="HdyKsgL9Uy4OnFZQHObjqK">有资料未查 → 改流程</text>
+              <text x="14" y="95" fill="#FBBF24" font-family="sans-serif" font-size="11" data-page-node-id="8TglCpewoCPddys7eiQhqH">存在争议 → 人工分歧</text>
+            </g>
+
+            <!-- 步骤 3：多智能体编译 -->
+            <g transform="translate(460, 40)" data-page-node-id="bWc6wsYIJ5ZnrY98ZbnPrq">
+              <rect width="180" height="120" rx="8" fill="#1F2937" stroke="#C084FC" stroke-width="1.5" data-page-node-id="DllCYBvTxHKAYtUvRXewu2" />
+              <text x="14" y="30" fill="#C084FC" font-family="sans-serif" font-weight="bold" font-size="13" data-page-node-id="Y0ROQCa6gG2sGJdSFZlULI">3. 最小化文本编译</text>
+              <text x="14" y="58" fill="#D1D5DB" font-family="sans-serif" font-size="11.5" data-page-node-id="gCRIaRROuQAqKL7GFPZGdq">多子 Agent 协同改写</text>
+              <text x="14" y="78" fill="#A78BFA" font-family="sans-serif" font-size="11" data-page-node-id="2EY6aZwDl8SBHQAjUCLVn1">独立对抗审查 (Critic)</text>
+              <text x="14" y="98" fill="#A78BFA" font-family="sans-serif" font-size="11" data-page-node-id="SSwjTRoDGy67hxYyvvBXTp">确定性静态 Linter</text>
+            </g>
+
+            <!-- 步骤 4：双阶段评测门禁 -->
+            <g transform="translate(675, 40)" data-page-node-id="lo2kir5TCWxWBkIsxhXApM">
+              <rect width="160" height="120" rx="8" fill="#1F2937" stroke="#F472B6" stroke-width="1.5" data-page-node-id="Hau9gR6dIFZQ1CabHvWoMn" />
+              <text x="12" y="30" fill="#F472B6" font-family="sans-serif" font-weight="bold" font-size="13" data-page-node-id="ehIjyk3a46vDnBNu3FwiO0">4. 双阶段验证门禁</text>
+              <text x="12" y="58" fill="#D1D5DB" font-family="sans-serif" font-size="11.5" data-page-node-id="sM0kXNhhdKiDjrAEFGTj51">① 原案双盲重放</text>
+              <text x="12" y="78" fill="#D1D5DB" font-family="sans-serif" font-size="11.5" data-page-node-id="ULcRma4MdnPtjUoe7SDAJm">② 历史基准回归</text>
+              <text x="12" y="98" fill="#F87171" font-family="sans-serif" font-size="11" data-page-node-id="oCjnOoD3NXXRlz4GzhFWLC">失败则带原因重编</text>
+            </g>
+
+            <!-- 下方：5. 专家 PR 审核 与 6. 测试资产沉淀 -->
+            <g transform="translate(460, 205)" data-page-node-id="ciN0zBxRyudGi2Q2RWu9c0">
+              <rect width="180" height="110" rx="8" fill="#064E3B" stroke="#34D399" stroke-width="1.5" data-page-node-id="gOpYhm4Ztt6NpNCn6wCMPe" />
+              <text x="14" y="28" fill="#34D399" font-family="sans-serif" font-weight="bold" font-size="13" data-page-node-id="Q4RlVTjHXdbhSkXazDRHwf">5. 专家 30秒 PR 批准</text>
+              <text x="14" y="54" fill="#E5E7EB" font-family="sans-serif" font-size="11.5" data-page-node-id="RIjAQAc5h3SozwoFAVkwxe">直观审查纯文本 Diff</text>
+              <text x="14" y="74" fill="#A7F3D0" font-family="sans-serif" font-size="11" data-page-node-id="ou40TEyabecEpEXKovD9E7">正式合流落盘</text>
+              <text x="14" y="94" fill="#A7F3D0" font-family="sans-serif" font-size="11" data-page-node-id="CtboZSci5wAcX6qrMpcLa4">版本受控可审计回滚</text>
+            </g>
+
+            <g transform="translate(200, 205)" data-page-node-id="4Ul0vuJMBl5ArNQew2RRfC">
+              <rect width="225" height="110" rx="8" fill="#312E81" stroke="#818CF8" stroke-width="1.5" data-page-node-id="jxHHOcmjQxu4yInqK0zQoo" />
+              <text x="14" y="28" fill="#818CF8" font-family="sans-serif" font-weight="bold" font-size="13" data-page-node-id="2NJoPGWZint8CKy163sQ0M">6. 永久沉淀与滚雪球</text>
+              <text x="14" y="54" fill="#E5E7EB" font-family="sans-serif" font-size="11.5" data-page-node-id="qMSYmk9uzBfAK8NDrD2lNP">原失败用例 + 标准判定</text>
+              <text x="14" y="74" fill="#C7D2FE" font-family="sans-serif" font-size="11" data-page-node-id="q3aPxsG6pczR9Ln3X3eezY">自动编译入回归评测集</text>
+              <text x="14" y="94" fill="#FCD34D" font-family="sans-serif" font-size="11" data-page-node-id="zGJM4pwxhVEaN2K5FiQuGk">越用越聪明，零回归保障</text>
+            </g>
+
+            <!-- 流程连线箭头 -->
+            <path d="M 210 100 L 245 100" fill="none" stroke="#9CA3AF" stroke-width="2" marker-end="url(#arrow)" data-page-node-id="ZZmrLuorfdQBJoeA3ijeNT" />
+            <path d="M 425 100 L 460 100" fill="none" stroke="#9CA3AF" stroke-width="2" marker-end="url(#arrow)" data-page-node-id="3NdxJ5ud3QtKXvNiSrq8kE" />
+            <path d="M 640 100 L 675 100" fill="none" stroke="#9CA3AF" stroke-width="2" marker-end="url(#arrow)" data-page-node-id="w9yAx1AuUZ1zflhqCIs4xH" />
+            <path d="M 755 160 C 755 260, 680 260, 640 260" fill="none" stroke="#34D399" stroke-width="2" marker-end="url(#arrow)" data-page-node-id="CasLMQstveNQk6GECBniJZ" />
+            <text x="735" y="210" fill="#34D399" font-size="11" font-family="sans-serif" data-page-node-id="ODQ922nOBevdnU6IT1KIlD">评测全通过</text>
+            <path d="M 675 75 C 655 55, 660 55, 640 75" fill="none" stroke="#F87171" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow)" data-page-node-id="SjxY6be1jIIL2xgArijmwu" />
+            <text x="655" y="48" fill="#F87171" font-size="9.5" font-family="sans-serif" text-anchor="middle" data-page-node-id="emBYalahGQfc2FTDwix8xd">重测返工</text>
+            <path d="M 460 260 L 425 260" fill="none" stroke="#34D399" stroke-width="2" marker-end="url(#arrow)" data-page-node-id="N7SQHoIbQK0A69xDQEx5Ye" />
+            <path d="M 200 260 C 90 260, 90 210, 90 160" fill="none" stroke="#818CF8" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="4,3" data-page-node-id="U9ndNcweD6YjBP8IIQcBgJ" />
+            <text x="95" y="215" fill="#818CF8" font-size="10.5" font-family="sans-serif" data-page-node-id="CunXBQG5lBLCLOyJQJAXSb">滚雪球扩展</text>
+          </svg>
+        </div>
+        <p class="diagram-caption" data-page-node-id="wmqzI5ztyuyhBhzpCHyJos">图 3：自进化飞轮运转全景——将专家的日常语言批评视为“编译输入”，通过对抗审查与双阶段验证门禁，最终将纠错凝固为可回放的长期资产。</p>
+      </div>
+
+      <div class="callout-box callout-rule" data-page-node-id="xPbTNKC29lE1tNCIWruGIf">
+        <div class="callout-title" data-page-node-id="oTmMGA6F1f9xTZPTGlYbpq">⚙️ 编译闭环四大执行阶段深度展开</div>
+
+        <p data-page-node-id="Dhk2ct4kvw2YF92KHHqtZf"><strong data-page-node-id="VPnfhfDuIbhBuBiMx2XnFV">1. 根因归因（Diagnosis）：到底是缺知识，还是用错了知识？</strong></p>
+        <p data-page-node-id="a67onCZVWJGKpCTO4GnScK">团队早期尝试按专家说话的形式分类（补充信息算知识，纠正方向算流程），但彻底失败了，因为同一句纠错可能指向不同根因。现在的做法是：系统查看 AI 当时实际加载的全部清单，执行<strong data-page-node-id="BiZqwqphJBo7lP2so37uv5">核心可达性判定测试</strong>：凭当时拿到的材料，AI 本来能不能得出正确结论？</p>
+        <ul data-page-node-id="YtBr3i3u9f4xOmDHlPLlaG">
+          <li data-page-node-id="uaz9d57A7BW7Ig2k1YIYJE">资料根本没写对应条件 → <strong data-page-node-id="rHA38ZaoPlFrbbDVRws6VW">知识盲区（Knowledge Gap）</strong>，补立场文件；</li>
+          <li data-page-node-id="vCP6gAK6vtFXBabqfbnICt">资料已有明确条件却被 AI 漏查 → <strong data-page-node-id="sDorbXWrvLGk02XBCTj173">流程缺陷（Recipe Flaw）</strong>，修改排查步骤；</li>
+          <li data-page-node-id="mNdJsGnlFnAM8dSYccvxss">专家自身存在不同解释 → <strong data-page-node-id="qkLnRC3AL9iEz9ST00JaVd">主观分歧（Ambiguity）</strong>，交人工研讨。</li>
+        </ul>
+
+        <p data-page-node-id="sn2FKA5RXdTnOXDxMR9Lzh"><strong data-page-node-id="GZ96zvaJAoUTzMijAKkuaR">2. 手术刀式编辑与对抗审查（Surgical Editing & Adversarial Review）</strong></p>
+        <p data-page-node-id="u8bOcJH8nzGVC7N8KjrEkZ">改动尽量小，影响要查清。系统采用<strong data-page-node-id="bWKoGa4xOevJrY9pKczqsB">双重安全网</strong>：</p>
+        <ul data-page-node-id="Q9ATnu35clMPqldlfnEW7X">
+          <li data-page-node-id="LtrR1Nhs9Fej3dsJZVTZzv"><strong data-page-node-id="ybeExfnFA7A6JZ3q7FNZv7">对抗性独立审查 Agent：</strong> 在一个全新的空白上下文只看修改 Diff，以“找茬”为使命，专门寻找矛盾和被破坏的历史立场。</li>
+          <li data-page-node-id="DV0lHRi5Nozt0pvWhWMLmE"><strong data-page-node-id="aNjbvKqdDuF3qsCOu1Q5VY">确定性静态 Linter 检查：</strong> 纯代码程序，硬性拦截失效引用、标识符冲突、文件体积超标和依赖循环等结构性错误。</li>
+        </ul>
+
+        <p data-page-node-id="CMSTMatzBNnpoprMij6sym"><strong data-page-node-id="IRnuW2xqt0q5s5RBdcMmNx">3. 两阶段防退步测试（Two-Stage Regression Testing）</strong></p>
+        <ul data-page-node-id="FKCagNVFbqNiOBSw9SHDnq">
+          <li data-page-node-id="DRemuuEKuRsMfyHmBTgrYp"><strong data-page-node-id="GxMtvM4o1yokCNmsuXRmFv">原案例双盲重放（Targeted Replay）：</strong> 重新运行触发纠错的场景。执行 AI 不知正在受测，裁判 LLM 仅看输出与专家原始标准，不知道具体改了哪行文件，杜绝偏见。</li>
+          <li data-page-node-id="O5fwtHGAaD5hX9mjPrQ9Dv"><strong data-page-node-id="Yc4QXK4HzDYxfrX4wG1C1w">全量基准回归测试（Regression Testing）：</strong> 运行领域已有的基准测试集。解决“全部转专项虽修好原案，却导致模拟数据常规案例被误杀”的副作用。</li>
+        </ul>
+
+        <p data-page-node-id="8APAL507m4zZRtCh1DKS5p"><strong data-page-node-id="UUaqAwuAhb2ggV8GrlFw00">4. 资产入库与滚雪球（Landing & Enrichment）</strong></p>
+        <p data-page-node-id="UIxQffRCkC45G8YjBMVlWg">专家以 PR 形式在 30 秒内快速审核并批准落地。批准后产生两份永久资产：</p>
+        <ul data-page-node-id="zs7tMo2C9TJCJJvkDP4BkJ">
+          <li data-page-node-id="Bm4G791zGRDETpNJzBySAG"><strong data-page-node-id="MZPCdz0lbYjGf1k5W17Vcf">更新后的纯文本知识或配方；</strong></li>
+          <li data-page-node-id="fLaXUJ0fQ9lOkaGf7BuTsC"><strong data-page-node-id="aar1RW5JXHh3m3rc3UPL7k">新增进回归测试库的测试用例与标准答案。</strong> 保证以后无论如何迭代，模型都不会在同一个坑里跌倒第二次。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 章节 4：动态交互沙盘 -->
+    <section id="sec-sandboxes" data-page-node-id="puRtCVc5vDwA1yEuV62Z2z">
+      <h2 data-page-node-id="wFEGkfXXInAdJ3lxNjPk5L">系统动态交互沙盘：可计算模型与决策模拟</h2>
+
+      <p data-page-node-id="If44Upt4BLsPojHwXKRDHn">为深度理解 Meta 第二大脑的底层机理，本节提供三个零外部依赖的原生交互沙盘。所有数值均基于 Stage 2 推导的数学模型实时计算，拒绝静态假数据。</p>
+
+      <!-- 沙盘 1：根因归因决策器 -->
+      <div class="sandbox-card" id="sec-sim-attribution" data-page-node-id="FvHjeRIfEhhRTMoHgzplEf">
+        <div class="sandbox-header" data-page-node-id="cVupHD9tga0QXXhmZmkJ02">
+          <div data-page-node-id="v9T5jFx4M5EbMH2ThHX2ZY">
+            <span class="sandbox-tag" data-page-node-id="yk7z9SZ6sjeHP3TTPnNn1x">交互沙盘 1</span>
+            <div class="sandbox-title" data-page-node-id="aItbQnwh5CbE73UOyqp1Tm">专家纠错诊断与根因归因决策器 (Attribution Simulator)</div>
+            <div class="sandbox-desc" data-page-node-id="A2fWlAkudsYISWYYBUwvsK">模拟 Meta 自优化飞轮的 Stage 1：根据执行时所持材料与专家反馈，反解系统故障根因与修复指令</div>
+          </div>
+        </div>
+
+        <div class="sandbox-grid" data-page-node-id="aQbJKsoSMKMnTDt3aWDOoC">
+          <div class="sandbox-controls" data-page-node-id="nOB0KtCD7VKGo9kh3BQ05X">
+            <div class="control-group" data-page-node-id="3Peg9kEkxDJsl0zH22FlH3">
+              <div class="control-label-row" data-page-node-id="C77tPlNkLEvOLPRjg7CnqO">
+                <label for="sel-incident" data-page-node-id="jKiX9hRoWIPdMkWqwCZ1RA">发生故障的案例场景：</label>
+              </div>
+              <select id="sel-incident" class="sandbox-select" data-page-node-id="aK35UEu5mTpQveJvKfRtro">
+                <option value="data_leak" data-page-node-id="Xq7VBBGJpFaGDCTzpXdnEr">案例 A：真实用户数据试用被系统误放行进入常规评审</option>
+                <option value="no_rollback" data-page-node-id="F2OvKq9nfC0jLE8m3rjBIo">案例 B：无回退方案的高风险功能未提示阻断即获批</option>
+                <option value="out_of_scope" data-page-node-id="1iHfwIO8Yl4uFsjrVDHFly">案例 C：非合规域的企业采购单触发了合规专有规则</option>
+                <option value="term_mismatch" data-page-node-id="6xP5iHA8NxUn0F5u8zyTdQ">案例 D：将“临时测试令牌”误判定为“长期服务凭证”</option>
+              </select>
+              <span class="control-hint" data-page-node-id="6SMmEZmlmQfuAs47d9BbEr">选择在实际业务评审中引发专家纠偏的典型错误用例</span>
+            </div>
+
+            <div class="control-group" data-page-node-id="a2o0cHj0NtcXdHYNPee2FF">
+              <div class="control-label-row" data-page-node-id="cMEhORUfnYryIwA10FDPDe">
+                <label for="sel-manifest" data-page-node-id="TTG9K5vPQctZFnyRgdPcxA">推理时已加载材料状态：</label>
+              </div>
+              <select id="sel-manifest" class="sandbox-select" data-page-node-id="ufpKY4oICtATCkG632WNfC">
+                <option value="missing" data-page-node-id="ofiHyQvFcROmAzpjd302bT">材料中根本没有说明该限制条件 (Information Missing)</option>
+                <option value="present" data-page-node-id="8bzzRztRRMD8UVEHyMvlvx">材料中已明确写有该约束，但 AI 推理时遗漏 (Present but Ignored)</option>
+                <option value="ambiguous" data-page-node-id="kwWFvgIRqliDW6PzIfxEgl">材料条款模糊，不同专家有不同解释 (Contradictory/Ambiguous)</option>
+              </select>
+              <span class="control-hint" data-page-node-id="g8xTpCzAOzI3ZJWjaDT64Y">基于当时 Knowledge Manifest 真实内容的核心可达性分析</span>
+            </div>
+
+            <div class="control-group" data-page-node-id="X6evBQ7ksKbYhETG8gQZ9g">
+              <div class="control-label-row" data-page-node-id="h2GL05SBhkE2Wy0BwNVKB5">
+                <label for="sel-consensus" data-page-node-id="8QlDzx207N8tlNC2arxaaX">专家群体内部共识状态：</label>
+              </div>
+              <select id="sel-consensus" class="sandbox-select" data-page-node-id="CQqHO3CsIOtuFJF8JShOBc">
+                <option value="unanimous" data-page-node-id="aC227QdqmOPuwUEYTNlvUS">全体专家一致认可正确判定准则 (Unanimous Consensus)</option>
+                <option value="split" data-page-node-id="A1riyjPiu6KuGfQf1aWXzF">专家组存在法理/业务分歧 (Split Opinions)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="sandbox-display" data-page-node-id="hK7anBHxsgpyPSdQ7UNTyq">
+            <div class="metric-row" data-page-node-id="G2Q0C4EzrHfI9cctrAcK5N">
+              <span class="metric-name" data-page-node-id="kCiv43Fa3WTqRD9y8rSPCx">系统根因归因判定：</span>
+              <span class="metric-value-badge" id="out-diag-cause" data-page-node-id="TsT06tHIxtpV6YA8Mdrfi2">Recipe Flaw (流程缺陷)</span>
+            </div>
+            <div class="metric-row" data-page-node-id="mEn6zgNpGLb7N2D5AsMEEF">
+              <span class="metric-name" data-page-node-id="oVCybX2mDHaqualIFqVFHI">目标修改文件层级：</span>
+              <span class="metric-value-badge" id="out-diag-target" data-page-node-id="OMUR2PJtiG1zHGFHWXjlVz">recipes/trial_review_flow.yaml</span>
+            </div>
+            <div class="metric-row" data-page-node-id="9ziASGzASfoRaDhEYOWUZw">
+              <span class="metric-name" data-page-node-id="tRhI158cJTyvE3Tg7idOj6">建议编译器动作：</span>
+              <span class="metric-value-badge" id="out-diag-action" data-page-node-id="8lgXKWYYK8Ag5PIH2qcAPM">增加数据类型强制核实步骤</span>
+            </div>
+
+            <div class="decision-banner status-emerald" id="out-diag-banner" data-page-node-id="NMdpRXA5caCr6ZlMSyVijQ">
+              <div data-page-node-id="lNGyes3feiP8aY98CRVxzU">
+                <strong data-page-node-id="GxZQgxwooBRUYZtJdba5d1">自动化编译建议：</strong>
+                <span id="out-diag-desc" data-page-node-id="bDVwSsZ1zQYpdXIHrpXmxA">资料中已包含约束，说明组织立场完备。问题出在 Recipe 没有强制要求核查数据属性，应在阶段 2 补充检查清单步骤，无须改写核心立场文件。</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 2：渐进式披露 Token 优化 -->
+      <div class="sandbox-card" id="sec-sim-token" data-page-node-id="TEo0IVsvIl0NyNDtejBlz9">
+        <div class="sandbox-header" data-page-node-id="mGQfBS6RySZrfNIrNCzWuQ">
+          <div data-page-node-id="iO9LPeLFmXmj8GNysLeTcA">
+            <span class="sandbox-tag" data-page-node-id="5deZHyb0sUXmPkTPTzskF2">交互沙盘 2</span>
+            <div class="sandbox-title" data-page-node-id="E84jCjdRMSoEOb2EtVTgvL">渐进式披露 (Progressive Disclosure) Token 优化与注意力沙盘</div>
+            <div class="sandbox-desc" data-page-node-id="GE8ik10yXhVyI2Iyv3AAQG">量化对比 Meta 采用“配方按需加载”相较于“单次全量知识灌入”的 Token 节约率与注意力质量</div>
+          </div>
+        </div>
+
+        <div class="sandbox-grid" data-page-node-id="Ft52KnfCbgCMbJzPtGCTCB">
+          <div class="sandbox-controls" data-page-node-id="nVsGFndcSbpVyC77uHh49P">
+            <div class="control-group" data-page-node-id="dRjSn7D5tFHWiDNHSMryme">
+              <div class="control-label-row" data-page-node-id="2U6XltArAkHUXpo4WXgkiP">
+                <label for="rng-total-kb" data-page-node-id="FDqVHeq7H0lejoMxlVgyie">全量知识库 Token 规模 (Tokens)：</label>
+                <span class="metric-value-badge" id="val-total-kb" data-page-node-id="lVnDXrAAqQUI5AsthFicgK">45,000</span>
+              </div>
+              <input type="range" id="rng-total-kb" class="sandbox-range" min="15000" max="100000" step="5000" value="45000" data-page-node-id="xfAmiWRirOTFLPw1IuQ1Ek">
+              <span class="control-hint" data-page-node-id="Y5pmQg5hca8d3ZLRaQvlBf">对应 200+ 结构化纯文本立场文件全量加载所需的上下文基线</span>
+            </div>
+
+            <div class="control-group" data-page-node-id="UA87Xc2vTjKkjGeIx5nMDb">
+              <div class="control-label-row" data-page-node-id="Jc6753mWMu4lWfuU2agM79">
+                <label for="rng-stages" data-page-node-id="VcTVqCvV4w4BKR1OMbaoOr">分析流水线阶段数 (K 步)：</label>
+                <span class="metric-value-badge" id="val-stages" data-page-node-id="yoI4o6kgEHqbr6hVgXYcZw">4</span>
+              </div>
+              <input type="range" id="rng-stages" class="sandbox-range" min="2" max="6" step="1" value="4" data-page-node-id="a4tXXVB4C6fxxNENw240Gy">
+              <span class="control-hint" data-page-node-id="IVl9A4GkxIWbI1C12QsbXF">如：1.入口网关 → 2.对应立场 → 3.产品证据核验 → 4.专家判定</span>
+            </div>
+
+            <div class="control-group" data-page-node-id="HHKJB62Ab0qpS0y5y8s3JT">
+              <div class="control-label-row" data-page-node-id="DmDRFc9jTylTlPMZpwQWsL">
+                <label for="rng-stage-kb" data-page-node-id="wzgGHjLrWzhDRU7eva1IEi">单阶段按需知识注入比例 (%)：</label>
+                <span class="metric-value-badge" id="val-stage-kb" data-page-node-id="5gWncfC20sZmh5PEbFdXiA">8%</span>
+              </div>
+              <input type="range" id="rng-stage-kb" class="sandbox-range" min="3" max="25" step="1" value="8" data-page-node-id="2tGX4bxC9cFp9q9zTal3Fx">
+              <span class="control-hint" data-page-node-id="NDHGJ5gFgCYzYOHaOXuver">每个子配方仅加载当前决策所需的具体立场卡片</span>
+            </div>
+          </div>
+
+          <div class="sandbox-display" data-page-node-id="pUQuS6wbpfpPCCHH93EPRY">
+            <div class="metric-row" data-page-node-id="asDlm2OvC83ReBXLPatRC4">
+              <span class="metric-name" data-page-node-id="3PddJffd0fUfegogy1bhQL">传统全量灌入单轮消耗：</span>
+              <span class="metric-value-badge" id="out-token-trad-turn" data-page-node-id="AeGrOBvH2OVoxKsF0oOHZ4">45,000</span>
+            </div>
+            <div class="metric-row" data-page-node-id="OHBBA1lyI9yAd9GsZHB6tn">
+              <span class="metric-name" data-page-node-id="oVV6PFzIwbIWDq9ApTcH05">渐进式披露单轮平均消耗：</span>
+              <span class="metric-value-badge" id="out-token-prog-turn" data-page-node-id="mRlkMbhtWpZGOdtaAzPuxT">3,600</span>
+            </div>
+            <div class="metric-row" data-page-node-id="IA4dQ1IpAqfvXvNrfODqIS">
+              <span class="metric-name" data-page-node-id="9WIM00yBnJN5OoWCLf4gvs">每轮 Token 削减幅度：</span>
+              <span class="metric-value-badge" id="out-token-saving" style="color:var(--emerald);" data-page-node-id="siMVGJhIPNCyM1ZC1AbPwh">92.0%</span>
+            </div>
+            <div class="metric-row" data-page-node-id="8ISI0TzvYFChhzxguCTBcj">
+              <span class="metric-name" data-page-node-id="P7OykXRmSENmyBBGam5fNR">全流程多轮总消耗对比：</span>
+              <span class="metric-value-badge" id="out-token-total-ratio" data-page-node-id="WFI7Dbea8qCpw8zdHUIqRw">14,400 vs 180,000</span>
+            </div>
+
+            <div class="decision-banner status-emerald" id="out-token-banner" data-page-node-id="FwImINjz3yw8MCOdVBsHGB">
+              <div data-page-node-id="UsViyCFY40wKsUxLV0uRVf">
+                <strong data-page-node-id="ETLoO0EA1ASUTWcGYU6Ra2">注意力衰减防护结论：</strong>
+                <span id="out-token-analysis" data-page-node-id="CFZDJrSfNJ2EudJfQUNgYI">符合 Meta 官方“约降低 80% Token 消耗”的实测结论。将上下文控制在 4,000 tokens 以内，有效消除了长上下文遗忘与注意力泛化风险。</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 3：双阶段防退步回归门禁 -->
+      <div class="sandbox-card" id="sec-sim-regression" data-page-node-id="6JyqHUV6r0LBf1eQYFiCFs">
+        <div class="sandbox-header" data-page-node-id="R8hYuEXGzLQBgYwAxpBvDo">
+          <div data-page-node-id="ow7QLwhwvMAO1e7RDY8n1u">
+            <span class="sandbox-tag" data-page-node-id="X5ltXcT7hRAkfDEbFekaDU">交互沙盘 3</span>
+            <div class="sandbox-title" data-page-node-id="2s7DJqKLEeJ3LAHIqKqpq9">两阶段防退步回归门禁与副作用模拟器 (Regression Gate)</div>
+            <div class="sandbox-desc" data-page-node-id="QEkGBWAxAamwCuA3lnPQ0A">模拟验证 Meta 为何必须采用“双阶段门禁”：粗暴修补原案极易引发历史基准案例大面积倒退</div>
+          </div>
+        </div>
+
+        <div class="sandbox-grid" data-page-node-id="7Lp3Gwc1qsHaXNw46IA2Ta">
+          <div class="sandbox-controls" data-page-node-id="ee1Gf8K7keK4e96iFW8B8Z">
+            <div class="control-group" data-page-node-id="uFYbxVYgHHtyFvHEN3lhZO">
+              <div class="control-label-row" data-page-node-id="D9vlYBEPKLJRhhFQLNhhJs">
+                <label for="sel-patch-type" data-page-node-id="aLrEs9y8d33JWsg20GdQNq">补丁编写策略与粒度：</label>
+              </div>
+              <select id="sel-patch-type" class="sandbox-select" data-page-node-id="dfeDBlWyuVdPBadSZnd9iW">
+                <option value="broad" data-page-node-id="ttaXh2BWPwkWPqpMw9gsUZ">一刀切粗暴修补：所有涉及试用全部强制转专项评审 (Over-Correction)</option>
+                <option value="surgical" data-page-node-id="OoVMiBEVI3bUiQEi6bG8qA">手术刀式精确修补：补查数据类型与可回退状态 (Surgical Patch)</option>
+                <option value="loose" data-page-node-id="JwmeVzqGP1uQOsVVOiWXhz">宽松微调：仅在原文本追加提示性弱口吻声明 (Weak Patch)</option>
+              </select>
+              <span class="control-hint" data-page-node-id="bpe8V6XDPpI48r3FWzUDPg">不同策略对原案修复率与历史案例副作用影响截然不同</span>
+            </div>
+
+            <div class="control-group" data-page-node-id="tYpf5fgtAJZsR6g6G3rsPB">
+              <div class="control-label-row" data-page-node-id="2Nnm0nJksqJIoYS9TLdFyg">
+                <label for="rng-suite-size" data-page-node-id="3o7DLERXaQMMCq1oOBKgI1">回归测试集用例规模 (Cases)：</label>
+                <span class="metric-value-badge" id="val-suite-size" data-page-node-id="FrVC5BLyGJNHHrDGZG2NYp">120</span>
+              </div>
+              <input type="range" id="rng-suite-size" class="sandbox-range" min="30" max="300" step="10" value="120" data-page-node-id="PcF7wQqBQmeLBAnmyllF8r">
+              <span class="control-hint" data-page-node-id="njknnIKFQYCF8dj7Frtu2T">由历史专家纠正累积滚雪球而来的自动化基准测试库</span>
+            </div>
+          </div>
+
+          <div class="sandbox-display" data-page-node-id="3z1TUNlEX4IqFXJdmtQFl3">
+            <div class="metric-row" data-page-node-id="jGy7oGE3uHM0KMGhqePey6">
+              <span class="metric-name" data-page-node-id="JxxCjdQgORWd2ZF4IWFYTZ">阶段 1 · 盲测定向重放判定：</span>
+              <span class="metric-value-badge" id="out-gate-replay" data-page-node-id="QxUAruhCO29gcJFAac89oY">PASS (100% 修复)</span>
+            </div>
+            <div class="metric-row" data-page-node-id="IvKrn1NzamWDV9aSYGRjZM">
+              <span class="metric-name" data-page-node-id="z5FzaHNaSMcjtGjDlPwy65">阶段 2 · 历史基准回归通过率：</span>
+              <span class="metric-value-badge" id="out-gate-regression" data-page-node-id="wp7t9GEVcmGhzwjR329RBc">68.3% (38例倒退)</span>
+            </div>
+            <div class="metric-row" data-page-node-id="FWxRhi4Jvt8mRheFlL8GHG">
+              <span class="metric-name" data-page-node-id="BxVdTwLrQM12uBl1hR23yD">自动化流水线最终裁决：</span>
+              <span class="metric-value-badge" id="out-gate-verdict" style="color:var(--rose);" data-page-node-id="X6zbUVYJIkKL6tyVNHem4M">REJECTED (阻断拦截)</span>
+            </div>
+
+            <div class="decision-banner status-rose" id="out-gate-banner" data-page-node-id="p0iBXw9nAnKSvXEdCKGIuQ">
+              <div data-page-node-id="0wRwBK8LOBFla5cGfVVhZN">
+                <strong data-page-node-id="UGPp4Ej9rQR6HVMNKjy1YW">副作用审计结果：</strong>
+                <span id="out-gate-reason" data-page-node-id="sni0InwqkLAZ2wPXp22bik">【阻断驳回】虽然原案例放行错误被修复，但一刀切策略导致原本合法的内部模拟数据试用被大面积误伤为专项评审。流水线拦截修改并要求重新编译！</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 章节 5：落地成效与量化指标 -->
+    <section id="sec-results" data-page-node-id="DfkV2Pi1kFnakIJ6chpDHi">
+      <h2 data-page-node-id="F4aRuhYyBhjM4AWKsQh8pU">实际落地成效与工业级指标量化</h2>
+
+      <p data-page-node-id="rgU8OUszJchcGhswiQ0Cu8">Meta 报告，经过<strong data-page-node-id="bg8GQrfUNhwDdeA0XERVzC">三个开发迭代（Sprints）、共六周时间</strong>，系统在合规审核特定领域取得了突破性成果：</p>
+
+      <div class="article-meta-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 24px;" data-page-node-id="rKPdXDu2UNMn7QmNVjvCNk">
+        <div class="meta-item" data-page-node-id="dmk8xvzgHLe3UQ2cdcrzXj">
+          <span class="meta-label" data-page-node-id="sgyM7W2RsBmqplf5PKhplB">单次评估周期</span>
+          <span class="meta-value" style="color:var(--accent); font-size:1.1rem;" data-page-node-id="pYLUokcVlNg7g2UZD0UKmm">从数天缩短至数分钟</span>
+        </div>
+        <div class="meta-item" data-page-node-id="BHCCufyRkQ65ogZVIhmUwc">
+          <span class="meta-label" data-page-node-id="p13ooY7zd2AHND117QEKms">单轮 Token 消耗</span>
+          <span class="meta-value" style="color:var(--emerald); font-size:1.1rem;" data-page-node-id="Bpw56AIl5edLQXfRGloiMR">稳定降低约 80%</span>
+        </div>
+        <div class="meta-item" data-page-node-id="YSdNqBNHGiOtqg5DrF9Hvt">
+          <span class="meta-label" data-page-node-id="3006idJtvcFjCUQpDOHTTY">开发周期与迭代</span>
+          <span class="meta-value" style="font-size:1.1rem;" data-page-node-id="FMOpGJJREhLv4a43jczP6K">3 个 Sprint / 共 6 周</span>
+        </div>
+        <div class="meta-item" data-page-node-id="iZQSNRzerzHqScVPICrGCM">
+          <span class="meta-label" data-page-node-id="3h6gBsg2hnSQQZSI6tpUtq">改进周期性能倒退</span>
+          <span class="meta-value" style="color:var(--emerald); font-size:1.1rem;" data-page-node-id="2pOLu2gZETOBVqZgBVXo9Y">0 回归 (Zero Regressions)</span>
+        </div>
+      </div>
+
+      <ul data-page-node-id="VU1waQM1ETG6x9WwNkkETc">
+        <li data-page-node-id="QrMAmHORGmBJl0OKkuA7gU"><strong data-page-node-id="KNpHYWPpFPljlHdO25WULC">单次评估从数天缩短至数分钟：</strong> AI 承担了绝大部分繁重繁琐的信息收集与初筛工作，专家精力得以聚焦在真正存在业务分歧与法律模糊地带的高价值决策上。</li>
+        <li data-page-node-id="aFvEnkf24SyqeXcMUwDEb7"><strong data-page-node-id="SfZxDSdyYTPlNFhMcQZLkd">输出可用性明显提升：</strong> 领域专家（SMEs）评价智能体输出“几乎始终有用（useful almost all the time）”，相较早期需要专家通篇大幅推翻重写，形成了本质飞跃。</li>
+        <li data-page-node-id="DxYhsg8z0hLIUpSOgJpwaN"><strong data-page-node-id="YFWAi8CyqmjiFuQB47YSQP">每轮 Token 消耗约降低 80%：</strong> 这一收益主要来自配方驱动的阶段化按需加载，彻底取代了一次性向大模型灌入巨量无关材料的暴力做法。</li>
+        <li data-page-node-id="vUjcbSKBIRuiEMCJ2lGi99"><strong data-page-node-id="ecX41XMMt6Ug5dj7BN74Jh">知识维护与更新显著提速：</strong> 自动改进闭环能在几分钟内产出通过双重验证的纯文本补丁，而此前人工排查依赖、协调规则可能耗费数周的工程开发周期。</li>
+        <li data-page-node-id="4l0NRwCWUOVmiCeT47v23X"><strong data-page-node-id="5PwngohfMxvm4VU59sHXDe">演化周期中未观察到回归：</strong> 每次被批准的修复都会自动将原案例及其标准答案补充到全量回归测试集，为未来的所有更新筑牢了堤坝。</li>
+      </ul>
+
+      <div class="callout-box callout-warning" data-page-node-id="PYtgvfCirEjBUJicimqhP9">
+        <div class="callout-title" data-page-node-id="q661L2He1DO3i9wrtRzR6O">⚠️ 工程实证与严谨性边界声明</div>
+        <p data-page-node-id="63VxQCGfmXfhyVXj5R8ugb">这些是 Meta 在内部特定合规领域描述的真实成果。“零回归”特指在<strong data-page-node-id="pby5CVswDKCV6wk1Hjayqz">已运行的自动化测试集覆盖范围内</strong>未出现性能退步，并不等于数学意义上的绝对零故障。任何企业在落地该架构时，必须根据自身业务特点构建高质量的领域评测集。</p>
+      </div>
+    </section>
+
+    <!-- 章节 6：通俗启示与企业 AI 落地路径 -->
+    <section id="sec-implications" data-page-node-id="QbnlRSytUyplovq4nzj9oD">
+      <h2 data-page-node-id="xOyJz2JrdynGc3U75RbMHt">通俗启示：它对企业 AI 落地的深远参考价值</h2>
+
+      <p data-page-node-id="z0mcY5mxCNcVBnrVAI1Bj3">这套实践给所有正在推进大模型落地的企业提供了一个极其清晰、可落地的工程方向：<strong data-page-node-id="9YpCJX4pk3SI8FvXKHpDqL">让 AI 学会专业判断，必须同时具备判断依据、执行方法和验收标准。</strong></p>
+
+      <div class="table-container" data-page-node-id="uUc3yH8IIIAOZp6UOwLUln">
+        <table data-page-node-id="4JyqN5Psm3AXXEUo8O8aVs">
+          <thead data-page-node-id="aGMcwioXZGC6NfrGfg40SU">
+            <tr data-page-node-id="Fc5WBLiBPoFSbv5cwAf01P">
+              <th data-page-node-id="qgk6sZyonBxZv109Tf37Mi">企业常见错误做法</th>
+              <th data-page-node-id="uaqoCCqFusBZBWE5G5ro8R">Meta 第二大脑破解之道</th>
+              <th data-page-node-id="BdUO9sPm7NK95OhH8NKZfS">核心工程本质</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="5F7QDTwoNAL4dWYN9jR9hy">
+            <tr data-page-node-id="Vk8QcXuKpmmHHx1wvYHxwz">
+              <td data-page-node-id="DiwwQyC8WQw5gmMyEUKCtQ">只堆砌原始文档库，指望模型通过语义向量匹配“自己悟出来”</td>
+              <td data-page-node-id="axHgf4aSkTXV5P1fwxGGAp">离线提炼为 200+ 结构化立场文件，声明明确边界与 YAML 触发规则</td>
+              <td data-page-node-id="UfdZUaO6PjdfF0fdnDfyMN"><strong data-page-node-id="eD4IJIzgLtfCBHfeNfJTVI">知识预提炼与边界明确化</strong>，把陈述性事实整理成结构化资产</td>
+            </tr>
+            <tr data-page-node-id="mFeuJ2JhlfQWZJFlA8NIxa">
+              <td data-page-node-id="ZNm42k7ZMDd3ijUjUn8AEm">把所有业务规则塞进一段巨大、混乱的 System Prompt</td>
+              <td data-page-node-id="4xlEhwpoWewPmCuUfzsD4r">将流程解耦为可组合的 Recipes，顶层配方调度子配方，阶段化按需披露</td>
+              <td data-page-node-id="MFB8gwGyBy02v5GBlXBiiG"><strong data-page-node-id="nFrpFk9rOYU52WWo70KCLx">命令式流程与陈述性知识彻底解耦</strong>，消除注意力衰减</td>
+            </tr>
+            <tr data-page-node-id="6E2tG2oaQxmhNgZaZTp1ow">
+              <td data-page-node-id="rlbYqIG9BfPYbitj8IEJxz">专家在聊天框纠错一次，下次分析同类问题依然答错</td>
+              <td data-page-node-id="hV5UXTghAlZd4KuFQUyKFr">专家反馈视作编译输入，经对抗审查与双阶段验证门禁后形成受控 PR</td>
+              <td data-page-node-id="BoVIIwfm8YmOyFpIgUEmhw"><strong data-page-node-id="gWsj3LCmiyrJay9fjSBpIf">无需重训模型的代码化演进闭环</strong>，纠错永久积累</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p data-page-node-id="vCelx6L3WPM9oPTqPFuvHP">这种体系尤其适合以下特征的企业核心业务场景：</p>
+      <ul data-page-node-id="GfFAV4MwiE9IuS88599iF8">
+        <li data-page-node-id="ikBqgxRe9EsSi4guCYfDJg"><strong data-page-node-id="6bySTA4ER7U0EOasyG51IA">专业经验高度集中：</strong> 极少数核心专家把持关键决策，业务经验难以成文扩散；</li>
+        <li data-page-node-id="8412AVNdmtrn8WAyltbBE9"><strong data-page-node-id="jEXAGHgcBakwZlClNg8EhN">判断一致性要求极高：</strong> 同一类型的产品或业务，绝不允许前后出现标准打架或合规漏洞（如合规评估、财务风险审查、工程安全规范、供应商资质评审等）；</li>
+        <li data-page-node-id="f0o0wkXOeBtLBsttTV3egk"><strong data-page-node-id="I5hnwccV1yKmd2s1W8bESS">业务通量远超人力负荷：</strong> 海量业务申请导致专家沦为“常规问题问答机”，无法聚焦高风险特例。</li>
+      </ul>
+
+      <p data-page-node-id="QGgL0uDDKI3Ge2uiKPgpmU"><strong data-page-node-id="ZhTrnSUAn2XiDHRXunSqsA">组织级第二大脑的终极价值，就是让专家花时间纠正一次之后，后续任务能够持久使用这次经验，并以工程化的自检门禁确保它永远不会丢失。</strong></p>
+    </section>
+
+  </main>
+
+  <!-- 原生 JavaScript 交互逻辑 -->
+  <script>
+    (function() {
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // 1. 阅读进度条与主题切换逻辑
+      window.addEventListener("scroll", function() {
+        var docElem = document.documentElement;
+        var scrollTotal = docElem.scrollHeight - docElem.clientHeight;
+        if (scrollTotal > 0) {
+          var progress = (window.pageYOffset || docElem.scrollTop) / scrollTotal * 100;
+          var bar = byId("reading-progress");
+          if (bar) bar.style.width = Math.min(100, Math.max(0, progress)) + "%";
+        }
+      });
+
+      var currentTheme = "dark";
+      var btnTheme = byId("btn-theme-toggle");
+      var themeIcon = byId("theme-icon");
+      var themeText = byId("theme-text");
+
+      if (btnTheme) {
+        btnTheme.addEventListener("click", function() {
+          currentTheme = (currentTheme === "dark") ? "light" : "dark";
+          document.documentElement.setAttribute("data-theme", currentTheme);
+          if (themeIcon && themeText) {
+            if (currentTheme === "dark") {
+              themeIcon.textContent = "☀️";
+              themeText.textContent = "浅色";
+            } else {
+              themeIcon.textContent = "🌙";
+              themeText.textContent = "深色";
+            }
+          }
+        });
+      }
+
+      var btnMobile = byId("btn-mobile-menu");
+      var sidebar = byId("app-sidebar");
+      if (btnMobile && sidebar) {
+        btnMobile.addEventListener("click", function() {
+          sidebar.classList.toggle("open");
+        });
+      }
+
+      // 2. 目录 TOC 高亮联动
+      var tocLinks = document.querySelectorAll(".toc-item a");
+      var sections = [];
+      for (var i = 0; i < tocLinks.length; i++) {
+        var href = tocLinks[i].getAttribute("href");
+        if (href && href.indexOf("#") === 0) {
+          var sec = byId(href.substring(1));
+          if (sec) sections.push({ link: tocLinks[i].parentElement, elem: sec });
+        }
+      }
+
+      window.addEventListener("scroll", function() {
+        var scrollPos = window.pageYOffset || document.documentElement.scrollTop;
+        var activeSet = false;
+        for (var j = sections.length - 1; j >= 0; j--) {
+          var top = sections[j].elem.offsetTop - 120;
+          if (scrollPos >= top && !activeSet) {
+            sections[j].link.classList.add("active");
+            activeSet = true;
+          } else {
+            sections[j].link.classList.remove("active");
+          }
+        }
+        if (!activeSet && sections.length > 0) {
+          sections[0].link.classList.add("active");
+        }
+      });
+
+      // 3. 沙盘 1：专家纠错诊断与归因决策器
+      var selIncident = byId("sel-incident");
+      var selManifest = byId("sel-manifest");
+      var selConsensus = byId("sel-consensus");
+
+      var outDiagCause = byId("out-diag-cause");
+      var outDiagTarget = byId("out-diag-target");
+      var outDiagAction = byId("out-diag-action");
+      var outDiagBanner = byId("out-diag-banner");
+      var outDiagDesc = byId("out-diag-desc");
+
+      function updateAttributionSimulator() {
+        if (!selIncident || !selManifest || !selConsensus) return;
+
+        var inc = selIncident.value;
+        var man = selManifest.value;
+        var con = selConsensus.value;
+
+        if (con === "split") {
+          outDiagCause.textContent = "Ambiguity (主观业务分歧)";
+          outDiagTarget.textContent = "N/A (进入专家委员会人工讨论流程)";
+          outDiagAction.textContent = "暂停自动编译，生成分歧议题提案";
+          outDiagBanner.className = "decision-banner status-amber";
+          outDiagDesc.textContent = "专家组内部对该场景的处理方式尚未达成一致标准，严禁自动化流水线强行修改规则。系统已创建法理讨论工单移交人工仲裁。";
+          return;
+        }
+
+        if (man === "missing") {
+          outDiagCause.textContent = "Knowledge Gap (知识盲区)";
+          if (inc === "data_leak") {
+            outDiagTarget.textContent = "knowledge/positions/trial_data_boundary.md";
+            outDiagAction.textContent = "增补明确的禁止真实用户数据试用条款";
+          } else if (inc === "no_rollback") {
+            outDiagTarget.textContent = "knowledge/positions/rollback_guarantee.md";
+            outDiagAction.textContent = "增补不可回退业务的强制人工审核要求";
+          } else if (inc === "out_of_scope") {
+            outDiagTarget.textContent = "knowledge/gateways/procurement_gate.md";
+            outDiagAction.textContent = "补充采购与合规交叉边界过滤规则";
+          } else {
+            outDiagTarget.textContent = "knowledge/taxonomy/token_security_terms.md";
+            outDiagAction.textContent = "明确区分测试令牌与持久服务凭证的定义";
+          }
+          outDiagBanner.className = "decision-banner status-emerald";
+          outDiagDesc.textContent = "推理材料中根本缺乏对应规则。AI 在当时无法得出正确结论，根因是陈述性立场缺失，已生成最小知识扩充文件补丁。";
+        } else if (man === "present") {
+          outDiagCause.textContent = "Recipe Flaw (分析流程缺陷)";
+          if (inc === "data_leak") {
+            outDiagTarget.textContent = "recipes/trial_review_flow.yaml";
+            outDiagAction.textContent = "在阶段 2 增加必须核实数据属性的强制检查步骤";
+          } else if (inc === "no_rollback") {
+            outDiagTarget.textContent = "recipes/risk_assessment_flow.yaml";
+            outDiagAction.textContent = "调整流程执行顺序：先检验回退机制再做影响评估";
+          } else if (inc === "out_of_scope") {
+            outDiagTarget.textContent = "recipes/top_level_router.yaml";
+            outDiagAction.textContent = "修改路由匹配逻辑，优先触发入口 Gateway 校验";
+          } else {
+            outDiagTarget.textContent = "recipes/credential_audit.yaml";
+            outDiagAction.textContent = "增加前置术语消歧检索子步骤";
+          }
+          outDiagBanner.className = "decision-banner status-emerald";
+          outDiagDesc.textContent = "立场库中已有明确规范，但 AI 在执行时漏查或顺序错误。根因属于操作程序问题，已生成 Recipe 执行步骤修订补丁。";
+        } else {
+          outDiagCause.textContent = "Ambiguity / Stance Drift (条款模糊漂移)";
+          outDiagTarget.textContent = "knowledge/positions/ & recipes/";
+          outDiagAction.textContent = "收紧边界用词并同步更新执行排查细则";
+          outDiagBanner.className = "decision-banner status-amber";
+          outDiagDesc.textContent = "现有规则存在模糊多重解。需要联合修订立场边界并明确在分析流程中的判定优先级。";
+        }
+      }
+
+      if (selIncident) selIncident.addEventListener("change", updateAttributionSimulator);
+      if (selManifest) selManifest.addEventListener("change", updateAttributionSimulator);
+      if (selConsensus) selConsensus.addEventListener("change", updateAttributionSimulator);
+
+      // 4. 沙盘 2：渐进式披露 Token 优化
+      var rngTotalKb = byId("rng-total-kb");
+      var rngStages = byId("rng-stages");
+      var rngStageKb = byId("rng-stage-kb");
+
+      var valTotalKb = byId("val-total-kb");
+      var valStages = byId("val-stages");
+      var valStageKb = byId("val-stage-kb");
+
+      var outTokenTradTurn = byId("out-token-trad-turn");
+      var outTokenProgTurn = byId("out-token-prog-turn");
+      var outTokenSaving = byId("out-token-saving");
+      var outTokenTotalRatio = byId("out-token-total-ratio");
+      var outTokenBanner = byId("out-token-banner");
+      var outTokenAnalysis = byId("out-token-analysis");
+
+      function updateTokenSimulator() {
+        if (!rngTotalKb || !rngStages || !rngStageKb) return;
+
+        var totalKb = parseInt(rngTotalKb.value, 10);
+        var stages = parseInt(rngStages.value, 10);
+        var stagePct = parseInt(rngStageKb.value, 10);
+
+        valTotalKb.textContent = totalKb.toLocaleString();
+        valStages.textContent = stages;
+        valStageKb.textContent = stagePct + "%";
+
+        var basePrompt = 1200;
+        var tradTurn = totalKb + basePrompt;
+        var tradTotal = tradTurn * stages;
+
+        var progTurn = Math.round(basePrompt + (totalKb * stagePct / 100));
+        var progTotal = progTurn * stages;
+
+        var savingPct = ((tradTurn - progTurn) / tradTurn * 100).toFixed(1);
+
+        outTokenTradTurn.textContent = tradTurn.toLocaleString() + " tok";
+        outTokenProgTurn.textContent = progTurn.toLocaleString() + " tok";
+        outTokenSaving.textContent = savingPct + "%";
+        outTokenTotalRatio.textContent = progTotal.toLocaleString() + " vs " + tradTotal.toLocaleString();
+
+        if (savingPct >= 75) {
+          if (outTokenBanner) outTokenBanner.className = "decision-banner status-emerald";
+          outTokenAnalysis.textContent = "当前节约幅度达 " + savingPct + "%，高度契合 Meta 报告的“约 80% 降幅”。单轮上下文保持在低水位，模型注意力精准聚焦，杜绝幻觉扩散。";
+        } else {
+          if (outTokenBanner) outTokenBanner.className = "decision-banner status-amber";
+          outTokenAnalysis.textContent = "当前按需加载比例较高，节约幅度为 " + savingPct + "%。建议进一步细分 Recipe 子步骤，提高知识文件的模块化解耦程度。";
+        }
+      }
+
+      if (rngTotalKb) rngTotalKb.addEventListener("input", updateTokenSimulator);
+      if (rngStages) rngStages.addEventListener("input", updateTokenSimulator);
+      if (rngStageKb) rngStageKb.addEventListener("input", updateTokenSimulator);
+
+      // 5. 沙盘 3：两阶段防退步回归门禁
+      var selPatchType = byId("sel-patch-type");
+      var rngSuiteSize = byId("rng-suite-size");
+      var valSuiteSize = byId("val-suite-size");
+
+      var outGateReplay = byId("out-gate-replay");
+      var outGateRegression = byId("out-gate-regression");
+      var outGateVerdict = byId("out-gate-verdict");
+      var outGateBanner = byId("out-gate-banner");
+      var outGateReason = byId("out-gate-reason");
+
+      function updateRegressionSimulator() {
+        if (!selPatchType || !rngSuiteSize) return;
+
+        var patch = selPatchType.value;
+        var suite = parseInt(rngSuiteSize.value, 10);
+        valSuiteSize.textContent = suite;
+
+        if (patch === "broad") {
+          outGateReplay.textContent = "PASS (100% 修复)";
+          var failedCount = Math.round(suite * 0.32);
+          var passRate = ((suite - failedCount) / suite * 100).toFixed(1);
+          outGateRegression.textContent = passRate + "% (" + failedCount + " 例倒退)";
+          outGateVerdict.textContent = "REJECTED (阻断拦截)";
+          outGateVerdict.style.color = "var(--rose)";
+          outGateBanner.className = "decision-banner status-rose";
+          outGateReason.textContent = "【阻断拦截】盲测虽然通过，但全量回归发现 " + failedCount + " 起合法试用被误杀！修改存在严重破坏性副作用，流水线自动打回重编。";
+        } else if (patch === "surgical") {
+          outGateReplay.textContent = "PASS (100% 修复)";
+          outGateRegression.textContent = "100.0% (0 例倒退)";
+          outGateVerdict.textContent = "LANDED (已合流待批准)";
+          outGateVerdict.style.color = "var(--emerald)";
+          outGateBanner.className = "decision-banner status-emerald";
+          outGateReason.textContent = "【双重门禁全绿】原案完美修复，且 " + suite + " 个基准测试集用例零回归！已自动生成 PR 差异报告，并成功将修复案例扩充进回归集。";
+        } else {
+          outGateReplay.textContent = "FAIL (盲测未解决)";
+          outGateRegression.textContent = "96.5% (4 例边界偶发)";
+          outGateVerdict.textContent = "RETRY (打回重试)";
+          outGateVerdict.style.color = "var(--amber)";
+          outGateBanner.className = "decision-banner status-amber";
+          outGateReason.textContent = "【第一阶段未通过】定向重放中 AI 依然受困于边界模糊，未达到专家纠偏期望。系统携带失败上下文触发第二轮多智能体编译。";
+        }
+      }
+
+      if (selPatchType) selPatchType.addEventListener("change", updateRegressionSimulator);
+      if (rngSuiteSize) rngSuiteSize.addEventListener("input", updateRegressionSimulator);
+
+      // 初始化执行
+      updateAttributionSimulator();
+      updateTokenSimulator();
+      updateRegressionSimulator();
+    })();
+
+    function copyCode(btn) {
+      var pre = btn.parentElement.nextElementSibling;
+      if (!pre) return;
+      var text = pre.textContent || "";
+      navigator.clipboard.writeText(text).then(function() {
+        var old = btn.textContent;
+        btn.textContent = "已复制！";
+        setTimeout(function() { btn.textContent = old; }, 2000);
+      }).catch(function() {
+        btn.textContent = "复制失败";
+      });
+    }
+  </script>
+</body>
+</html>

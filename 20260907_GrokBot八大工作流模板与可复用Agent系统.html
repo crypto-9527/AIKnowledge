@@ -1,0 +1,2296 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="OBO0ZMLqHrYFGmx4FPigjV">
+<head data-page-node-id="RcE6N6ugphjgpVCyXIZ0Ej">
+  <meta charset="utf-8" data-page-node-id="OAt1liJVUrBwCcHb2jYl53">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="NhcPmzippOzE50mqLuEJ43">
+  <title>SpaceXAI 官方分享的 Grok Bot 8 个模板：把工作方法变成可复制的助手</title>
+  <style>
+    /* ==========================================================================
+       1. 全局设计系统与双主题令牌 (CSS Custom Properties)
+       ========================================================================== */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+      /* 核心五色状态令牌 */
+      --accent: #D97757;          /* 陶土色 / 品牌主色 */
+      --accent-hover: #E2886A;
+      --accent-subtle: rgba(217, 119, 87, 0.12);
+      --emerald: #2E8B57;         /* 成功/稳定/已交付 */
+      --emerald-subtle: rgba(46, 139, 87, 0.14);
+      --emerald-border: #38A169;
+      --rose: #C53030;            /* 阻断/缺陷/未打包 */
+      --rose-subtle: rgba(197, 48, 48, 0.14);
+      --amber: #D69E2E;           /* 警告/注意/边界 */
+      --amber-subtle: rgba(214, 158, 46, 0.14);
+      --cyan: #319795;            /* 数据/流转/工具连接 */
+      --cyan-subtle: rgba(49, 151, 149, 0.14);
+      --purple: #805AD5;          /* 认知/记忆/提示工程 */
+      --purple-subtle: rgba(128, 90, 213, 0.14);
+    }
+
+    /* 深色主题 (Dark Theme - 黑曜石质感，默认) */
+    html[data-theme="dark"] {
+      --bg-canvas: #141413;
+      --bg-surface: #1E1E1C;
+      --bg-surface-elevated: #282825;
+      --bg-surface-highlight: #32322E;
+      --border-soft: rgba(255, 255, 255, 0.08);
+      --border-medium: rgba(255, 255, 255, 0.16);
+      --border-hard: rgba(255, 255, 255, 0.28);
+      --text-primary: #F4F1EA;
+      --text-secondary: #B0ADA5;
+      --text-tertiary: #7D7A73;
+      --text-inverse: #141413;
+      --code-bg: #181816;
+      --card-bg: #1B1B19;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.6);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.7);
+    }
+
+    /* 浅色主题 (Light Theme - 暖羊皮纸质感) */
+    html[data-theme="light"] {
+      --bg-canvas: #FAF7F2;
+      --bg-surface: #FFFFFF;
+      --bg-surface-elevated: #F3EFE8;
+      --bg-surface-highlight: #EAE5DC;
+      --border-soft: rgba(0, 0, 0, 0.07);
+      --border-medium: rgba(0, 0, 0, 0.14);
+      --border-hard: rgba(0, 0, 0, 0.24);
+      --text-primary: #21201D;
+      --text-secondary: #58554E;
+      --text-tertiary: #8C887F;
+      --text-inverse: #FAF7F2;
+      --code-bg: #F0EAE1;
+      --card-bg: #FFFFFF;
+      --card-border: rgba(0, 0, 0, 0.08);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.12);
+    }
+
+    /* ==========================================================================
+       2. 基础重置与排版规范
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      line-height: 1.8;
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    #reading-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--cyan));
+      width: 0%;
+      z-index: 9999;
+      transition: width 0.1s linear;
+    }
+
+    /* ==========================================================================
+       3. 左右分栏布局与侧边目录 (Layout & Sticky Sidebar)
+       ========================================================================== */
+    .app-sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 300px;
+      background-color: var(--bg-surface);
+      border-right: 1px solid var(--border-soft);
+      overflow-y: auto;
+      padding: 24px 20px 40px 20px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      transition: transform 0.3s ease;
+    }
+
+    .sidebar-header {
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .brand-badge {
+      background: var(--accent-subtle);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .sidebar-title {
+      font-size: 0.8rem;
+      color: var(--text-tertiary);
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .toc-nav {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .toc-group-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-tertiary);
+      margin-top: 14px;
+      margin-bottom: 6px;
+      padding-left: 8px;
+    }
+
+    .toc-link {
+      display: block;
+      padding: 6px 10px;
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      border-radius: 6px;
+      line-height: 1.4;
+      transition: all 0.15s ease;
+      border-left: 2px solid transparent;
+    }
+
+    .toc-link:hover {
+      color: var(--text-primary);
+      background-color: var(--bg-surface-elevated);
+    }
+
+    .toc-link.active {
+      color: var(--accent);
+      background-color: var(--accent-subtle);
+      border-left-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .toc-sublink {
+      padding-left: 22px;
+      font-size: 0.8rem;
+    }
+
+    .sidebar-footer {
+      padding-top: 16px;
+      border-top: 1px solid var(--border-soft);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .theme-toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-medium);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .theme-toggle-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* 主内容区 */
+    .app-main {
+      margin-left: 300px;
+      flex: 1;
+      max-width: 1000px;
+      padding: 48px 48px 100px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+    }
+
+    /* ==========================================================================
+       4. 头部与元信息横幅
+       ========================================================================== */
+    .article-header {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .article-meta-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .meta-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      background: var(--bg-surface-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-soft);
+    }
+
+    .meta-tag.highlight {
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border-color: rgba(217, 119, 87, 0.25);
+    }
+
+    .article-title {
+      font-family: var(--font-serif);
+      font-size: 2.25rem;
+      font-weight: 700;
+      line-height: 1.3;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .article-lead {
+      font-size: 1.15rem;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      border-left: 3px solid var(--accent);
+      padding-left: 16px;
+      margin-top: 4px;
+    }
+
+    /* ==========================================================================
+       5. 模块卡片、正文排版与 Callout 语法
+       ========================================================================== */
+    .content-section {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    h2 {
+      font-family: var(--font-serif);
+      font-size: 1.55rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+      padding-top: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h2::before {
+      content: "";
+      display: inline-block;
+      width: 4px;
+      height: 1.2em;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    h3 {
+      font-size: 1.22rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h3::before {
+      content: "§";
+      color: var(--accent);
+      font-weight: 400;
+      font-size: 0.95em;
+    }
+
+    p {
+      color: var(--text-secondary);
+      font-size: 0.98rem;
+      line-height: 1.8;
+    }
+
+    p strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px dashed var(--accent);
+      transition: color 0.15s ease, border-bottom 0.15s ease;
+    }
+
+    a:hover {
+      color: var(--accent-hover);
+      border-bottom-style: solid;
+    }
+
+    /* 一分钟速览卡片 */
+    .quick-overview-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: 10px;
+      padding: 24px 28px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .quick-overview-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .quick-overview-title svg {
+      color: var(--accent);
+    }
+
+    .quick-overview-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .quick-overview-list li {
+      position: relative;
+      padding-left: 24px;
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .quick-overview-list li::before {
+      content: "•";
+      position: absolute;
+      left: 8px;
+      top: -1px;
+      color: var(--accent);
+      font-size: 1.3rem;
+    }
+
+    /* 呼出引用框 (Callouts) */
+    .callout-box {
+      background: var(--bg-surface);
+      border-radius: 8px;
+      padding: 16px 20px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin: 12px 0;
+      border-left: 4px solid var(--accent);
+      border-top: 1px solid var(--border-soft);
+      border-right: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .callout-box.info {
+      border-left-color: var(--cyan);
+      background: var(--bg-surface);
+    }
+
+    .callout-box.task {
+      border-left-color: var(--emerald);
+      background: var(--bg-surface);
+    }
+
+    .callout-box.question {
+      border-left-color: var(--purple);
+      background: var(--bg-surface);
+    }
+
+    .callout-box.warning {
+      border-left-color: var(--amber);
+      background: var(--bg-surface);
+    }
+
+    .callout-icon {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      margin-top: 2px;
+    }
+
+    .callout-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .callout-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .callout-desc {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .callout-tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .tool-chip {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border-medium);
+      font-size: 0.74rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-weight: 500;
+    }
+
+    /* 架构图与插图容器 */
+    .visual-container {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: 10px;
+      padding: 20px;
+      margin: 16px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .visual-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .visual-caption {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .visual-tag {
+      font-size: 0.72rem;
+      padding: 2px 6px;
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+    }
+
+    .visual-body {
+      width: 100%;
+      overflow-x: auto;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 10px 0;
+    }
+
+    .visual-note {
+      font-size: 0.82rem;
+      color: var(--text-tertiary);
+      line-height: 1.5;
+      background: var(--bg-surface-elevated);
+      padding: 8px 12px;
+      border-radius: 6px;
+    }
+
+    /* 表格样式 */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      margin: 16px 0;
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      background: var(--bg-surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+
+    th {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      padding: 12px 16px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-medium);
+    }
+
+    td {
+      padding: 12px 16px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-soft);
+      line-height: 1.6;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: var(--bg-surface-highlight);
+    }
+
+    /* ==========================================================================
+       6. 交互式沙盘：8大模板装配台与 ROI 计算器
+       ========================================================================== */
+    .interactive-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 20px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .sandbox-header {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .sandbox-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sandbox-desc {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+    }
+
+    /* 模板切换 Tab 列表 */
+    .template-selector-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      background: var(--bg-surface-elevated);
+      padding: 6px;
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+    }
+
+    .tab-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      background: transparent;
+      color: var(--text-secondary);
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface-highlight);
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      color: #FFFFFF;
+      font-weight: 600;
+    }
+
+    /* 模板详细面板 */
+    .template-detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      background: var(--bg-canvas);
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+    }
+
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .detail-label {
+      font-size: 0.76rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-tertiary);
+    }
+
+    .detail-value {
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      line-height: 1.5;
+    }
+
+    .detail-full {
+      grid-column: 1 / -1;
+    }
+
+    /* ROI 计算器网格 */
+    .roi-calc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .slider-group {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .slider-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.86rem;
+    }
+
+    .slider-title {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .slider-val-badge {
+      color: var(--accent);
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-surface-elevated);
+      border-radius: 3px;
+      outline: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 2px rgba(0,0,0,0.5);
+      transition: transform 0.1s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    .roi-kpi-display {
+      background: var(--bg-canvas);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+      gap: 16px;
+    }
+
+    .kpi-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed var(--border-soft);
+    }
+
+    .kpi-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .kpi-title {
+      font-size: 0.86rem;
+      color: var(--text-secondary);
+    }
+
+    .kpi-number {
+      font-family: var(--font-mono);
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .kpi-number.emerald {
+      color: var(--emerald);
+    }
+
+    .kpi-number.amber {
+      color: var(--amber);
+    }
+
+    .kpi-evaluation {
+      font-size: 0.82rem;
+      line-height: 1.5;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: var(--bg-surface-elevated);
+      color: var(--text-secondary);
+      border-left: 3px solid var(--accent);
+    }
+
+    /* 底部收尾栏 */
+    .article-footer {
+      margin-top: 40px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border-soft);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 0.84rem;
+      color: var(--text-tertiary);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 16px;
+    }
+
+    /* ==========================================================================
+       7. 响应式与打印自适应 (@media)
+       ========================================================================== */
+    @media (max-width: 960px) {
+      .app-sidebar {
+        transform: translateX(-100%);
+      }
+      .app-sidebar.open {
+        transform: translateX(0);
+      }
+      .app-main {
+        margin-left: 0;
+        padding: 24px 20px 80px 20px;
+      }
+      .mobile-menu-btn {
+        display: flex !important;
+      }
+      .roi-calc-grid, .template-detail-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .mobile-menu-btn {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+      background: var(--accent);
+      color: #FFFFFF;
+      border: none;
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-md);
+      cursor: pointer;
+    }
+
+    @media print {
+      body {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+      }
+      .app-sidebar, #reading-progress, .theme-toggle-btn, .mobile-menu-btn, .interactive-card {
+        display: none !important;
+      }
+      .app-main {
+        margin-left: 0 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+      }
+      a {
+        text-decoration: none !important;
+        color: #000000 !important;
+      }
+      .visual-container, .quick-overview-box, .callout-box {
+        border: 1px solid #CCCCCC !important;
+        box-shadow: none !important;
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body data-page-node-id="2l1yebMPjS8YyxcxLUTz9F">
+
+  <!-- 阅读进度指示条 -->
+  <div id="reading-progress" data-page-node-id="a0SKQLcITY7AnoD7VLu7pN"></div>
+
+  <!-- 移动端目录折叠切换按钮 -->
+  <button id="btn-toggle-menu" class="mobile-menu-btn" title="切换目录" data-page-node-id="ENU0ZoGwuUmZXCjAHlzwZr">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="G3G72JGrD6ADWz5CkgOtoH">
+      <line x1="3" y1="12" x2="21" y2="12" data-page-node-id="NYfQj8EDxy6BtsxNbuPCtH" />
+      <line x1="3" y1="6" x2="21" y2="6" data-page-node-id="zcxfIaJ4NVSXi2PGQXnHpb" />
+      <line x1="3" y1="18" x2="21" y2="18" data-page-node-id="kSk2WfA17um8VPGZX0wja3" />
+    </svg>
+  </button>
+
+  <!-- 左侧固定目录导航 -->
+  <aside class="app-sidebar" id="app-sidebar" data-page-node-id="94tFAlc5020xZ52gbgipNo">
+    <div class="sidebar-header" data-page-node-id="rinEDQ351SxvPNYcivyCGe">
+      <a href="#article-top" class="sidebar-brand" data-page-node-id="XTa82ko7MptQsDOyzUGzpO">
+        <span class="brand-badge" data-page-node-id="bZlvnm5mLK9uxzuEF3XyKB">SpaceXAI</span>
+        <span data-page-node-id="2wNVlevw8nbVMr8BYxb9o5">Grok Bot 模板集</span>
+      </a>
+      <div class="sidebar-title" data-page-node-id="mCs9wOdecniwV0tAGF24Jd">8 个日常助手 · 可复用工作流工程拆解</div>
+    </div>
+
+    <nav class="toc-nav" id="toc-nav" data-page-node-id="tpJLf0d1JQouu7ArcOTP61">
+      <div class="toc-group-title" data-page-node-id="vinMrA72keY2EMX9iEO1yb">前言与核心范式</div>
+      <a href="#section-overview" class="toc-link" data-page-node-id="4wlH6MkSNP2FzPENZafQFA">一分钟速览</a>
+      <a href="#section-methodology" class="toc-link" data-page-node-id="6o4hlwC7q8j0ENbhSdwoHv">模板复制的是做事方法</a>
+
+      <div class="toc-group-title" data-page-node-id="3sgSt22841GxI9gCqBONUl">8 个模板架构拆解</div>
+      <a href="#section-dev-loops" class="toc-link toc-sublink" data-page-node-id="EQAjCQgrecPgJO1m9GGT1J">1. Loops: 外循环任务准备</a>
+      <a href="#section-dev-demos" class="toc-link toc-sublink" data-page-node-id="giwi4r1w127lzekEo1krAy">2. Tech demos: 体验式原型</a>
+      <a href="#section-info-crm" class="toc-link toc-sublink" data-page-node-id="YQCfCyyHCiABCBrIUI3nC5">3. Personal CRM: 出行人脉网络</a>
+      <a href="#section-info-xalgo" class="toc-link toc-sublink" data-page-node-id="kIOw3W6KPdDGkHlIPVgUEB">4. X algorithm: 发帖算法参照</a>
+      <a href="#section-content-writing" class="toc-link toc-sublink" data-page-node-id="qHmCZesRFvBqTKmYDVqEo3">5. Writing Bot: 出版级修句</a>
+      <a href="#section-content-image" class="toc-link toc-sublink" data-page-node-id="qG2iFzUxk55fgs2tT4b8ir">6. Image Gen: 风格一致性</a>
+      <a href="#section-action-skippy" class="toc-link toc-sublink" data-page-node-id="L8C2RIffOBJSnMm8p5LlyZ">7. Skippy: 扫街防罚单</a>
+      <a href="#section-action-dial" class="toc-link toc-sublink" data-page-node-id="kzz0SgZ458iTDHVlyEB7xt">8. Dial Bot: 真实电话外呼</a>
+
+      <div class="toc-group-title" data-page-node-id="uN9r8ZHTpBfBa4tglxRBpg">工程实操与交互沙盘</div>
+      <a href="#section-creation-guide" class="toc-link" data-page-node-id="G4XAjxEPtlQcHplwessTfg">怎样把工作做成模板</a>
+      <a href="#section-marketplace" class="toc-link" data-page-node-id="25I2MjPyZyQa5Fay746vTe">Bot Marketplace 探索</a>
+      <a href="#section-interactive-sandbox" class="toc-link" data-page-node-id="Dq8KFAIjdS917RJSav4YKw">模板速查与装配沙盘</a>
+      <a href="#section-roi-calculator" class="toc-link" data-page-node-id="Ael1QTKSDDIlWQOFMRxSpA">模板 ROI 盈亏测算器</a>
+    </nav>
+
+    <div class="sidebar-footer" data-page-node-id="bgbxBuTqLtREWDory5XLpW">
+      <button id="btn-theme-toggle" class="theme-toggle-btn" type="button" data-page-node-id="OSlaZadT2synZP1UDZobRC">
+        <svg id="icon-theme" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="hcsZBcz0HQuEkd1EtP5JuF">
+          <circle cx="12" cy="12" r="5" data-page-node-id="xSXlxfpPLDqWOvm9rFCWyD" />
+          <line x1="12" y1="1" x2="12" y2="3" data-page-node-id="0MP2ssO06uqqeuaa9cXHL2" />
+          <line x1="12" y1="21" x2="12" y2="23" data-page-node-id="i06ySNBVRQ76fooqgTHGXW" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" data-page-node-id="AURX1mlEi4h5cygwaCnr3n" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" data-page-node-id="foNJOkKC1gCkcdMkbI0yVg" />
+          <line x1="1" y1="12" x2="3" y2="12" data-page-node-id="tNBq2QQP4PZ3TDaw6mc9D8" />
+          <line x1="21" y1="12" x2="23" y2="12" data-page-node-id="EkRhDqUoOyYlf8Oh9i6R9E" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" data-page-node-id="LTfOCnMhkDLwLIatsTMImG" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" data-page-node-id="SlEYZBDngt0iVhza7EL5uH" />
+        </svg>
+        <span id="label-theme" data-page-node-id="pkld9fl11ABhP0sOlJ3Q8n">切换主题</span>
+      </button>
+      <div style="font-size: 0.72rem; color: var(--text-tertiary); text-align: center;" data-page-node-id="ww49kLaYXBTLHQ1AVK6R8d">
+        纯内联零依赖 · 断网可用
+      </div>
+    </div>
+  </aside>
+
+  <!-- 主阅读界面 -->
+  <main class="app-main" data-page-node-id="UyxGa1TEyruZ5YNYgYHwrF">
+
+    <!-- 顶部文章标题区 -->
+    <header class="article-header" id="article-top" data-page-node-id="IQDb4GShKCcVk0G6xxl68k">
+      <div class="article-meta-tags" data-page-node-id="sUWQrodKygs6p0CBUzs1Jf">
+        <span class="meta-tag highlight" data-page-node-id="Ogl1m12qBid6dYkXh9bCza">SpaceXAI 官方工程实战</span>
+        <span class="meta-tag" data-page-node-id="lEdHdVrCIwZ4zggEaBKcYS">作者: Matt Palmer</span>
+        <span class="meta-tag" data-page-node-id="kphsIhDr5yCCfQxtKnbJms">分类: 工具教程 / Agent 工程化</span>
+        <span class="meta-tag" data-page-node-id="FI5FNbn0HlJAd53Tml5eeS">交付基准日: 2026-09-07</span>
+      </div>
+
+      <h1 class="article-title" data-page-node-id="Srnq0vXjwtpxXmMr2xTJby">SpaceXAI 官方分享的 Grok Bot 的 8 个模板：把工作方法变成可复制的助手</h1>
+
+      <div class="article-lead" data-page-node-id="WHdiIYWIqBMCJggoRTiCgy">
+        8 个日常助手，展示技能、记忆和工具连接怎样组成可复用的工作方法，以及接收者还需要配置什么。
+      </div>
+    </header>
+
+    <!-- 模块 0：一分钟速览 -->
+    <section class="content-section" id="section-overview" data-page-node-id="jE15U1uugk0pwVRSXvhntt">
+      <div class="quick-overview-box" data-page-node-id="J0dV6uw0eEPCOeCo5NFyxE">
+        <div class="quick-overview-title" data-page-node-id="oVPvBP6MkTfIGQeJfw5Ndp">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="sjTMq8gV06QMNHwoOdf1PG">
+            <circle cx="12" cy="12" r="10" data-page-node-id="vIHBC5QNny57kgNNB0U3bO" />
+            <polyline points="12 6 12 12 16 14" data-page-node-id="ShvQ7yxVWMjrt0CSizHnRm" />
+          </svg>
+          一分钟速览
+        </div>
+        <ul class="quick-overview-list" data-page-node-id="XE4v8iGt2jGOZ8hBHPQtSr">
+          <li data-page-node-id="KmzZHqMnrOCNPKAaqw039c"><strong data-page-node-id="gZJVwaqElHYWRC9jYx4TuE">资产解耦与复用</strong>：模板把常用指令、技能、可分享记忆与插件配置带到新助手，大幅减少反复交代同一工作方法的过程。</li>
+          <li data-page-node-id="WMa6CClbWLfFEjk8f8eeZ5"><strong data-page-node-id="OK9TZWVEqfVU38t6OUjGVA">外循环衔接内循环</strong>：开发案例将背景调研、方案规约、编码执行与截图/视频检查串联，让书签中收藏的新工具变成可以亲手体验的原型作品。</li>
+          <li data-page-node-id="3IDbZFLecR0TBbzQtWfYmT"><strong data-page-node-id="9Wept1HInOeEoKAzQpbxFc">迁移边界意识</strong>：复杂模板仍需补齐自己的配置；自定义代码、本地脚本与自建 MCP 服务不会自动随模板迁移。</li>
+          <li data-page-node-id="PcMBImbIzc44H17q6fhF9F"><strong data-page-node-id="TPGkTNlZQ3gsCkFnbpC4Nj">最小可行起点</strong>：先从输入明确、反复发生、结果容易检查的小任务开始，把“下次不想重新交代的要求”固化为模板。</li>
+        </ul>
+      </div>
+
+      <p data-page-node-id="XZvnQ1PVxLXjL1lwIMUeFQ">
+        你每天让 AI 做的事，往往有一部分一直重复：先去哪里找资料，沿用什么写法，调用哪些工具，最后拿什么结果回来。每次重新交代这些要求，工作就始终依赖你在旁边补充背景。
+      </p>
+
+      <p data-page-node-id="oyTIR5AO7CZ8nL9tbDZCGt">
+        Grok Bot 的模板功能，把这些做事方法连同可分享的记忆和官方插件配置打包，让另一个人据此建立自己的助手。<a href="https://mattpalmer.io/" target="_blank" rel="noopener noreferrer" data-page-node-id="3564Q5Jn00gUSNS857o3dB">Matt Palmer</a> 从事开发者关系与产品工作，目前在 SpaceXAI 任职，过去也在 Replit 和 Conductor 工作过。他在《Using Grok Bot: 8 templates to get inspired》中分享了自己日常使用的 8 个例子：从试用开发工具、修改文稿，到整理联系人、查询停车限制和打电话。
+      </p>
+
+      <p data-page-node-id="d3KyDlnpsw6XWiIjItNM0N">
+        这些例子值得一起看，因为它们把“复用一个助手”需要保留什么讲得很具体：既有任务怎么做，也有它去哪里取信息、怎样把结果交到人手上。
+      </p>
+    </section>
+
+    <!-- 模块 1：核心范式认知 -->
+    <section class="content-section" id="section-methodology" data-page-node-id="gtoCus8vK9xEesSj48t9eY">
+      <h2 data-page-node-id="qevJFoleFjE5GWl9cNIhGC">模板复制的是一套做事方法</h2>
+
+      <p data-page-node-id="TMIhbDeg0N2RVRWodUexzl">
+        先用写作助手理解模板。你希望它按熟悉的写作原则修改句子，记得你的偏好，还能从 Notion 取稿、把草稿放进 Typefully。只分享一句“帮我润色”，接收者就得自己补上这些要求和连接。
+      </p>
+
+      <p data-page-node-id="JrEyfmRVJpl5CA5BsmCBg5">
+        模板把相关指令、技能、记忆与官方插件组合起来。<strong data-page-node-id="crqHAZSQfGqGNfOCrqog5M">技能（Skills）</strong>规定具体动作，<strong data-page-node-id="xRplGIDCoEuuyqV8T5oNii">记忆（Memory）</strong>保留可复用的背景或习惯，<strong data-page-node-id="cDiRsem3g8iihX3fLfHGYp">插件（Plugins）</strong>让助手可以接触对话之外的工具。接收者在自己的环境中使用这些配置，处理自己的资料。
+      </p>
+
+      <!-- SVG 架构图 1：模板解耦与迁移构成 -->
+      <div class="visual-container" data-page-node-id="kIEvnCEwo1QjHxAyfJQCY6">
+        <div class="visual-header" data-page-node-id="Pzkc6Bav1l8qiX4lFz5j0r">
+          <div class="visual-caption" data-page-node-id="n1kpczHCdAQWT2poyZmhiK">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="HbIsVoLmUXdHO8cIuz1eOj"><polygon points="12 2 2 7 12 12 22 7 12 2" data-page-node-id="GZAl1Fss87oVwrHtcQxHQy" /><polyline points="2 17 12 22 22 17" data-page-node-id="lyjCLPRHFwnxaXw7MGraL5" /><polyline points="2 12 12 17 22 12" data-page-node-id="bDBTmcOjcLyK8TU0TqNsHj" /></svg>
+            图 1：Grok Bot 模板解耦结构与迁移隔离边界
+          </div>
+          <span class="visual-tag" data-page-node-id="oww7trDkgSRIHz6NuWZUTP">Architecture Blueprint</span>
+        </div>
+        <div class="visual-body" data-page-node-id="28Wy8qVHIOQttj7WeUVr5Z">
+          <svg viewBox="0 0 800 240" width="100%" height="240" style="max-width: 800px; font-family: var(--font-sans);" data-page-node-id="65KaY3Bod4sG7OkR3ZfpvA">
+            <!-- 背景卡片：随模板打包项 -->
+            <rect x="20" y="20" width="450" height="200" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--emerald)" stroke-width="1.5" stroke-dasharray="4 2" data-page-node-id="Gcg5UhyzmJdqRBymhKkKlO" />
+            <text x="35" y="45" fill="var(--emerald)" font-size="13" font-weight="700" data-page-node-id="PGxkIttFA8AuV770AoPLXA">✓ 随模板自动打包迁移（公开蓝图）</text>
+
+            <rect x="40" y="65" width="190" height="65" rx="6" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="vfV8Ui1iiiCWbDdLyUmexv" />
+            <text x="55" y="92" fill="var(--text-primary)" font-size="13" font-weight="600" data-page-node-id="3ccGkDFXbd0ZC6LZlBfZ30">Prompt / Instructions</text>
+            <text x="55" y="112" fill="var(--text-tertiary)" font-size="11" data-page-node-id="QktGiYArVfTF9JOV4oIEkR">任务指令、步骤规范与约束</text>
+
+            <rect x="255" y="65" width="190" height="65" rx="6" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="pf7U8PlY8t2S4pf3EK8Qce" />
+            <text x="270" y="92" fill="var(--text-primary)" font-size="13" font-weight="600" data-page-node-id="dbyiukEcxFK7P4Uf6HP2nA">Skills / Tools 定义</text>
+            <text x="270" y="112" fill="var(--text-tertiary)" font-size="11" data-page-node-id="w0L1CePYoyu3F7OStnOBC2">动作规则、参数与调用契约</text>
+
+            <rect x="40" y="142" width="190" height="65" rx="6" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="yW9A20dA4HCjBil2zJ4KJA" />
+            <text x="55" y="169" fill="var(--text-primary)" font-size="13" font-weight="600" data-page-node-id="Vd5CecgHMB048sMngM9pPA">Shareable Memory</text>
+            <text x="55" y="189" fill="var(--text-tertiary)" font-size="11" data-page-node-id="HZeQYHdSc2hSTJofG7FumV">脱敏偏好、通用上下文背景</text>
+
+            <rect x="255" y="142" width="190" height="65" rx="6" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="KKgiYJMq0ENTfH4mI6dmMq" />
+            <text x="270" y="169" fill="var(--text-primary)" font-size="13" font-weight="600" data-page-node-id="tneiTJIyrJ4TkVPLYfB6Ay">官方插件配置引用</text>
+            <text x="270" y="189" fill="var(--text-tertiary)" font-size="11" data-page-node-id="7tGvQacwMhhv7CsRxC5N4H">X / Notion / Cloudflare 声明</text>
+
+            <!-- 隔离墙 -->
+            <line x1="495" y1="20" x2="495" y2="220" stroke="var(--border-hard)" stroke-width="2" data-page-node-id="iangTS5GrIYmw4kS7DfSdN" />
+
+            <!-- 右侧：需接收者自行补齐项 -->
+            <rect x="520" y="20" width="260" height="200" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--rose)" stroke-width="1.5" data-page-node-id="QbAhIoOPDhWoR93AT2DdPR" />
+            <text x="535" y="45" fill="var(--rose)" font-size="13" font-weight="700" data-page-node-id="UlX7Nc9NrLrj9KDF3idHPm">✗ 不自动打包（需接收者补齐）</text>
+
+            <rect x="535" y="65" width="230" height="42" rx="5" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="x2INx9R5mqLjonGmI8H1i1" />
+            <text x="548" y="90" fill="var(--text-secondary)" font-size="12" data-page-node-id="qAgtinRyIJbESHFsOGqqZY">私有 API Key 与 OAuth 授权凭据</text>
+
+            <rect x="535" y="115" width="230" height="42" rx="5" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="noKUzlFQwCzaFCbupWNzBo" />
+            <text x="548" y="140" fill="var(--text-secondary)" font-size="12" data-page-node-id="nmkd6WxBNVTsyH88fepVUG">自定义本地脚本与私有代码仓库</text>
+
+            <rect x="535" y="165" width="230" height="42" rx="5" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="CkWBdYW9iLDh0RYMaBoYdX" />
+            <text x="548" y="190" fill="var(--text-secondary)" font-size="12" data-page-node-id="drbkRv5c9jcROhyC4U9hFD">自建 MCP 服务与专属网络隧道</text>
+          </svg>
+        </div>
+        <div class="visual-note" data-page-node-id="XEQ5XaIENHcnNG4F6DOXJi">
+          Palmer 强调：模板是一份重建助手的蓝图。系统会默认排除个人或内部私密数据；接收者得到的版本仍需接上自己的账户、工具与 MCP 连接。
+        </div>
+      </div>
+
+      <p data-page-node-id="9bgyP6o2pVzgmZ3bTnORAY">
+        Palmer 在配套教程中强调，模板是一份重建助手的蓝图。系统会选择与工作流有关的内容，默认排除个人或内部信息；接收者得到的版本仍可能与原助手不同，也可能需要额外设置。自定义代码、脚本和自建 MCP 服务不会自动打包，所需插件也要在接收者的环境中安装。MCP 可以简单理解为让 AI 调用外部工具的一种连接方式。
+      </p>
+
+      <p data-page-node-id="SBJn7KjAjr5lysPHgrKSMP">
+        这个区别决定了后面 8 个例子该怎么看：你可以复用作者组织工作的办法，但自己的账户、工具和配置仍需接上。
+      </p>
+    </section>
+
+    <!-- 模块 2：开发类助手 -->
+    <section class="content-section" id="section-dev" data-page-node-id="PuzA1ygorAJg6mY6kSUBKL">
+      <h2 data-page-node-id="xn6QCjuQHQbZ2wvM3w59B6">开发：把任务准备和代码执行接起来</h2>
+
+      <p data-page-node-id="CmKKzAiwaGZ6Hixqc5GkKS">
+        Palmer 的两个开发助手互相衔接。<strong data-page-node-id="54l9A8Uqrq3Ex8fXGN85va">Loops 负责工程任务的准备与组织，Tech demos 负责把新技术变成能检查的演示。</strong>
+      </p>
+
+      <!-- 2.1 Loops -->
+      <div id="section-dev-loops" data-page-node-id="Vvb9G3kYW6qnwh0CXqeMjC">
+        <h3 data-page-node-id="bDLeV7Iy3WetlZ3ACVVT6h">Loops：先把任务交代清楚</h3>
+
+        <p data-page-node-id="m8Zyj4vvWZbHgDFco6hEAL">
+          Loops 是 Palmer 的软件工程助手。他先与 Loops 讨论，再由 Loops 与 Cursor Agent 沟通；后者是实际执行编码任务的助手。Palmer 把 Loops 称为工程的“外循环”助手。
+        </p>
+
+        <p data-page-node-id="lg9wHqPBiPQFlBq4a2uLZL">
+          这里的内外循环有具体分工：<strong data-page-node-id="Reg01QXwBXnZzFHuL5Cmnu">代码内循环</strong>围绕编写、构建和测试展开；<strong data-page-node-id="CceSyc6XQ7HdrxyHggiaKT">外循环</strong>还包括研究、规划、形成方案、部署与检查。写代码只是完整工程过程的一部分。
+        </p>
+
+        <!-- SVG 架构图 2：Loops 内外循环分工 -->
+        <div class="visual-container" data-page-node-id="lssEztwRkUzkxZ4dZOWOsm">
+          <div class="visual-header" data-page-node-id="Uecde53G6p5OOuAfDeFQzs">
+            <div class="visual-caption" data-page-node-id="KYxrgkdwaMYMoZGYF71PLN">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="B1tyCYRWwAcFawl6NeIDrZ"><circle cx="12" cy="12" r="10" data-page-node-id="SJACfuh7PnR4lI2zrgphDT" /><path d="M12 6v6l4 2" data-page-node-id="dPexJ9WHsHW97MXve9WgLO" /></svg>
+              图 2：软件工程外循环（Loops）与内循环（Cursor Agent）协作架构
+            </div>
+            <span class="visual-tag" data-page-node-id="LvJoBJyC5Wxl9pTV2U3rS2">Dual-Loop SDLC</span>
+          </div>
+          <div class="visual-body" data-page-node-id="DinrGDAxC8y3WjuxM1WWvt">
+            <svg viewBox="0 0 800 240" width="100%" height="240" style="max-width: 800px; font-family: var(--font-sans);" data-page-node-id="6vBee4IRT2owlLIEHYz9FC">
+              <!-- 外循环容器 -->
+              <rect x="20" y="20" width="760" height="200" rx="10" fill="var(--bg-surface-elevated)" stroke="var(--cyan)" stroke-width="1.5" data-page-node-id="VYAEFY8aW2DffPBoHfBrrL" />
+              <text x="40" y="46" fill="var(--cyan)" font-size="13" font-weight="700" data-page-node-id="o1byE3wIgxWvmsiNJzUiKY">工程外循环 (Outer Loop) · Loops 负责：研究、规约、上下文组织与验收</text>
+
+              <!-- 外循环步骤 -->
+              <rect x="40" y="70" width="140" height="60" rx="6" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="AJfwEeQqFabkzH467m0ADB" />
+              <text x="55" y="96" fill="var(--text-primary)" font-size="12" font-weight="600" data-page-node-id="GAEjQsqShW9nWpJAXFjjnG">1. 同事PR/历史研究</text>
+              <text x="55" y="116" fill="var(--text-tertiary)" font-size="10" data-page-node-id="pJESwVDB7L18AUHAkGBtLM">提取既有工程模式</text>
+
+              <path d="M 180 100 L 210 100" stroke="var(--accent)" stroke-width="2" data-page-node-id="7b6Ycbj08KGKvIEse1oygJ" />
+
+              <rect x="210" y="70" width="140" height="60" rx="6" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="fDuyLYyZ8zp9Ae5BOjWvCR" />
+              <text x="225" y="96" fill="var(--text-primary)" font-size="12" font-weight="600" data-page-node-id="iLL0gAsn94J2uUGZTj8PL6">2. 竞品文档与调研</text>
+              <text x="225" y="116" fill="var(--text-tertiary)" font-size="10" data-page-node-id="LdAJoQH0MpFPaHCj9EDB3n">思考方案与边界</text>
+
+              <path d="M 350 100 L 380 100" stroke="var(--accent)" stroke-width="2" data-page-node-id="eFN15v7sk8Wd4ENXlTzIA1" />
+
+              <!-- 内循环嵌套卡片 -->
+              <rect x="380" y="60" width="220" height="140" rx="8" fill="var(--bg-surface)" stroke="var(--emerald)" stroke-width="2" data-page-node-id="F1rMVpoiM8iIvPcQE0sbum" />
+              <text x="395" y="84" fill="var(--emerald)" font-size="12" font-weight="700" data-page-node-id="BdgVbkgIiY7morb5uiDJQl">内循环 (Inner Loop) · Cursor</text>
+              <rect x="400" y="95" width="180" height="30" rx="4" fill="var(--bg-surface-elevated)" data-page-node-id="IA5I5bgTRrGNlOR9ib06xI" />
+              <text x="415" y="115" fill="var(--text-secondary)" font-size="11" data-page-node-id="AVNnlDfmvOUXD7stzeRuXA">编写代码 (Code)</text>
+              <rect x="400" y="130" width="180" height="30" rx="4" fill="var(--bg-surface-elevated)" data-page-node-id="DcuZbISTrIbc66FO4KJebZ" />
+              <text x="415" y="150" fill="var(--text-secondary)" font-size="11" data-page-node-id="e3io2Urs6AvGt6fhpSHA36">构建与单元测试 (Test)</text>
+              <text x="400" y="185" fill="var(--text-tertiary)" font-size="10" data-page-node-id="ZlWoYoqidw8fG25bZNo5UW">快速迭代运行，直到无红标</text>
+
+              <path d="M 600 100 L 630 100" stroke="var(--accent)" stroke-width="2" data-page-node-id="Nmyww2B7eZMwOwfArAUUK2" />
+
+              <!-- 外循环验收 -->
+              <rect x="630" y="70" width="130" height="60" rx="6" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="CyNQpTtLz3hp4x45qFlEdc" />
+              <text x="645" y="96" fill="var(--text-primary)" font-size="12" font-weight="600" data-page-node-id="BQQs2IP0sA7IVqGdnuycc7">3. 部署与验收</text>
+              <text x="645" y="116" fill="var(--text-tertiary)" font-size="10" data-page-node-id="5DJ9Fh5D674dHzSWk1WijE">多模态/端到端复核</text>
+
+              <!-- 回馈弧线 -->
+              <path d="M 695 130 C 695 180, 110 180, 110 130" fill="none" stroke="var(--text-tertiary)" stroke-width="1.2" stroke-dasharray="4 3" data-page-node-id="MY9jZTZzPGub5XL9NssUOJ" />
+              <text x="320" y="205" fill="var(--text-tertiary)" font-size="11" data-page-node-id="cR1uNwn3XBm04kcUVJzFSb">继续迭代与方法论沉淀 (下一次复用)</text>
+            </svg>
+          </div>
+          <div class="visual-note" data-page-node-id="7EzUFBD5bOWkHnOLX1AHbB">
+            代码内循环围绕编写、构建和测试展开；外循环还包括研究、规划、方案、测试和部署。原图把两者分开，提醒我们写代码只是完整工程过程的一部分。
+          </div>
+        </div>
+
+        <p data-page-node-id="wEa7ONeHCvA5jTg6tolkS4">
+          例如修改网站时，Palmer 会让 Loops 阅读几位同事过去的贡献，了解现有做法；也会让它研究竞争产品的文档，思考类似问题如何处理，以及这次修改该怎样验证。Loops 把这些背景整理成任务提示，再启动云端编码助手。之后，Palmer 转到 Cursor 继续工作。
+        </p>
+
+        <p data-page-node-id="7NnxQD7YlU7vWQcDoeu9dh">
+          他还把自己反复采用的提示方式保存在助手中。相似任务可以沿用整理背景、形成任务和继续迭代的做法，下一次不用从空白对话重新准备。
+        </p>
+
+        <div class="callout-box task" data-page-node-id="FVB1vIgYEPHOntHASPGt8D">
+          <div class="callout-icon" data-page-node-id="YFSQtCglosvtnbqsCoxayM">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" data-page-node-id="LyEoEpFBfGT8dghQUysGpa"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" data-page-node-id="IYPyVIvOJHo4fsMmkPCYMU" /><polyline points="22 4 12 14.01 9 11.01" data-page-node-id="poOMjkMGWvfiUlXZFbFCEQ" /></svg>
+          </div>
+          <div class="callout-content" data-page-node-id="0AHImJQreowiOh3CnemVBx">
+            <div class="callout-title" data-page-node-id="qzvvI3OlukVsVjdmR8XL2H">Loops 适合什么任务，需要哪些工具？</div>
+            <div class="callout-desc" data-page-node-id="lKkM5XcGrGAJ70Bx6LwKCI">
+              <strong data-page-node-id="aXfVzLWMPBbcR2G56UKPyJ">定位与动作</strong>：先整理背景与方案，梳理同事历史贡献与竞品文档，生成高信息密度提示词，再交给编码助手。<br data-page-node-id="oHkhwQkL1Nufl3h6iNpd3Y">
+              <strong data-page-node-id="FRupOpqyozSQzVdxabE5xz">所需工具或数据</strong>：
+            </div>
+            <div class="callout-tools" data-page-node-id="WCTvWoPGAhaBpRM0Ze8yHe">
+              <span class="tool-chip" data-page-node-id="LzHLyRK28lqLxx2iJHMuEy">GitHub</span>
+              <span class="tool-chip" data-page-node-id="yRu08vrXK5pE7EG47TsKR9">Cursor Agent</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2.2 Tech demos -->
+      <div id="section-dev-demos" data-page-node-id="9JHfvc5SVhHHYFCKeh4eRY">
+        <h3 data-page-node-id="e35ljcVITAIzpgodyYSJyA">Tech demos：把收藏变成可体验的作品</h3>
+
+        <p data-page-node-id="ChJ5fpbpw8Q4EKfwiXBUc7">
+          Tech demos 每天早晨查看 Palmer 的 X 书签，挑一个新工具，发来一份任务提示草稿。这份提示沿用他从 Loops 整理出来的方法，再把开发工作交给编码助手。
+        </p>
+
+        <p data-page-node-id="EemDawVUOjQIGkgFwLKDQP">
+          Palmer 对返回结果有明确要求：<strong data-page-node-id="zLj6ku8jgB0Duj5YAH52zt">提供截图和视频</strong>。演示可以部署到 Cloudflare，用户既能在 Grok Bot 中快速查看，也能打开浏览器实际操作，或者进入 Cursor 继续修改代码。
+        </p>
+
+        <!-- SVG 架构图 3：Tech Demos 闭环工作流 -->
+        <div class="visual-container" data-page-node-id="mcdGFbd63bzgBPfT7sQe6G">
+          <div class="visual-header" data-page-node-id="lXPZqFVDFcSAutfpy2RTWd">
+            <div class="visual-caption" data-page-node-id="CL0z0j6eSv1u1RCAcYP0Yr">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="Gz7Ga0irpJDwAJO0xeIFkg"><rect x="2" y="3" width="20" height="14" rx="2" data-page-node-id="9nF3GEgDPQVY20iNs4rIMv" /><line x1="8" y1="21" x2="16" y2="21" data-page-node-id="ZCErpa5TPTtkAQFrqRAiqq" /><line x1="12" y1="17" x2="12" y2="21" data-page-node-id="7bB3CCiyEQpVLvFrVJF2zi" /></svg>
+              图 3：Tech Demos 晨间自动化研发与多模态验收闭环
+            </div>
+            <span class="visual-tag" data-page-node-id="cJ2k2H6D1QmW5wBnxIipFW">Pipeline Workflow</span>
+          </div>
+          <div class="visual-body" data-page-node-id="fI8q59jyFdgvAIq6SvvAhE">
+            <svg viewBox="0 0 800 200" width="100%" height="200" style="max-width: 800px; font-family: var(--font-sans);" data-page-node-id="mK3OLAQANAxFBqVGr825Cb">
+              <!-- 步骤 1 -->
+              <rect x="20" y="40" width="130" height="110" rx="8" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="9yjYXHcpgokvBlfECe0Mi7" />
+              <circle cx="85" cy="70" r="16" fill="var(--accent-subtle)" data-page-node-id="dtCeLiyMaeG6tqoASNFdyt" />
+              <text x="85" y="75" text-anchor="middle" fill="var(--accent)" font-weight="700" font-size="12" data-page-node-id="uGEUFIhXJWZllCIgZuQZwV">1</text>
+              <text x="85" y="105" text-anchor="middle" fill="var(--text-primary)" font-size="12" font-weight="600" data-page-node-id="Xtfx0DADCIWA383AWyCBSO">每日扫描书签</text>
+              <text x="85" y="125" text-anchor="middle" fill="var(--text-tertiary)" font-size="10" data-page-node-id="6roMiAfpxEe8KCU9MzScX9">X Bookmarks</text>
+
+              <line x1="150" y1="95" x2="180" y2="95" stroke="var(--accent)" stroke-width="2" data-page-node-id="DgzI3FpcbDFLd1aXLSO8f0" />
+
+              <!-- 步骤 2 -->
+              <rect x="180" y="40" width="130" height="110" rx="8" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="cQ7fuYR8qFDZBEpRGVbqJM" />
+              <circle cx="245" cy="70" r="16" fill="var(--cyan-subtle)" data-page-node-id="tMafZ28OkLBhKiP6RwyxOm" />
+              <text x="245" y="75" text-anchor="middle" fill="var(--cyan)" font-weight="700" font-size="12" data-page-node-id="nXaEbySWF1HDi6HA1qHmYJ">2</text>
+              <text x="245" y="105" text-anchor="middle" fill="var(--text-primary)" font-size="12" font-weight="600" data-page-node-id="iCHgMvALXIMzDhwZB9Vl7d">生成任务草稿</text>
+              <text x="245" y="125" text-anchor="middle" fill="var(--text-tertiary)" font-size="10" data-page-node-id="1WtDBX0gPAwozRc2tdwBrx">沿用 Loops 方法</text>
+
+              <line x1="310" y1="95" x2="340" y2="95" stroke="var(--accent)" stroke-width="2" data-page-node-id="PTDV2UcQ1yuU3q1NGCXRHk" />
+
+              <!-- 步骤 3 -->
+              <rect x="340" y="40" width="130" height="110" rx="8" fill="var(--bg-surface)" stroke="var(--purple)" stroke-width="1.5" data-page-node-id="yx8kIcHW8H1tGmfv3wtsu2" />
+              <circle cx="405" cy="70" r="16" fill="var(--purple-subtle)" data-page-node-id="LLR1uGZCE32NQKOj7lSkbi" />
+              <text x="405" y="75" text-anchor="middle" fill="var(--purple)" font-weight="700" font-size="12" data-page-node-id="lLodMnoTQGGRxRmEIHT1pc">3</text>
+              <text x="405" y="105" text-anchor="middle" fill="var(--text-primary)" font-size="12" font-weight="600" data-page-node-id="pYQCrxOTcyJDcR1CZNkGkY">Cursor 编码构建</text>
+              <text x="405" y="125" text-anchor="middle" fill="var(--text-tertiary)" font-size="10" data-page-node-id="4hvBA0gk7Rcn0dRjxCpxVQ">Agent 独立执行</text>
+
+              <line x1="470" y1="95" x2="500" y2="95" stroke="var(--accent)" stroke-width="2" data-page-node-id="PZSNNWRFqBSW7o0YUy02ql" />
+
+              <!-- 步骤 4 -->
+              <rect x="500" y="40" width="130" height="110" rx="8" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="u4hEmc1FEDv6rc3j4xemYG" />
+              <circle cx="565" cy="70" r="16" fill="var(--amber-subtle)" data-page-node-id="PDAgyYQIm9ALylBb9joKeE" />
+              <text x="565" y="75" text-anchor="middle" fill="var(--amber)" font-weight="700" font-size="12" data-page-node-id="Q1YRGhpzB72vCTRWn8Un1K">4</text>
+              <text x="565" y="105" text-anchor="middle" fill="var(--text-primary)" font-size="12" font-weight="600" data-page-node-id="etCV129ffvdVzCcCZ3lCDq">部署 Cloudflare</text>
+              <text x="565" y="125" text-anchor="middle" fill="var(--text-tertiary)" font-size="10" data-page-node-id="LOQvEwcvz45ydi9RyyRpo7">即时线上可访问</text>
+
+              <line x1="630" y1="95" x2="660" y2="95" stroke="var(--accent)" stroke-width="2" data-page-node-id="WJmeywuJ7yme3mwwRBSfRK" />
+
+              <!-- 步骤 5 -->
+              <rect x="660" y="40" width="120" height="110" rx="8" fill="var(--bg-surface)" stroke="var(--emerald)" stroke-width="1.5" data-page-node-id="Ch2zJXnVV2drYPqIWNhcCs" />
+              <circle cx="720" cy="70" r="16" fill="var(--emerald-subtle)" data-page-node-id="B8Oxb6HaAegCiWj2BWX0Tx" />
+              <text x="720" y="75" text-anchor="middle" fill="var(--emerald)" font-weight="700" font-size="12" data-page-node-id="UXqaaBpgIEb8qnsvDJeggt">5</text>
+              <text x="720" y="105" text-anchor="middle" fill="var(--text-primary)" font-size="12" font-weight="600" data-page-node-id="f4qV2W5QOGAaIVsWCVNP2U">截图与视频验收</text>
+              <text x="720" y="125" text-anchor="middle" fill="var(--emerald)" font-size="10" data-page-node-id="J1gO2S478lBhO7WL9ZWcDl">多模态交互复核</text>
+            </svg>
+          </div>
+          <div class="visual-note" data-page-node-id="G1DmEIA5SGEdDETiD5XeMC">
+            原图展示：Tech demos 返回演示截图，并提供查看开发结果的入口。旋转地球与城市连线的演示来自写代码的 Cursor Agent 所在工作环境，Grok Bot 负责远程调度并带回成果。
+          </div>
+        </div>
+
+        <div class="callout-box question" data-page-node-id="GhM0lLNXUlPgiaMIIVJCCW">
+          <div class="callout-icon" data-page-node-id="lDtFyBaDPDn2GFNDnGFjXg">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" data-page-node-id="n9FoBHHwUpH5f6NQvq6YUt"><circle cx="12" cy="12" r="10" data-page-node-id="G6Z7jy0LUmOUwzjFaaw9Xv" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" data-page-node-id="OYrbAK8Xi6JzCSasb1Qugp" /><line x1="12" y1="17" x2="12.01" y2="17" data-page-node-id="37Zds24Aa98Bw7rIiZsMpL" /></svg>
+          </div>
+          <div class="callout-content" data-page-node-id="gYAmHVll0oVFYLSRYaZ7xI">
+            <div class="callout-title" data-page-node-id="OkZAfTCGkHeq8ixjL8RgZO">开发结果具体长什么样？</div>
+            <div class="callout-desc" data-page-node-id="qp3hDd39se7XFtHCOsaE5c">
+              旋转地球与城市连线的演示来自 Cursor Agent 的工作环境。Grok Bot 可以与那个助手沟通、使用它的电脑，再把直观的运行结果（截图与视频）带回。
+            </div>
+          </div>
+        </div>
+
+        <p data-page-node-id="QqpCx8HAz0QQ4161rmgCYl">
+          于是，书签里的“以后看看”有了一条明确的处理路径：<strong data-page-node-id="k2MDFR6IeWB5C8EEgpFGDx">选工具 → 形成任务 → 做出演示 → 检查效果 → 继续迭代</strong>。Palmer 说自己通常不会发布这些演示，但亲手看过和试过之后，会更了解有哪些库可用，也更容易在项目中采用或推荐它们。
+        </p>
+
+        <div class="callout-box task" data-page-node-id="hAMaHvYL1cKuITptELShlF">
+          <div class="callout-icon" data-page-node-id="GBMIshfwkGentDxEZCvUBW">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" data-page-node-id="TbIUYjehG4MYDCUMSdpp3W"><polygon points="5 3 19 12 5 21 5 3" data-page-node-id="THMHAnrYM8ubbNYOAmuwk9" /></svg>
+          </div>
+          <div class="callout-content" data-page-node-id="v0yAYX0NA5nS32tmCXHEEH">
+            <div class="callout-title" data-page-node-id="BoKZPDAUAUiKcqm6ctjdQV">Tech demos 适合什么任务，需要哪些工具？</div>
+            <div class="callout-desc" data-page-node-id="SQQ0Xqc30y04FF4KxcuGcJ">
+              <strong data-page-node-id="GGnef2oeBmmvYjgeG4GgSe">定位与动作</strong>：把收藏的新工具做成可体验的演示。自动生成任务、驱动编码、部署并带回多模态直观结果。<br data-page-node-id="l2OV2oFJKVujZVUnC8uz4d">
+              <strong data-page-node-id="05LGPjRr595glrFj8HuOHR">所需工具或数据</strong>：
+            </div>
+            <div class="callout-tools" data-page-node-id="sMyzvb8yh4KeZ4hoObk9l0">
+              <span class="tool-chip" data-page-node-id="wY2AWAB2wkD3yuDriAOiTD">X (Bookmarks)</span>
+              <span class="tool-chip" data-page-node-id="PdbLFpcnkGzjdmQTfgWkoz">GitHub</span>
+              <span class="tool-chip" data-page-node-id="iydQkZLDHLCHuGMBXoCixG">Cursor Agent</span>
+              <span class="tool-chip" data-page-node-id="WayHEhqO2SKNNDYQZpBHFD">Cloudflare</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 模块 3：信息整理类助手 -->
+    <section class="content-section" id="section-info" data-page-node-id="ZoTdGHUgRMaVFBQek4HEMP">
+      <h2 data-page-node-id="FP29WIaXmilBun1v9nELcz">信息整理：让已有资料直接服务下一次决定</h2>
+
+      <p data-page-node-id="9z8v1CUPyE2Fwu1EixEvg0">
+        开发助手把资料转成作品。另两种助手则把分散的信息整理成能直接使用的参照，减少“我明明有这些信息，却临时找不到”的情况。
+      </p>
+
+      <!-- 3.1 Personal CRM -->
+      <div id="section-info-crm" data-page-node-id="1YrbQcWPepWGu87MLwfvR0">
+        <h3 data-page-node-id="RA32UB6972CmlTjWuNi5GE">Personal CRM：到一个城市前，先找出当地朋友</h3>
+
+        <p data-page-node-id="WBCwICI3fi4IHeLAGvRIpt">
+          Personal CRM 是个人联系人管理助手。它整理 Palmer 在 X 上互相关注的人，并写进 Notion，按国家、州和城市组织。旅行前，他就能筛出目的地的朋友，再决定联系谁喝咖啡或散步。
+        </p>
+
+        <p data-page-node-id="g5US2Q0Y8uw7vWhAmrTTXG">
+          配套演示把过程讲得更清楚：助手从公开个人简介读取地点，通过接口或浏览页面取得信息，再建立 Notion 数据库。表中保留<strong data-page-node-id="FubpBLtGZOaAWUKq1UE14F">简介、地点和位置判断的置信度</strong>等字段。位置本来就可能含糊，整理后的记录也需要保留这种不确定性。
+        </p>
+
+        <!-- SVG 架构图 4：Personal CRM 地理抽取与置信度 -->
+        <div class="visual-container" data-page-node-id="NKZkacVBJN2rR2AkAsxqYj">
+          <div class="visual-header" data-page-node-id="aMB6m4KEV8e5w1lmzOdu5S">
+            <div class="visual-caption" data-page-node-id="zhwiDRQOwDqko2IK0sa7FY">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="dEC7nKRXciAYLXpzX2TRs2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" data-page-node-id="6I5cKB0MR2WlGCAFf1SQTd" /><circle cx="9" cy="7" r="4" data-page-node-id="yYcRJFmHfYvs1vlKqHxCMy" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" data-page-node-id="0elLwMDgP4dl9JsfwZdK4D" /><path d="M16 3.13a4 4 0 0 1 0 7.75" data-page-node-id="lnsOmVP0pBUCvO6fkxFjfn" /></svg>
+              图 4：Personal CRM 语义信息提取与置信度沉淀流
+            </div>
+            <span class="visual-tag" data-page-node-id="FCp1u8VBGEHF3EgeeebxmU">Data Enrichment</span>
+          </div>
+          <div class="visual-body" data-page-node-id="ma3R7HRTEbNXOcHqycVPFo">
+            <svg viewBox="0 0 800 180" width="100%" height="180" style="max-width: 800px; font-family: var(--font-sans);" data-page-node-id="LiST9riuueuo3oCCHZdr0U">
+              <rect x="20" y="35" width="180" height="110" rx="8" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="4kAE7mwmDKp040t9CLOwnQ" />
+              <text x="35" y="65" fill="var(--text-primary)" font-size="13" font-weight="600" data-page-node-id="GS476sMxZxPLM8or99cvg4">X 互相关注好友</text>
+              <text x="35" y="88" fill="var(--text-tertiary)" font-size="11" data-page-node-id="kxOAEsckvrW8KQOIuZwOOv">获取公开个人主页简介</text>
+              <text x="35" y="108" fill="var(--text-tertiary)" font-size="11" data-page-node-id="8NlAUBfReSnNxLO1OUBFw1">Bio: "SF / NYC nomad"</text>
+              <text x="35" y="128" fill="var(--accent)" font-size="10" data-page-node-id="yqIRo39xDwQZc9H1xvP7OG">半结构化 / 模糊地理文本</text>
+
+              <path d="M 200 90 L 250 90" stroke="var(--accent)" stroke-width="2" data-page-node-id="EhWY4v6fDzucEgiun2qhGl" />
+
+              <rect x="250" y="35" width="230" height="110" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--cyan)" stroke-width="1.5" data-page-node-id="n7wRFjsA5BV3g106tsTAu9" />
+              <text x="265" y="65" fill="var(--cyan)" font-size="13" font-weight="700" data-page-node-id="vue0u48SZTjxYNkHYlNKJG">NLP 实体抽取与置信度引擎</text>
+              <text x="265" y="88" fill="var(--text-secondary)" font-size="11" data-page-node-id="Di44yCu9AslC6pxD7PO8wP">国家: United States</text>
+              <text x="265" y="108" fill="var(--text-secondary)" font-size="11" data-page-node-id="PK6xfkyhBqAPHczDt69SiJ">城市: San Francisco</text>
+              <rect x="265" y="118" width="140" height="18" rx="4" fill="var(--amber-subtle)" data-page-node-id="VOIQMbd7Pc9aDqTki7o4p4" />
+              <text x="272" y="131" fill="var(--amber)" font-size="10" font-weight="600" data-page-node-id="GAYQ8wRjEYNLvlC5nEHLZw">Confidence: Medium (65%)</text>
+
+              <path d="M 480 90 L 530 90" stroke="var(--accent)" stroke-width="2" data-page-node-id="FzqiZx4VZRGfTi9gaFZ4Ws" />
+
+              <rect x="530" y="35" width="250" height="110" rx="8" fill="var(--bg-surface)" stroke="var(--emerald)" stroke-width="1.5" data-page-node-id="JBp4k6VP7jCTneDzzv0qDr" />
+              <text x="545" y="65" fill="var(--emerald)" font-size="13" font-weight="700" data-page-node-id="ZHFjM6YbiuRjvSippQGRvN">Notion 动态出行筛选数据库</text>
+              <text x="545" y="88" fill="var(--text-secondary)" font-size="11" data-page-node-id="HcZdfLpbt8hvF4VheOda24">Filter: Location == "San Francisco"</text>
+              <text x="545" y="108" fill="var(--text-secondary)" font-size="11" data-page-node-id="STwuZ1c0xctjSsRUMZiIbH">保留置信度列，规避假定</text>
+              <text x="545" y="128" fill="var(--text-tertiary)" font-size="10" data-page-node-id="IcDDClwLmmE1abCPeDzTGi">行前自动产出喝咖啡 / 散步候选名单</text>
+            </svg>
+          </div>
+          <div class="visual-note" data-page-node-id="xVAIY9ECMCJRnFQsqyFeoJ">
+            原图说明：Notion 联系人表将地点整理为可筛选字段，并保留位置判断的置信度。这类工作的难点在于持续维护人与信息的映射，将不确定性显式量化。
+          </div>
+        </div>
+
+        <div class="callout-box question" data-page-node-id="bn16pwFDwcqfDNcWOjNA7D">
+          <div class="callout-icon" data-page-node-id="EIJtQxJRYqMpQoGVwXUXXR">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" data-page-node-id="FDMZn14zYJ0K3luMGAI6zW"><circle cx="12" cy="12" r="10" data-page-node-id="0KHTPlx37WXiT0Fqmh3VfI" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" data-page-node-id="cHe1FZtlwBrLRAAb3cyIm5" /><line x1="12" y1="17" x2="12.01" y2="17" data-page-node-id="J7rTH2ep8aoElS37aidBQr" /></svg>
+          </div>
+          <div class="callout-content" data-page-node-id="o8GF3rl46JmIUVUAB2sdH0">
+            <div class="callout-title" data-page-node-id="PyFABvCn0CYUKB6lBoFw0v">联系人资料怎样变成按城市筛选的表格？</div>
+            <div class="callout-desc" data-page-node-id="4HyzFxyP3Fn1qwCiVr4RNx">
+              联系人演示从 16:06 开始：读取公开地点信息，清洗与打分后，再在 Notion 数据库中按城市进行多维筛选。
+            </div>
+          </div>
+        </div>
+
+        <div class="callout-box task" data-page-node-id="JxmxEu5xkIQPkjifxWf52U">
+          <div class="callout-icon" data-page-node-id="Hen0LxVeHRgAzvUggEnWPf">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" data-page-node-id="FhQKUANA3rkE5B5UdURXoB"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" data-page-node-id="MnaF6ph4df1mrwBjGp1BUE" /><circle cx="12" cy="10" r="3" data-page-node-id="ZrLaWFJeui8ugkv4kCBKf5" /></svg>
+          </div>
+          <div class="callout-content" data-page-node-id="gGU3WgfNoXTETKqjP2vmSj">
+            <div class="callout-title" data-page-node-id="BvGMHzaVuyeoIpLOwQ3y90">Personal CRM 适合什么任务，需要哪些工具？</div>
+            <div class="callout-desc" data-page-node-id="jS56I6Sl1APuSXOrWr8Jid">
+              <strong data-page-node-id="YpXhRavdwzEV5DDKKDFDyd">定位与动作</strong>：按城市整理联系人，方便旅行前查找。读取公开资料并写入保留置信度的结构化表。<br data-page-node-id="C2yiEzH1Ra5gGs8pAyCt5n">
+              <strong data-page-node-id="DOeH9oWTCnJZJWgmHr6NoG">所需工具或数据</strong>：
+            </div>
+            <div class="callout-tools" data-page-node-id="dQEuBgZe9lcfMhNUG7VR5M">
+              <span class="tool-chip" data-page-node-id="dB0aKcsrEWtTSI2EDSiZ3R">X (Twitter)</span>
+              <span class="tool-chip" data-page-node-id="aBdttlHfHptKQs2wVZFaO7">Notion</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3.2 X algorithm -->
+      <div id="section-info-xalgo" data-page-node-id="bQnu27A156aqt4oKdoQj50">
+        <h3 data-page-node-id="gHaQWvFGgHZ8r9kbgIcAog">X algorithm：为发帖安排提供参照</h3>
+
+        <p data-page-node-id="wgjvP2AKtOstPEF31G9WQ2">
+          X algorithm 助手结合 <a href="https://github.com/xai-org/x-algorithm" target="_blank" rel="noopener noreferrer" data-page-node-id="a0EelSj09cDpRXO2puyQND">X 算法仓库</a>与原生 X 连接，帮助 Palmer 判断什么时候发帖、采用什么格式，以及如何参与互动。它接手的是内容安排时反复出现的小决定。
+        </p>
+
+        <!-- SVG 架构图：X algorithm -->
+        <div class="visual-container" data-page-node-id="FTU6QvWi2OenruF7yG2Hse">
+          <div class="visual-header" data-page-node-id="8ABYgL92PLY60MNrSG7L3j">
+            <div class="visual-caption" data-page-node-id="VMbivbx4mFZ4r7aQ8OnB5v">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="zrD9U5pFDLGFvm57Ac6uUQ"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" data-page-node-id="HG3dKaHJBc1qWHzLkgitik" /></svg>
+              图 5：X Algorithm 算法辅助发帖决策机制
+            </div>
+            <span class="visual-tag" data-page-node-id="sGeTQRo4YCNPqr1frcXEii">Recommendation Alignment</span>
+          </div>
+          <div class="visual-body" data-page-node-id="mJagpHqBLBhPnmMaIsICgZ">
+            <svg viewBox="0 0 800 160" width="100%" height="160" style="max-width: 800px; font-family: var(--font-sans);" data-page-node-id="IYXG1cBaoZJ7JuwhspAtC9">
+              <rect x="30" y="30" width="210" height="100" rx="8" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="9Mh4Gg71ysTCc9D6XqWvpb" />
+              <text x="45" y="58" fill="var(--text-primary)" font-size="13" font-weight="700" data-page-node-id="NLwWMVoIiHMt5ESAadJpJ6">开源算法代码库</text>
+              <text x="45" y="80" fill="var(--text-tertiary)" font-size="11" data-page-node-id="Kwcnkq8v8nW7LPCP2GzLa2">xai-org/x-algorithm</text>
+              <text x="45" y="100" fill="var(--text-tertiary)" font-size="10" data-page-node-id="LtHWVtPro4GRPunALgGdeI">解析分发权重、互动倍率、降权惩罚</text>
+
+              <path d="M 240 80 L 290 80" stroke="var(--accent)" stroke-width="2" data-page-node-id="IFWNt3cMavmp0YcAYKIMyK" />
+
+              <rect x="290" y="30" width="220" height="100" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--cyan)" stroke-width="1.5" data-page-node-id="utdXC2tYhDhJUwDyHLL52v" />
+              <text x="305" y="58" fill="var(--cyan)" font-size="13" font-weight="700" data-page-node-id="authvlAUIEk52gQsK7Kly9">Grok Bot 参照建议引擎</text>
+              <text x="305" y="80" fill="var(--text-secondary)" font-size="11" data-page-node-id="EQB5fyuyN3msTHkzu9HQjP">发帖时机判断 · 格式优化</text>
+              <text x="305" y="100" fill="var(--text-secondary)" font-size="10" data-page-node-id="mVzRiNj0wbv4BZ4BZWggZV">回复互动安排 · 规避违规降权</text>
+
+              <path d="M 510 80 L 560 80" stroke="var(--accent)" stroke-width="2" data-page-node-id="w0ddU9xAPLLh0If2KmAEIp" />
+
+              <rect x="560" y="30" width="210" height="100" rx="8" fill="var(--bg-surface)" stroke="var(--emerald)" stroke-width="1.5" data-page-node-id="l0eXi1MdueSoRDQwussbnF" />
+              <text x="575" y="58" fill="var(--emerald)" font-size="13" font-weight="700" data-page-node-id="XN48PADwpNO3LnmKoH5ezU">创作者决策结论</text>
+              <text x="575" y="80" fill="var(--text-primary)" font-size="11" data-page-node-id="fLABNE3vdRK3UWde78k0rt">减少内容发布的犹豫成本</text>
+              <text x="575" y="100" fill="var(--accent)" font-size="10" data-page-node-id="uJJiWQK8JwlXNaivOqeA3A">★ 牢记：好内容始终优于微调</text>
+            </svg>
+          </div>
+          <div class="visual-note" data-page-node-id="bp0GqSzKDx4Ct87Vj4lgPD">
+            原图说明：X algorithm 助手围绕发帖与互动给出建议。该助手主要解决犹豫不决，但在整个创作中内容质量依然占据决定性地位。
+          </div>
+        </div>
+
+        <p data-page-node-id="4Etk2rruIGT4SoEC0vNMCM">
+          Palmer 同时保留了优先级：<strong data-page-node-id="3WXELPJdjB4a1dCfWPR0IG">好内容比细小优化更重要</strong>。他觉得这个助手最有用的时刻，是自己拿不准怎样安排内容时。它可以减少犹豫，无法把内容质量这个问题省掉。
+        </p>
+
+        <div class="callout-box task" data-page-node-id="PQlTzpWuvPgOqKCbZ8HiOu">
+          <div class="callout-icon" data-page-node-id="rAdr1d6w4Kb1HLCOvks02G">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" data-page-node-id="MqiDCoek3mhG2dsUqexMBe"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" data-page-node-id="EOAE93rjoKohTQsDMwwIL6" /></svg>
+          </div>
+          <div class="callout-content" data-page-node-id="ItnvgyRZ6WWbRwFdAi1AMK">
+            <div class="callout-title" data-page-node-id="1NnJJxDQt6T23U0z7ZtbnD">X algorithm 适合什么任务，需要哪些工具？</div>
+            <div class="callout-desc" data-page-node-id="wCeyVzmGXbVx4TQyERMsz4">
+              <strong data-page-node-id="AOLmw1eJadJt5wc6yxWfHJ">定位与动作</strong>：为发帖时机、格式与互动提供参照，减少不必要的发布犹豫。<br data-page-node-id="JLB4GEim9gYciClwwPcbgt">
+              <strong data-page-node-id="DNUmQ5yGD9T5jyD5EvlqdF">所需工具或数据</strong>：
+            </div>
+            <div class="callout-tools" data-page-node-id="ZWhzT13CeOwxbqT5kyoNhS">
+              <span class="tool-chip" data-page-node-id="uSFiQkFwt9t5JHSurFtgim">X (原生连接)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 模块 4：内容制作类助手 -->
+    <section class="content-section" id="section-content" data-page-node-id="hNrZS5znHtIaISFpW1We5C">
+      <h2 data-page-node-id="5br1cONnotdK2RxmSGVJcK">内容制作：把质量要求放进重复工序</h2>
+
+      <p data-page-node-id="1P6mENvVBt9QiiNr6q1eZq">
+        当工作开始产生文稿、图标等内容，模板还可以保存你希望结果遵循的标准。
+      </p>
+
+      <!-- 4.1 Writing Bot -->
+      <div id="section-content-writing" data-page-node-id="0tB66AXhZDDAtrFldKKDNV">
+        <h3 data-page-node-id="MI5BUz1WgDCZiBBHDZrCN0">Writing Bot：保留人的写作，再接手整理和修句</h3>
+
+        <p data-page-node-id="pPdxO70IXT98Bx5PcNmcFE">
+          Palmer 的 Writing Bot 以他喜欢的写作书为基础，包括《Style: Lessons in Clarity and Grace》和《On Writing Well》。他通常先自己写，再让助手处理语法和难写的句子；Typefully 与 Notion 连接让助手能直接处理已有草稿。
+        </p>
+
+        <p data-page-node-id="62AUEnxBciANnyFfz5pRdV">
+          这篇 8 模板介绍的准备工作也用了它：Writing Bot 先向他的其他助手索取摘要，再把草稿放进 Typefully，供他开始写作。它既能处理句子，也能把散落在不同助手里的信息收拢到一个写作起点。
+        </p>
+
+        <!-- SVG 架构图 6：Writing Bot 跨助手聚合流 -->
+        <div class="visual-container" data-page-node-id="zASly9wdksOE38rmj7VeaC">
+          <div class="visual-header" data-page-node-id="uiwxLcEft3UQiT3dIXX9RM">
+            <div class="visual-caption" data-page-node-id="idbwJcaNhC6SBsrbXwQoOq">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="G28mzDgr1eadjDtWDTK2KE"><path d="M12 20h9" data-page-node-id="H8o4AlPADpUiPt33KV4zdY" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" data-page-node-id="IfcZGyBvixfDZhVlduLlas" /></svg>
+              图 6：Writing Bot 跨 Agent 摘要收集与出版级编辑流水线
+            </div>
+            <span class="visual-tag" data-page-node-id="HLm4dbId46BIhPSDcZ4dGc">Editorial Workflow</span>
+          </div>
+          <div class="visual-body" data-page-node-id="EKGbzrnf2Li8cEaa4MKMCV">
+            <svg viewBox="0 0 800 180" width="100%" height="180" style="max-width: 800px; font-family: var(--font-sans);" data-page-node-id="yyr5pLdlDvnfkE3gzCSxFY">
+              <rect x="20" y="30" width="160" height="120" rx="8" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="UBXFlB0yYrjdA91raMkHyF" />
+              <text x="35" y="55" fill="var(--text-primary)" font-size="12" font-weight="700" data-page-node-id="UfExqTU3laZk8S0ijtXrOU">分布式子助手集群</text>
+              <rect x="35" y="68" width="130" height="20" rx="3" fill="var(--bg-surface-elevated)" data-page-node-id="czF7z8BTdFQ3LzyZnEeTl7" />
+              <text x="45" y="82" fill="var(--text-secondary)" font-size="10" data-page-node-id="tSkZ1enbF3kVbIPN0K5HhH">Loops 研发摘要</text>
+              <rect x="35" y="94" width="130" height="20" rx="3" fill="var(--bg-surface-elevated)" data-page-node-id="VdfPpgByJ455kP3bKl85gW" />
+              <text x="45" y="108" fill="var(--text-secondary)" font-size="10" data-page-node-id="YXihHStGfXb5cJ0hf5v1R7">Tech demos 成果</text>
+              <rect x="35" y="120" width="130" height="20" rx="3" fill="var(--bg-surface-elevated)" data-page-node-id="OGCjsYbsZ28RPCYDQnAktu" />
+              <text x="45" y="134" fill="var(--text-secondary)" font-size="10" data-page-node-id="tV3oBEAvxrPenlgfg0icBz">CRM / 行程数据</text>
+
+              <path d="M 180 90 L 230 90" stroke="var(--accent)" stroke-width="2" data-page-node-id="EPRLqGuNeeMjqPpP8elFYN" />
+
+              <rect x="230" y="30" width="280" height="120" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--accent)" stroke-width="1.5" data-page-node-id="TtzhCNaNplwFApflb5Ppkh" />
+              <text x="245" y="55" fill="var(--accent)" font-size="13" font-weight="700" data-page-node-id="maBjpEjE3YdnHwXmRPJ4x6">Writing Bot 汇集与风格约束引擎</text>
+              <text x="245" y="80" fill="var(--text-primary)" font-size="11" data-page-node-id="RICXanzFYV2z7Dm5rHKLkW">① 汇集多助手事实上下文，构建第一版草稿</text>
+              <text x="245" y="100" fill="var(--text-primary)" font-size="11" data-page-node-id="AKC1SylU6dPXf9tsuxOlgo">② 注入《Style》与《On Writing Well》原则</text>
+              <text x="245" y="120" fill="var(--text-secondary)" font-size="10" data-page-node-id="f6NWjvMf8GFNZ9Oq93tE2D">修剪冗余字句 · 增强动词力度 · 保持清晰节奏</text>
+
+              <path d="M 510 90 L 560 90" stroke="var(--accent)" stroke-width="2" data-page-node-id="TpxsiX32ZueUfwDlzrfFIx" />
+
+              <rect x="560" y="30" width="220" height="120" rx="8" fill="var(--bg-surface)" stroke="var(--emerald)" stroke-width="1.5" data-page-node-id="6WkyCnSV9kkESNR25yn62B" />
+              <text x="575" y="55" fill="var(--emerald)" font-size="13" font-weight="700" data-page-node-id="kreBVn9uNsmFy6Bib3mGPa">人类终审与发布管道</text>
+              <text x="575" y="80" fill="var(--text-primary)" font-size="11" data-page-node-id="nuTIGw9qFUdmyzVZwGAIUx">Notion 归档知识库</text>
+              <text x="575" y="102" fill="var(--text-primary)" font-size="11" data-page-node-id="31J21jy9HG3lrx1Jwp7cvO">Typefully 排版与调度发布</text>
+              <text x="575" y="125" fill="var(--text-tertiary)" font-size="10" data-page-node-id="kHuy6WFP9hm9Hx5LnIcXtL">保留人的主观思考与观点</text>
+            </svg>
+          </div>
+          <div class="visual-note" data-page-node-id="1tlA7GkPBZwonLes8aQfVL">
+            原图说明：Writing Bot 接到汇总多个助手信息、准备文章草稿的任务。这个流程保留了人的叙述和编辑，同时让助手承担资料汇集与语言修整。模板中值得复制的，是反复采用的写作标准与工具连接。
+          </div>
+        </div>
+
+        <p data-page-node-id="rAI7E78zPVQe3r0GNYZzu3">
+          这个流程保留了人的叙述和编辑，同时让助手承担资料汇集与语言修整。模板中值得复制的，是反复采用的写作标准与工具连接。
+        </p>
+
+        <div class="callout-box task" data-page-node-id="7At5l2aRrDMcphbtFGV8VG">
+          <div class="callout-icon" data-page-node-id="cc01whGaLanl6bGVEHimDM">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" data-page-node-id="MHe8Ctidbqx5MmiFxOhlBi"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" data-page-node-id="rhdp1aDjT8VXJAiXoD6CFd" /><polyline points="14 2 14 8 20 8" data-page-node-id="g2w8AZYPGNnpgeUIeLj8GG" /><line x1="16" y1="13" x2="8" y2="13" data-page-node-id="kB46wvjjBFRYN3FIS6v28w" /><line x1="16" y1="17" x2="8" y2="17" data-page-node-id="Qm8CHWRMOasDLnB0k3CWLb" /><polyline points="10 9 9 9 8 9" data-page-node-id="4kVYnHdP8GIbHszY1p5bbs" /></svg>
+          </div>
+          <div class="callout-content" data-page-node-id="WB632L5fbjAEEGJfl0pjGd">
+            <div class="callout-title" data-page-node-id="tq3GgvYdxFwRKCXLtMTPcP">Writing Bot 适合什么任务，需要哪些工具？</div>
+            <div class="callout-desc" data-page-node-id="5v7gI79JBqWZ2dAouHWLmb">
+              <strong data-page-node-id="IC1tLNONjLLcBbHSj3HblR">定位与动作</strong>：汇集草稿，沿用熟悉的编辑标准。从其他助手处索取材料并推送到排版工具。<br data-page-node-id="xBoi5pHwyaWozL9ViMAViq">
+              <strong data-page-node-id="1uxSdyFihUOfKM4rgAdAJZ">所需工具或数据</strong>：
+            </div>
+            <div class="callout-tools" data-page-node-id="STyWp8Cm1x2nklGHeBUMjZ">
+              <span class="tool-chip" data-page-node-id="BlDkIr56BzxAzKj2IXhm4I">Typefully</span>
+              <span class="tool-chip" data-page-node-id="6pDYI7fuYSLYJcCE9ivjOL">Notion</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4.2 Image Generation -->
+      <div id="section-content-image" data-page-node-id="W3emNvk5PtJ7XdZKci7R9A">
+        <h3 data-page-node-id="p48nfPjG0MbUdfbJou0SXU">Image Generation：让一组资产保持同一种风格</h3>
+
+        <p data-page-node-id="uMZfaEJaWOD3zk6NjuAEOi">
+          图像助手解决的是成套图标和角色的<strong data-page-node-id="FoAgsXDLNpMPtYS7VH8H92">视觉一致性</strong>。它先用技能向 Grok Imagine 发送标准化提示，再调用 fal 的去背景模型；Palmer 随后应用统一色板。
+        </p>
+
+        <p data-page-node-id="tIv28mwkfeXutqHknRPDPC">
+          这三个步骤各有作用：<strong data-page-node-id="qmPbIaF8xA5sclB7kUPoKZ">提示规范约束生成方向</strong>，<strong data-page-node-id="YFNXocAHocqbMOGZSXTKDm">去背景便于后续使用</strong>，<strong data-page-node-id="VuAUg07ZGYFhJ8eaZDGh9L">统一色板让多张资产在同一个项目中看起来协调</strong>。把整条流程保存在助手里，就可以在制作下一组素材时继续沿用。
+        </p>
+
+        <!-- SVG 架构图 7：视觉资产一致性流水线 -->
+        <div class="visual-container" data-page-node-id="W0QAVjA7nKwxMOWUiybuiS">
+          <div class="visual-header" data-page-node-id="0UxSFgUDbfCgdxMhVdT84y">
+            <div class="visual-caption" data-page-node-id="39rzlZdi6hIFQYdQ82vm5N">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="pWGu6ERPlgGYsFFOzuEKp8"><rect x="3" y="3" width="18" height="18" rx="2" data-page-node-id="Po5QeUBXRcOJuO5M42CZxu" /><circle cx="8.5" cy="8.5" r="1.5" data-page-node-id="oIlyBmZHzB14LBFvbDffhH" /><polyline points="21 15 16 10 5 21" data-page-node-id="TKB1ycjPEgUJ5hPUq1MvG1" /></svg>
+              图 7：一致性视觉资产工业化生成流水线
+            </div>
+            <span class="visual-tag" data-page-node-id="WFzieKe4YIeujMxhzI1j44">Visual Pipeline</span>
+          </div>
+          <div class="visual-body" data-page-node-id="BTcQhDcJpYijTLuRM1JXfK">
+            <svg viewBox="0 0 800 160" width="100%" height="160" style="max-width: 800px; font-family: var(--font-sans);" data-page-node-id="6YEmdsCNEHrCm7GXm19vhF">
+              <rect x="30" y="30" width="210" height="100" rx="8" fill="var(--bg-surface)" stroke="var(--cyan)" stroke-width="1.5" data-page-node-id="ryjne4pCi9DT6sgwbkj5qG" />
+              <text x="50" y="58" fill="var(--cyan)" font-size="13" font-weight="700" data-page-node-id="vQKZ9TYbEWDasXBeAJGh5Q">步骤 1：标准化提示约束</text>
+              <text x="50" y="80" fill="var(--text-primary)" font-size="11" data-page-node-id="XfkdvOp7i8k6ZyDrvMlRn6">调用 Grok Imagine</text>
+              <text x="50" y="100" fill="var(--text-tertiary)" font-size="10" data-page-node-id="dBunj2KZTSPChfY3ktFDYd">固定镜头、3D 黏土/立体质感</text>
+
+              <path d="M 240 80 L 290 80" stroke="var(--accent)" stroke-width="2" data-page-node-id="sZqwaXcPA73RLMjw523xnQ" />
+
+              <rect x="290" y="30" width="220" height="100" rx="8" fill="var(--bg-surface)" stroke="var(--purple)" stroke-width="1.5" data-page-node-id="oJUYE3VPfa61D92PP9CXaI" />
+              <text x="310" y="58" fill="var(--purple)" font-size="13" font-weight="700" data-page-node-id="P4QqO1dkKrSZYUXleG1haA">步骤 2：自动智能去背</text>
+              <text x="310" y="80" fill="var(--text-primary)" font-size="11" data-page-node-id="VoIsWlmArUh0AhXyMACIyg">调用 fal 去背景模型</text>
+              <text x="310" y="100" fill="var(--text-tertiary)" font-size="10" data-page-node-id="19NrGPTz5AoCLWlaaK4vNI">剥离杂乱背景，输出透明通道 PNG</text>
+
+              <path d="M 510 80 L 560 80" stroke="var(--accent)" stroke-width="2" data-page-node-id="BJvHMPIVpfIynQ0iFtbyd1" />
+
+              <rect x="560" y="30" width="210" height="100" rx="8" fill="var(--bg-surface)" stroke="var(--emerald)" stroke-width="1.5" data-page-node-id="sBTCcaxkHb9GQv3roKqCUo" />
+              <text x="580" y="58" fill="var(--emerald)" font-size="13" font-weight="700" data-page-node-id="ivA3fatMC2VZV4Q33qQwCr">步骤 3：统一品牌色板</text>
+              <text x="580" y="80" fill="var(--text-primary)" font-size="11" data-page-node-id="rcMJR6ypciiQhMEqfpvYpH">Palette Mapping</text>
+              <text x="580" y="100" fill="var(--text-tertiary)" font-size="10" data-page-node-id="PYyP1TkcNj5poM4SnnnjTu">保证项目所有图标色调协调一体</text>
+            </svg>
+          </div>
+          <div class="visual-note" data-page-node-id="I9Y67nBs4dXUCiQvlfQHna">
+            原图说明：图像助手生成的一组图标，以相近的立体表现和统一风格组织。
+          </div>
+        </div>
+
+        <div class="callout-box task" data-page-node-id="GFss098kCuxPOCC7WVs1HJ">
+          <div class="callout-icon" data-page-node-id="5PmAdlmXjetkFCUfzpibw1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" data-page-node-id="P9tTQ99IzXWTkLixn5vPBE"><circle cx="12" cy="12" r="10" data-page-node-id="wAAuriNgeQJMRdumV966rA" /><path d="m4.93 4.93 4.24 4.24" data-page-node-id="399pH4wN9BE9EG7pfNc1Cc" /><path d="m14.83 9.17 4.24-4.24" data-page-node-id="oZO4CZYucNkt61jjr6bV3K" /><path d="m14.83 14.83 4.24 4.24" data-page-node-id="ytNAFJjTYhZvl3tc7pNLfE" /><path d="m9.17 14.83-4.24 4.24" data-page-node-id="OKIpxCV1UzF5rrrs3malFn" /></svg>
+          </div>
+          <div class="callout-content" data-page-node-id="YmG8WyjeSjuSVaqjixBEol">
+            <div class="callout-title" data-page-node-id="J4FhT4SHsPEtDNR8eMQPj6">Image Generation 适合什么任务，需要哪些工具？</div>
+            <div class="callout-desc" data-page-node-id="m7WreVQfxtrorJw5PNAluJ">
+              <strong data-page-node-id="OjjCVcKVF1mFfJRGpU9EBH">定位与动作</strong>：复用图像生成与去背景的制作工序。标准化提示约束、去背及色板映射。<br data-page-node-id="vOvsjfojBKNYwPJH9Wq8oi">
+              <strong data-page-node-id="l37rXs6HGOvyuhE8YlA35V">所需工具或数据</strong>：
+            </div>
+            <div class="callout-tools" data-page-node-id="6JOWJS0QEHSj2ltHWCoFSL">
+              <span class="tool-chip" data-page-node-id="dMjUo0N5O0X0bpnYbLu6iY">Grok Imagine</span>
+              <span class="tool-chip" data-page-node-id="0rEl10tORavnXqSBxLOhwt">fal</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 模块 5：日常行动类助手 -->
+    <section class="content-section" id="section-action" data-page-node-id="KguRlIP89iYmtXI5FWkXgs">
+      <h2 data-page-node-id="pxrFe44kX8a6NCZW52nqo8">日常行动：从查询提醒，到真实电话</h2>
+
+      <p data-page-node-id="EqOrv8Z10u6GUl6Ub30XC0">
+        还有两种模板，把工作延伸到手机上的日常任务。它们也说明了：<strong data-page-node-id="nlni1L1TniM26ZwOSmSOyO">任务的范围可以很窄，只要输入、动作和结果足够明确，就有复用价值。</strong>
+      </p>
+
+      <!-- 5.1 Skippy -->
+      <div id="section-action-skippy" data-page-node-id="wIRUyHBV1ScBm7jjo4G2PH">
+        <h3 data-page-node-id="y5KTbfAl4HCGD4gq9v2fnH">Skippy：把停车限制变成及时提醒</h3>
+
+        <p data-page-node-id="Go1EEaEANXljgrTIHqO2T2">
+          Skippy 使用旧金山公开数据，根据停车地点查询相关限制。Palmer 可以保存常用位置，并在工作日早晨、限制时段到来之前收到提醒。截图中，助手会根据具体路口区分街道两侧的清扫安排。
+        </p>
+
+        <!-- 原图语义卡片说明 -->
+        <div class="visual-container" data-page-node-id="IFs8TGtLzTafWB7UeqTQO7">
+          <div class="visual-header" data-page-node-id="e7IUXlhOnejTpzW0GHMt7B">
+            <div class="visual-caption" data-page-node-id="XGRVELiv5HpKtPDNoqbaIK">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="QhpfGt383B5dxkhdWdcvaw"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" data-page-node-id="MzlLMbbXTn6mq0PDnUgAyT" /></svg>
+              图 8：Skippy 路口两侧清扫日历与定位提醒机制
+            </div>
+            <span class="visual-tag" data-page-node-id="Im6wLFq6V6bQmjb48yXETA">Location Alert</span>
+          </div>
+          <div class="visual-body" data-page-node-id="u2Hla3yRP4RHCN7olpeYcq">
+            <svg viewBox="0 0 800 150" width="100%" height="150" style="max-width: 800px; font-family: var(--font-sans);" data-page-node-id="b2NoQhcFgDDAxBK7x3Q2ny">
+              <rect x="30" y="25" width="220" height="95" rx="8" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="llHN27zG7H4HKEG2Jyl3en" />
+              <text x="45" y="52" fill="var(--text-primary)" font-size="12" font-weight="700" data-page-node-id="HdXYtrJrSyFJAoW5fa1Lmj">用户常用位置 (路口定位)</text>
+              <text x="45" y="74" fill="var(--text-secondary)" font-size="11" data-page-node-id="gk0DBRH24OLlatLVbpHRNe">例如：Valencia & 18th St</text>
+              <text x="45" y="95" fill="var(--text-tertiary)" font-size="10" data-page-node-id="SHSFR4DZGwDv7PrjZ4ay9b">工作日早晨定时触发扫描</text>
+
+              <path d="M 250 72 L 300 72" stroke="var(--accent)" stroke-width="2" data-page-node-id="RH3h5hPwIxeqRpNQVRf6D7" />
+
+              <rect x="300" y="25" width="230" height="95" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--cyan)" stroke-width="1.5" data-page-node-id="EuoMhjyAVzxaedfFjjvAhH" />
+              <text x="315" y="52" fill="var(--cyan)" font-size="13" font-weight="700" data-page-node-id="kcrG8f2LVN3csLkxFGNYmA">SF 市政公开数据查询</text>
+              <text x="315" y="74" fill="var(--text-secondary)" font-size="11" data-page-node-id="E1YjnUAIREFnyc6vTSSRjL">区分街道南侧/北侧扫街时段</text>
+              <text x="315" y="95" fill="var(--amber)" font-size="10" data-page-node-id="5rKH39UDIZ9EVekFYaPDCb">今日限制：北侧 8:00-10:00 禁停</text>
+
+              <path d="M 530 72 L 580 72" stroke="var(--accent)" stroke-width="2" data-page-node-id="EzaOTFD9MeGs8kZ1L5NHeh" />
+
+              <rect x="580" y="25" width="190" height="95" rx="8" fill="var(--bg-surface)" stroke="var(--emerald)" stroke-width="1.5" data-page-node-id="MwZNhsu9BTcGqtD5A6Q4BR" />
+              <text x="595" y="52" fill="var(--emerald)" font-size="13" font-weight="700" data-page-node-id="a0jKuTKodBio5mu9ygcyMV">及时避雷手机提醒</text>
+              <text x="595" y="74" fill="var(--text-primary)" font-size="11" data-page-node-id="e2jtjeNMMuQuUWN2XRvpdt">清扫到来前 30 分钟推送</text>
+              <text x="595" y="95" fill="var(--text-tertiary)" font-size="10" data-page-node-id="PvDiS3vPMrGyeS40AZk0IK">规避数百美元违章拖车罚单</text>
+            </svg>
+          </div>
+          <div class="visual-note" data-page-node-id="1JpcfuRme32BLu39PgKVwQ">
+            原图说明：Skippy 根据路口位置，区分街道两侧的清扫安排并提示停车限制。
+          </div>
+        </div>
+
+        <p data-page-node-id="Vm8FKgfbz1TX7QT9KqDBzQ">
+          它接手的是反复查数据库或网站的工作。地点、查询和提醒连起来之后，这件小事就能通过手机里的助手处理。Palmer 想进一步接入停车应用、让它代付停车费，但那仍是他设想的下一步。
+        </p>
+
+        <div class="callout-box task" data-page-node-id="lOLMsViPFzK9LxcSgiEBLt">
+          <div class="callout-icon" data-page-node-id="qZi6vswHH1O1nnXesMBCVt">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" data-page-node-id="MUORZr08Ct78nmjVCXSIz2"><rect x="1" y="3" width="15" height="13" data-page-node-id="MeB7ltSL8v0e4YnwpFbJ5n" /><polygon points="16 8 20 8 23 11 23 16 16 16 16 8" data-page-node-id="GH1hYLOiNjJnAXTCxW0Bhy" /><circle cx="5.5" cy="18.5" r="2.5" data-page-node-id="gxG80sijloDEGcX52SBuEJ" /><circle cx="18.5" cy="18.5" r="2.5" data-page-node-id="8DYR5VeN7jBDU0Lw7xPKwh" /></svg>
+          </div>
+          <div class="callout-content" data-page-node-id="99ZPEbOULhVMnmRvGBXfWD">
+            <div class="callout-title" data-page-node-id="LBPbSHQgAyvccWJMzM0inJ">Skippy 适合什么任务，需要哪些工具？</div>
+            <div class="callout-desc" data-page-node-id="rMpWehgp5mvSTFit7oehZO">
+              <strong data-page-node-id="Z87DTIiejTKRgYBXyWTTbL">定位与动作</strong>：查询停车限制，提前安排提醒。把反复查市政网站的工作自动化。<br data-page-node-id="gVWXCpwBsTz4jouQnDLPYO">
+              <strong data-page-node-id="57yOCBi7QkXD1pFClfBxEk">所需工具或数据</strong>：
+            </div>
+            <div class="callout-tools" data-page-node-id="QAlXfV6Q1qGNo0vEmDthu7">
+              <span class="tool-chip" data-page-node-id="n0xBqfPA1oVUiaTWRwBKET">旧金山公开数据</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5.2 Dial Bot -->
+      <div id="section-action-dial" data-page-node-id="8sxVikG6IALoAkksR1duW6">
+        <h3 data-page-node-id="OLxbBczjAxzizhGVhWJQjW">Dial Bot：给助手一条电话通道</h3>
+
+        <p data-page-node-id="fBY937WHLDEV7JqWufe4wu">
+          Dial Bot 接入 Bland 的通话能力。Palmer 用自己的声音创建了语音配置，并设置 MCP 连接和通话技能，使助手可以代为打电话。他描述的用途包括应对电话语音菜单和等待接通。
+        </p>
+
+        <p data-page-node-id="1uVGF3FII5djA1WPhik737">
+          短视频展示了一个很具体的任务：<strong data-page-node-id="wZKDsmKjqU6gmbnhAUKa48">打电话询问当天营业时间，听到对方回答后复述确认并结束通话。</strong>它展示了电话问答的过程；语音菜单和长时间等待则属于 Palmer 描述的进一步用途。
+        </p>
+
+        <!-- SVG 架构图 9：Dial Bot 真实通话 MCP 机制 -->
+        <div class="visual-container" data-page-node-id="5CyGcLQwbMPNz0R2Odo3cR">
+          <div class="visual-header" data-page-node-id="13MLchqTYTQSS6CEqTypFs">
+            <div class="visual-caption" data-page-node-id="QUN0QVtCYFi8Nxz355BO2V">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="X6iSQPjCGShklVJCpMsi9S"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" data-page-node-id="MmbxHYLtEG467d9UZb1zOC" /></svg>
+              图 9：Dial Bot 真实世界电话外呼与状态机架构
+            </div>
+            <span class="visual-tag" data-page-node-id="2J001KZpV6yGS3sOmZPb0i">Telephony Agent</span>
+          </div>
+          <div class="visual-body" data-page-node-id="cE8HwIFslM0QKD8X0PYjjR">
+            <svg viewBox="0 0 800 170" width="100%" height="170" style="max-width: 800px; font-family: var(--font-sans);" data-page-node-id="ZhOUwiDz2FXGncznrMCALE">
+              <rect x="20" y="30" width="200" height="110" rx="8" fill="var(--bg-surface)" stroke="var(--border-medium)" data-page-node-id="b3BnRsgGXjShvWtwIPp2qz" />
+              <text x="35" y="58" fill="var(--text-primary)" font-size="12" font-weight="700" data-page-node-id="bxgyvZIa0QeZDzn36XZlya">Grok Bot 决策大脑</text>
+              <text x="35" y="80" fill="var(--text-secondary)" font-size="11" data-page-node-id="mif9wJGzS4hRxifXDuUYsz">任务: "问今天几点关门"</text>
+              <text x="35" y="100" fill="var(--text-tertiary)" font-size="10" data-page-node-id="BubkdE0L72MhxE6lmiQMCU">个人声音克隆模型绑定</text>
+              <text x="35" y="120" fill="var(--accent)" font-size="10" data-page-node-id="ZwDuOuggDc4MsdW31PErf4">通话技能 (Calling Skill)</text>
+
+              <path d="M 220 85 L 280 85" stroke="var(--accent)" stroke-width="2" data-page-node-id="QZGDP3allak7BagCtDKrsV" />
+
+              <rect x="280" y="30" width="220" height="110" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--rose)" stroke-width="1.5" data-page-node-id="RRGrkPDaIhKwZFvNVCSWtz" />
+              <text x="295" y="58" fill="var(--rose)" font-size="13" font-weight="700" data-page-node-id="dxX8jV7g2eOgcf6bf3Lpet">自定义 MCP 通信网关</text>
+              <text x="295" y="80" fill="var(--text-primary)" font-size="11" data-page-node-id="IikmITdLCVPqmgSiClH2mZ">桥接外部 Bland 通话服务</text>
+              <text x="295" y="100" fill="var(--text-tertiary)" font-size="10" data-page-node-id="Rg9GlnyCTQzwZXTLTWCOFK">⚠️ 不随模板自动迁移</text>
+              <text x="295" y="120" fill="var(--text-tertiary)" font-size="10" data-page-node-id="ycx9KqxUOWqGik12jswdpM">接收者需自备 API Key 与服务</text>
+
+              <path d="M 500 85 L 560 85" stroke="var(--accent)" stroke-width="2" data-page-node-id="YIrG5hfp25k6zY34FUbGSL" />
+
+              <rect x="560" y="30" width="220" height="110" rx="8" fill="var(--bg-surface)" stroke="var(--emerald)" stroke-width="1.5" data-page-node-id="4oAFQsjbDOSAffLWBw9v9E" />
+              <text x="575" y="58" fill="var(--emerald)" font-size="13" font-weight="700" data-page-node-id="adoMLsCB047gX74JpyVpHQ">真实世界电话通道</text>
+              <text x="575" y="80" fill="var(--text-primary)" font-size="11" data-page-node-id="4uf7S36Uun7AX6ZoyWmVLG">自动拨叫实体商户</text>
+              <text x="575" y="100" fill="var(--text-secondary)" font-size="10" data-page-node-id="MAyaBx1V9HQb3RQf25hKRQ">语音识别商户回答 → 确认复述</text>
+              <text x="575" y="120" fill="var(--emerald)" font-size="10" data-page-node-id="yEKzqFtXFxYW7mcWuQJV3H">通话结束，结构化回传结果</text>
+            </svg>
+          </div>
+          <div class="visual-note" data-page-node-id="DNax9m0YWwKD2O4CWC3sog">
+            原图说明：电话演示：询问当天营业时间，复述确认后结束通话。电话能力来自外部通话服务，复用时也要考虑对应设置。尤其是自定义 MCP 连接不会随模板自动打包，拿到模板链接之后还要补齐自己的配置。
+          </div>
+        </div>
+
+        <div class="callout-box question" data-page-node-id="7NbU8vKQ3tjKmqO91ELgMg">
+          <div class="callout-icon" data-page-node-id="Vcvw3S4DnRBZ9H3lOERbum">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" data-page-node-id="2AHeAR8Twvw5WkSGk3NtJB"><circle cx="12" cy="12" r="10" data-page-node-id="cZTMIbKajNWZ233xn3Aalv" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" data-page-node-id="yQw2tuMSM4eXUJumYwrzHT" /><line x1="12" y1="17" x2="12.01" y2="17" data-page-node-id="uX2gTWK7Y3R3RpzCEZOgOn" /></svg>
+          </div>
+          <div class="callout-content" data-page-node-id="hXGlho0r9nw7DFHBVSfm7d">
+            <div class="callout-title" data-page-node-id="u3zcGtfIMhzbOKvNhoWNtB">电话助手怎样完成一次具体问答？</div>
+            <div class="callout-desc" data-page-node-id="aFs77vfNQFDXJY70Pg4QMJ">
+              电话演示：询问当天营业时间，听到对方回答后复述确认并结束通话。
+            </div>
+          </div>
+        </div>
+
+        <div class="callout-box task" data-page-node-id="QSFXIt5gT4DBwTQvH5E7CY">
+          <div class="callout-icon" data-page-node-id="6byCUqSCtfUbbeQvFfCq8C">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" data-page-node-id="fzKNEWvPO6yz2jJTDHFKVl"><path d="M15.05 5A5 5 0 0 1 19 8.95M15.05 1A9 9 0 0 1 23 8.94" data-page-node-id="yECcdRB1J3cwQBgzdYHD8U" /><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" data-page-node-id="yrsvuNZn59ewwEKLolTATc" /></svg>
+          </div>
+          <div class="callout-content" data-page-node-id="ceKtTQPMUfjHtd7MuuuW7Y">
+            <div class="callout-title" data-page-node-id="HuWzZpkMi5jP7QJgESi4iR">Dial Bot 适合什么任务，需要哪些工具？</div>
+            <div class="callout-desc" data-page-node-id="GeyklAou6GZz6mkmCAAEzq">
+              <strong data-page-node-id="0QFsQBus4UB0K1E8F5Zifa">定位与动作</strong>：通过外部通话服务完成电话问答。<br data-page-node-id="bmGDCtHL1EDfjGjXbADQ0z">
+              <strong data-page-node-id="Ks5Z0kkFw7OEK5WP7nTVOp">所需工具或数据</strong>：
+            </div>
+            <div class="callout-tools" data-page-node-id="waqb7NKQNsLAVBz67HoPNk">
+              <span class="tool-chip" data-page-node-id="aDvAQG5fhTDHrk62Xl8WUI">Bland</span>
+              <span class="tool-chip" data-page-node-id="0vKL26wPHHYJTyAcKahObn">自定义 MCP</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 模块 6：工作方法做成模板的方法论 -->
+    <section class="content-section" id="section-creation-guide" data-page-node-id="mWUajT8iG5HHAQxHb2aPMB">
+      <h2 data-page-node-id="EbQdZ7Js66ETx27SzxfnkJ">怎样把自己的工作方法做成模板</h2>
+
+      <p data-page-node-id="tNDnn36V5Y2RJ7Hbil7XFt">
+        看完这些例子，最实际的起点是找一件已经重复做过的事：<strong data-page-node-id="1GrAf07jEl71SY9XEImVtL">你知道需要哪些资料，处理顺序是什么，也知道看到怎样的结果才算完成。</strong>先把这件事教给助手，再把成熟的方法分享出去。
+      </p>
+
+      <p data-page-node-id="FFbrIdDkyJ3WJHtlSo6RQg">
+        Palmer 演示的创建和使用过程，可以分成以下几步：
+      </p>
+
+      <!-- 阶段全景表格 -->
+      <div class="table-container" data-page-node-id="lCDfVIUo38UiRAK19W9Usj">
+        <table data-page-node-id="vhDxwUoTgZJHOmmJ7AAzYd">
+          <thead data-page-node-id="U3jydwaIF6aUNDbJBAuBku">
+            <tr data-page-node-id="7flW9GwU8948UdG2X3WIja">
+              <th data-page-node-id="yoqTyUGnJs4H9yUOijgY4Y">阶段</th>
+              <th data-page-node-id="WzFbo10PhBGvbBGBA8fRaq">要做的事</th>
+              <th data-page-node-id="MBOg0GrInLj1vLDyMmfkR6">此时得到什么</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="aWigWuj6XhPwUwvtFLyeEn">
+            <tr data-page-node-id="9qet23G0IBFZdbkjSyMHOA">
+              <td data-page-node-id="ptrxYIKUgle3t3LrQJ7Ot3"><strong data-page-node-id="kI0Y0i6uxk61L0Uy8NyGtM">创建</strong></td>
+              <td data-page-node-id="yPZFxb25lY4XVvLybRdZvB">打开助手右侧设置，选择 Share as template</td>
+              <td data-page-node-id="LUiHQ5qB7X5GleER5WsQpO">尚未发布的模板草稿</td>
+            </tr>
+            <tr data-page-node-id="xMw4Ls2RbiB7dEqfajgl2Q">
+              <td data-page-node-id="cpDGH8G3gOq5it4eRVLbh3"><strong data-page-node-id="0DCNmMhHDhAN7Ued0aSmkM">检查</strong></td>
+              <td data-page-node-id="SAeKJuY1eIhRYEqBp0tH4s">查看 Context、Integrations 等详情</td>
+              <td data-page-node-id="FEzjgRMv8Em86bN3Z4VuoD">确认保留了哪些背景和工具</td>
+            </tr>
+            <tr data-page-node-id="8P2dFwBcx73tpu5fZMy1eJ">
+              <td data-page-node-id="9eJiT2Ns9wjQYOwl7KGtcU"><strong data-page-node-id="R4pip9gPZgb4bzrEbQxt6L">发布</strong></td>
+              <td data-page-node-id="4lEpovcOxysbu0yinw5Zs0">选择团队或公开范围，再点击 Publish</td>
+              <td data-page-node-id="UR6pGwefrxQARzwuyKGqHi">可分享的模板链接</td>
+            </tr>
+            <tr data-page-node-id="rD0SQ1kQQFcl0uBCexzyzm">
+              <td data-page-node-id="va0JO150RWGAMLvgZOhsTJ"><strong data-page-node-id="BVlWGS3chruniTyLei8WoO">使用</strong></td>
+              <td data-page-node-id="FxCB2DM8Ji6UJfyiJZp7LB">接收者打开链接，在 Grok Bot 中查看详情后添加</td>
+              <td data-page-node-id="bL4PrO4WJtWvyCHcFFxDv4">在自己环境中建立的新助手</td>
+            </tr>
+            <tr data-page-node-id="FVlJLbAjEBsfG87hLXvTvX">
+              <td data-page-node-id="ueEUIcoTXC9B6yLOdIAGrn"><strong data-page-node-id="vBAKanky209wGXY0Zc8NTD">配置</strong></td>
+              <td data-page-node-id="xrhG2tEASigTifAvTgp6V7">安装所需插件，补充个人设置及未打包的连接</td>
+              <td data-page-node-id="V1r8uOGhFYAMGq2iGNl4A7">能处理自己任务的工作环境</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout-box question" data-page-node-id="XWzL4vNPq2pkDMbU1TsxmS">
+        <div class="callout-icon" data-page-node-id="deSYPqB0B9vbZt8CPHWGSY">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" data-page-node-id="gCMAd1yPUk2Qbvm05aEaK1"><circle cx="12" cy="12" r="10" data-page-node-id="D37SjZ9fEwrfVevXAscNz7" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" data-page-node-id="bdRSMBOqScCJF7SK9dPBGg" /><line x1="12" y1="17" x2="12.01" y2="17" data-page-node-id="mutarwbCdM2TyqAZ8zMNmw" /></svg>
+        </div>
+        <div class="callout-content" data-page-node-id="ZYOnnYQiPqYry7o0TcCNbc">
+          <div class="callout-title" data-page-node-id="ZBWagT1DezwQCHPTD8xDy8">创建入口、模板详情和分享链接各在哪里？</div>
+          <div class="callout-desc" data-page-node-id="guJ5ljIw6gAhP9MjTsioh6">
+            在设置中创建模板，使用模板卡片查看详情，发布后复制链接。
+          </div>
+        </div>
+      </div>
+
+      <p data-page-node-id="8DBl9AHJILfFe1fCgMKVi2">
+        复杂模板最好附带清楚的安装和配置说明。Palmer 会要求助手想清楚：<strong data-page-node-id="dxe78lXd68clyvh34LKtRX">别人要复现这套工作方式，需要哪些设置、API 密钥或额外工具，再把必要说明写进模板。</strong>接收者也应先读 Context 和 Integrations，确认这些内容符合自己的任务预期。
+      </p>
+
+      <div class="callout-box question" data-page-node-id="k3cerUFiflU3RKnExiYRdO">
+        <div class="callout-icon" data-page-node-id="bITW6mvNBCHJZnXiqEyOhC">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" data-page-node-id="0gl00de4NrBvroCH90uC3K"><circle cx="12" cy="12" r="10" data-page-node-id="VjghXD4HvhwQxicQTf5AzC" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" data-page-node-id="jsHgkjhTwVF1aQXLfAhaYt" /><line x1="12" y1="17" x2="12.01" y2="17" data-page-node-id="b8BvDS8sNLQGoY8uM9bus9" /></svg>
+        </div>
+        <div class="callout-content" data-page-node-id="FHwqVKCFlsOugz8V9h8orK">
+          <div class="callout-title" data-page-node-id="KodJDdOSjLAdio2hzdPDUP">从创建模板到安装使用有哪些区别？</div>
+          <div class="callout-desc" data-page-node-id="YbfjJX9SJxUIVLDIOT4N0E">
+            完整教程：创建草稿、检查详情、选择分享范围、添加到自己的助手并完成配置。
+          </div>
+        </div>
+      </div>
+
+      <p data-page-node-id="9R6E3GnKSVkxZoIxEAowpz">
+        这 8 个例子的共同点，是把工作中的重复要求留下来：开发保存任务准备和验收方式，写作保存编辑标准，图像保存制作工序，联系人和停车助手保存查询与整理方法。选择自己的第一个模板时，可以从一句具体的话开始：
+      </p>
+
+      <div class="callout-box warning" data-page-node-id="vzgnLc4tDoMXkZHA5zYTMy">
+        <div class="callout-icon" data-page-node-id="noA80UiB8SfsA1T0vtwtim">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" data-page-node-id="3UXQcJwvPCj7f3HrEfk9am"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" data-page-node-id="Lr2so6o40jDWES0RSWsy1W" /><line x1="12" y1="9" x2="12" y2="13" data-page-node-id="yKqepeteBtDrbJIGjRBqea" /><line x1="12" y1="17" x2="12.01" y2="17" data-page-node-id="1M0FCiA3Q94RA7cNQZJbul" /></svg>
+        </div>
+        <div class="callout-content" data-page-node-id="oDdOksPiULVkpC4Wn7Go2H">
+          <div class="callout-title" data-page-node-id="q90KG9KQyEUocpY5OB26LO">选择第一个模板的黄金法则</div>
+          <div class="callout-desc" data-page-node-id="o2kGbtLU185Y3oEJRWSZFQ">
+            <strong style="color: var(--accent); font-size: 1.05rem;" data-page-node-id="xooEq8CxeBRY86w7koKE1J">“下次再做这件事，哪些要求我不想重新交代？”</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 模块 7：模板市场 -->
+    <section class="content-section" id="section-marketplace" data-page-node-id="oVQlC7kIJ7yZjjN4oHgAeJ">
+      <h3 data-page-node-id="yPmUxaw7bzlET8BeiZryDn">去模板市场，找一个适合自己的起点</h3>
+
+      <p data-page-node-id="LrqUFuThnyjDKLIkN0oJWH">
+        Grok Bot 已开放官方模板市场 <strong data-page-node-id="bTYAfrwcVjanPxHJ5oJ3Jh">Bot Marketplace</strong>，把团队和其他创作者分享的机器人集中到一个入口。你可以按工程、销售、营销、设计、个人事务等类别浏览，也可以搜索机器人或创作者的名字。
+      </p>
+
+      <p data-page-node-id="AAyWynFJaX0Dv9OZu5PzK2">
+        市场里的任务比这 8 个例子更广：从准备销售线索、协调面试，到整理素材和照料植物，都能找到相应的助手。先挑一个与你手头任务接近的模板，查看它的用途、技能和工具连接，再决定哪些方法值得留下、哪些配置需要换成自己的。
+      </p>
+
+      <div class="callout-box question" data-page-node-id="y1SL4IumDQWvLbLoAoZDgF">
+        <div class="callout-icon" data-page-node-id="sRGmmLRexNugt0jNa8dTKC">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" data-page-node-id="5tfn7odfrIzFRHVD322fNr"><circle cx="12" cy="12" r="10" data-page-node-id="Db0LM9VpvrYQbqFRSwbUzT" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" data-page-node-id="sDhroAfr60zgeRxDRtz3wf" /><line x1="12" y1="17" x2="12.01" y2="17" data-page-node-id="EIXL8UxXgvMOaP5dYCxQyT" /></svg>
+        </div>
+        <div class="callout-content" data-page-node-id="m8AuIskacRaZRN8SgblGcA">
+          <div class="callout-title" data-page-node-id="Ap0sIaikFN4VZe7JutwExj">在哪里继续发现适合自己任务的模板？</div>
+          <div class="callout-desc" data-page-node-id="JCoPs5zeXNwIBafT1ANUR7">
+            官方模板市场提供搜索、任务分类及不同创作者的机器人模板。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 模块 8：交互沙盘 1——8大模板装配台 -->
+    <section class="content-section" id="section-interactive-sandbox" data-page-node-id="kmBEFytDDw08mf2Qx8Jbrt">
+      <h2 data-page-node-id="vRQNgAI1UHF8vYLJVfAMNH">8 大工作流模板架构装配与配置速查沙盘</h2>
+      <p data-page-node-id="ZxJPHiaXGeQEgyZ54CpdCu">
+        点击下方标签切换 8 个官方工作流助手，实时查看其工程定位、输入要求、连接插件、需要自备的配置与工作流 SOP 蓝图：
+      </p>
+
+      <div class="interactive-card" data-page-node-id="gznNo4VDVsglE9D65r6xvn">
+        <div class="sandbox-header" data-page-node-id="ACDt8Xbpy6z1aXlLZt5ZA5">
+          <div class="sandbox-title" data-page-node-id="PNAiHSVsoe4LGyqcHOP4OE">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" data-page-node-id="bvhjpH3KOwgK9W7yUzmTPT"><rect x="3" y="3" width="7" height="7" data-page-node-id="xxBfLfmBE5hZr5j9xmZNSE" /><rect x="14" y="3" width="7" height="7" data-page-node-id="k5NYFqqVn9xe6mhqzC5hUm" /><rect x="14" y="14" width="7" height="7" data-page-node-id="rQwFipel6wQMJVIkEAua8F" /><rect x="3" y="14" width="7" height="7" data-page-node-id="wbWAlOr81gFTNiYUrsK16x" /></svg>
+            模板架构蓝图检查器 (Template Blueprint Inspector)
+          </div>
+          <div class="sandbox-desc" data-page-node-id="dEDYTYnyLFOBsm1OLGYz6p">
+            探索不同领域助手在“记忆、技能、工具与私有边界”上的设计范式：
+          </div>
+        </div>
+
+        <!-- 8 个切换按钮 -->
+        <div class="template-selector-tabs" id="tab-container" data-page-node-id="Om4nxxFF6lzsJJvwIHJk07">
+          <button class="tab-btn active" type="button" data-tpl="loops" id="tab-btn-loops" data-page-node-id="dVaiV0o18enChvEjleusxM">1. Loops</button>
+          <button class="tab-btn" type="button" data-tpl="demos" id="tab-btn-demos" data-page-node-id="BEUFFq4SjdgbrfFU7aOWUC">2. Tech demos</button>
+          <button class="tab-btn" type="button" data-tpl="crm" id="tab-btn-crm" data-page-node-id="pQSh5N7ES10ksb4aalsbfo">3. Personal CRM</button>
+          <button class="tab-btn" type="button" data-tpl="xalgo" id="tab-btn-xalgo" data-page-node-id="sHbEtorlgUVLNOAkfvTKGV">4. X algorithm</button>
+          <button class="tab-btn" type="button" data-tpl="writing" id="tab-btn-writing" data-page-node-id="Uee6UogYCJ76cgbnBq0P0p">5. Writing Bot</button>
+          <button class="tab-btn" type="button" data-tpl="image" id="tab-btn-image" data-page-node-id="FMFH9dD4tXM1HOtRilNx8a">6. Image Gen</button>
+          <button class="tab-btn" type="button" data-tpl="skippy" id="tab-btn-skippy" data-page-node-id="aCdw0egaVHcEDUGbYldzsS">7. Skippy</button>
+          <button class="tab-btn" type="button" data-tpl="dial" id="tab-btn-dial" data-page-node-id="jZp8H34v0t0mhrDZksTtQr">8. Dial Bot</button>
+        </div>
+
+        <!-- 动态详情插槽 -->
+        <div class="template-detail-grid" data-page-node-id="YSw1LDB9fw6HsDBHukG7SJ">
+          <div class="detail-item" data-page-node-id="GIw8pWbHaAICZ2whi9NdGR">
+            <span class="detail-label" data-page-node-id="Z1XBP4lg6o2PtRqCiOExS9">模板名称与领域</span>
+            <span class="detail-value" id="out-tpl-name" style="font-weight: 700; color: var(--accent);" data-page-node-id="5o2KwDwloSKJvtQvaSn4Z8">Loops (软件工程外循环助手)</span>
+          </div>
+          <div class="detail-item" data-page-node-id="Toa6e8NA9LQWXe0ABDj3ec">
+            <span class="detail-label" data-page-node-id="76ldnsOeZC6GsVm2sE8Dis">核心工作定位</span>
+            <span class="detail-value" id="out-tpl-role" data-page-node-id="70B7GGFkFGbgcKZDNmBHvC">先整理背景与方案，再交给编码助手</span>
+          </div>
+
+          <div class="detail-item" data-page-node-id="nxM0aVVaQx6CDV2XI6SLx0">
+            <span class="detail-label" data-page-node-id="BnubrBFYSWW8xjtIwHOqtw">关键官方插件 / 依赖工具</span>
+            <span class="detail-value" id="out-tpl-tools" data-page-node-id="K3ZfiRzQfZqzQ1Fp48VwHd">GitHub · Cursor</span>
+          </div>
+          <div class="detail-item" data-page-node-id="8GALFmxo0nbOmSwpuAg8UD">
+            <span class="detail-label" data-page-node-id="uFEiduk0HA6NVb5DYT74MS">接收者必须自备的私有配置</span>
+            <span class="detail-value" id="out-tpl-config" style="color: var(--amber);" data-page-node-id="BpSNx8z7eNztdVSpRMfiLt">GitHub 访问 Token、本地代码仓环境、Cursor Agent 配置</span>
+          </div>
+
+          <div class="detail-item detail-full" data-page-node-id="vjimllXt0DVfgCrtMAwDOf">
+            <span class="detail-label" data-page-node-id="EHRrOkn3EUlk1oPMRM4dUU">复用工作方法 (SOP 蓝图)</span>
+            <span class="detail-value" id="out-tpl-sop" data-page-node-id="3LJuDTR80gmeWVet9BhAQq">阅读同事历史 PR 了解规范 → 查阅竞品文档 → 生成高信息密度提示草稿 → 触发编码内循环</span>
+          </div>
+
+          <div class="detail-item detail-full" data-page-node-id="sz3kNtEHiX4nx5rBJHesc0">
+            <span class="detail-label" data-page-node-id="PShE9zIz2xEqbAfqC6G7Dj">设计精髓 (Why it works)</span>
+            <span class="detail-value" id="out-tpl-insight" style="color: var(--text-secondary);" data-page-node-id="13pUxa3r38uDGRlENxgnuU">将编码内循环与业务外循环解耦，规避“直接向编码模型下发模糊需求”导致的多次返工。</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 模块 9：交互沙盘 2——模板 ROI 盈亏测算器 -->
+    <section class="content-section" id="section-roi-calculator" data-page-node-id="RJaCYBMVNlMqgDVBBLKuvi">
+      <h2 data-page-node-id="HvSuvybLox4Y4JlNEkm9oo">工作流模板化投入产出比（ROI）测算器</h2>
+      <p data-page-node-id="xbFVBdNKIohzb0rDdB5IXt">
+        针对某项具体任务，滑动调节发生频次、单次交代耗时与封装模板的投入，实时计算出<strong data-page-node-id="WWrJTv9zvLOdEouAjJvKbz">盈亏平衡周期</strong>与<strong data-page-node-id="NhQP0epkc0URhEks0U8yIU">年化节省工时</strong>，辅助决策是否值得将其封装为 Grok Bot 模板：
+      </p>
+
+      <div class="interactive-card" data-page-node-id="vPPizfwd3KQ6fkDD7bymo5">
+        <div class="sandbox-header" data-page-node-id="tEWdwdii5EYGFZ7jSQYzCR">
+          <div class="sandbox-title" data-page-node-id="u0tAM4pvyYHoy9BZUolYke">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" data-page-node-id="pDciaXVSbihfaa7MAv7SG3"><circle cx="12" cy="12" r="10" data-page-node-id="F5a23QacdVLeTA05gtAxtp" /><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" data-page-node-id="f5C6w4LdpkM2YWRd2AnKC2" /><path d="M12 18V6" data-page-node-id="rDcVmRfvdAtvNAkyjUjvCA" /></svg>
+            模板化经济性模型 (Template Breakeven Model)
+          </div>
+          <div class="sandbox-desc" data-page-node-id="gK5DIHanDQg8b8Pnfdy3x6">
+            测算模型基准：盈亏平衡周数 = 初始封装投入工时 / 每周节省工时
+          </div>
+        </div>
+
+        <div class="roi-calc-grid" data-page-node-id="GN4ZQuJZBtsY1jI0AtEoiB">
+          <!-- 滑块控制区 -->
+          <div class="slider-group" data-page-node-id="Uz9H597L7JfXgjOjw3DiDk">
+            <div class="slider-item" data-page-node-id="XlbX3If8ZZRewUc73COWtv">
+              <div class="slider-header" data-page-node-id="pOoFROQTty2eAH0vHCULxb">
+                <span class="slider-title" data-page-node-id="eOv1KDHTCDgonsdWF97J5x">每周重复发生频次</span>
+                <span class="slider-val-badge" id="val-freq" data-page-node-id="j704Tc7w2w4Lu7guK0awPj">5 次/周</span>
+              </div>
+              <input type="range" id="input-freq" min="1" max="25" step="1" value="5" data-page-node-id="r0rXMO3K3y8CEZGGuQ0MNI">
+            </div>
+
+            <div class="slider-item" data-page-node-id="RgHiiLO0rhRpKzUBHyWnvu">
+              <div class="slider-header" data-page-node-id="txYw9VfkFSXkXFYFhy663n">
+                <span class="slider-title" data-page-node-id="LkrfpAGCOyCIACKwvFIVXT">未模板化时，单次重复交代耗时</span>
+                <span class="slider-val-badge" id="val-manual-time" data-page-node-id="60AYG9UD4GYmdlqULAnw40">12 分钟</span>
+              </div>
+              <input type="range" id="input-manual-time" min="2" max="60" step="1" value="12" data-page-node-id="DwBVRg4Zz05fpkQWypzsk2">
+            </div>
+
+            <div class="slider-item" data-page-node-id="mZXedj0IwkmyUhTwHe5szb">
+              <div class="slider-header" data-page-node-id="979mB4xmDEVa7EhAHLQqL2">
+                <span class="slider-title" data-page-node-id="q73GZrQwXu3lVICXF2GibW">封装与调试此模板初始投入</span>
+                <span class="slider-val-badge" id="val-setup-time" data-page-node-id="U2RXFnMPv8b2hRIGPqxf86">2.5 小时</span>
+              </div>
+              <input type="range" id="input-setup-time" min="0.5" max="10" step="0.5" value="2.5" data-page-node-id="BYOg4uvbABWTHXZG3OpzLm">
+            </div>
+          </div>
+
+          <!-- KPI 实时计算结果区 -->
+          <div class="roi-kpi-display" data-page-node-id="WHndHU24zetl0fyeiEGpir">
+            <div class="kpi-row" data-page-node-id="erKbflbYISgXqCk8CYedcJ">
+              <span class="kpi-title" data-page-node-id="7z25dieY3UXUF8dYoD9yJb">每周节省总时长</span>
+              <span class="kpi-number" id="out-weekly-saved" data-page-node-id="vCUt43LQHjH6lFsHPtgBVc">1.0 小时</span>
+            </div>
+
+            <div class="kpi-row" data-page-node-id="EnAY5j1Zq8DzmF6U8yOeVK">
+              <span class="kpi-title" data-page-node-id="ag0Ew7CysWIS7YFxkwDWy2">达到盈亏平衡时间 (Breakeven)</span>
+              <span class="kpi-number emerald" id="out-breakeven-weeks" data-page-node-id="hVm73SIeNnuywOUes4dhRF">2.5 周</span>
+            </div>
+
+            <div class="kpi-row" data-page-node-id="5ISUOJQClyVQ5lrljsE2kA">
+              <span class="kpi-title" data-page-node-id="2iXIZkyhXwv8yR1YCPxCnE">首年净节省工时 (Net Annual Saved)</span>
+              <span class="kpi-number" id="out-net-annual" data-page-node-id="x6eGGsr7xjTnCwsKZjVvwe">+47.5 小时</span>
+            </div>
+
+            <div class="kpi-evaluation" id="out-roi-verdict" data-page-node-id="RIGKcS4gPVfopJCMCmSqKI">
+              极力推荐立即模板化：平衡周期不足一个月，年化节省相当于释放了一个完整工作周！
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 底部收尾栏 -->
+    <footer class="article-footer" data-page-node-id="WtP8aiLUJvQt26ZJ1mgK8a">
+      <div data-page-node-id="ChlrmeclbbOkPzoBp0gTHl">
+        <span data-page-node-id="xmxVU7sFFpS1Ek2vjUv5ZW">来源参考: <a href="https://best.xiaohu.ai/article/grok-bot-eight-workflow-templates/" target="_blank" rel="noopener noreferrer" data-page-node-id="ETVGq2BJUPNf4miXdBtICt">best.xiaohu.ai</a></span>
+        <span style="margin: 0 8px;" data-page-node-id="iBOaVhpzvRt2S4nxAI31wi">·</span>
+        <span data-page-node-id="0MWdgx8GfSRXHqUzszRbiE">SpaceXAI Matt Palmer 原创分享</span>
+      </div>
+      <div class="footer-links" data-page-node-id="ik7xRYGafRDjYsUMB5CAj8">
+        <a href="#article-top" data-page-node-id="SGmcqMctyowCBmPjsVIPCv">返回顶部 ↑</a>
+      </div>
+    </footer>
+
+  </main>
+
+  <!-- ==========================================================================
+       8. 内联 JavaScript：主题切换、目录监听、沙盘装配与公式计算
+       ========================================================================== -->
+  <script>
+    (function() {
+      // 元素引用工具
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // ==========================================
+      // 1. 阅读进度条与目录高亮
+      // ==========================================
+      window.addEventListener('scroll', function() {
+        var doc = document.documentElement;
+        var top = doc.scrollTop || document.body.scrollTop;
+        var total = doc.scrollHeight - doc.clientHeight;
+        var progress = (total > 0) ? (top / total) * 100 : 0;
+        var bar = byId('reading-progress');
+        if (bar) {
+          bar.style.width = Math.min(100, Math.max(0, progress)) + '%';
+        }
+
+        // 目录滚动激活监听
+        var sections = document.querySelectorAll('.content-section, header');
+        var links = document.querySelectorAll('.toc-link');
+        var currentId = '';
+
+        sections.forEach(function(sec) {
+          var rect = sec.getBoundingClientRect();
+          if (rect.top <= 120) {
+            currentId = sec.getAttribute('id') || '';
+          }
+        });
+
+        if (currentId) {
+          links.forEach(function(l) {
+            var href = l.getAttribute('href');
+            if (href === '#' + currentId) {
+              l.classList.add('active');
+            } else {
+              l.classList.remove('active');
+            }
+          });
+        }
+      });
+
+      // ==========================================
+      // 2. 主题切换 (浅色/深色)
+      // ==========================================
+      var themeBtn = byId('btn-theme-toggle');
+      var themeLabel = byId('label-theme');
+
+      function setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        try {
+          localStorage.setItem('grok_theme', theme);
+        } catch (e) {}
+
+        if (themeLabel) {
+          themeLabel.textContent = (theme === 'dark') ? '切换浅色' : '切换深色';
+        }
+      }
+
+      // 初始化主题
+      var savedTheme = 'dark';
+      try {
+        savedTheme = localStorage.getItem('grok_theme') || 'dark';
+      } catch (e) {}
+      setTheme(savedTheme);
+
+      if (themeBtn) {
+        themeBtn.addEventListener('click', function() {
+          var current = document.documentElement.getAttribute('data-theme');
+          var target = (current === 'dark') ? 'light' : 'dark';
+          setTheme(target);
+        });
+      }
+
+      // ==========================================
+      // 3. 移动端抽屉目录开关
+      // ==========================================
+      var menuBtn = byId('btn-toggle-menu');
+      var sidebar = byId('app-sidebar');
+      if (menuBtn && sidebar) {
+        menuBtn.addEventListener('click', function() {
+          sidebar.classList.toggle('open');
+        });
+
+        document.querySelectorAll('.toc-link').forEach(function(l) {
+          l.addEventListener('click', function() {
+            if (window.innerWidth <= 960) {
+              sidebar.classList.remove('open');
+            }
+          });
+        });
+      }
+
+      // ==========================================
+      // 4. 交互沙盘 1：8 大模板装配详情数据与切换
+      // ==========================================
+      var templateData = {
+        loops: {
+          name: 'Loops (软件工程外循环助手)',
+          role: '先整理背景与方案，再交给编码助手',
+          tools: 'GitHub · Cursor Agent',
+          config: 'GitHub 访问 Token、本地工程仓库、Cursor 授权连接',
+          sop: '提取同事历史 PR 规约 → 调研竞品实现边界 → 形成结构化任务提示 → 移交 Cursor 编码',
+          insight: '代码只是工程的一部分。把思考、规划与验收固定为外循环，代码内循环只专注实现，大幅提升编码成功率。'
+        },
+        demos: {
+          name: 'Tech demos (新技术体验式原型开发)',
+          role: '把收藏的新工具做成可体验的演示',
+          tools: 'X (Bookmarks) · GitHub · Cursor · Cloudflare',
+          config: 'Cloudflare Pages/Workers 凭据、私有测试沙箱、Cursor Agent',
+          sop: '每日晨间自动扫描 X 书签 → 提取新库/工具 → 生成 Loops 任务草稿 → 编码并自动部署 → 带回录屏与截图',
+          insight: '把“以后看看”的书签变成真实可交互的产品。要求返回截图与录屏，形成闭环学习与评估。'
+        },
+        crm: {
+          name: 'Personal CRM (出行地理人脉智能网络)',
+          role: '按城市整理联系人，方便旅行前查找',
+          tools: 'X (Twitter) · Notion API',
+          config: 'Notion Database ID、Notion API Token、X 开发者/浏览接口',
+          sop: '抓取 X 互关好友个人简介 → NLP 抽取地理信息 → 计算位置置信度 → 写入 Notion 结构化表',
+          insight: '地理位置具有模糊性（如 nomad、两地居住）。显式保留“置信度”列，规避假定，让信息真正可筛选。'
+        },
+        xalgo: {
+          name: 'X algorithm (发帖策略与算法对齐)',
+          role: '为发帖时机、格式与互动提供参照',
+          tools: 'X (原生连接) · xai-org/x-algorithm 开源仓库',
+          config: 'X 账号绑定授权',
+          sop: '解析开源算法评分公式 → 对比当前账号权重与受众作息 → 输出发帖时段与格式建议',
+          insight: '减少内容分发时反复纠结的小决定。但始终谨记：优质内容始终先于算法微调，算法只能减少犹豫。'
+        },
+        writing: {
+          name: 'Writing Bot (出版级行文规范与草稿汇集)',
+          role: '汇集草稿，沿用熟悉的编辑标准',
+          tools: 'Typefully · Notion',
+          config: 'Typefully API Key、Notion 写作库连接',
+          sop: '从其他助手（Loops、Tech demos）索取研发摘要 → 按《Style》修剪长难句与冗余字 → 推送到 Typefully',
+          insight: '跨助手信息收拢。保留作者本人的思考核心与主干叙事，助手专注处理修句、节奏与工具管道分发。'
+        },
+        image: {
+          name: 'Image Generation (一致性视觉资产流水线)',
+          role: '复用图像生成与去背景的制作工序',
+          tools: 'Grok Imagine · fal',
+          config: 'fal.ai 账户 API Key、品牌调色板定义',
+          sop: '标准化 Prompt 约束立体风格 → Grok Imagine 出图 → fal 抠图去背输出透明通道 → 映射统一色板',
+          insight: '成套资产的核心是“一致性”。把提示词、去背景和品牌色规约固化成流水线，后续图标即可一键批量复用。'
+        },
+        skippy: {
+          name: 'Skippy (市政路停限制与扫街提醒)',
+          role: '查询停车限制，提前安排提醒',
+          tools: '旧金山公开数据 (SF Open Data)',
+          config: '常用停车路口地理坐标设置、系统早晨通知通道',
+          sop: '录入常用停车坐标 → 匹配市政扫街与单侧禁停日历 → 限制时段前向手机发送推送',
+          insight: '任务范围极窄，但输入输出极明确。把查市政网站的机械工作交给手机端助手，杜绝违章罚单。'
+        },
+        dial: {
+          name: 'Dial Bot (实体电话外呼与问答会话)',
+          role: '通过外部通话服务完成电话问答',
+          tools: 'Bland 通话服务 · 自定义 MCP',
+          config: 'Bland 平台账户密钥、个人语音克隆音频模型、自建 MCP 服务网关',
+          sop: '下发通话任务与目标问题 → 调用个人克隆音色拨打商户 → 应对语音菜单与真人交互 → 结构化回传答案',
+          insight: '为 AI 连接真实世界的语音通信通道。虽然涉及自建 MCP 复杂度较高，但彻底解放了排队等待时间。'
+        }
+      };
+
+      var tabButtons = [
+        byId('tab-btn-loops'), byId('tab-btn-demos'), byId('tab-btn-crm'), byId('tab-btn-xalgo'),
+        byId('tab-btn-writing'), byId('tab-btn-image'), byId('tab-btn-skippy'), byId('tab-btn-dial')
+      ];
+
+      tabButtons.forEach(function(btn) {
+        if (!btn) return;
+        btn.addEventListener('click', function() {
+          tabButtons.forEach(function(b) { if (b) b.classList.remove('active'); });
+          btn.classList.add('active');
+
+          var tplKey = btn.getAttribute('data-tpl') || 'loops';
+          var data = templateData[tplKey] || templateData.loops;
+
+          byId('out-tpl-name').textContent = data.name;
+          byId('out-tpl-role').textContent = data.role;
+          byId('out-tpl-tools').textContent = data.tools;
+          byId('out-tpl-config').textContent = data.config;
+          byId('out-tpl-sop').textContent = data.sop;
+          byId('out-tpl-insight').textContent = data.insight;
+        });
+      });
+
+      // ==========================================
+      // 5. 交互沙盘 2：模板化 ROI 经济学动态计算
+      // ==========================================
+      var inputFreq = byId('input-freq');
+      var inputManualTime = byId('input-manual-time');
+      var inputSetupTime = byId('input-setup-time');
+
+      var valFreq = byId('val-freq');
+      var valManualTime = byId('val-manual-time');
+      var valSetupTime = byId('val-setup-time');
+
+      var outWeeklySaved = byId('out-weekly-saved');
+      var outBreakevenWeeks = byId('out-breakeven-weeks');
+      var outNetAnnual = byId('out-net-annual');
+      var outRoiVerdict = byId('out-roi-verdict');
+
+      function calculateRoi() {
+        var freq = parseFloat(inputFreq.value);
+        var manualMin = parseFloat(inputManualTime.value);
+        var setupHours = parseFloat(inputSetupTime.value);
+
+        valFreq.textContent = freq + ' 次/周';
+        valManualTime.textContent = manualMin + ' 分钟';
+        valSetupTime.textContent = setupHours.toFixed(1) + ' 小时';
+
+        // 每周节省的小时数 = (freq * manualMin) / 60
+        var weeklySavedHours = (freq * manualMin) / 60.0;
+        outWeeklySaved.textContent = weeklySavedHours.toFixed(1) + ' 小时';
+
+        // 盈亏平衡周数 = 初始投入小时 / 每周节省小时
+        var breakevenWeeks = (weeklySavedHours > 0) ? (setupHours / weeklySavedHours) : 999;
+        outBreakevenWeeks.textContent = (breakevenWeeks < 99) ? (breakevenWeeks.toFixed(1) + ' 周') : '> 99 周';
+
+        // 首年 50 个工作周，净节省 = 50 * weeklySaved - setupHours
+        var netAnnualHours = (50 * weeklySavedHours) - setupHours;
+        outNetAnnual.textContent = (netAnnualHours > 0 ? '+' : '') + netAnnualHours.toFixed(1) + ' 小时';
+
+        // 评语判定
+        if (breakevenWeeks <= 2.0) {
+          outBreakevenWeeks.className = 'kpi-number emerald';
+          outRoiVerdict.textContent = '超高回报率：2 周内收回封装成本！年化节省极度显著，应作为最高优先级立即模板化。';
+        } else if (breakevenWeeks <= 6.0) {
+          outBreakevenWeeks.className = 'kpi-number emerald';
+          outRoiVerdict.textContent = '值得投入：1 个多月即可收回成本，年化净收益明显，非常推荐沉淀为 Grok Bot 助手。';
+        } else if (breakevenWeeks <= 16.0) {
+          outBreakevenWeeks.className = 'kpi-number amber';
+          outRoiVerdict.textContent = '谨慎评估：平衡周期在 2-4 个月。建议先用轻量提示词验证稳定性，再决定是否深度配置 MCP。';
+        } else {
+          outBreakevenWeeks.className = 'kpi-number';
+          outRoiVerdict.textContent = '暂不建议封装：发生频次过低或单次交代耗时极短，模板维护和配置成本可能倒挂，保持临时对话即可。';
+        }
+      }
+
+      if (inputFreq && inputManualTime && inputSetupTime) {
+        inputFreq.addEventListener('input', calculateRoi);
+        inputManualTime.addEventListener('input', calculateRoi);
+        inputSetupTime.addEventListener('input', calculateRoi);
+        calculateRoi(); // 初始计算
+      }
+
+    })();
+  </script>
+</body>
+</html>

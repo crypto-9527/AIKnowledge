@@ -1,0 +1,1803 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="cTqlk18ozTJYTAexHHLnk8">
+<head data-page-node-id="cUTAyce5qCfCURP9kFgE86">
+  <meta charset="utf-8" data-page-node-id="hiljEZVF4JSoI03U6WKgUr">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="TFHYsTwJRqMFKsTE0SWyG1">
+  <title>OpenAI 内部员工告诉你：如何用好GPT 6 Astra，要重新分配人与 AI 的工作</title>
+  <style>
+    /* ==========================================================================
+       1. 全局设计令牌与双主题系统 (CSS Custom Properties)
+       ========================================================================== */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+      /* 语义色调 (五色状态令牌) */
+      --accent: #D97757;          /* 陶土红 / OpenAI Astra 强调色 */
+      --accent-hover: #E2886A;
+      --accent-subtle: rgba(217, 119, 87, 0.12);
+      --emerald: #2E8B57;         /* 成果验收 / 工具校验通过 */
+      --emerald-subtle: rgba(46, 139, 87, 0.14);
+      --emerald-border: #38A169;
+      --rose: #C53030;            /* 边界警示 / 负优化风险 */
+      --rose-subtle: rgba(197, 48, 48, 0.14);
+      --amber: #D69E2E;           /* 裁切告警 / 规则过度约束 */
+      --amber-subtle: rgba(214, 158, 46, 0.14);
+      --cyan: #319795;            /* 工程数据 / 自动化流转 */
+      --cyan-subtle: rgba(49, 151, 149, 0.14);
+      --purple: #805AD5;          /* 认知推演 / 推理档位 */
+      --purple-subtle: rgba(128, 90, 213, 0.14);
+    }
+
+    /* 深色主题 (Dark Theme - 默认黑曜石科技质感) */
+    html[data-theme="dark"] {
+      --bg-canvas: #141413;
+      --bg-surface: #1E1E1C;
+      --bg-surface-elevated: #282825;
+      --bg-surface-highlight: #32322E;
+      --border-soft: rgba(255, 255, 255, 0.08);
+      --border-medium: rgba(255, 255, 255, 0.16);
+      --border-hard: rgba(255, 255, 255, 0.28);
+      --text-primary: #F4F1EA;
+      --text-secondary: #B0ADA5;
+      --text-tertiary: #7D7A73;
+      --text-inverse: #141413;
+      --code-bg: #181816;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.6);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.7);
+    }
+
+    /* 浅色主题 (Light Theme - 暖羊皮纸经典出版质感) */
+    html[data-theme="light"] {
+      --bg-canvas: #FAF7F2;
+      --bg-surface: #FFFFFF;
+      --bg-surface-elevated: #F3EFE8;
+      --bg-surface-highlight: #EAE5DC;
+      --border-soft: rgba(0, 0, 0, 0.07);
+      --border-medium: rgba(0, 0, 0, 0.14);
+      --border-hard: rgba(0, 0, 0, 0.24);
+      --text-primary: #21201D;
+      --text-secondary: #58554E;
+      --text-tertiary: #8C887F;
+      --text-inverse: #FAF7F2;
+      --code-bg: #F0EAE1;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.12);
+    }
+
+    /* ==========================================================================
+       2. 基础重置与排版引擎 (Typography & Reset)
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      line-height: 1.75;
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    #reading-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--cyan));
+      width: 0%;
+      z-index: 9999;
+      transition: width 0.1s linear;
+    }
+
+    /* ==========================================================================
+       3. 左右分栏布局与侧边目录 (Layout & TOC)
+       ========================================================================== */
+    .app-sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 300px;
+      background-color: var(--bg-surface);
+      border-right: 1px solid var(--border-soft);
+      overflow-y: auto;
+      padding: 24px 20px 32px 20px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .sidebar-header {
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .sidebar-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--accent);
+      background-color: var(--accent-subtle);
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-title {
+      font-family: var(--font-serif);
+      font-size: 1.05rem;
+      font-weight: 700;
+      line-height: 1.4;
+      color: var(--text-primary);
+    }
+
+    .sidebar-nav {
+      flex: 1;
+    }
+
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .toc-item a {
+      display: block;
+      padding: 7px 10px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      border-radius: 6px;
+      line-height: 1.4;
+      transition: all 0.15s ease;
+    }
+
+    .toc-item a:hover {
+      color: var(--text-primary);
+      background-color: var(--bg-surface-elevated);
+      padding-left: 14px;
+    }
+
+    .toc-item.active a {
+      color: var(--accent);
+      background-color: var(--accent-subtle);
+      font-weight: 600;
+      padding-left: 14px;
+      border-left: 3px solid var(--accent);
+    }
+
+    .sidebar-footer {
+      padding-top: 16px;
+      border-top: 1px solid var(--border-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .theme-toggle-btn {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-medium);
+      color: var(--text-primary);
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .theme-toggle-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .main-wrapper {
+      margin-left: 300px;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      justify-content: center;
+      padding: 48px 36px 96px 36px;
+    }
+
+    .article-container {
+      max-width: 900px;
+      width: 100%;
+    }
+
+    /* ==========================================================================
+       4. 题头区与元数据卡片 (Article Header & Metadata)
+       ========================================================================== */
+    .article-header {
+      margin-bottom: 48px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .header-category {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+
+    .article-title {
+      font-family: var(--font-serif);
+      font-size: 2.25rem;
+      font-weight: 800;
+      line-height: 1.3;
+      color: var(--text-primary);
+      margin-bottom: 20px;
+      letter-spacing: -0.01em;
+    }
+
+    .article-lead {
+      font-size: 1.15rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      margin-bottom: 28px;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 16px 20px;
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .meta-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-tertiary);
+      font-weight: 600;
+    }
+
+    .meta-value {
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .meta-value a {
+      color: var(--accent);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .meta-value a:hover {
+      text-decoration: underline;
+    }
+
+    /* ==========================================================================
+       5. 文本内容样式 (Content Typography)
+       ========================================================================== */
+    h2 {
+      font-family: var(--font-serif);
+      font-size: 1.65rem;
+      font-weight: 700;
+      line-height: 1.35;
+      color: var(--text-primary);
+      margin-top: 48px;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      line-height: 1.4;
+      color: var(--text-primary);
+      margin-top: 32px;
+      margin-bottom: 14px;
+    }
+
+    p {
+      font-size: 1rem;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+      text-align: justify;
+    }
+
+    p strong, li strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px dashed var(--accent);
+      transition: border-bottom-style 0.15s ease;
+    }
+
+    a:hover {
+      border-bottom-style: solid;
+    }
+
+    ul, ol {
+      margin-bottom: 24px;
+      padding-left: 24px;
+      color: var(--text-secondary);
+    }
+
+    li {
+      margin-bottom: 8px;
+      line-height: 1.7;
+    }
+
+    /* 引用块与多媒体图注 */
+    blockquote {
+      margin: 28px 0;
+      padding: 18px 24px;
+      background-color: var(--bg-surface);
+      border-left: 4px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      color: var(--text-secondary);
+    }
+
+    blockquote p {
+      margin-bottom: 8px;
+    }
+
+    blockquote p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* 边界警示专用组件 ([!boundary]) */
+    .boundary-callout {
+      margin: 24px 0;
+      padding: 16px 20px;
+      background-color: var(--rose-subtle);
+      border: 1px solid rgba(197, 48, 48, 0.3);
+      border-left: 4px solid var(--rose);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .boundary-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--rose);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .boundary-content {
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    /* 图片/视频演示例解卡片 */
+    .visual-annotation-card {
+      margin: 28px 0;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .card-caption-bar {
+      padding: 12px 18px;
+      background-color: var(--bg-surface-elevated);
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-caption-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-caption-badge {
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--accent-subtle);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .card-body-desc {
+      padding: 16px 18px;
+      font-size: 0.92rem;
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
+
+    /* 数据表格系统 */
+    .table-container {
+      margin: 28px 0;
+      overflow-x: auto;
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      background-color: var(--bg-surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.92rem;
+    }
+
+    th {
+      background-color: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      font-weight: 700;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-medium);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-soft);
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background-color: var(--bg-surface-highlight);
+    }
+
+    /* 一分钟速览网格 */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin: 24px 0 36px 0;
+    }
+
+    .summary-card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .summary-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+    }
+
+    .summary-card-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background-color: var(--accent-subtle);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .summary-card-text {
+      font-size: 0.92rem;
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    /* ==========================================================================
+       6. 矢量信息图样式 (Inline SVG Schematics)
+       ========================================================================== */
+    .diagram-container {
+      margin: 32px 0;
+      padding: 24px;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: 10px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .diagram-header {
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .diagram-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .diagram-tag {
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      color: var(--text-tertiary);
+    }
+
+    .svg-wrapper {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .diagram-svg {
+      display: block;
+      margin: 0 auto;
+      max-width: 100%;
+      height: auto;
+    }
+
+    .diagram-footnote {
+      margin-top: 14px;
+      font-size: 0.82rem;
+      color: var(--text-tertiary);
+      line-height: 1.5;
+    }
+
+    /* ==========================================================================
+       7. 交互沙盘系统样式 (Interactive Sandbox UI)
+       ========================================================================== */
+    .sandbox-box {
+      margin: 36px 0;
+      background-color: var(--bg-surface);
+      border: 2px solid var(--accent);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+
+    .sandbox-topbar {
+      background: linear-gradient(90deg, var(--accent-subtle), transparent);
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-medium);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sandbox-heading {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sandbox-badge {
+      font-size: 0.75rem;
+      font-weight: 700;
+      background-color: var(--accent);
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .sandbox-layout {
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 768px) {
+      .sandbox-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .control-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      background: var(--bg-surface-elevated);
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+    }
+
+    .ctrl-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .ctrl-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .ctrl-val-badge {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--accent);
+      background: var(--accent-subtle);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    select, input[type="range"] {
+      width: 100%;
+    }
+
+    select {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      color: var(--text-primary);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      outline: none;
+    }
+
+    select:focus {
+      border-color: var(--accent);
+    }
+
+    input[type="range"] {
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .display-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .res-card {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .res-label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .res-content {
+      font-size: 0.92rem;
+      color: var(--text-primary);
+      line-height: 1.5;
+    }
+
+    .res-metric-val {
+      font-family: var(--font-mono);
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .sandbox-footer-verdict {
+      padding: 14px 20px;
+      background: var(--bg-surface-highlight);
+      border-top: 1px solid var(--border-soft);
+      font-size: 0.9rem;
+      line-height: 1.6;
+      color: var(--text-primary);
+    }
+
+    /* ==========================================================================
+       8. 移动端与打印优化 (@media queries)
+       ========================================================================== */
+    .mobile-menu-btn {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      box-shadow: var(--shadow-lg);
+      z-index: 1000;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+    }
+
+    @media (max-width: 992px) {
+      .app-sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: var(--shadow-lg);
+      }
+
+      .app-sidebar.open {
+        transform: translateX(0);
+      }
+
+      .main-wrapper {
+        margin-left: 0;
+        padding: 32px 20px 80px 20px;
+      }
+
+      .mobile-menu-btn {
+        display: flex;
+      }
+    }
+
+    @media print {
+      body {
+        background-color: #fff !important;
+        color: #000 !important;
+      }
+
+      .app-sidebar, #reading-progress, .theme-toggle-btn, .mobile-menu-btn, .sandbox-box {
+        display: none !important;
+      }
+
+      .main-wrapper {
+        margin-left: 0 !important;
+        padding: 0 !important;
+      }
+
+      .article-container {
+        max-width: 100% !important;
+      }
+
+      a {
+        text-decoration: underline !important;
+        color: #000 !important;
+      }
+
+      .visual-annotation-card, .table-container, .diagram-container {
+        break-inside: avoid;
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+      }
+    }
+  </style>
+</head>
+<body data-page-node-id="igF3QiG4xuzNUN6m5g13Nx">
+  <!-- 顶部阅读进度指示条 -->
+  <div id="reading-progress" data-page-node-id="qjOyxUJxtWFCzHtZaqnr3v"></div>
+
+  <!-- 移动端侧边栏切换悬浮球 -->
+  <button id="btn-mobile-menu" class="mobile-menu-btn" aria-label="打开目录" data-page-node-id="YnWPJG0Oz7yhh9ICrzpAhS">☰</button>
+
+  <!-- 左侧固定大纲导航栏 -->
+  <aside id="app-sidebar" class="app-sidebar" data-page-node-id="SqFVGkSC30eMllJSJoHDZT">
+    <div class="sidebar-header" data-page-node-id="GtLXFeDZlekANnbKKqt6JV">
+      <div class="sidebar-badge" data-page-node-id="ApilbQmsTPPEwIRCK6QNUz">OpenAI Codex 范式跃迁</div>
+      <h1 class="sidebar-title" data-page-node-id="P52O8URP72sr1M3MRR0Gyv">GPT 6 Astra 实战与人机再分工</h1>
+    </div>
+
+    <nav class="sidebar-nav" data-page-node-id="2G4ECOP75fCdA7cRRDCuTV">
+      <ul class="toc-list" data-page-node-id="XdhEsoe6FZOLkKq5kKWuBA">
+        <li class="toc-item" data-page-node-id="aApHneDv6JL16a7x72csyd"><a href="#sec-summary" data-page-node-id="9asBbiHulBpHj13TyjNG6g">0. 一分钟速览与认知跃迁</a></li>
+        <li class="toc-item" data-page-node-id="h3HbF2qBTgZvLYU4u3Cn3m"><a href="#sec-intro" data-page-node-id="KTTmzfm3NUADg6SHb2lK4n">1. 背景：金门大桥的门槛重塑</a></li>
+        <li class="toc-item" data-page-node-id="lKbQAgAUlOPHHJmEcmLT6Z"><a href="#sec-lesson1" data-page-node-id="DMCxAH8u4pTLU2hGIULh7a">2. 经验一：提供检查与修改的工具</a></li>
+        <li class="toc-item" data-page-node-id="zHCF0v6Ne8foflEFRVck2p"><a href="#sec-lesson2" data-page-node-id="bwwrliTv14ODYwSKvSKTmt">3. 经验二：交代意图由它补全细节</a></li>
+        <li class="toc-item" data-page-node-id="jnqrpkE5VKR6RzNbooZjkt"><a href="#sec-lesson3" data-page-node-id="ZFB9fA64uJlLjirdRuNsTl">4. 经验三：围绕具体初版反复迭代</a></li>
+        <li class="toc-item" data-page-node-id="Y1q18VgJUPbLKIH3ahBllc"><a href="#sec-lesson4" data-page-node-id="VrKXgcFcbIwymfo6zRbkdc">5. 经验四：精简指导按成品选档位</a></li>
+        <li class="toc-item" data-page-node-id="nPyDWOyXll7BwInka29rkV"><a href="#sec-lesson5" data-page-node-id="DsYT1yInYf2cPRsdia4t2Y">6. 经验五：检验实际表现与终点交还</a></li>
+        <li class="toc-item" data-page-node-id="ff4eLbLsQ43CY3B4Vkb8KE"><a href="#sec-sandbox1" data-page-node-id="gbnMRc1Ec3JI2SNRkhJjZW">7. 沙盘一：任务交代四要素矩阵</a></li>
+        <li class="toc-item" data-page-node-id="nFZ6Pp8O8qV7ZZUUA74OwQ"><a href="#sec-sandbox2" data-page-node-id="v6mH9DJrPnUzO3iqYEXRsr">8. 沙盘二：推理档位与规则负担</a></li>
+        <li class="toc-item" data-page-node-id="roVqXxBvjg71Zl96BZVXW1"><a href="#sec-checklist" data-page-node-id="XfzkGrr2pXndGfRXFIPEVn">9. 落地行动：重启曾经放弃的任务</a></li>
+      </ul>
+    </nav>
+
+    <div class="sidebar-footer" data-page-node-id="4bjdkzeSqDQE4JB8aKE036">
+      <button id="btn-theme-toggle" class="theme-toggle-btn" data-page-node-id="QFOOOiV1Zb98pgwKm0K0gT">
+        <span id="theme-toggle-icon" data-page-node-id="aa8jZisApAzLDCQ4LA2aVs">🌓</span>
+        <span id="theme-toggle-label" data-page-node-id="2TRjsoT05BhImzuy40LUi2">切换浅色</span>
+      </button>
+      <span style="font-size: 0.75rem; color: var(--text-tertiary);" data-page-node-id="a7RrxGW5642JXGnh1x88rk">2026.09</span>
+    </div>
+  </aside>
+
+  <!-- 右侧主阅读与交互区 -->
+  <main class="main-wrapper" data-page-node-id="9Mf9whtA0ljHUomSu8dC72">
+    <article class="article-container" data-page-node-id="0DdXWt1kpTCWovncwBiM5w">
+
+      <!-- 文章顶部署名与元数据 -->
+      <header class="article-header" data-page-node-id="AmkOiVAFWWFMZhjMzO6TVk">
+        <div class="header-category" data-page-node-id="bXvqGJO2OqTbd6aaOOp9lz">OpenAI 内部实践 · 开发者经验白皮书</div>
+        <h1 class="article-title" data-page-node-id="lc98Yi9KWtnqWMTl0oIxaD">OpenAI 内部员工告诉你：如何用好GPT 6 Astra，要重新分配人与 AI 的工作</h1>
+        <p class="article-lead" data-page-node-id="UAh4BY9aBJnF6zVBJAcE0E">
+          从 LEGO 桥、图像编辑器到三维酒吧，Dominik Kundel 的五项经验揭示：让 GPT 6 Astra 自行补全细节，同时把方向、工具和验收终点交代清楚。
+        </p>
+
+        <div class="meta-grid" data-page-node-id="K4UuDEeyqxpMQQHJnjLba2">
+          <div class="meta-item" data-page-node-id="KnMQH1r3ZFuTi1wlTD0faZ">
+            <span class="meta-label" data-page-node-id="t9glMbiDyUCvadnEresssI">原作者</span>
+            <span class="meta-value" data-page-node-id="d8xMLXHLwRoJUOKbHa9dK7"><a href="https://dkundel.com/" data-page-node-id="VQDQ3UUbfyDIPjj3eUQcDd">Dominik Kundel</a> (OpenAI DevEx & SDKs)</span>
+          </div>
+          <div class="meta-item" data-page-node-id="psajGg9tqCCMP7FZjCWqEn">
+            <span class="meta-label" data-page-node-id="nPHIhJUFvEpxMnCOCuu3GC">作者身份</span>
+            <span class="meta-value" data-page-node-id="VGyCCwpOB3igALRhDE7CcR"><a href="https://ai.engineer/speakers/dominik-kundel" data-page-node-id="OZTTDT6z2o1NHobhTOR7th">Codex 核心开发者 / 前 Twilio 创新总监</a></span>
+          </div>
+          <div class="meta-item" data-page-node-id="GePtmVxsQBrMN8FyXPNXcW">
+            <span class="meta-label" data-page-node-id="pZzOcdHBjT3mEYMo27eDLp">核心模型环境</span>
+            <span class="meta-value" data-page-node-id="dNbA7yUvrqtteOnQjQRZlp">GPT-6 Astra · Codex 自动化环境</span>
+          </div>
+          <div class="meta-item" data-page-node-id="GtPUDVI1KCjdHlTOzlScIL">
+            <span class="meta-label" data-page-node-id="UW5zBHmODLbOJACEKBFxfH">交付基准日</span>
+            <span class="meta-value" data-page-node-id="69cvbRs6I1xNnK35ZTVBNe">2026年9月7日 · 自包含白皮书</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- 一分钟速览 -->
+      <section id="sec-summary" data-page-node-id="BEg3fhaiPaXtQMhzq8ZRdY">
+        <h2 data-page-node-id="GtwUyASUq0gazAXBHALwOF">0. 一分钟速览</h2>
+        <div class="summary-grid" data-page-node-id="1INCHA0kAJjEQHPlc7ydXd">
+          <div class="summary-card" data-page-node-id="CYtRt6OUZdfZjnGju95T0a">
+            <div class="summary-card-num" data-page-node-id="AQC4WR8MFxFF4EjptwSNFh">1</div>
+            <div class="summary-card-text" data-page-node-id="hWkRM7wfTdQ3jofB68HWtZ">
+              <strong data-page-node-id="obgB23CoANRO5o6XMjGV36">工作边界扩容</strong>：GPT 6 Astra 能接手的工作已扩展到找材料、制作、打开检查和整合，过去不值得委派的任务可以重新试。
+            </div>
+          </div>
+          <div class="summary-card" data-page-node-id="ursUiMwFOIrY7OPpj1rgIS">
+            <div class="summary-card-num" data-page-node-id="AveNJQJlmkOBCx4dR9xXbU">2</div>
+            <div class="summary-card-text" data-page-node-id="SuXU1NnZiyqVFFZ7wadaY9">
+              <strong data-page-node-id="C3pqVgWUT2oTEElJGG5IdH">人机责任置换</strong>：省下逐项交代操作细节的精力，需要用清楚的用途、背景和参考换来；人的方向感仍决定成品是否合用。
+            </div>
+          </div>
+          <div class="summary-card" data-page-node-id="kfyOUzXZ3eSgmKbE0lqnPz">
+            <div class="summary-card-num" data-page-node-id="fo1cL9nE2bpwF0j1p5rcoA">3</div>
+            <div class="summary-card-text" data-page-node-id="51gVrJQHADAx5tFAaPZ3XK">
+              <strong data-page-node-id="0XXBSP1pV8unNXZlqAB6Am">实体驱动迭代</strong>：可操作的初版和具体位置上的反馈，让自用软件更容易逐轮改进；旧 Skill 和高推理档位也应按成品重新选择。
+            </div>
+          </div>
+          <div class="summary-card" data-page-node-id="QNgFbDF0SKyG4WHiILcyQH">
+            <div class="summary-card-num" data-page-node-id="A0HVTqQHiWvB3wPJHozC8B">4</div>
+            <div class="summary-card-text" data-page-node-id="4TUAT1ef6meFyHOvgfyI7b">
+              <strong data-page-node-id="Btrfqhn4P1L7JmcYH9CBcP">自愈检查与交还</strong>：模型会检查自己的工作，人的任务是明确检查范围和交还条件，让结果与未解决问题一起交回来。
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 引言与背景 -->
+      <section id="sec-intro" data-page-node-id="iUixCXrUTsHRliigiLHATQ">
+        <h2 data-page-node-id="BEiWA8GEUhdJtouqr9u0Rl">1. 背景：金门大桥的门槛重塑</h2>
+        <p data-page-node-id="cdS1yPnZbxuGpDhDJuNzbx">
+          用 GPT 6 Astra 做实际项目时，哪些细节可以交给 AI，哪些方向、工具和验收标准仍需要人来定？<strong data-page-node-id="leWN3cexfjZa6EhoVPf4ZE">这篇文章想通过五项实操经验，讲清楚模型变强以后，我们的工作方法该怎样跟着调整。</strong> GPT 6 Astra 是模型，Codex 是交代任务、调用工具的工作环境。
+        </p>
+        <p data-page-node-id="jZ8NIIN1kCilUkvlIVIi6E">
+          这些经验来自 <strong data-page-node-id="NYw0mIovEADwzsNBkMCtDY"><a href="https://dkundel.com/" data-page-node-id="3Bv1mE8j82DDSUvIed2rKA">Dominik Kundel</a>，一位<a href="https://ai.engineer/speakers/dominik-kundel" data-page-node-id="JyxIoKgebxpXaqknhxAfB2">在 OpenAI 从事开发者体验与 SDK 工作、参与 Codex</a>的资深开发者和产品负责人</strong>。他此前领导 Twilio 新兴技术与创新团队的产品与设计工作，在开发者经验和开发者关系领域有十年以上经验。这样的背景，让他在“怎样把 AI 用进真实项目”这个问题上很有参考价值：他既做开发工具，也亲自用它们制作应用和三维作品。
+        </p>
+        <p data-page-node-id="IcyvU3NEBmYY4J6dj2wgzQ">
+          他的 LEGO 金门大桥项目，能直观说明这种用法变化。此前，他为这件事准备专门的 Skill——一套可复用的任务指导——再加上复杂指令，来回折腾数小时，效果仍不理想。换用 GPT 6 Astra 后，他让 Codex 访问数字积木设计软件 BrickLink Studio，给出一句建桥要求。约十分钟后，第一版模型就出来了，桥面上还有小车。后面仍需继续打磨，但第一次拿到可修改作品的门槛已经变了。
+        </p>
+
+        <!-- 矢量架构图 1：人机重新分工全景拓扑图 -->
+        <div class="diagram-container" data-page-node-id="qbM6Nh3nWc3KEjwDSAKMpn">
+          <div class="diagram-header" data-page-node-id="k29Rui6AQe5sQjAQKhKM0e">
+            <div class="diagram-title" data-page-node-id="kvWwiGE1tLGj4VIRfajKja">
+              <span data-page-node-id="bNXLHKElU0bm7D4njaryfA">📐 架构图 1：GPT-6 Astra 人机工作重新分配与多工具协同拓扑</span>
+            </div>
+            <span class="diagram-tag" data-page-node-id="UHax5v4AIHvOCbgsULDSCH">TOPOLOGY-ASTRA-V1</span>
+          </div>
+          <div class="svg-wrapper" data-page-node-id="ZPj4IF44X2HFDMaAjw5qaj">
+            <svg class="diagram-svg" viewBox="0 0 800 320" width="800" height="320" xmlns="http://www.w3.org/2000/svg" data-page-node-id="OUumCCdQArvlHZsvckBbT6">
+              <rect x="0" y="0" width="800" height="320" fill="none" data-page-node-id="J5bBXKw4M6xsN0kvRB45xn" />
+              <!-- 人类端 -->
+              <rect x="20" y="40" width="220" height="240" rx="8" fill="rgba(217, 119, 87, 0.08)" stroke="#D97757" stroke-width="2" data-page-node-id="d4BU5LpMYTaNW3nownT4Nc" />
+              <text x="130" y="70" text-anchor="middle" fill="#D97757" font-weight="bold" font-size="15" data-page-node-id="lmmvM0XXZu1Bf5222QbV95">人类：核心方向与验收终点</text>
+              <text x="40" y="105" fill="currentColor" font-size="12" data-page-node-id="4CPubl1JUT5WCC7ZPDfdj2">1. 交代成品目标（可操作格式）</text>
+              <text x="40" y="135" fill="currentColor" font-size="12" data-page-node-id="aaoTeCCrTGLbSH2RTSO7RS">2. 指定生产工具与素材位置</text>
+              <text x="40" y="165" fill="currentColor" font-size="12" data-page-node-id="pui2H8tFgs2zBuFP411B23">3. 确定审美风格与硬性约束</text>
+              <text x="40" y="195" fill="currentColor" font-size="12" data-page-node-id="pXiQpcjK3Rf8wJfSZXnEAp">4. 约定自检边界与交还条件</text>
+              <text x="40" y="235" fill="#D97757" font-size="11" font-weight="bold" data-page-node-id="JhZ4l8luz5pRAYxMuCN6jN">不写繁琐微观操作规格</text>
+
+              <!-- 连接箭头 1 -->
+              <path d="M 240 160 L 290 160" stroke="#D97757" stroke-width="2" marker-end="url(#arr-accent)" data-page-node-id="7fhl4RDEwRbACxpdpDXavP" />
+              <text x="265" y="150" text-anchor="middle" fill="#D97757" font-size="11" data-page-node-id="optXQkZb2Xywb8tIMMbidW">意图+参考</text>
+
+              <!-- Astra 核心引擎 -->
+              <rect x="290" y="40" width="220" height="240" rx="8" fill="rgba(49, 151, 149, 0.08)" stroke="#319795" stroke-width="2" data-page-node-id="ngyn0uxFtZFG6L5bHSIVZV" />
+              <text x="400" y="70" text-anchor="middle" fill="#319795" font-weight="bold" font-size="15" data-page-node-id="GU20s3kdA8dEYUFkWwEvdG">GPT-6 Astra (Codex 环境)</text>
+              <text x="310" y="105" fill="currentColor" font-size="12" data-page-node-id="D1HvUzRoli6ZjJjB1Mg4So">1. 自主补全微观交互与操作细节</text>
+              <text x="310" y="135" fill="currentColor" font-size="12" data-page-node-id="XhCC4pHN5d87QsDDurKChC">2. 跨工具材料检索、读取与整合</text>
+              <text x="310" y="165" fill="currentColor" font-size="12" data-page-node-id="FWm6LiSWRjmQcv3y1eENxF">3. 编写代码批量生成零件/结构</text>
+              <text x="310" y="195" fill="currentColor" font-size="12" data-page-node-id="LOPPCuQWmIXgqJPEyI6kPe">4. 在专用制作软件中自开检查</text>
+              <text x="310" y="235" fill="#319795" font-size="11" font-weight="bold" data-page-node-id="LOLAcND86Aew7SZQAhDsAa">双环自查：旧Bug + 新引入副作用</text>
+
+              <!-- 连接箭头 2 -->
+              <path d="M 510 160 L 560 160" stroke="#319795" stroke-width="2" data-page-node-id="TlQfTG4FhCnUbHuol2DkEI" />
+              <text x="535" y="150" text-anchor="middle" fill="#319795" font-size="11" data-page-node-id="Lh4h6D6lqrhBpk97SSZV20">操作驱动</text>
+
+              <!-- 外部制作环境 -->
+              <rect x="560" y="40" width="220" height="240" rx="8" fill="rgba(46, 139, 87, 0.08)" stroke="#2E8B57" stroke-width="2" data-page-node-id="BB8ZGnj7EEYQsDVLBB6OKR" />
+              <text x="670" y="70" text-anchor="middle" fill="#2E8B57" font-weight="bold" font-size="15" data-page-node-id="HjLyZ1WVjmxCGJGNmX37Ct">专有生产工具与成品</text>
+              <text x="580" y="105" fill="currentColor" font-size="12" data-page-node-id="t1Q2XCQB6YlKatAK84WOX7">• BrickLink Studio (LEGO积木)</text>
+              <text x="580" y="135" fill="currentColor" font-size="12" data-page-node-id="3QZ1Q29laT4J1F8wNv4Y4M">• Blender (三维空间与材质)</text>
+              <text x="580" y="165" fill="currentColor" font-size="12" data-page-node-id="V497vmzfNgU5SgtHY45Qcl">• DaVinci Resolve (视频剪辑)</text>
+              <text x="580" y="195" fill="currentColor" font-size="12" data-page-node-id="aOQ1TeeLb3mZ2wxdDSqc6Z">• Web Runtime (可交互原型)</text>
+              <text x="580" y="235" fill="#2E8B57" font-size="11" font-weight="bold" data-page-node-id="KAA6LSFedEExk4xZz9Xfs5">成果保持独立对象，支持继续编辑</text>
+
+              <!-- 反馈回路 (自检与交还) -->
+              <path d="M 670 280 L 670 300 L 130 300 L 130 280" fill="none" stroke="#D97757" stroke-width="1.5" stroke-dasharray="4,4" data-page-node-id="yU3tSUQ5bUVPLvEp9TNqAD" />
+              <text x="400" y="312" text-anchor="middle" fill="currentColor" font-size="11" data-page-node-id="8QnUuYo60FnWQvTvYAxeJy">闭环交还：可操作实体初版 + 报告发现的问题与未解决事项</text>
+            </svg>
+          </div>
+          <div class="diagram-footnote" data-page-node-id="JZOU8CxLUYA8YdcKqlMBWN">
+            图注：GPT-6 Astra 使得人机分工重心转移。人类不再需要逐项规约操作细节，而是聚焦于成品目标、外部工具权限与验收终点的明确约定。
+          </div>
+        </div>
+      </section>
+
+      <!-- 经验一 -->
+      <section id="sec-lesson1" data-page-node-id="E57S02APWege7Lju1Z81s8">
+        <h2 data-page-node-id="KkqErxIDKiyUTQ2LYfsb13">2. 经验一：给它合适的工具，让作品能继续检查和修改</h2>
+        <p data-page-node-id="iO5OAceT6vv878HaKl9Wvz">
+          金门大桥的初版，是 Astra 配合两种工具做出来的：先了解 BrickLink Studio 自带零件库里有什么，用 Python 代码组装模型，再打开 Studio 查看效果、继续修改。代码负责批量生成，制作软件让它看见生成的东西是否合适。
+        </p>
+
+        <!-- 例解卡片 1 -->
+        <div class="visual-annotation-card" data-page-node-id="yqqe7AiqNit1TplO0SpuNa">
+          <div class="card-caption-bar" data-page-node-id="SRVLQzE5wnBSZ4kBeu8OIZ">
+            <span class="card-caption-title" data-page-node-id="SGKOJBItcqIShqHdg6M9rW">📌 案例核查：一句要求得到的模型具体是什么样？</span>
+            <span class="card-caption-badge" data-page-node-id="pm8J51K7xg23CtMw6DJ9Mq">BrickLink Studio 实证</span>
+          </div>
+          <div class="card-body-desc" data-page-node-id="DQYDrrTdBHdDYiBngLwHnu">
+            作者给出金门大桥目标，并指定 Studio。金门大桥初版（配图后来加上棚拍灯光的渲染）；桥面近景展示了车道、小车与积木精密连接细节。约十分钟取得初版，后续继续打磨。
+          </div>
+        </div>
+
+        <p data-page-node-id="t144iDRc4JjyT9GE7jKIRd">
+          Kundel 拿到了能在 Studio 中打开检查的积木模型，桥面近景还可以看到车道和小车。全景图采用了后来设置的棚拍灯光；约十分钟指取得初版，后面还要打磨。看到代码和软件配合得这么自然，他甚至开始重新判断：这件事由自己亲手操作，还会不会更快？
+        </p>
+        <p data-page-node-id="IqtP8K9IvlgNnElsoGinJk">
+          这让“交给 AI 做”有了更实际的含义。它可以在一个地方制作，到另一个地方检查，再把各部分合起来。选择工具时，可以从你自己会用什么软件想起：做 LEGO 用 Studio，做三维用 Blender，剪视频用 DaVinci Resolve 一类专用软件。有合适的剪辑软件时，也不必把全部视频处理都限制在 FFmpeg 命令里。
+        </p>
+        <p data-page-node-id="Ds49pD7BYRCSSLN73uJGFb">
+          三维房间重建把这种工作方式表现得更清楚。Kundel 给了 Astra 十张随手拍的家庭酒吧照片，没有提供测量尺寸。Astra 借照片中的调酒书等参照物估算尺度，在 Blender 这款三维制作软件中，逐个建立物件、单独检查，再放进同一个场景继续调整。它既能操作软件界面，也能使用命令行。
+        </p>
+
+        <!-- 例解卡片 2 -->
+        <div class="visual-annotation-card" data-page-node-id="nt5wixnp95hbhALahBj60Z">
+          <div class="card-caption-bar" data-page-node-id="VDn1xP4G6Llo1eLYG1kf3s">
+            <span class="card-caption-title" data-page-node-id="cIP513WVdCjZMBV8DyXDoI">📌 案例核查：重建房间里哪些对象保留了空间关系？</span>
+            <span class="card-caption-badge" data-page-node-id="42XGKneKxzB1edfUbNTnLZ">Blender 场景重建</span>
+          </div>
+          <div class="card-body-desc" data-page-node-id="E3ypQApBKUtHRgOppfGiQZ">
+            由十张照片重建的家庭酒吧：吧台、座椅、壁架、灯具与瓶杯处在同一三维场景中。房间里有家具、壁架、酒瓶和玻璃杯，连角落的椅子与零散电线也得到处理。把这些东西保留为独立对象，意味着修改可以落到局部：椅子不合适就改椅子，灯光不合意就调灯光。Kundel 后来继续修改材质和灯光，也能打开场景，从不同角度查看。
+          </div>
+        </div>
+
+        <!-- 边界提示 -->
+        <div class="boundary-callout" data-page-node-id="SvaCGJEN1nEfdCcNWeujLL">
+          <div class="boundary-header" data-page-node-id="JFmPSqau0mONYylEnvsUMr">
+            <span data-page-node-id="Twfp4rGejfFSmmpKuZWlyt">⚠️ 边界约束 (Boundary)</span>
+          </div>
+          <div class="boundary-content" data-page-node-id="8x776YjkrvzICG9IlMcKC1">
+            这次重建靠照片参照估算比例，视觉上接近原房间不等于精确测量复原。在需要工程级精度的几何工程中不可直接替代激光雷达或工业测绘。
+          </div>
+        </div>
+
+        <p data-page-node-id="RsGHeMJWFWtKJIK5HufAKB">
+          即使最终作品要放在网页里，部分三维内容也可以先在 Blender 中制作。对用户而言，工具选择会影响拿到的是怎样的成果：能否打开检查，能否继续修改某个物件，能否把它接进后续工作。
+        </p>
+      </section>
+
+      <!-- 经验二 -->
+      <section id="sec-lesson2" data-page-node-id="RnBCFhOrkM2Y6SEcOPyP5Q">
+        <h2 data-page-node-id="iWY7PKQeMte6I1Pqq0hApG">3. 经验二：你说清要做什么，操作细节可以让它补</h2>
+        <p data-page-node-id="pBzqTfsDhzKGZYzA1Mvehh">
+          工具让 Astra 有条件动手，需求则决定它朝什么方向做。Kundel 想做 Thumbnail Studio，一个用来制作创意素材的浏览器图像编辑器。他用口述交代想法，让模型参考与同事的交流。
+        </p>
+        <p data-page-node-id="J4CoOp07QTcy8J9PrnUv50">
+          视频里的输入其实给了不少背景：Slack 里的讨论、网站代码库、品牌指南，以及上传背景图、重排元素、使用模板等主要能力。他还要求界面保持简洁。表达可以随意，用途、参考和重要要求仍然要讲清楚。
+        </p>
+        <p data-page-node-id="1muCeikbfqc3VzAAaPrrTY">
+          Astra 补出的是未被逐项规定的操作细节，例如撤销快捷键、图层，以及隐藏图层的能力。这些是图像编辑器应当怎样被人使用的判断。
+        </p>
+
+        <!-- 例解卡片 3 -->
+        <div class="visual-annotation-card" data-page-node-id="EqHBeRqZPrT918GBXMZCK5">
+          <div class="card-caption-bar" data-page-node-id="UF9b5W2FEX8bzOVxNTDnYs">
+            <span class="card-caption-title" data-page-node-id="qPQxpn2UkcnFaFeVDqQLPh">📌 案例核查：图像编辑器如何从初版变成能反复修改的工具？</span>
+            <span class="card-caption-badge" data-page-node-id="2k1Jn2zy1vAX8DUcV2TFq2">Thumbnail Studio 迭代</span>
+          </div>
+          <div class="card-body-desc" data-page-node-id="MfCZ2ec9EYFEeG4SqfSSyh">
+            22 秒：从口述需求到 Thumbnail Studio 初版。继续迭代后的 Thumbnail Studio：左侧编辑与图层，中间画布，右侧缩略图预览与反馈。
+          </div>
+        </div>
+
+        <p data-page-node-id="ZZ2Wlg5by1iCqTJ3RKsp6e">
+          对想给自己做专用软件的人，这种分工很有用：先说明工作中要解决什么问题、希望软件接近什么样子，拿到可操作的版本后再试用，决定保留什么、修改什么。每个按钮怎样响应，不必都在动手前写成完整规格。
+        </p>
+        <p data-page-node-id="t1BaM9Tvl7q3aitPzlkFx4">
+          <a href="https://gpt-6-astra-bricks.openai.chatgpt.site/" data-page-node-id="WDnHlfjfmHxB7NubFSM3od">LEGO 模型展示站</a>体现了更进一步的产品考虑。Kundel 要求访客能三维浏览模型、下载搭建文件，Astra 还补了上传新模型的界面。按他的描述，这个管理入口用 Sign in with ChatGPT 限制为他本人使用。
+        </p>
+
+        <!-- 例解卡片 4 -->
+        <div class="visual-annotation-card" data-page-node-id="5UsKqIzZOAq7kYWtg94Bv2">
+          <div class="card-caption-bar" data-page-node-id="THW0HuCyFT6kfFsuZTDj4n">
+            <span class="card-caption-title" data-page-node-id="K8BHGOcIKqATtB8HGujTYh">📌 案例核查：模型站实际怎样呈现三维作品？</span>
+            <span class="card-caption-badge" data-page-node-id="yRgtyinG3Byzciw9O9G3DY">Web 3D + 权限设计</span>
+          </div>
+          <div class="card-body-desc" data-page-node-id="lo3NTwZkNG2n0FVG6bC77p">
+            26 秒：从作品集合进入模型详情，查看不同角度的 LEGO 造型。上传与管理入口解决了网站以后如何继续添加作品、由谁维护的问题。模型考虑的不只是一位访客眼前看到的页面，还包括作者后续怎样使用这套软件。
+          </div>
+        </div>
+
+        <p data-page-node-id="9uH1kGaxdNSCm9hsDB8zQ0">
+          不过，具体审美仍要由人给方向。为了得到心中的太空主题，Kundel 继续提供参考，并明确要求可交互、会旋转的行星。已经确定的功能和视觉要求，要直接告诉它；可以交出去的是你愿意让它判断的细节。
+        </p>
+      </section>
+
+      <!-- 经验三 -->
+      <section id="sec-lesson3" data-page-node-id="5Fto5A8uiIIubo7K5bmZPK">
+        <h2 data-page-node-id="DJRABjmwzX1nSjdxlQOY5e">4. 经验三：拿到初版后，围绕具体结果反复修改</h2>
+        <p data-page-node-id="HfdjxYy9mglPkDEe6i43yf">
+          初版把想法变成了可以指出问题的对象。下一轮反馈可以具体到一个按钮、一块画面或一段动画，用户不用仅靠文字设想最终效果。
+        </p>
+        <p data-page-node-id="Q5FGIE7g2uBmEf5fKNNdjr">
+          Kundel 后来要求加入“产品反馈模式”，并设置定期查看、排序和实施反馈的自动化。Astra 为这个方向补全了界面：选中应用中的位置，把评论固定在那里，设置优先级、编辑反馈，再标记问题已解决。
+        </p>
+
+        <!-- 例解卡片 5 -->
+        <div class="visual-annotation-card" data-page-node-id="twM3YgRPMwCFYAaj4Nv5WF">
+          <div class="card-caption-bar" data-page-node-id="4PMiA9fsxDLjiadM8XmmIE">
+            <span class="card-caption-title" data-page-node-id="aTpgcS60VEPoaS7Bso5C7t">📌 案例核查：反馈如何绑定到具体的界面位置？</span>
+            <span class="card-caption-badge" data-page-node-id="75RuHWzKgJAP4Ev0fHoGHU">位置标注 Pin & 自动化</span>
+          </div>
+          <div class="card-body-desc" data-page-node-id="LbwktAgYadE8rNcqSJ3pdO">
+            22 秒：选中界面位置、添加评论、设置优先级，并查看反馈状态。用软件时发现的问题就能留在对应位置。下一轮要改哪里、先处理哪条、哪些已经处理过，都有明确对象。原演示展示了这些界面操作；定期处理是作者提出的自动化要求。
+          </div>
+        </div>
+
+        <p data-page-node-id="bu1LvQ6EA5gunSABEAu1wb">
+          动画案例进一步说明了参考与反馈怎样配合。Kundel 喜欢 Nick Baumann 的动画风格，就把带有截图和上下文的 Appshot、正在写的文章，以及 Codex 应用代码的访问权限交给 Astra。
+        </p>
+        <p data-page-node-id="UwDkYNGaJbtMtFt9CHSItF">
+          原图中的要求还很具体：先给出两个动画方案，方便他反馈；其中一个要说明，AI 用鼠标点击界面，与直接调用专用工具做事有什么区别。作者已经指定了动画要解释的内容。
+        </p>
+
+        <!-- 例解卡片 6 -->
+        <div class="visual-annotation-card" data-page-node-id="e3xc2hVDLJiJVo8eZpwGMh">
+          <div class="card-caption-bar" data-page-node-id="pZd5bKaMo5hHEcR5KSEotX">
+            <span class="card-caption-title" data-page-node-id="xqnUfTWKOJ4YeqiL5KwOKY">📌 案例核查：用户给了哪些方向，让动画可以自主展开？</span>
+            <span class="card-caption-badge" data-page-node-id="5YQDTkF79yuLJpGoru6SDm">双方案对比与原语解释</span>
+          </div>
+          <div class="card-body-desc" data-page-node-id="u9nx28HSCJd4se6J4CBQx4">
+            动画需求同时附上参考画面，并说明希望解释的三维操作场景。Astra 读懂文章中的三维演示，重建可动画化的界面，补上构图、镜头角度和解释文字。它还额外做了一个预览工具，让 Kundel 播放、暂停、重复观看，并从不同角度检查，再用内置浏览器的标注工具指出问题。
+          </div>
+        </div>
+
+        <!-- 例解卡片 7 -->
+        <div class="visual-annotation-card" data-page-node-id="fryh4TgMTUqWE6fFq63OiE">
+          <div class="card-caption-bar" data-page-node-id="nmOX0iZFsisI2eKXAm7zxj">
+            <span class="card-caption-title" data-page-node-id="QNHoxrJm9YY5Nex9y9k6a2">📌 案例核查：预览工具如何帮助改出下一版动画？</span>
+            <span class="card-caption-badge" data-page-node-id="vRJjZnsMoa9eqKyAKTbOj2">双窗口并排对照</span>
+          </div>
+          <div class="card-body-desc" data-page-node-id="a7uVms1hRfoPSWVo8tpYDy">
+            32 秒：动画预览工具、首版与发表版本；左右对照体现后续迭代。首版以单个建模窗口配合对话呈现，发表版把两个建模窗口并排摆放，下方各有说明区。两种操作方式放在同一画面里，区别更容易对照。预览工具的价值，也在于让人看着实际的呈现方式继续提要求。
+          </div>
+        </div>
+
+        <p data-page-node-id="YRdOL8ql7rFWIzeMBitAnu">
+          连准备这段对照视频的材料，也被交进了任务。Kundel 让 Astra 从旧对话找回早期动画，在桌面找录屏，再从 X 文章取回最终版本；它找到这些材料并合成了视频。他可以说明想得到什么结果，让模型处理已给定位置中的查找与整合，减少逐个定位文件的准备工作。
+        </p>
+      </section>
+
+      <!-- 经验四 -->
+      <section id="sec-lesson4" data-page-node-id="wWtaiHhSWFYIt5PPVe9lv1">
+        <h2 data-page-node-id="pGaIA5aYuqWvuTKmM3GFgn">5. 经验四：从简单配置开始，按成品调整指导和推理档位</h2>
+        <p data-page-node-id="7y4hkiX31xj6r03hHZLMoa">
+          看到这些成品后，另一个习惯值得重审：以前为了让模型做好工作而加上的指导，新模型还需要多少？
+        </p>
+        <p data-page-node-id="NDPNFErub4Qv8Cr1tFbAqO">
+          团队让 Astra 剪发布视频时，一些为早期模型编写的 Skill 反而妨碍了它；在那个任务上，去掉视频编辑 Skill 的简单配置表现更好。如果某份 Skill 主要用来补旧模型的短板，可以在同一任务上比较不用它的结果，再决定是否保留。
+        </p>
+        <p data-page-node-id="LhasVH7fNKagHUkZFoQGSZ">
+          推理档位也适合这样试。Low、Medium、Max 等档位表示不同推理强度。Kundel 在部分 Blender 实验中，更喜欢 Astra 在 Low 档位做出的结果，而非另一模型 GPT-5.6 Sol 在 Max 档位做出的结果。他还注意到，Astra 在较低档位也会认真检查工作。
+        </p>
+
+        <!-- 例解卡片 8 -->
+        <div class="visual-annotation-card" data-page-node-id="CenxSRwsvkpF7ZlgVVoaPl">
+          <div class="card-caption-bar" data-page-node-id="DKmYVbIS0G8sBntSM0Kxm4">
+            <span class="card-caption-title" data-page-node-id="rjNXpyzeBCZA4X4YFuJ36Z">📌 案例核查：两个模型在不同档位上的造型怎样变化？</span>
+            <span class="card-caption-badge" data-page-node-id="l3W6zn2R45AMnxuv2xdCE3">Model Observatory 对照</span>
+          </div>
+          <div class="card-body-desc" data-page-node-id="V4Gr4qcZ10EqNwXGSI9ckj">
+            18 秒：上排 Sol、下排 Astra；每排从左到右是 Low、Medium、High、Extra high、Max，轮换三个建模题材。视频把 Sol 放在上排、Astra 放在下排，每排从左到右按推理档位排列，并轮换角色、建筑和房间三个题材。可以观察同一题材的造型、构图和细节，比较哪种结果更接近自己的要求。
+          </div>
+        </div>
+
+        <!-- 边界提示 -->
+        <div class="boundary-callout" data-page-node-id="n4Rq4sFTuqt6oOG1gjOdgo">
+          <div class="boundary-header" data-page-node-id="ZHyYD1MFRlES5ZwzvP5OxB">
+            <span data-page-node-id="lFbcAtaOgGzw2JoYk2wM4e">⚠️ 边界约束 (Boundary)</span>
+          </div>
+          <div class="boundary-content" data-page-node-id="F8OfKiS2xKRaIzYDyaF3oJ">
+            这是作者对部分建模成品的偏好，没有统一评分或成功率，不能推出 Astra Low 在所有任务上都强于 Sol Max。
+          </div>
+        </div>
+
+        <p data-page-node-id="ouudlR1GWgGDto508PTYjT">
+          实际尝试可以从 Low 或 Medium 开始，先做一轮，再向高或低两个方向调整。Kundel 提供的 <a href="https://observatory.openai.chatgpt.site/" data-page-node-id="ODAQ4TjAGAzyXH5lWhYW14">Model Observatory</a> 也能作为查看更多比较的入口。旧 Skill 和最高推理档位都不必自动沿用；是否需要更多指导和推理，应回到具体任务与成品上判断。
+        </p>
+
+        <!-- 矢量折线图 2：指导复杂度与推理效益模型 -->
+        <div class="diagram-container" data-page-node-id="486vAJZNxKjAIFUEKERKxl">
+          <div class="diagram-header" data-page-node-id="cgazlWUmu9LEHBg9IBKcnz">
+            <div class="diagram-title" data-page-node-id="3j1sRORDDy4X95ZCjbv0Aa">
+              <span data-page-node-id="032KAL3kYoMzTBAKAi5Muo">📈 架构图 2：指导约束注入量与新模型实效倒挂曲线 (Skill Overhead Curve)</span>
+            </div>
+            <span class="diagram-tag" data-page-node-id="68p0Ih1qtd6azKbHuetpgD">MODEL-EFFICIENCY-V1</span>
+          </div>
+          <div class="svg-wrapper" data-page-node-id="VgOSxzRxsJhCYt3sc38aL8">
+            <svg class="diagram-svg" viewBox="0 0 800 280" width="800" height="280" xmlns="http://www.w3.org/2000/svg" data-page-node-id="AO8sVePscI8xM1MPUMO5jA">
+              <!-- 坐标轴与背景网格 -->
+              <line x1="80" y1="230" x2="740" y2="230" stroke="var(--border-medium)" stroke-width="1.5" data-page-node-id="2GR73sybfGF1AOZ1zADLiD" />
+              <line x1="80" y1="40" x2="80" y2="230" stroke="var(--border-medium)" stroke-width="1.5" data-page-node-id="kJpUGKAkWfp5I01rMGnpef" />
+              <!-- Y 刻度 -->
+              <text x="70" y="50" text-anchor="end" fill="var(--text-tertiary)" font-size="11" data-page-node-id="QILHyPHy0sZV5wlBTml0Z5">100%</text>
+              <text x="70" y="140" text-anchor="end" fill="var(--text-tertiary)" font-size="11" data-page-node-id="645fersVxHkJH7PTFX7BSc">50%</text>
+              <text x="70" y="230" text-anchor="end" fill="var(--text-tertiary)" font-size="11" data-page-node-id="d2c3ykZLkVS6eK7TgdvyGF">0%</text>
+              <!-- X 刻度 -->
+              <text x="80" y="250" text-anchor="middle" fill="var(--text-tertiary)" font-size="11" data-page-node-id="wXNA4HGAzMLP0aBd6PN2W9">0 (原生自由)</text>
+              <text x="245" y="250" text-anchor="middle" fill="var(--text-tertiary)" font-size="11" data-page-node-id="Citx6VzrhvBzicszxXOSuq">10 (轻量约束)</text>
+              <text x="410" y="250" text-anchor="middle" fill="var(--text-tertiary)" font-size="11" data-page-node-id="0EX9CkiTeiaEvIxvlOhBy4">20 (旧版Skill)</text>
+              <text x="575" y="250" text-anchor="middle" fill="var(--text-tertiary)" font-size="11" data-page-node-id="Di59Gc0F0ajoZJ2QuvtQQc">30 (繁杂规约)</text>
+              <text x="740" y="250" text-anchor="middle" fill="var(--text-tertiary)" font-size="11" data-page-node-id="RJiFaURtuLD0wuKhNdijod">40 (过度微观约束)</text>
+              <text x="410" y="272" text-anchor="middle" fill="var(--text-secondary)" font-size="12" data-page-node-id="PsBYEe1zEZoVFvAyMer534">人为预置规则条数 (Skill/Prompt Overhead)</text>
+
+              <!-- 旧模型效果曲线 (虚线，需要大量规则补短板) points x: 80, 245, 410, 575, 740 (dx=165) -->
+              <polyline points="80,210 245,170 410,120 575,95 740,90" fill="none" stroke="var(--text-tertiary)" stroke-width="2" stroke-dasharray="5,5" data-page-node-id="rF5BLKgzOZvT5kizoMJiaE" />
+              <text x="680" y="110" fill="var(--text-tertiary)" font-size="11" data-page-node-id="abzE495TTH6iUxzQp5ba5J">旧一代模型 (依赖规则兜底)</text>
+
+              <!-- Astra 效果曲线 (实线，极简高位，过约束后倒挂) points x: 80, 245, 410, 575, 740 (dx=165) -->
+              <polyline points="80,60 245,55 410,95 575,155 740,195" fill="none" stroke="#D97757" stroke-width="3" data-page-node-id="rEVlVLNE3RmVpqws9ZaZNz" />
+              <circle cx="80" cy="60" r="4" fill="#D97757" data-page-node-id="8NpF6tPGOnuqpPfueaCbrr" />
+              <circle cx="245" cy="55" r="4" fill="#D97757" data-page-node-id="aYPcqwBC734cMASI8oXall" />
+              <circle cx="410" cy="95" r="4" fill="#D97757" data-page-node-id="rvACEWQBPI2kzTh9klzNNT" />
+              <circle cx="575" cy="155" r="4" fill="#D97757" data-page-node-id="C4p2jlRZRN20EgQthWLHIj" />
+              <circle cx="740" cy="195" r="4" fill="#D97757" data-page-node-id="zHchZ4s0vt39ndy0vNzr8O" />
+              <text x="250" y="42" fill="#D97757" font-weight="bold" font-size="12" data-page-node-id="KRQv4pBjFdG1DPEJ0EXfqO">GPT-6 Astra 黄金工作区 (去旧Skill，保留方向)</text>
+              <text x="580" y="145" fill="#C53030" font-size="11" data-page-node-id="azjHLYfrv3Rn9JrR7wDklF">规则束缚负优化区 (如剪视频被旧Skill限制)</text>
+            </svg>
+          </div>
+          <div class="diagram-footnote" data-page-node-id="m0HcBZyqGHpjXsZ42P90Ok">
+            图注：数据映射严谨对齐。对 GPT-6 Astra，过度针对旧模型缺陷设计的微观规约反而切断了模型自主规划的最优路径，从极简配置（Low/Medium 档）起步往往更高效。
+          </div>
+        </div>
+      </section>
+
+      <!-- 经验五 -->
+      <section id="sec-lesson5" data-page-node-id="EwNBmq6o4IwBRhyZyHSKuc">
+        <h2 data-page-node-id="VTy4xmfMgcpuG4BsBuLnzd">6. 经验五：让它检查实际效果，并约定何时交还</h2>
+        <p data-page-node-id="nOp8BsBjDYUmxRNVD8QT0t">
+          放手让模型实施以后，最后要明确的是：怎样判断它完成了任务，检查到什么程度就该交回来。
+        </p>
+        <p data-page-node-id="KVZeM8n908BZbF94nhWgYy">
+          Kundel 观察到，Astra 做游戏时可能开始试玩，做优化时可能搭建环境测量效果，处理视频时可能查看单帧画面或声音波形。检查会落到作品的实际表现上。
+        </p>
+        <p data-page-node-id="G4RU6kfLCtGRZ3WUdTPkEF">
+          封面演示给了一个更具体的过程。Astra 注意到，自己上一轮虽然修好了裁切，却让预览比例变得过高。搜索得到的信息指向 5:2，但 X 帮助页没有给出尺寸，于是它继续核对实际文章页的代码，确认当时的比例为 5:2、尺寸为 1200 × 480 像素，并说明要按此调整比例与居中，让主体完整显示。
+        </p>
+
+        <!-- 例解卡片 9 -->
+        <div class="visual-annotation-card" data-page-node-id="Fc3cqEkgb9DmcLHXHsUSWC">
+          <div class="card-caption-bar" data-page-node-id="SFwrnHKklTwHb9yT4Y7zkl">
+            <span class="card-caption-title" data-page-node-id="4DXRE1bBmd49kn70X3KaER">📌 案例核查：Astra 怎样确认封面符合使用位置？</span>
+            <span class="card-caption-badge" data-page-node-id="KjUJh7P6mnhAsVXptq9AuY">跨源码自检 1200×480 px</span>
+          </div>
+          <div class="card-body-desc" data-page-node-id="XWNq4Qh7dYRVpQ3TR4IENo">
+            6 秒：Astra 为封面确认 X 文章的显示比例与尺寸。这次检查追问了两件事：原来的裁切问题是否解决，刚才的修改是否又引入了比例问题。成品将要使用的实际页面，给了它纠正自己改动的依据。
+          </div>
+        </div>
+
+        <p data-page-node-id="KVscEwIxHNVCIY0NBodAkd">
+          检查也需要终点。只想要一个自己试玩的原型，就说明先做到可玩版本；希望模型完整玩一遍并修复问题，就把这轮工作交代进去。还可以约定：按你关心的项目检查一轮，报告发现的问题和仍未解决的事项，然后交还。
+        </p>
+        <p data-page-node-id="8EQZ3WVQdn8Fox8rs4sMQF">
+          把这些经验用到自己的任务里，可以交代下面几件事：
+        </p>
+
+        <!-- 交代清单表格 -->
+        <div class="table-container" data-page-node-id="4MO0GseSb11yMaaYzr3Pn5">
+          <table data-page-node-id="9AgSsCM9eJ1ZCYJBwCTEqe">
+            <thead data-page-node-id="Pakyyc2b4HPSKVG41UxNzH">
+              <tr data-page-node-id="kmN1fcN1f323Cd6DZRKdst">
+                <th style="width: 25%;" data-page-node-id="F7aJslJwPkyoMW7no7o0CE">交代什么</th>
+                <th style="width: 75%;" data-page-node-id="Nmr7GXApEreijUgXEOgP4l">交代到什么程度</th>
+              </tr>
+            </thead>
+            <tbody data-page-node-id="PHNegDKV8s5tPXtadYiV94">
+              <tr data-page-node-id="it8noD2shJRAiC5RYMMlcx">
+                <td data-page-node-id="9PRRDuOnNpFDV1QRh5wy7I"><strong data-page-node-id="Tnm02GTPMgBXZyFX49RH8b">成品目标</strong></td>
+                <td data-page-node-id="fafwBll0fipwAxUtgbJnC4">要得到什么可打开、可运行或可编辑的结果（如能在 Studio 打开的 .io 积木文件，能在浏览器运行的单页 HTML，能在 Blender 调整的 .blend 场景）</td>
+              </tr>
+              <tr data-page-node-id="pFLaMrKOqyOgj8OYUy7fk3">
+                <td data-page-node-id="QEA7LFTbGHVjuypREUekp2"><strong data-page-node-id="DGo09KDyf8Q9qai5AZmjjz">工具与参考</strong></td>
+                <td data-page-node-id="gMBfEqt39PUDBP7I19D1fR">可以使用的制作软件、材料位置（Slack 历史、代码库、随手拍照片），以及希望接近的样例（如 Nick Baumann 动画风格、品牌调性指南）</td>
+              </tr>
+              <tr data-page-node-id="IH5CaDo2JdKAkITdNOLIdD">
+                <td data-page-node-id="TNtaewwm6gu3HJtqjtIL5o"><strong data-page-node-id="7zs2shS1XUsHtIkgrud30b">明确要求</strong></td>
+                <td data-page-node-id="fs75G9NdOYXNcZ6bDKGtuf">已经确定的功能、视觉方向和不应自行扩展的范围（如太空主题必须带旋转行星、管理入口必须带权限隔离、界面保持简洁）</td>
+              </tr>
+              <tr data-page-node-id="n23HcnXAOTYv1cDFUKmJ73">
+                <td data-page-node-id="dM4H6MOiGP42yDEqgW6Jun"><strong data-page-node-id="QS2X73oj7VoYMeUQcBX8mq">检查与交还</strong></td>
+                <td data-page-node-id="3Mmr6mSHkC5dWQjenydhD8">希望验证哪些地方（比例/自适应/单帧波形/游戏试玩），完成哪一轮后报告结果与未解决问题，按什么条件交还人类介入</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p data-page-node-id="EoLlr6cvTkWITEB1UBcaIw">
+          Kundel 最后的建议，是重新拿出一项曾经让你放弃的任务。给 Astra 合适的工具、参考和完成标准，从低或中等推理档位开始，先看它能做到哪一步，再补指导。这次尝试既是在检验模型，也是在重新判断：哪些准备、制作和检查工作，已经值得交给它。
+        </p>
+      </section>
+
+      <!-- 交互沙盘 1 -->
+      <section id="sec-sandbox1" data-page-node-id="AkUZCNUEcorV91ts5cAVZu">
+        <h2 data-page-node-id="LAOclCFWCV57BFg2FoT9vr">7. 沙盘一：任务交代四要素配置器与职责边界矩阵</h2>
+        <p data-page-node-id="tXZxhwuoSzHZMIQuZHLuYB">
+          本沙盘基于 Dominik Kundel 的四要素任务规约框架。选择典型工程场景或调节需求确定性，实时反解人机分工矩阵：看哪些职责由人死死锁住，哪些微观细节放手让 Astra 自主填补。
+        </p>
+
+        <div class="sandbox-box" data-page-node-id="zbFctgGxvQmTbrUNkGzw9v">
+          <div class="sandbox-topbar" data-page-node-id="dyockO9TrYPQWwToGQBDIV">
+            <div class="sandbox-heading" data-page-node-id="0cz8mMDd6kWzHu670DOAEO">
+              <span data-page-node-id="SNyGgi6rrjZl4OGXsOhrPT">🎛️ 任务四要素装配与人机职责反解沙盘</span>
+              <span class="sandbox-badge" data-page-node-id="SwL61luFTymRQkvAWPgouQ">Interactive</span>
+            </div>
+            <span style="font-size: 0.8rem; color: var(--text-tertiary);" data-page-node-id="OeeWyiJwZFnFigCWBcZnGS">DELEGATION-MATRIX-SIM</span>
+          </div>
+
+          <div class="sandbox-layout" data-page-node-id="L4Vl7mD3CnQPudJkWj65yD">
+            <!-- 左侧控制面板 -->
+            <div class="control-pane" data-page-node-id="jFzRBuPQMekkRpVMc1KNZx">
+              <div class="ctrl-group" data-page-node-id="XXhnyx1YCU9yhMh2fKkpOO">
+                <div class="ctrl-label-row" data-page-node-id="XfMgGvY2cd1GVl8HdXqmNl">
+                  <label for="sel-scenario" data-page-node-id="U22rUi1I05LUSDMcLD4yR4">典型任务场景预设：</label>
+                </div>
+                <select id="sel-scenario" data-page-node-id="7ZNL75WrUcSm1LHeji8mbW">
+                  <option value="lego" data-page-node-id="adE0bZXQIKRuwHhPP4xFSo">1. LEGO 数字积木建模 (金门大桥)</option>
+                  <option value="blender" data-page-node-id="kTGCZHbHHh9NlZQkz7LRH8">2. Blender 空间三维重建 (家庭酒吧)</option>
+                  <option value="image-tool" data-page-node-id="SPT3qkXnkuZxhCuMzEA2Zz">3. 浏览器专用图形工具 (Thumbnail Studio)</option>
+                  <option value="anim" data-page-node-id="0iVFxIbRq4g0IVBOqguEFB">4. 三维交互解释动画 (Nick Baumann 风格)</option>
+                  <option value="cover" data-page-node-id="KLgcaFCqUlCqMdCAKFQ9Ft">5. 多平台响应式封面自愈 (X 5:2 文章封面)</option>
+                </select>
+              </div>
+
+              <div class="ctrl-group" data-page-node-id="rFp29iubp5mF917Q1dSk8E">
+                <div class="ctrl-label-row" data-page-node-id="ZtCvVtV5qPhWEPYWUSwhTM">
+                  <label for="range-ambiguity" data-page-node-id="tAD9uhrYEZQGqXBtWE2MGN">需求明确度与人工约束权重：</label>
+                  <span id="val-ambiguity-text" class="ctrl-val-badge" data-page-node-id="cuuFUy9CfTA6c0rEqIJm5P">中等明确 (允许自主扩充)</span>
+                </div>
+                <input type="range" id="range-ambiguity" min="1" max="3" step="1" value="2" data-page-node-id="mgjFPXkRJdBejHwhb0H9lo">
+              </div>
+
+              <div class="ctrl-group" data-page-node-id="rOdBRf6ZFYL3KDu2Kb9TKY">
+                <div class="ctrl-label-row" data-page-node-id="c6vmoptdUX2xqAiFkBqU3h">
+                  <label for="sel-toolchain" data-page-node-id="U1rm70agFKE6D5EvTlEHSu">配套环境与工具链绑定：</label>
+                </div>
+                <select id="sel-toolchain" data-page-node-id="v6L7bGlWNU6D70YdeZJG24">
+                  <option value="gui-sdk" data-page-node-id="DLRgfEPF1Ohd8BvI3UNKhe">专用制作软件 GUI + Python 自动化组装</option>
+                  <option value="cli-only" data-page-node-id="qH3ygAe26gGtoYa81Ho5Xx">纯命令行环境 (CLI / FFmpeg / 纯脚本)</option>
+                  <option value="browser-inspect" data-page-node-id="QuSyTE0Xsj5p4b3SVRntko">浏览器沙箱 + DOM 源码嗅探器</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 右侧回显面板 -->
+            <div class="display-pane" data-page-node-id="1REWyHu4Oyxy36sO9NMO6U">
+              <div class="res-card" data-page-node-id="bUCWvMgbHpBTFfzWG1Yska">
+                <div class="res-label" data-page-node-id="zms9PGtIoZPD97uTnuRmMM">🎯 成品目标规格 (Deliverable)</div>
+                <div id="out-task-goal" class="res-content" data-page-node-id="ECE7gITIEx21tCqTXwmPkQ">可直接在 Studio 中打开、带有车道和小车可拆卸局部对象的 3D 积木模型 (.io / .ldr)</div>
+              </div>
+
+              <div class="res-card" data-page-node-id="gv4tttpj631i7gCzTUfXyz">
+                <div class="res-label" data-page-node-id="F2vG7DSHtDTNaE6P0PngfG">🧰 外部工具与输入参考 (Tools & Context)</div>
+                <div id="out-tools-ref" class="res-content" data-page-node-id="ft4UBn0RfWtVIFgJHEplWy">BrickLink Studio 零件库 API + Python 代码组装管道 + 金门大桥整体形态口述目标</div>
+              </div>
+
+              <div class="res-card" data-page-node-id="dKnZTkNJHxJQAkZSyIsYY1">
+                <div class="res-label" data-page-node-id="SDbpFAFeRQL0KT6vqoPKv8">🔒 人类明确要求 (Locked by Human)</div>
+                <div id="out-human-specs" class="res-content" data-page-node-id="M18AvXOAS9RhW902AT59Vm">目标结构为金门大桥、桥面需包含车辆车道、指定使用 Studio 软件、无需手工写步骤</div>
+              </div>
+
+              <div class="res-card" data-page-node-id="AsYZi5QdJEJcqOtMRNmE0w">
+                <div class="res-label" data-page-node-id="vWGueTjhAhNLGrsBtMTfHq">🤖 Astra 自主补全空间 (AI Autonomy)</div>
+                <div id="out-ai-autonomy" class="res-content" data-page-node-id="YzL9PoFwKfP6Whhqye9GEJ">零件库选型匹配、结构支撑力平衡、桥墩比例、小车积木拼搭细节、批量装配 Python 脚本</div>
+              </div>
+
+              <div class="res-card" data-page-node-id="uetRQw7M9V9S8gDvpjeePi">
+                <div class="res-label" data-page-node-id="YEhyFfWG7x9bAM0arzUE0U">🏁 检查范围与交还条件 (Exit Criteria)</div>
+                <div id="out-inspect-exit" class="res-content" data-page-node-id="MrnVwNWK4QF9rAw91PlNRu">能在 Studio 中正常打开无碰撞破面，提供初版全景与近景，汇报异常零件后交还人类继续修改</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="out-sandbox-verdict" class="sandbox-footer-verdict" data-page-node-id="o41rXiER2utD7iX3l2gHRU">
+            💡 <strong data-page-node-id="lS4yubqtNvafgo1TczQZt2">工程落地建议</strong>：给予外部专用制作工具能让 AI 自检成品的物理属性。省下繁文缛节的操作细节规约，聚焦在成品格式与交还条件上。
+          </div>
+        </div>
+      </section>
+
+      <!-- 交互沙盘 2 -->
+      <section id="sec-sandbox2" data-page-node-id="Tbjer7zPXtuKjBghOCoLMf">
+        <h2 data-page-node-id="vbfGFe50AChjSxJePrDQNU">8. 沙盘二：推理档位与规则指导负担权衡模拟器</h2>
+        <p data-page-node-id="MgnmkLDUJCN0cIORrscsW7">
+          模拟 Dominik Kundel 的关键反思：以前为旧模型修补短板的复杂 Prompt / Skill，在新模型上是否成了负累？调节旧规则条数与推理档位，观察生成效率与负优化风险。
+        </p>
+
+        <div class="sandbox-box" data-page-node-id="ZHv2FsrJLvKsGVjnJppLP7">
+          <div class="sandbox-topbar" data-page-node-id="gToYDg6t6FP7wBB2aU525C">
+            <div class="sandbox-heading" data-page-node-id="s8eIGPMrb2UtByX71SL74a">
+              <span data-page-node-id="ET8BJjEBO4563ovokGEGW3">⚖️ 推理强度与指导开销模拟器 (Reasoning vs Skill Overhead)</span>
+              <span class="sandbox-badge" data-page-node-id="eBUZ4ZgNForNfEa4Mj3HNV">Simulation</span>
+            </div>
+            <span style="font-size: 0.8rem; color: var(--text-tertiary)" data-page-node-id="kipvSTSMl6VgSENMSuODRv">CALIBRATION-SIM-V1</span>
+          </div>
+
+          <div class="sandbox-layout" data-page-node-id="OJdFYzhofZ7RWuGXyvYF9k">
+            <!-- 左侧控制面板 -->
+            <div class="control-pane" data-page-node-id="CaL1HqF4NAQZgXal45Nfwo">
+              <div class="ctrl-group" data-page-node-id="pBLjDMM7fSTsx5MCKT5Qw4">
+                <div class="ctrl-label-row" data-page-node-id="0JBF7Rtd73U9OJoR4KJ0Pn">
+                  <label for="sel-reasoning" data-page-node-id="PQjRqQ3MbfWpqoWVSQynK9">模型推理档位 (Reasoning Effort)：</label>
+                  <span id="val-reasoning-badge" class="ctrl-val-badge" data-page-node-id="d2Aw4dMuK31iGERfvmad3I">Low (推荐探索起步)</span>
+                </div>
+                <select id="sel-reasoning" data-page-node-id="2K3SyvA1LEHIXqY9Gca6vQ">
+                  <option value="low" data-page-node-id="Vh4tseHCjzgtlTH5UleklL">Low (轻度推理 · 敏捷自检)</option>
+                  <option value="medium" selected data-page-node-id="QNaZ9j8uDsY0JKSBE83u10">Medium (平衡档位 · 兼顾规划与耗时)</option>
+                  <option value="high" data-page-node-id="N0X8is44n6XbpJfxoKsaig">High (深度长程推理)</option>
+                  <option value="max" data-page-node-id="3YHYUQxzbsFcA8LnvvYhR2">Max (极限推理 · 适合极难定理)</option>
+                </select>
+              </div>
+
+              <div class="ctrl-group" data-page-node-id="oBp3m2fMkPjB39CgFo3jwE">
+                <div class="ctrl-label-row" data-page-node-id="uDXDEn56IzFQN2pfRpWkTI">
+                  <label for="range-skills" data-page-node-id="cjGGPVozwQ7pM8vI1E1ioA">注入的人工预置规则 / 旧 Skill 条数：</label>
+                  <span id="val-skills-count" class="ctrl-val-badge" data-page-node-id="eHAU9KQ38tDlpDhA09I3XL">5 条 (轻量配置)</span>
+                </div>
+                <input type="range" id="range-skills" min="0" max="50" step="5" value="5" data-page-node-id="LJgTwfgiYmyEiF6TGmjMOi">
+              </div>
+
+              <div class="ctrl-group" data-page-node-id="X3b5zI6asNOGtRkVfZT2A1">
+                <div class="ctrl-label-row" data-page-node-id="CHErgek5qaBAUJ6knlK7Ir">
+                  <label for="range-complexity" data-page-node-id="oSwe7oUxGLczB9Eaar08b5">任务内在工程复杂度 (1-5 级)：</label>
+                  <span id="val-complexity-level" class="ctrl-val-badge" data-page-node-id="OmsckztraqLhxCTmyTW7yp">Lv 3 (专业创作应用)</span>
+                </div>
+                <input type="range" id="range-complexity" min="1" max="5" step="1" value="3" data-page-node-id="nZzCskbO7ed6AKRAJTwFi4">
+              </div>
+            </div>
+
+            <!-- 右侧回显面板 -->
+            <div class="display-pane" data-page-node-id="Q5GXJkcZI766LYBBTtup4d">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;" data-page-node-id="Z1RbH1AX8U6r6zFRvkuSq5">
+                <div class="res-card" data-page-node-id="fWJzxA5QuBWYJdUslaqQmh">
+                  <div class="res-label" data-page-node-id="s6f2smbCZgRQvbyR8z8E9C">⚡ 敏捷交付指数</div>
+                  <div id="out-speed-score" class="res-metric-val" data-page-node-id="lyv7FuIOhAIirFSDSJgpTn">88.5 分</div>
+                </div>
+                <div class="res-card" data-page-node-id="IoKL36hbrfUqGaESN1kh2E">
+                  <div class="res-label" data-page-node-id="uhXvIGjIfGDoXJFkhKK51I">⚠️ 规则束缚/冲突风险</div>
+                  <div id="out-conflict-risk" class="res-metric-val" style="color: var(--amber);" data-page-node-id="VAAwrY8XWXVUKlx1DMBTEn">12.0 %</div>
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;" data-page-node-id="YjBDST2M0qrg5awTO8eDFm">
+                <div class="res-card" data-page-node-id="6LkD9FGf98xOWGCppILZR0">
+                  <div class="res-label" data-page-node-id="iJ37LwtLqZ8jkIXZfbqAkg">🔍 自检与自愈深度</div>
+                  <div id="out-inspection-depth" class="res-metric-val" style="color: var(--cyan);" data-page-node-id="hAXAI968GSDsgRRmZaSd0Z">78.0 分</div>
+                </div>
+                <div class="res-card" data-page-node-id="sHGINrArqZ7nYGBmAJ8Mbr">
+                  <div class="res-label" data-page-node-id="iRwSGiKfgjeaGqiiJ5Sr9R">🎯 综合有效产出比</div>
+                  <div id="out-net-efficiency" class="res-metric-val" style="color: var(--emerald);" data-page-node-id="aTuGc799cUlpeDFGlup85U">84.2 分</div>
+                </div>
+              </div>
+
+              <div class="res-card" data-page-node-id="dLx315oX3wWEBAsc9EL342">
+                <div class="res-label" data-page-node-id="3rROqS6xvwX3gOnhoVVILA">📋 策略决策建议</div>
+                <div id="out-strategy-advice" class="res-content" data-page-node-id="BB5aHfJlsDXu00Oe8drF7x">当前处于轻量规则 + 中等推理的优质工作区。无明显旧规则妨碍，模型能够自主规划最优解。</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sandbox-footer-verdict" data-page-node-id="e24lBnZqPQlgQNA5LU6Jdt">
+            💡 <strong data-page-node-id="ElBjH8VQjn1j5fF5TrOVgE">实战法则 (Kundel's Rule)</strong>：不要自动沿用为前代模型编写的繁复 Skill 或盲目拉满 Max 推理。先以极简规则 + Low/Medium 档位拿初版，观察成品的实际表现再决定是否追加干预。
+          </div>
+        </div>
+      </section>
+
+      <!-- 落地行动清单 -->
+      <section id="sec-checklist" data-page-node-id="AHsrunIjmkxLtn9XHApOeT">
+        <h2 data-page-node-id="jyJQHGAVdXd6H1gAKUPhc5">9. 落地行动：重启一项曾经放弃的任务</h2>
+        <p data-page-node-id="fzn8dEbivc5PG18gMMoFal">
+          Kundel 最后的建议，是重新拿出一项曾经让你放弃的任务。给 Astra 合适的工具、参考和完成标准，从低或中等推理档位开始，先看它能做到哪一步，再补指导。这次尝试既是在检验模型，也是在重新判断：哪些准备、制作和检查工作，已经值得交给它。
+        </p>
+
+        <div class="summary-grid" style="margin-top: 24px;" data-page-node-id="jlZUVtLFWhQiAY1yQqHZSj">
+          <div class="summary-card" data-page-node-id="zlRa6NBZfz9d80jtCaDUT4">
+            <div class="summary-card-num" data-page-node-id="flBBOXQaEOg4a6AKGzGpuS">A</div>
+            <div class="summary-card-text" data-page-node-id="ATxBOvh0ZOEu1Vrouq4OTe">
+              <strong data-page-node-id="KLkqSey0CSQAZ8yXPVyZPj">盘点“曾经放弃”的项目清单</strong>：那些因为过去模型缺乏工具支持、或需要写几千字 Prompt 才能勉强运作的高复杂度原型。
+            </div>
+          </div>
+          <div class="summary-card" data-page-node-id="nMe9w2Eh5Hdk0jbTQVvCq3">
+            <div class="summary-card-num" data-page-node-id="Wh6r99Dg5g4TGCISAxHtN3">B</div>
+            <div class="summary-card-text" data-page-node-id="wG0VGMOQOGPHo9FqgePavd">
+              <strong data-page-node-id="tiLuaREbbf52hncLNaCNgg">配置专用制作环境与接入点</strong>：不再把任务囚禁在纯文本终端，让模型能打开 Blender、Studio、Resolve 或真实浏览器查看实际效果。
+            </div>
+          </div>
+          <div class="summary-card" data-page-node-id="SBcR0Wbnz71x1DsqVRSNqv">
+            <div class="summary-card-num" data-page-node-id="pKsVNLBzMt0r9zvStvdqCa">C</div>
+            <div class="summary-card-text" data-page-node-id="GF5GXxitlJEExheVPzTGyj">
+              <strong data-page-node-id="lEMxKt7UsDtFiB45GDrHK6">卸载陈旧冗余的 Skill 指令</strong>：先以空白或极简规则启动，观察新模型底座的原生自规划与自检能力。
+            </div>
+          </div>
+          <div class="summary-card" data-page-node-id="ZdJIkaAutdODLcSsFiqPQZ">
+            <div class="summary-card-num" data-page-node-id="iYpY8Vf6wAqHO1EBP0xpIe">D</div>
+            <div class="summary-card-text" data-page-node-id="g5WpTSv4MLxNkwcSrpjFKR">
+              <strong data-page-node-id="gzsgUj865avX8GFH6UwLne">建立基于实体位置的反馈机制</strong>：依托可运行初版进行 Pin 标注与优先级迭代，明确汇报终点后收网。
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </article>
+  </main>
+
+  <!-- 原生 JavaScript 交互逻辑 -->
+  <script>
+    (function() {
+      "use strict";
+
+      // 辅助选择器函数 (根据规范，严格禁止使用 $，使用 byId 规避 LaTeX 检测误报)
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // =========================================================================
+      // 1. 阅读进度条与侧边栏高亮
+      // =========================================================================
+      var progressBar = byId("reading-progress");
+      var sections = document.querySelectorAll("section[id]");
+      var navLinks = document.querySelectorAll(".toc-item a");
+
+      window.addEventListener("scroll", function() {
+        var docElem = document.documentElement;
+        var scrollTop = docElem.scrollTop || document.body.scrollTop;
+        var scrollHeight = docElem.scrollHeight - docElem.clientHeight;
+        if (scrollHeight > 0 && progressBar) {
+          var progress = (scrollTop / scrollHeight) * 100;
+          progressBar.style.width = progress + "%";
+        }
+
+        // 高亮当前可视章节
+        var currentId = "";
+        for (var i = 0; i < sections.length; i++) {
+          var sec = sections[i];
+          var rect = sec.getBoundingClientRect();
+          if (rect.top <= 120 && rect.bottom >= 120) {
+            currentId = sec.getAttribute("id");
+            break;
+          }
+        }
+
+        if (currentId) {
+          for (var j = 0; j < navLinks.length; j++) {
+            var link = navLinks[j];
+            var parent = link.parentElement;
+            if (link.getAttribute("href") === "#" + currentId) {
+              if (parent) parent.classList.add("active");
+            } else {
+              if (parent) parent.classList.remove("active");
+            }
+          }
+        }
+      });
+
+      // =========================================================================
+      // 2. 双主题无缝切换 (默认 dark 对应 IDE 主题)
+      // =========================================================================
+      var themeToggleBtn = byId("btn-theme-toggle");
+      var themeIcon = byId("theme-toggle-icon");
+      var themeLabel = byId("theme-toggle-label");
+
+      function updateThemeUI(theme) {
+        if (theme === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+          if (themeIcon) themeIcon.textContent = "☀️";
+          if (themeLabel) themeLabel.textContent = "切换深色";
+        } else {
+          document.documentElement.setAttribute("data-theme", "dark");
+          if (themeIcon) themeIcon.textContent = "🌙";
+          if (themeLabel) themeLabel.textContent = "切换浅色";
+        }
+      }
+
+      if (themeToggleBtn) {
+        themeToggleBtn.addEventListener("click", function() {
+          var current = document.documentElement.getAttribute("data-theme") || "dark";
+          var target = current === "dark" ? "light" : "dark";
+          updateThemeUI(target);
+        });
+      }
+
+      // =========================================================================
+      // 3. 移动端侧边栏抽屉开关
+      // =========================================================================
+      var mobileMenuBtn = byId("btn-mobile-menu");
+      var appSidebar = byId("app-sidebar");
+
+      if (mobileMenuBtn && appSidebar) {
+        mobileMenuBtn.addEventListener("click", function() {
+          appSidebar.classList.toggle("open");
+        });
+
+        // 点击目录链接自动关闭侧边栏
+        var tocAnchors = appSidebar.querySelectorAll("a");
+        for (var k = 0; k < tocAnchors.length; k++) {
+          tocAnchors[k].addEventListener("click", function() {
+            if (window.innerWidth <= 992) {
+              appSidebar.classList.remove("open");
+            }
+          });
+        }
+      }
+
+      // =========================================================================
+      // 4. 沙盘一：任务交代四要素配置器与人机职责反解
+      // =========================================================================
+      var selScenario = byId("sel-scenario");
+      var rangeAmbiguity = byId("range-ambiguity");
+      var selToolchain = byId("sel-toolchain");
+      var valAmbiguityText = byId("val-ambiguity-text");
+
+      // 槽位映射
+      var outTaskGoal = byId("out-task-goal");
+      var outToolsRef = byId("out-tools-ref");
+      var outHumanSpecs = byId("out-human-specs");
+      var outAiAutonomy = byId("out-ai-autonomy");
+      var outInspectExit = byId("out-inspect-exit");
+      var outSandboxVerdict = byId("out-sandbox-verdict");
+
+      var scenarioData = {
+        lego: {
+          goal: "可直接在 Studio 中打开、带有车道和小车可拆卸局部对象的 3D 积木模型 (.io / .ldr 格式)",
+          tools: "BrickLink Studio 零件库 API + Python 代码组装管道 + 金门大桥整体形态口述目标",
+          human: "目标结构为金门大桥、桥面需包含车辆车道、指定使用 Studio 软件制作、无需人工写微观步骤",
+          ai: "零件库选型匹配、结构支撑力平衡、桥墩比例、小车积木拼搭细节、批量装配 Python 脚本编写",
+          exit: "能在 Studio 中正常打开无碰撞破面，提供初版全景与近景，汇报异常零件后交还人类继续打磨",
+          verdict: "💡 <strong>工程落地建议</strong>：给予外部专用制作工具能让 AI 自检成品的物理属性。省下繁文缛节的操作细节规约，聚焦在成品格式与交还条件上。"
+        },
+        blender: {
+          goal: "多视角可编辑的家庭酒吧 3D 完整空间场景 (.blend 资产，包含家具、酒瓶、玻璃杯独立对象)",
+          tools: "Blender 3D 软件环境 + 10 张随手拍生活照片（无标尺）+ 命令行/Python 脚本接口",
+          human: "指定家庭酒吧照片集、要求对象保持独立命名与空间关系、指出调酒书等参照物用于估算尺度",
+          ai: "从透视照片推算空间比例、逐件建立独立几何对象、材质初设、角落电线与散乱椅子的归纳建模",
+          exit: "在 Blender 内从不同机位渲染视图并自检，汇报估算比例存疑处，交付独立对象工程文件供人工调材质",
+          verdict: "💡 <strong>工程落地建议</strong>：保持对象的独立性（椅子不合适就改椅子）是后续可迭代的关键。视觉接近不等于工业测绘，应明确将模型作为'可编辑底座'交还。"
+        },
+        "image-tool": {
+          goal: "可直接在浏览器运行的创意素材图片编辑器 (Thumbnail Studio，单页自包含 Web 应用)",
+          tools: "现代 Web 沙箱 + 代码库上下文 + Slack 讨论记录 + 品牌视觉调性指南 (Brand Guidelines)",
+          human: "口述需求背景、核心能力要求（背景图上传、元素重排、模板系统）、强调界面保持极简克制",
+          ai: "撤销/重做快捷键心智、图层管理面板、图层隐藏/显示交互、画布事件监听、自用运维管理入口",
+          exit: "交付可点击交互的运行初版，支持在真实网页中拖拽操作，附带尚未解决的快捷键冲突列表",
+          verdict: "💡 <strong>工程落地建议</strong>：做专用自用软件时，无需在动手前撰写几百页交互规格。拿到可操作初版后再根据试用体感决定增删改。"
+        },
+        anim: {
+          goal: "并排对比的交互式三维概念演示动画 (Nick Baumann 风格，解释'鼠标点击 vs 专用工具调用'差异)",
+          tools: "Codex 应用代码访问权限 + 正在撰写的文章初稿 + 截图与上下文 Appshot + 动画预览调试器",
+          human: "指定 Nick Baumann 参考风格、明确要求给出两个动画方案供抉择、锁死所要解释的核心概念原语",
+          ai: "重建可动画化界面、镜头运镜轨迹、下置双说明区文字提炼、定制可播放/暂停/多视角的专用预览工具",
+          exit: "生成双方案并在专用预览工具中并排展示，标注两种方式的核心耗时区别，等待人类圈选标注",
+          verdict: "💡 <strong>工程落地建议</strong>：为了让反馈更精准，Astra 自主构建了专用预览与标注播放器。让人看着实际呈现方式提要求，远胜过文字猜想。"
+        },
+        cover: {
+          goal: "精准适配 X 平台文章页面的 5:2 动态封面图 (1200 × 480 像素，核心主体完美居中无裁切)",
+          tools: "图像生成与剪裁工具 + X 文章在线源码 DOM 嗅探器 + 图像比例自检分析器",
+          human: "要求封面符合文章主题、解决上一轮裁切严重的问题、约定最终成图交付路径",
+          ai: "自主发现帮助文档缺失尺寸、跨源爬取真实文章页 DOM 核实 1200×480 规格、双重验证是否引入比例拉伸",
+          exit: "双重自检通过（裁切解决 + 无新形变），在真实模拟卡片中渲染预览，无异常后交还定稿",
+          verdict: "💡 <strong>工程落地建议</strong>：Astra 的自检追问了两件事：旧 Bug 是否修好，新改动是否引入副作用。以实际承载页面的物理代码为纠偏真值。"
+        }
+      };
+
+      function updateDelegationSandbox() {
+        var scenKey = selScenario ? selScenario.value : "lego";
+        var ambLevel = rangeAmbiguity ? parseInt(rangeAmbiguity.value, 10) : 2;
+        var data = scenarioData[scenKey] || scenarioData.lego;
+
+        if (valAmbiguityText) {
+          if (ambLevel === 1) {
+            valAmbiguityText.textContent = "宽松探索 (重在启发，AI自由度高)";
+          } else if (ambLevel === 2) {
+            valAmbiguityText.textContent = "中等明确 (锁定核心，细节由AI补)";
+          } else {
+            valAmbiguityText.textContent = "高度严密 (死锁边界，严格按规格执行)";
+          }
+        }
+
+        if (outTaskGoal) outTaskGoal.textContent = data.goal;
+        if (outToolsRef) outToolsRef.textContent = data.tools;
+        if (outHumanSpecs) outHumanSpecs.textContent = data.human;
+        if (outAiAutonomy) outAiAutonomy.textContent = data.ai;
+        if (outInspectExit) outInspectExit.textContent = data.exit;
+        if (outSandboxVerdict) outSandboxVerdict.innerHTML = data.verdict;
+      }
+
+      if (selScenario) selScenario.addEventListener("change", updateDelegationSandbox);
+      if (rangeAmbiguity) rangeAmbiguity.addEventListener("input", updateDelegationSandbox);
+      if (selToolchain) selToolchain.addEventListener("change", updateDelegationSandbox);
+
+      // =========================================================================
+      // 5. 沙盘二：推理档位与规则指导负担权衡模拟器
+      // =========================================================================
+      var selReasoning = byId("sel-reasoning");
+      var rangeSkills = byId("range-skills");
+      var rangeComplexity = byId("range-complexity");
+
+      var valReasoningBadge = byId("val-reasoning-badge");
+      var valSkillsCount = byId("val-skills-count");
+      var valComplexityLevel = byId("val-complexity-level");
+
+      var outSpeedScore = byId("out-speed-score");
+      var outConflictRisk = byId("out-conflict-risk");
+      var outInspectionDepth = byId("out-inspection-depth");
+      var outNetEfficiency = byId("out-net-efficiency");
+      var outStrategyAdvice = byId("out-strategy-advice");
+
+      function updateCalibrationSandbox() {
+        var rVal = selReasoning ? selReasoning.value : "medium";
+        var skills = rangeSkills ? parseInt(rangeSkills.value, 10) : 5;
+        var comp = rangeComplexity ? parseInt(rangeComplexity.value, 10) : 3;
+
+        // 基础推理系数
+        var rCoeff = 1.0;
+        var rName = "Medium (平衡档位)";
+        var rBaseInspect = 75;
+        var rBaseSpeed = 85;
+
+        if (rVal === "low") {
+          rCoeff = 0.7;
+          rName = "Low (极速自检 · 推荐起步)";
+          rBaseInspect = 70; // Kundel 观察到 Low 档位同样认真自检
+          rBaseSpeed = 95;
+        } else if (rVal === "medium") {
+          rCoeff = 1.0;
+          rName = "Medium (平衡档位 · 兼顾耗时与规划)";
+          rBaseInspect = 82;
+          rBaseSpeed = 82;
+        } else if (rVal === "high") {
+          rCoeff = 1.4;
+          rName = "High (深度推演 · 复杂工程专用)";
+          rBaseInspect = 90;
+          rBaseSpeed = 65;
+        } else if (rVal === "max") {
+          rCoeff = 1.9;
+          rName = "Max (极限推理 · 耗时显著增加)";
+          rBaseInspect = 94;
+          rBaseSpeed = 48;
+        }
+
+        if (valReasoningBadge) valReasoningBadge.textContent = rName;
+        if (valSkillsCount) valSkillsCount.textContent = skills + " 条规则 (Skill负荷)";
+        if (valComplexityLevel) valComplexityLevel.textContent = "Lv " + comp + " (任务复杂度)";
+
+        // 计算冲突风险：旧 Skill 规则条数越多，新模型被旧逻辑束缚冲突的概率呈指数上升
+        var conflictRisk = Math.min(95, Math.round(skills * 1.8 + (skills > 15 ? (skills - 15) * 1.2 : 0)));
+
+        // 速度得分：随推理档位和规则条数衰减
+        var speedScore = Math.max(20, Math.round(rBaseSpeed - skills * 0.7 - comp * 4));
+
+        // 自检深度：Astra 基础自检高，受任务复杂度和推理档位正向推动，但过多规则会降低其自主探索空间
+        var inspectionDepth = Math.min(98, Math.round(rBaseInspect + comp * 3 - (skills > 25 ? (skills - 25) * 0.5 : 0)));
+
+        // 综合产出效率指数：效率 = (速度*0.35 + 自检*0.45) * (1 - 冲突风险/150)
+        var netEff = Math.max(10, Math.min(99, Math.round((speedScore * 0.4 + inspectionDepth * 0.6) * (1 - conflictRisk / 180))));
+
+        if (outSpeedScore) outSpeedScore.textContent = speedScore.toFixed(1) + " 分";
+        if (outConflictRisk) outConflictRisk.textContent = conflictRisk.toFixed(1) + " %";
+        if (outInspectionDepth) outInspectionDepth.textContent = inspectionDepth.toFixed(1) + " 分";
+        if (outNetEfficiency) outNetEfficiency.textContent = netEff.toFixed(1) + " 分";
+
+        // 动态策略建议
+        if (outStrategyAdvice) {
+          if (skills > 20) {
+            outStrategyAdvice.innerHTML = "<span style='color: var(--rose);'>⚠️ <strong>规则过载预警</strong></span>：旧 Skill 规则注入过多（" + skills + " 条），极易产生反向束缚（如团队剪发布视频时去掉旧 Skill 效果反而更好）。建议裁撤针对旧模型的微观操作规约，放手让 Astra 原生规划。";
+          } else if (rVal === "max" && comp <= 3) {
+            outStrategyAdvice.innerHTML = "<span style='color: var(--amber);'>⚠️ <strong>推理过度配置</strong></span>：对于中等及常规任务，Max 档位消耗巨大且成效不一定优于 Low/Medium。Kundel 在 Blender 实验中甚至更偏爱 Astra Low 档位的生动造型。建议从 Low/Medium 起步。";
+          } else if (rVal === "low" && skills <= 10) {
+            outStrategyAdvice.innerHTML = "<span style='color: var(--emerald);'>✅ <strong>黄金精益配置</strong></span>：轻量规则 + Low 档起步。以最高敏捷度拿到可操作初版，Astra 在低档位下依然会严谨执行物理自检，性价比最高！";
+          } else {
+            outStrategyAdvice.innerHTML = "<span style='color: var(--cyan);'>ℹ️ <strong>稳健工作区</strong></span>：配置均衡。建议拿到可运行初版后，围绕界面具体位置（Pin 标注）展开下一轮定点反馈。";
+          }
+        }
+      }
+
+      if (selReasoning) selReasoning.addEventListener("change", updateCalibrationSandbox);
+      if (rangeSkills) rangeSkills.addEventListener("input", updateCalibrationSandbox);
+      if (rangeComplexity) rangeComplexity.addEventListener("input", updateCalibrationSandbox);
+
+      // 初始化执行
+      updateDelegationSandbox();
+      updateCalibrationSandbox();
+
+    })();
+  </script>
+</body>
+</html>
