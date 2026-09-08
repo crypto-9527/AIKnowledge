@@ -1,0 +1,1814 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>如何与 AI 一起写出没有“AI 味”的文章：先整理素材，再让模型动笔</title>
+  <style>
+    /* ==========================================================================
+       1. 全局设计令牌与双主题系统 (CSS Custom Properties)
+       ========================================================================== */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+      /* 核心排版尺度基线 */
+      --aike-sidebar-w: 280px;
+      --aike-content-max: 960px;
+
+      /* 统一语义色调 (五色状态令牌) */
+      --accent: #D97757;          /* 陶土红 / 主强调色 */
+      --accent-hover: #E2886A;
+      --accent-subtle: rgba(217, 119, 87, 0.12);
+      --accent-border: rgba(217, 119, 87, 0.35);
+
+      --emerald: #2E8B57;         /* 正向 / 验收 / 通过 */
+      --emerald-subtle: rgba(46, 139, 87, 0.14);
+      --emerald-border: #38A169;
+
+      --rose: #C53030;            /* 警示 / 边界 / 避坑 */
+      --rose-subtle: rgba(197, 48, 48, 0.14);
+      --rose-border: #E53E3E;
+
+      --amber: #D69E2E;           /* 提醒 / 提示 / 转换点 */
+      --amber-subtle: rgba(214, 158, 46, 0.14);
+      --amber-border: #ECC94B;
+
+      --cyan: #319795;            /* 数据 / 维度 / 框架 */
+      --cyan-subtle: rgba(49, 151, 149, 0.14);
+      --cyan-border: #4FD1C5;
+
+      --purple: #805AD5;          /* 理论 / 模型 / 认知 */
+      --purple-subtle: rgba(128, 90, 213, 0.14);
+      --purple-border: #9F7AEA;
+    }
+
+    /* 深色主题 (Dark Theme - 默认黑曜石科技学术质感) */
+    html[data-theme="dark"] {
+      --bg-canvas: #141413;
+      --bg-surface: #1E1E1C;
+      --bg-surface-elevated: #282825;
+      --bg-surface-highlight: #32322E;
+      --border-soft: rgba(255, 255, 255, 0.08);
+      --border-medium: rgba(255, 255, 255, 0.16);
+      --border-hard: rgba(255, 255, 255, 0.28);
+      --text-primary: #F4F1EA;
+      --text-secondary: #B0ADA5;
+      --text-tertiary: #7D7A73;
+      --text-inverse: #141413;
+      --code-bg: #181816;
+      --code-border: rgba(255, 255, 255, 0.12);
+      --quote-bg: rgba(217, 119, 87, 0.06);
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6);
+      --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.7);
+    }
+
+    /* 浅色主题 (Light Theme - 暖羊皮纸经典出版质感) */
+    html[data-theme="light"] {
+      --bg-canvas: #FAF7F2;
+      --bg-surface: #FFFFFF;
+      --bg-surface-elevated: #F3EFE8;
+      --bg-surface-highlight: #EAE5DC;
+      --border-soft: rgba(0, 0, 0, 0.07);
+      --border-medium: rgba(0, 0, 0, 0.14);
+      --border-hard: rgba(0, 0, 0, 0.24);
+      --text-primary: #21201D;
+      --text-secondary: #58554E;
+      --text-tertiary: #8C887F;
+      --text-inverse: #FAF7F2;
+      --code-bg: #F0EAE1;
+      --code-border: rgba(0, 0, 0, 0.12);
+      --quote-bg: rgba(217, 119, 87, 0.05);
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+      --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.12);
+    }
+
+    /* ==========================================================================
+       2. 基础排版重置与阅读辅助 (Reset & Baseline)
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      line-height: 1.75;
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    #reading-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--cyan));
+      width: 0%;
+      z-index: 9999;
+      transition: width 0.1s linear;
+    }
+
+    /* ==========================================================================
+       3. 左右分栏与统一排版基线布局 (Sidebar & Centered Main)
+       ========================================================================== */
+    .app-sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: var(--aike-sidebar-w);
+      background-color: var(--bg-surface);
+      border-right: 1px solid var(--border-soft);
+      overflow-y: auto;
+      padding: 28px 18px 32px 20px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      transition: transform 0.25s ease;
+    }
+
+    .sidebar-header {
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .sidebar-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--accent);
+      background-color: var(--accent-subtle);
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-title {
+      font-family: var(--font-serif);
+      font-size: 1.02rem;
+      font-weight: 700;
+      line-height: 1.45;
+      color: var(--text-primary);
+    }
+
+    .sidebar-subtitle {
+      font-size: 0.8rem;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+    }
+
+    .toc-section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-tertiary);
+      margin: 12px 0 6px 8px;
+    }
+
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .toc-item a {
+      display: block;
+      padding: 7px 10px;
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      border-radius: 6px;
+      line-height: 1.4;
+      transition: all 0.15s ease;
+      border-left: 2px solid transparent;
+    }
+
+    .toc-item a:hover {
+      color: var(--text-primary);
+      background-color: var(--bg-surface-elevated);
+      padding-left: 14px;
+    }
+
+    .toc-item.active a {
+      color: var(--accent);
+      background-color: var(--accent-subtle);
+      font-weight: 600;
+      padding-left: 14px;
+      border-left-color: var(--accent);
+    }
+
+    .sidebar-footer {
+      padding-top: 16px;
+      border-top: 1px solid var(--border-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .theme-toggle-btn {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-medium);
+      color: var(--text-primary);
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .theme-toggle-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .reading-stat {
+      font-size: 0.78rem;
+      color: var(--text-tertiary);
+    }
+
+    /* 统一排版基线：正文在剩余区域绝对对称居中 */
+    body:has(> .app-sidebar) {
+      display: block !important;
+    }
+
+    body:has(> .app-sidebar) > .main-wrapper {
+      display: block !important;
+      max-width: var(--aike-content-max) !important;
+      width: auto !important;
+      flex: none !important;
+      margin-left: calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2)) !important;
+      margin-right: max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2)) !important;
+      box-sizing: border-box !important;
+      padding: 48px 36px 96px 36px;
+    }
+
+    .article-container {
+      width: 100%;
+    }
+
+    /* 移动端汉堡按钮 */
+    .mobile-nav-toggle {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      box-shadow: var(--shadow-lg);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    /* ==========================================================================
+       4. 文章题头与元数据卡片 (Article Header & Metadata)
+       ========================================================================== */
+    .article-header {
+      margin-bottom: 44px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .header-badge-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .header-category {
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-subtle);
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+
+    .header-tag {
+      font-size: 0.8rem;
+      color: var(--text-tertiary);
+    }
+
+    .article-title {
+      font-family: var(--font-serif);
+      font-size: 2.2rem;
+      font-weight: 800;
+      line-height: 1.32;
+      color: var(--text-primary);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+
+    .article-lead {
+      font-size: 1.12rem;
+      color: var(--text-secondary);
+      line-height: 1.75;
+      margin-bottom: 28px;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 18px 22px;
+      margin-bottom: 28px;
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .meta-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-tertiary);
+      font-weight: 600;
+    }
+
+    .meta-value {
+      font-size: 0.88rem;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .meta-value a {
+      color: var(--accent);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .meta-value a:hover {
+      text-decoration: underline;
+    }
+
+    /* 核心摘要卡片 */
+    .executive-card {
+      background: var(--bg-surface-elevated);
+      border-left: 4px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      padding: 22px 24px;
+      margin-bottom: 40px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .executive-card-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .executive-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .executive-list li {
+      position: relative;
+      padding-left: 20px;
+      font-size: 0.98rem;
+      color: var(--text-primary);
+      line-height: 1.68;
+    }
+
+    .executive-list li::before {
+      content: "•";
+      position: absolute;
+      left: 4px;
+      top: 0;
+      color: var(--accent);
+      font-size: 1.3rem;
+      line-height: 1.4;
+    }
+
+    /* ==========================================================================
+       5. 章节与正文排版 (Typography & Section Blocks)
+       ========================================================================== */
+    .content-section {
+      margin-bottom: 56px;
+      scroll-margin-top: 32px;
+    }
+
+    h2 {
+      font-family: var(--font-serif);
+      font-size: 1.68rem;
+      font-weight: 700;
+      line-height: 1.35;
+      color: var(--text-primary);
+      margin-top: 44px;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    h2 .section-num {
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 1.3rem;
+      font-weight: 600;
+    }
+
+    h3 {
+      font-family: var(--font-serif);
+      font-size: 1.28rem;
+      font-weight: 700;
+      line-height: 1.4;
+      color: var(--text-primary);
+      margin-top: 32px;
+      margin-bottom: 16px;
+    }
+
+    h4 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 24px;
+      margin-bottom: 12px;
+    }
+
+    p {
+      margin-bottom: 20px;
+      font-size: 1.02rem;
+      line-height: 1.82;
+      color: var(--text-primary);
+    }
+
+    p strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* 优雅引用块 */
+    blockquote {
+      background-color: var(--quote-bg);
+      border-left: 4px solid var(--accent);
+      padding: 16px 20px;
+      margin: 24px 0;
+      border-radius: 0 8px 8px 0;
+      font-size: 1rem;
+      line-height: 1.75;
+      color: var(--text-primary);
+    }
+
+    blockquote.boundary-warning {
+      background-color: var(--amber-subtle);
+      border-left-color: var(--amber);
+    }
+
+    blockquote.key-insight {
+      background-color: var(--accent-subtle);
+      border-left-color: var(--accent);
+      font-size: 1.06rem;
+      font-weight: 500;
+    }
+
+    /* 列表排版 */
+    ul, ol {
+      margin: 18px 0 24px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    li {
+      font-size: 1rem;
+      line-height: 1.75;
+      color: var(--text-primary);
+    }
+
+    /* 表格组件 */
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      margin: 28px 0;
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      background: var(--bg-surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.92rem;
+    }
+
+    thead {
+      background-color: var(--bg-surface-elevated);
+      border-bottom: 1px solid var(--border-medium);
+    }
+
+    th {
+      padding: 14px 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-soft);
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:hover {
+      background-color: var(--bg-surface-highlight);
+    }
+
+    td strong {
+      color: var(--text-primary);
+    }
+
+    /* ==========================================================================
+       6. 交互组件与架构图卡片 (Cards & Visual Diagrams)
+       ========================================================================== */
+    .card-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 28px 0;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .card-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .card-panel-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-panel-tag {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .tag-emerald { background: var(--emerald-subtle); color: var(--emerald); }
+    .tag-accent { background: var(--accent-subtle); color: var(--accent); }
+    .tag-cyan { background: var(--cyan-subtle); color: var(--cyan); }
+    .tag-purple { background: var(--purple-subtle); color: var(--purple); }
+
+    /* 代码块与模板卡片 */
+    .code-block-wrapper {
+      position: relative;
+      margin: 20px 0 28px 0;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--code-border);
+      background: var(--code-bg);
+    }
+
+    .code-block-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--bg-surface-elevated);
+      border-bottom: 1px solid var(--border-soft);
+      font-size: 0.8rem;
+      color: var(--text-tertiary);
+      font-family: var(--font-mono);
+    }
+
+    .copy-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      color: var(--text-secondary);
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-family: var(--font-sans);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .copy-btn.copied {
+      background: var(--emerald-subtle);
+      border-color: var(--emerald);
+      color: var(--emerald);
+    }
+
+    pre {
+      padding: 18px 20px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.65;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.9em;
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border-soft);
+      color: var(--accent);
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      border: none;
+      color: inherit;
+    }
+
+    /* 自检清单交互样式 */
+    .checklist-container {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 22px 24px;
+      margin: 28px 0;
+    }
+
+    .checklist-progress-bar-bg {
+      height: 8px;
+      background: var(--bg-surface-elevated);
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 14px 0 20px 0;
+    }
+
+    .checklist-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--emerald));
+      width: 0%;
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .checklist-items {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .checklist-item-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 6px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-soft);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .checklist-item-row:hover {
+      border-color: var(--accent-border);
+      background: var(--bg-surface-highlight);
+    }
+
+    .checklist-item-row.checked {
+      border-color: var(--emerald-border);
+      background: var(--emerald-subtle);
+    }
+
+    .checklist-checkbox {
+      margin-top: 4px;
+      width: 18px;
+      height: 18px;
+      accent-color: var(--emerald);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .checklist-text {
+      flex: 1;
+      font-size: 0.95rem;
+      line-height: 1.65;
+      color: var(--text-primary);
+    }
+
+    .checklist-text strong {
+      display: inline-block;
+      margin-bottom: 2px;
+    }
+
+    .checklist-status-badge {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    /* 变量组合互动沙盘 */
+    .sandbox-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid var(--border-soft);
+      padding-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .sandbox-tab-btn {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-medium);
+      color: var(--text-secondary);
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .sandbox-tab-btn:hover {
+      color: var(--text-primary);
+      border-color: var(--accent);
+    }
+
+    .sandbox-tab-btn.active {
+      background: var(--accent-subtle);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .sandbox-stage-row {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .sandbox-stage-box {
+      padding: 14px 18px;
+      border-radius: 6px;
+      border-left: 4px solid var(--border-medium);
+      background: var(--bg-surface-elevated);
+    }
+
+    .sandbox-stage-box.stage-0 { border-left-color: var(--text-tertiary); }
+    .sandbox-stage-box.stage-1 { border-left-color: var(--amber); }
+    .sandbox-stage-box.stage-2 { border-left-color: var(--accent); }
+
+    .stage-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+      display: inline-block;
+    }
+
+    .stage-0 .stage-badge { color: var(--text-tertiary); }
+    .stage-1 .stage-badge { color: var(--amber); }
+    .stage-2 .stage-badge { color: var(--accent); }
+
+    .stage-desc {
+      font-size: 0.92rem;
+      line-height: 1.65;
+      color: var(--text-primary);
+    }
+
+    /* EDAN 句子意图卡片网格 */
+    .edan-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin: 20px 0;
+    }
+
+    .edan-card {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 18px;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .edan-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent-border);
+    }
+
+    .edan-letter {
+      font-size: 1.6rem;
+      font-family: var(--font-mono);
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+
+    .edan-name {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .edan-desc {
+      font-size: 0.84rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    /* 内联 SVG 架构图容器 */
+    .diagram-container {
+      margin: 28px 0;
+      padding: 20px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .diagram-title {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .diagram-container svg {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
+
+    /* 底部参考与版权 */
+    .article-footer {
+      margin-top: 60px;
+      padding-top: 28px;
+      border-top: 1px solid var(--border-soft);
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    .article-footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .article-footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* ==========================================================================
+       7. 响应式与打印样式 (@media)
+       ========================================================================== */
+    @media (max-width: 1080px) {
+      .app-sidebar {
+        transform: translateX(-100%);
+      }
+
+      .app-sidebar.open {
+        transform: translateX(0);
+        box-shadow: var(--shadow-lg);
+      }
+
+      .mobile-nav-toggle {
+        display: flex;
+      }
+
+      body:has(> .app-sidebar) > .main-wrapper {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        padding: 32px 20px 80px 20px !important;
+      }
+
+      .article-title {
+        font-size: 1.85rem;
+      }
+    }
+
+    @media print {
+      .app-sidebar, #reading-progress, .mobile-nav-toggle, .theme-toggle-btn, .copy-btn {
+        display: none !important;
+      }
+
+      body:has(> .app-sidebar) > .main-wrapper {
+        margin: 0 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+      }
+
+      body {
+        background: #fff !important;
+        color: #000 !important;
+      }
+
+      .card-panel, .executive-card, .table-wrapper, .code-block-wrapper, .checklist-container, .diagram-container {
+        box-shadow: none !important;
+        border: 1px solid #ccc !important;
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 阅读进度指示器 -->
+  <div id="reading-progress"></div>
+
+  <!-- 侧边导航目录 -->
+  <aside class="app-sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-badge">人机协同 · 写作方法论</div>
+      <div class="sidebar-title">去“AI 味”与素材库指南</div>
+      <div class="sidebar-subtitle">Nicolas Cole 代笔模型与人机分工</div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="toc-section-title">核心目录</div>
+      <ul class="toc-list" id="toc-list">
+        <li class="toc-item active"><a href="#section-intro">前言：为什么你的文章有“AI 味”？</a></li>
+        <li class="toc-item"><a href="#section-1">一、通用常识与作者辨识度</a></li>
+        <li class="toc-item"><a href="#section-2">二、赋予文字辨识度：特质素材</a></li>
+        <li class="toc-item"><a href="#section-3">三、澄清文风与协作机制</a></li>
+        <li class="toc-item"><a href="#section-4">四、终极价值：走向原创思考</a></li>
+        <li class="toc-item"><a href="#section-5">五、可直接复用的实操工具箱</a></li>
+        <li class="toc-item"><a href="#section-ref">参考来源与扩展阅读</a></li>
+      </ul>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="theme-toggle-btn" id="theme-toggle-btn" title="切换深色/浅色主题">
+        <span id="theme-icon">☀️</span>
+        <span id="theme-text">切换浅色</span>
+      </button>
+      <div class="reading-stat" id="stat-reading-pct">进度 0%</div>
+    </div>
+  </aside>
+
+  <!-- 移动端侧栏呼出按钮 -->
+  <button class="mobile-nav-toggle" id="mobile-toggle-btn" aria-label="打开目录">☰</button>
+
+  <!-- 正文主包裹区 -->
+  <main class="main-wrapper">
+    <article class="article-container">
+      
+      <!-- 题头与元数据 -->
+      <header class="article-header">
+        <div class="header-badge-row">
+          <span class="header-category">Writing Architecture</span>
+          <span class="header-tag">Nicolas Cole 专栏深度消化</span>
+          <span class="header-tag">·</span>
+          <span class="header-tag">2026-09-08 基线</span>
+        </div>
+        <h1 class="article-title">如何与 AI 一起写出没有“AI 味”的文章：先整理素材，再让模型动笔</h1>
+        <p class="article-lead">从通用常识、个人经历到原创思考，理解数字写作顾问 Nicolas Cole 的人机写作分工体系，掌握商业代笔者的“大理石雕塑法”，并用三套实操模板开始实践。</p>
+
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">原作者与出处</span>
+            <span class="meta-value">Nicolas Cole · <a href="https://artandbiz.substack.com/p/the-right-way-to-write-with-ai" target="_blank" rel="noopener">The Right Way to Write with AI</a></span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">核心模型</span>
+            <span class="meta-value">特质素材五变量 · EDAN 意图 · 大理石雕塑法</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">人机分工定律</span>
+            <span class="meta-value">人类提供真实素材与取向 · 机器负责重组与降噪</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">交付工件</span>
+            <span class="meta-value">自提清单 · 雕塑提示词 · 4步自检交互清单</span>
+          </div>
+        </div>
+
+        <!-- 核心要义速览卡片 -->
+        <div class="executive-card">
+          <div class="executive-card-title">📌 核心要点 (Key Takeaways)</div>
+          <ul class="executive-list">
+            <li><strong>常识对初学与思考仍然有价值</strong>：当重复写作不再带来新理解时，可以让 AI 协助重组。</li>
+            <li><strong>个人经历、立场和表达样本需要由你提供</strong>：并持续积累成可复用的素材库。</li>
+            <li><strong>把重复整理交给 AI，省下的精力用于新的观察与思考</strong>：模板尤其适合经验与观点写作。</li>
+          </ul>
+        </div>
+      </header>
+
+      <!-- 引言区 -->
+      <section class="content-section" id="section-intro">
+        <p>如果你常用 ChatGPT 或 Claude 协助写作，很可能遇到过这种情形：输入一个常见题目，比如“如何做好时间管理”或“新手如何做行业调研”，屏幕上很快会生成一篇结构整齐、用词得体的文章。它列出了明确目标、制定计划、分清主次等几条建议。</p>
+        <p>文章挑不出明显硬伤，但读起来总让人觉得空泛机械、千篇一律，也就是人们常说的“AI 味”。</p>
+        <p>许多人把原因归结为提示词不够精妙，或者以为只要让模型模仿某种特定文风就能解决。数字写作顾问、长期从事商业代笔的 Nicolas Cole 在其专栏长文《<a href="https://artandbiz.substack.com/p/the-right-way-to-write-with-ai" target="_blank" rel="noopener">The Right Way to Write with AI</a>》中提出了一个不同的解释：</p>
+        
+        <blockquote class="key-insight">
+          <strong>语言模型输出的内容显得空洞，往往不是因为它的遣词造句能力不足，而是因为人类尚未向它提供具体的情境。你觉得文章读起来不像你，本质上是因为你没有把自己真实的经历、观察和立场作为素材交由它处理。</strong>
+        </blockquote>
+
+        <p>Cole 结合自己早年撰写网络文章以及自述后来为 300 多位行业领导者（包括硅谷高管）代笔的经历，梳理了文字内容的层次划分，并解释了如何建立一个让人与机器各自发挥所长的工作流。</p>
+
+        <!-- 内联 SVG 图 1：内容分层金字塔与人机职责 -->
+        <div class="diagram-container">
+          <div class="diagram-title">图 1：文字内容三层金字塔与人机协作边界</div>
+          <svg viewBox="0 0 760 280" width="760" height="280">
+            <!-- 顶层：原创思考 -->
+            <polygon points="380,20 480,95 280,95" fill="rgba(217,119,87,0.22)" stroke="#D97757" stroke-width="2"/>
+            <text x="380" y="55" fill="#E2886A" font-size="14" font-weight="bold" text-anchor="middle">L3 原创思考 (Original Content)</text>
+            <text x="380" y="75" fill="#B0ADA5" font-size="11" text-anchor="middle">新假说 / 新模型 / 增量见解 (人类主导)</text>
+
+            <!-- 中层：个人特质素材 -->
+            <polygon points="280,105 480,105 570,185 190,185" fill="rgba(49,151,149,0.18)" stroke="#319795" stroke-width="2"/>
+            <text x="380" y="140" fill="#4FD1C5" font-size="14" font-weight="bold" text-anchor="middle">L2 个人特质素材 (Personality Content)</text>
+            <text x="380" y="160" fill="#B0ADA5" font-size="11" text-anchor="middle">生活事实 / 明确取向 / 真实经历 / 经验教训 (必须由人提供)</text>
+
+            <!-- 底层：通用常识 -->
+            <polygon points="190,195 570,195 660,265 100,265" fill="rgba(128,90,213,0.16)" stroke="#805AD5" stroke-width="2"/>
+            <text x="380" y="225" fill="#9F7AEA" font-size="14" font-weight="bold" text-anchor="middle">L1 通用常识 (Commodity Content)</text>
+            <text x="380" y="245" fill="#B0ADA5" font-size="11" text-anchor="middle">公共概念 / 标准流程 / 概率组合 (机器极速重组)</text>
+
+            <!-- 左右协作指示线 -->
+            <path d="M 590,230 L 680,230" stroke="#805AD5" stroke-width="1.5" stroke-dasharray="4,3"/>
+            <text x="690" y="234" fill="#9F7AEA" font-size="12" text-anchor="start">AI 自动化杠杆</text>
+
+            <path d="M 500,60 L 680,60" stroke="#D97757" stroke-width="1.5" stroke-dasharray="4,3"/>
+            <text x="690" y="64" fill="#E2886A" font-size="12" text-anchor="start">人类智慧创造</text>
+          </svg>
+        </div>
+      </section>
+
+      <!-- 第一部分 -->
+      <section class="content-section" id="section-1">
+        <h2><span class="section-num">01</span> 通用常识与作者辨识度</h2>
+        <p>要理解人机协作的边界，首先需要区分两类性质不同的内容。</p>
+
+        <h3>1. 共享的语言与“通用内容”</h3>
+        <p>Cole 把人类共享的语言比作一套开源系统：字母、词汇和常规语法由所有人共享，没有任何人会因某一个单独的字词而具备辨识度。当不同的人写下同一句日常用语时，也无法单凭这些通用表达建立起独特的辨识度。</p>
+        <p>由这些常规词汇组合而成的基础道理，大多属于<strong>通用内容</strong>（Commodity Content）。例如：</p>
+        <ul>
+          <li>“做营销的关键在于了解你的客户。”</li>
+          <li>“健康减重的基础是保证营养并控制热量摄入。”</li>
+          <li>“长期储蓄需要尽早开始并保持克制。”</li>
+        </ul>
+        <p>这些句子逻辑完整，对刚接触该领域的读者同样具有指导意义。但它们由普遍共享的概念构成，遮住作者的名字，读者无法判断这句话出自一位行业资深从业者，还是刚接触该领域的新手。它属于行业内的公共知识，缺乏作者的个人辨识度。</p>
+
+        <h3>2. 为什么机器处理通用内容更具效率</h3>
+        <p>大语言模型擅长处理常见语句的概率关联。面对广泛流传的通用常识、基础概念整理与标准化步骤说明，机器的改写和重组效率远高于人类手工敲击键盘。</p>
+        <p>Cole 回顾了自己 2014 年大学毕业一年后的兼职经历：当时一家旅行机构以每篇 20 美元的价格雇他撰写关于芝加哥、密尔沃基等城市餐厅和酒店的 600 词 SEO 文章。据他自述，他当时并不了解那些城市，也去不起所写的餐厅与酒店，只能在网上阅读已有的公开发布内容，调换同义词、调整副词与句式，拼凑成一篇“新文章”。</p>
+        <p>在今天，这种基于已有公开信息的常规洗稿与句式替换，机器几秒钟内就能完成。如果写作者依然把全部精力放在手工敲出人尽皆知的通用常识上，并仅仅因为自己付出了体力和打字时间就认为这是独特的创作，实际上是在效率最低的环节消耗精力。</p>
+
+        <h3>3. 通用内容何时有价值？何时该交给机器？</h3>
+        <p>这并不意味着通用常识一文不值。在 Cole 的框架中，写作者需要理性看待通用内容的生命周期：</p>
+        <ul>
+          <li><strong>初学与探索阶段</strong>：新手读者需要基础常识来建立认知框架；写作者亲手撰写和梳理常识，能够帮助自己澄清思考、检验逻辑，并主动选择自己认同的专业立场；同时，探索并沉淀自己认可的多样化表达方式，也能为后续的素材复用积累真实的文风样本。</li>
+          <li><strong>定位与传播阶段</strong>：在公开写作中适度重复某些通用观点，有助于帮助读者明确你的专业领域与关注方向。</li>
+          <li><strong>交给机器的临界点</strong>：当你已经在自己的领域反复表达过这些基本概念，亲手写出新的变体既不再澄清思考，也不再为素材库补充有用的表达样本时，这项工作就进入了收益递减阶段。此时，将梳理结构、填充背景常识和重组段落的工作交由机器完成，人类作者才能腾出时间去思考更深入的问题。</li>
+        </ul>
+      </section>
+
+      <!-- 第二部分 -->
+      <section class="content-section" id="section-2">
+        <h2><span class="section-num">02</span> 赋予文字辨识度：个人特质素材</h2>
+        <p>既然通用常识可以被轻易重组，让一篇文章具备独特辨识度和真实感的核心要素究竟是什么？</p>
+        <p>Cole 认为，答案在于围绕通用常识展开的具体情境——即<strong>个人特质素材</strong>（Personality Content）。通用内容回答的是“是什么”（What）和“怎么做”（How），而特质素材回答的是<strong>“为什么”</strong>（Why）：你是谁？你在什么具体情境下得出了这个结论？你为什么认同这一观点而不是另一种？</p>
+
+        <h3>1. 假设案例：从空洞建议到经验叙述</h3>
+        <p>为了说明这一点，Cole 给出了一个关于理财顾问的假设示例。</p>
+        <p>有一句常见的通用投资建议：</p>
+        <blockquote>“不要加杠杆炒股，买入标普 500 指数并持有十年。”</blockquote>
+        <p>如果一个年轻人在社交媒体上直接发出这句话，它只是一句常规道理。即使由持牌理财顾问说出，也主要依赖职业资质背书。</p>
+        <p>但如果这位顾问这样写：</p>
+        <blockquote>“不要加杠杆炒股。这是我二十出头在华尔街工作时犯过的错误，那时候我因为压力大到脱发。后来我才意识到，最稳妥的积累方式，就是买入标普 500 指数并拿上十年。”</blockquote>
+        <p>核心的通用建议并没有改变，但周围补充了具体的人生情境（二十岁出头、华尔街、经历压力导致的脱发）。读者感受到的真实感与可信度，往往来自这些无法凭空捏造的个人经历。</p>
+
+        <blockquote class="boundary-warning">
+          <strong>⚠️ 边界提醒</strong>：加入个人细节能够让文章更具辨识度与温度，但个人细节本身并不能自动等同于客观真理。经验分享与严谨论证属于不同维度，需结合具体写作场景审慎使用。
+        </blockquote>
+
+        <h3>2. 差异化来自细节变量的组合</h3>
+        <p>许多人担心自己没有举世瞩目的成就，写不出独特的素材。Cole 认为，作者的辨识度极少来自孤立的非凡标签，而是由多个普通的生活变量组合而成的。</p>
+        <p>他以“如何做煎蛋”这个完全通用的生活话题为例：</p>
+        <ul>
+          <li><strong>纯通用层</strong>：热锅、倒油、打蛋、翻面、出锅。任何指南写出来都大同小异。</li>
+          <li><strong>引入身份变量</strong>：假设两位作者都写明自己是“单亲父亲”。这个标签开始带来区分度，但社会上依然有许多单亲父亲。</li>
+          <li><strong>引入具体对象与日常情境</strong>：第一位父亲写的是他每天早晨在上学前为<strong>儿子</strong>煎蛋；第二位父亲写的是他在每天放学后为<strong>女儿</strong>做熟鸡蛋当点心。</li>
+        </ul>
+        <p>随着生活事实、具体对象和日常细节一层层叠加，两篇教授同样煎蛋步骤的文章便自然展现出截然不同的面貌。钢琴上的琴键是共享的，但不同的音符顺序、节奏与停顿组合在一起，就构成了特定演奏者的曲调。</p>
+
+        <!-- 交互卡片：生活变量逐层叠加沙盘 -->
+        <div class="card-panel">
+          <div class="card-panel-header">
+            <div class="card-panel-title">💡 细节变量叠加沙盘：消除“AI 味”的演进过程</div>
+            <span class="card-panel-tag tag-cyan">Interactive Matrix</span>
+          </div>
+          
+          <div class="sandbox-tabs">
+            <button class="sandbox-tab-btn active" id="tab-btn-egg" data-topic="egg">案例 A：如何做煎蛋 (生活)</button>
+            <button class="sandbox-tab-btn" id="tab-btn-lead" data-topic="lead">案例 B：初次带团队 (职场)</button>
+            <button class="sandbox-tab-btn" id="tab-btn-invest" data-topic="invest">案例 C：指数定投 (财务)</button>
+          </div>
+
+          <div class="sandbox-stage-row" id="sandbox-stage-container">
+            <div class="sandbox-stage-box stage-0">
+              <div class="stage-badge">L0 · 纯通用常识 (100% AI 味)</div>
+              <div class="stage-desc" id="desc-stage-0">热锅、倒油、打入鸡蛋、翻面、适度加盐出锅。步骤逻辑严谨，但遮住名字无人知晓作者是谁。</div>
+            </div>
+            <div class="sandbox-stage-box stage-1">
+              <div class="stage-badge">L1 · 叠入身份变量 (产生初步区隔)</div>
+              <div class="stage-desc" id="desc-stage-1">作者表明自己是一位“单亲父亲”。开始具备标签识别度，但仍缺乏独一无二的具体温度。</div>
+            </div>
+            <div class="sandbox-stage-box stage-2">
+              <div class="stage-badge">L2 · 叠入具体对象与情境 (无法替代的特质)</div>
+              <div class="stage-desc" id="desc-stage-2">每天清晨 6 点赶在 7 岁儿子赶校车前煎一个溏心蛋，记录儿子从挑食到吃光的早晨细节。此时文字完全不可替代。</div>
+            </div>
+          </div>
+        </div>
+
+        <h3>3. 个人素材库的五类核心资产</h3>
+        <p>大语言模型拥有海量的公开语言规律，但它无法凭空获知你的人生经历。构建属于你自己的素材库，需要有意识地梳理和记录以下五种非通用变量：</p>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 25%;">变量类型</th>
+                <th style="width: 25%;">核心关注点</th>
+                <th style="width: 50%;">说明与自查方向</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>1. 个人事实 (Life Facts)</strong></td>
+                <td>你的成长坐标与轨迹</td>
+                <td>你在哪里长大？学过什么专业？做过哪些不同性质的工作？这些客观生活事实是机器无法推导的。</td>
+              </tr>
+              <tr>
+                <td><strong>2. 明确取向 (Opinions)</strong></td>
+                <td>你在争议观点中的主动选择</td>
+                <td>在行业公认的几种做法中，你认同哪一种、反对哪一种？例如面对理财，是认同“省下每天的咖啡钱”，还是认同“重点在于提高主营收入”？你的主动认同构成了你的专业立场。</td>
+              </tr>
+              <tr>
+                <td><strong>3. 个人洞察 (Insights)</strong></td>
+                <td>对通用道理的具体情境化理解</td>
+                <td>许多洞察本身也是常见常识（如“领导力的关键是以身作则”）。赋予其真正价值的是你的个人情境与具体案例：你在什么场景下切实体会并理解了这一道理？</td>
+              </tr>
+              <tr>
+                <td><strong>4. 真实经历 (Stories)</strong></td>
+                <td>包含时间、情境与起伏的事件</td>
+                <td>在何时、何地、与谁在一起？原本预期如何，实际发生了什么？真实发生的生活与工作事件最能提供叙事抓手。</td>
+              </tr>
+              <tr>
+                <td><strong>5. 经验教训 (Lessons)</strong></td>
+                <td>经历特定事件后带来的行为改变</td>
+                <td>经历过某次波折或转折之后，你在哪件事上彻底改变了做法或判断标准？</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 第三部分 -->
+      <section class="content-section" id="section-3">
+        <h2><span class="section-num">03</span> 澄清文风与协作机制</h2>
+        <p>不少写作者试图通过复杂的提示词去“调试文风”，比如要求模型“写得幽默风趣”或“充满学术严谨感”。但在实际操作中，这种脱离内容的风格修饰往往收效甚微。</p>
+
+        <h3>1. 声音来自具体的语言行为</h3>
+        <p>在 Cole 的写作框架中，文字的“声音”（Voice）并不是虚幻的气质，而是由三个具体的语言行为共同塑造的：</p>
+        <ol>
+          <li><strong>词汇选择（Vocabulary）</strong>：你习惯使用什么样的词？是口语化的日常表达，还是严谨的学术词汇？词汇的选择直接向读者传递了你的表达习惯与观察视角。</li>
+          <li><strong>句式节奏（Rhythm）</strong>：句子的长短交替与标点运用构成了文章的韵律。海明威偏好短促直接的硬朗句式，而福克纳则擅长绵密复调的长句。</li>
+          <li><strong>句子意图（EDAN 框架）</strong>：你在每个具体句子中所承担的交际目的：
+            <ul>
+              <li><strong>E (Explanation / 阐释)</strong>：向读者说明逻辑机制与客观道理（抽象讲述）；</li>
+              <li><strong>D (Description / 描写)</strong>：通过感官细节呈现具体画面（具象展现）；</li>
+              <li><strong>A (Action / 动作)</strong>：交代发生的行为与推进过程；</li>
+              <li><strong>N (Narration / 叙述与推测)</strong>：背景叙述、心路交代或主观假设。</li>
+            </ul>
+          </li>
+        </ol>
+
+        <!-- EDAN 框架卡片组件 -->
+        <div class="edan-grid">
+          <div class="edan-card">
+            <div class="edan-letter">E</div>
+            <div class="edan-name">Explanation / 阐释</div>
+            <div class="edan-desc">解释客观机制与概念原理。主要承载通用逻辑与常识背景。</div>
+          </div>
+          <div class="edan-card">
+            <div class="edan-letter">D</div>
+            <div class="edan-name">Description / 描写</div>
+            <div class="edan-desc">调动感官细节（光线、气味、神态），还原现场物理与心理画面。</div>
+          </div>
+          <div class="edan-card">
+            <div class="edan-letter">A</div>
+            <div class="edan-name">Action / 动作</div>
+            <div class="edan-desc">交代具体行动、转折事件与执行步骤，推动叙事节奏往前推进。</div>
+          </div>
+          <div class="edan-card">
+            <div class="edan-letter">N</div>
+            <div class="edan-name">Narration / 叙述</div>
+            <div class="edan-desc">交代历史前因、心路起伏与主观假设，连接不同段落的内在因果。</div>
+          </div>
+        </div>
+
+        <p>Cole 指出，文风并非某种需要苦苦寻觅的固定天性，而是写作者的主动创造——如同画家用红绿蓝调配色彩，你可以根据不同句子的目的逐句调整。同一位作者在阐明原理与刻画场景时，完全可以使用不同的句子意图、词汇与节奏，无需强求全篇保持单一腔调。</p>
+        <p>同时，Cole 强调文风在整篇文章中只是次要变量，起决定作用的始终是内容本身。在交代背景或传递常识时，通用的表达方式往往不可避免且依然有效，并不等同于低劣的“AI 垃圾”；但在追求辨识度的个人写作中，若缺乏真实的人格特质与具体事实支撑，单靠调换词汇也无法建立真正的区隔。此外，要想让机器模仿你的口吻，前提是你已经写出过具有个人表达习惯的文字样本并将其存入素材库；否则，模型只能默认调用通用的平均腔调。</p>
+
+        <h3>2. 代笔者的“雕塑法”工作流</h3>
+        <p>作为商业代笔写作者，Cole 梳理了他在服务委托人时摸索出的人机协作心智模型：</p>
+        <p>委托人（如行业专家或企业高管）往往具备丰富的专业经验，但没有充足的时间手动将所有想法码成文章。优秀的代笔绝不是替客户无中生有地编造人生，其核心流程是：</p>
+        <ol>
+          <li><strong>口述与记录</strong>：通过交流访谈或语音记录，引导对方说出真实经历、踩过的坑、坚持的原则与业务观察，将其固化为文字素材（逐字稿）。</li>
+          <li><strong>剔除与雕琢</strong>：代笔写作者拿到这块包含核心观点的原始素材，开始像雕塑家处理大理石一样，剔除前后重复的絮叨、删去无关的跑题内容、理出连贯的逻辑线索。</li>
+          <li><strong>补充通用框架</strong>：在核心经验周围，适度补充行业内通用的背景知识与基础概念，最终整合成一篇兼具专业度与可读性的文章。</li>
+        </ol>
+
+        <!-- 内联 SVG 图 2：大理石雕塑法工作流示意 -->
+        <div class="diagram-container">
+          <div class="diagram-title">图 2：大理石雕塑法——商业代笔与人机写作工作流</div>
+          <svg viewBox="0 0 760 210" width="760" height="210">
+            <!-- 步骤 1 -->
+            <rect x="30" y="45" width="200" height="120" rx="8" fill="var(--bg-surface-elevated)" stroke="#319795" stroke-width="1.5"/>
+            <text x="130" y="75" fill="#4FD1C5" font-size="14" font-weight="bold" text-anchor="middle">1. 原始毛石输入</text>
+            <text x="130" y="105" fill="#B0ADA5" font-size="12" text-anchor="middle">口述录音 / 经验散记</text>
+            <text x="130" y="125" fill="#B0ADA5" font-size="12" text-anchor="middle">观点取向 / 踩坑案例</text>
+            <text x="130" y="145" fill="#E2886A" font-size="11" font-weight="600" text-anchor="middle">【人类负责核心特质】</text>
+
+            <!-- 箭头 1 -->
+            <path d="M 235,105 L 285,105" stroke="#D97757" stroke-width="2"/>
+            
+            <!-- 步骤 2 -->
+            <rect x="290" y="45" width="200" height="120" rx="8" fill="var(--bg-surface-elevated)" stroke="#D97757" stroke-width="1.5"/>
+            <text x="390" y="75" fill="#E2886A" font-size="14" font-weight="bold" text-anchor="middle">2. 大理石雕琢</text>
+            <text x="390" y="105" fill="#B0ADA5" font-size="12" text-anchor="middle">剔除冗余重复口癖</text>
+            <text x="390" y="125" fill="#B0ADA5" font-size="12" text-anchor="middle">梳理结构逻辑脉络</text>
+            <text x="390" y="145" fill="#9F7AEA" font-size="11" font-weight="600" text-anchor="middle">【AI 扮演雕琢与降噪者】</text>
+
+            <!-- 箭头 2 -->
+            <path d="M 495,105 L 545,105" stroke="#D97757" stroke-width="2"/>
+
+            <!-- 步骤 3 -->
+            <rect x="550" y="45" width="180" height="120" rx="8" fill="var(--bg-surface-elevated)" stroke="#2E8B57" stroke-width="1.5"/>
+            <text x="640" y="75" fill="#38A169" font-size="14" font-weight="bold" text-anchor="middle">3. 赋形与交付</text>
+            <text x="640" y="105" fill="#B0ADA5" font-size="12" text-anchor="middle">适度填补常识背景</text>
+            <text x="640" y="125" fill="#B0ADA5" font-size="12" text-anchor="middle">成文兼具辨识度与通顺</text>
+            <text x="640" y="145" fill="#38A169" font-size="11" font-weight="600" text-anchor="middle">【无“AI味”的高质成果】</text>
+          </svg>
+        </div>
+
+        <p>在这一过程中，人类代笔提供的是人工杠杆，而大语言模型提供的是技术杠杆。两者在协作逻辑上高度一致：<strong>由人类负责提供不可替代的核心真实素材，由工具（人或机器）负责结构梳理、冗余剔除和排版规范。</strong></p>
+
+        <blockquote class="key-insight">
+          <strong>“你无法自动化你无法清晰表达的内容。”（You can't automate what you can't articulate.）</strong>
+        </blockquote>
+
+        <p>如果你对自己经历了什么、持有什么主张毫无头绪，直接要求 AI 替你完成思考，产出的必然是千篇一律的通用套话。</p>
+      </section>
+
+      <!-- 第四部分 -->
+      <section class="content-section" id="section-4">
+        <h2><span class="section-num">04</span> 终极价值：走向真正的原创思考</h2>
+        <p>区分通用常识与特质素材，不仅是为了写出一篇顺畅的文章，更是为了理清个人素材积累与思考深化的长期循环。</p>
+
+        <h3>1. 个人素材库的复用循环</h3>
+        <p>Cole 提出的“个人语言模型”（Personal Language Model）或“数字大脑”（Digital Brain），本质上是指<strong>个人长期积累、已由自己确认认可的文字与口述素材库</strong>，并非要求用户去训练一个新的技术模型。</p>
+        <p>这个循环不断重复：</p>
+        <ol>
+          <li><strong>记录与沉淀</strong>：将自己的经历、教训与认可的观点转化为文字。</li>
+          <li><strong>机器复用</strong>：由 AI 协助将已知素材重组、排版并重复分发。</li>
+          <li><strong>释放精力</strong>：人类作者摆脱重复码字，投入新生活与新思考。</li>
+        </ol>
+        <p>新经历与新思考再回到记录环节，继续补充素材库。</p>
+
+        <!-- 内联 SVG 图 3：素材复用与思考飞轮 -->
+        <div class="diagram-container">
+          <div class="diagram-title">图 3：个人数字大脑与思考进化双螺旋飞轮</div>
+          <svg viewBox="0 0 760 220" width="760" height="220">
+            <!-- 节点 1：沉淀 -->
+            <circle cx="160" cy="110" r="52" fill="var(--bg-surface-elevated)" stroke="#319795" stroke-width="2"/>
+            <text x="160" y="105" fill="#4FD1C5" font-size="13" font-weight="bold" text-anchor="middle">1. 沉淀记录</text>
+            <text x="160" y="125" fill="#B0ADA5" font-size="11" text-anchor="middle">观点/经历/教训</text>
+
+            <!-- 弧线 1 -->
+            <path d="M 215,90 Q 290,40 365,90" fill="none" stroke="#D97757" stroke-width="2" stroke-dasharray="4,4"/>
+            <text x="290" y="55" fill="#E2886A" font-size="11" text-anchor="middle">机器接管重组与分发</text>
+
+            <!-- 节点 2：复用 -->
+            <circle cx="420" cy="110" r="52" fill="var(--bg-surface-elevated)" stroke="#805AD5" stroke-width="2"/>
+            <text x="420" y="105" fill="#9F7AEA" font-size="13" font-weight="bold" text-anchor="middle">2. 机器复用</text>
+            <text x="420" y="125" fill="#B0ADA5" font-size="11" text-anchor="middle">多渠道/高杠杆</text>
+
+            <!-- 弧线 2 -->
+            <path d="M 475,90 Q 550,40 625,90" fill="none" stroke="#D97757" stroke-width="2" stroke-dasharray="4,4"/>
+            <text x="550" y="55" fill="#E2886A" font-size="11" text-anchor="middle">释放脑力与体力</text>
+
+            <!-- 节点 3：新思考 -->
+            <circle cx="670" cy="110" r="52" fill="var(--bg-surface-elevated)" stroke="#D97757" stroke-width="2"/>
+            <text x="670" y="105" fill="#E2886A" font-size="13" font-weight="bold" text-anchor="middle">3. 原创进化</text>
+            <text x="670" y="125" fill="#B0ADA5" font-size="11" text-anchor="middle">新连接/新假说</text>
+
+            <!-- 回流大底弧 -->
+            <path d="M 640,150 Q 420,225 190,150" fill="none" stroke="#2E8B57" stroke-width="2"/>
+            <text x="420" y="195" fill="#38A169" font-size="12" font-weight="bold" text-anchor="middle">↺ 新思考持续回流充实素材库 (终极复利)</text>
+          </svg>
+        </div>
+
+        <p>除了供 AI 调用，这些素材如果选择公开，本身就是一种直接面向读者的高杠杆资产。在现实中，你可能需要在一对一的咖啡聊天中向不同的人反复讲述同一段故事或个人见解；而一旦将它们整理成公开素材，任何人都能在任何时间、任何地点异步访问你的“数字大脑”，无需你每次亲自重复沟通。</p>
+        <p>当写作者建立起这样一个素材沉淀机制后，旧有的故事和基本主张不仅能供读者直接查阅，还可以交由机器协助复用，写作者本人的时间则被释放出来，投入到更有价值的创造中。</p>
+
+        <h3>2. 原创内容（Original Content）的两种路径</h3>
+        <p>在通用常识和个人故事之上，写作的最高目标是产生<strong>原创内容</strong>。个人经历能够带来区分度，但真正的原创要求作者带来具有增量价值的新理解。</p>
+        <p>Cole 总结了实现原创思考的两种方向：</p>
+        <ol>
+          <li><strong>提出未曾出现过的新想法（Say something different）</strong>：在深入钻研特定领域后，得出前人未曾阐述过的新论点或新视角。</li>
+          <li><strong>用具有实质意义的新方式阐释已有想法（Say the same thing in a meaningfully different way）</strong>：对大家都知道的道理，提供全新的论证证据、全新的结构框架或更具解释力的新模型。</li>
+        </ol>
+        <p>原创思考无法通过频繁变换浅层话题来实现，它往往需要作者在少数垂直领域内持续深耕与写作。让人工智能去承担基础常识的重组与排版，其最终目的正是为了让人类有精力去推敲新想法、发现新联系，从而推动所在领域的知识增量。</p>
+      </section>
+
+      <!-- 第五部分：实操工具箱 -->
+      <section class="content-section" id="section-5">
+        <h2><span class="section-num">05</span> 可直接复用的实操工具箱 (Takeaway Toolkit)</h2>
+        
+        <blockquote class="boundary-warning">
+          <strong>📌 说明与适用场景</strong>：本工具箱基于 Nicolas Cole 在原文中阐释的五大素材变量、雕塑家工作流以及通用常识与特质素材的结合方式改编设计，旨在帮助你在实际人机写作中直接提取使用。<br>
+          <strong>适用边界</strong>：以下工作流尤其适合个人专栏、商业随笔、经验复盘和观点论述等高度依赖作者辨识度的内容。如果你正在撰写的是客观事实通报、标准技术手册或纯资料汇编，应以准确清晰传递信息为主，无需刻意套用个人故事。
+        </blockquote>
+
+        <!-- 工具一 -->
+        <h3>工具一：个人特质素材自提清单（写作前花几分钟梳理）</h3>
+        <p>在将任务交给 AI 之前，先快速梳理以下 4 个问题。<strong>允许回答“无”或“不涉及”；如果某些方面没有经历，直接留空，严禁为了故事性而编造。</strong></p>
+
+        <div class="code-block-wrapper">
+          <div class="code-block-header">
+            <span>TOOL-01: PERSONAL_MATERIAL_CHECKLIST.md</span>
+            <button class="copy-btn" id="btn-copy-tool1" data-target="code-tool1">复制模板</button>
+          </div>
+          <pre><code id="code-tool1">### 写作主题：[例如：如何应对初次带团队的沟通压力]
+
+1. 我的真实生活与工作事实 (Life Facts)：
+   - 我在什么场景下参与过这件事？（例如：刚转为小组组长半年，负责 4 人团队）
+   - [若无特殊经历可直接写：按常规流程推进，无特殊背景]
+
+2. 我在行业常识中的主动取向 (Opinions)：
+   - 面对这个主题，市面上常见的几种通用建议是什么？
+   - 我个人倾向于认同哪一种？为什么？（例如：比起“增加一对一沟通频次”，我更认同“先理清任务界限”）
+
+3. 一段包含情境的具体经历 (Stories & Insights)：
+   - 我在实际操作中经历过什么具体波动或突发情况？（交代时间、当时在场人员、原本设想与实际结果）
+   - [若无明显波折，可记录一次日常具体协作的实际流程]
+   - 这段经历让我更具体地理解了哪条道理？哪个细节支持这个理解？
+
+4. 这一经历带来的做法改变 (Lessons)：
+   - 经过这件事后，我现在的做事方式或检查习惯与过去有什么具体不同？</code></pre>
+        </div>
+
+        <!-- 工具二 -->
+        <h3>工具二：“大理石雕塑法”人机协作提示词模板</h3>
+        <p>将你在工具一中记录的要点或原始口述片段，粘贴至下方提示词中发送给 AI。<strong>该提示词的核心目的在于明确事实边界，防止模型凭空编造事实：</strong></p>
+
+        <div class="code-block-wrapper">
+          <div class="code-block-header">
+            <span>TOOL-02: SCULPTOR_COLLABORATION_PROMPT.md</span>
+            <button class="copy-btn" id="btn-copy-tool2" data-target="code-tool2">复制提示词</button>
+          </div>
+          <pre><code id="code-tool2">你现在的角色是一位专业的文本编辑与内容顾问。
+
+【背景与目标】
+我正在撰写一篇关于《[填入你的主题]》的内容。
+我不希望这篇文章充斥泛泛而谈的套话。我希望基于我个人的实际经历与立场，形成一篇逻辑严密、叙事自然的深度分享。
+
+【我的原始素材输入】
+以下是我关于这个主题的要点记录（包含我的经历、观点与实际观察）：
+---
+[在此粘贴你在工具一中梳理的内容，或直接粘贴一段你的口述逐字稿]
+---
+
+【处理规则与约束】
+1. 严禁捏造事实与经历：文中涉及的所有个人经历、工作案例、具体数据和关键教训，必须严格基于我提供的【原始素材】。如果素材中有缺失或逻辑断层，请在提纲中向我提问或标注占位符，绝不可替我凭空编造未提及的生活细节、职场经历或经营数据。
+2. 充当雕琢者：请梳理我的原始口述，去除前后重复冗余的表述，理清文章的逻辑递进关系。
+3. 合理补充通用背景：为了保证文章的通顺与完整，你可以适度补充该领域必要的常识背景或常规框架，但必须将其作为绿叶，用来衬托和解释我的真实经历。
+4. 语言风格：
+   - 拒绝机械公文套话：避免使用“显而易见”、“总而言之”、“不可否认”、“双刃剑”等陈词滥调。
+   - 保持自然清爽的对话感：多用主动语态和直接具体的表述。
+
+请先输出文章的结构大纲与核心段落构想，由我确认后再展开正文写作。</code></pre>
+        </div>
+
+        <!-- 工具三：交互式四步自检清单 -->
+        <h3>工具三：文稿完成后的四步自检清单</h3>
+        <p>在拿到 AI 生成或协助修改的稿件后，对照以下清单逐项检查（点击即可标记核对）：</p>
+
+        <div class="checklist-container">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="font-size: 1rem; color: var(--text-primary);">文稿发布前自检进度</strong>
+            <span class="checklist-status-badge" id="stat-checklist-summary">完成度: 0 / 4 (0%)</span>
+          </div>
+
+          <div class="checklist-progress-bar-bg">
+            <div class="checklist-progress-fill" id="stat-checklist-progress"></div>
+          </div>
+
+          <div class="checklist-items">
+            <label class="checklist-item-row" id="row-chk-1" for="chk-item-1">
+              <input type="checkbox" class="checklist-checkbox" id="chk-item-1">
+              <div class="checklist-text">
+                <strong>1. 遮挡姓名检查 (Name Masking Test)</strong><br>
+                如果隐去作者姓名，熟悉你的同事或朋友能否看出这是基于你的经验写出的文章？如果整篇内容放在任何同行业从业者身上都完全成立，说明文章仍缺乏具体的个人特质素材，需要补充你的具体情境。
+              </div>
+            </label>
+
+            <label class="checklist-item-row" id="row-chk-2" for="chk-item-2">
+              <input type="checkbox" class="checklist-checkbox" id="chk-item-2">
+              <div class="checklist-text">
+                <strong>2. 虚构经历排查 (Anti-Hallucination Audit · 极其关键)</strong><br>
+                仔细阅读正文中的所有案例、时间节点、团队规模与因果故事，检查 AI 是否为了追求戏剧效果或句式顺畅，擅自添加了你未曾经历过的事情或未曾表达过的主张。如有发现，立即删改。
+              </div>
+            </label>
+
+            <label class="checklist-item-row" id="row-chk-3" for="chk-item-3">
+              <input type="checkbox" class="checklist-checkbox" id="chk-item-3">
+              <div class="checklist-text">
+                <strong>3. 常识与特质的边界 (Proportion Balance)</strong><br>
+                通篇是否大部分都在重复人尽皆知的普遍常识？通用常识是否做到了精炼，并留出足够的篇幅展开你的具体做法和实际观察？
+              </div>
+            </label>
+
+            <label class="checklist-item-row" id="row-chk-4" for="chk-item-4">
+              <input type="checkbox" class="checklist-checkbox" id="chk-item-4">
+              <div class="checklist-text">
+                <strong>4. 体裁匹配度确认 (Genre Verification)</strong><br>
+                检查文章性质是否适合加入个人经验。如果是纯客观的研究总结或技术文档，应果断删去不必要的个人感悟，保证事实清晰与检索效率。
+              </div>
+            </label>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- 底部参考来源 -->
+      <footer class="article-footer" id="section-ref">
+        <p><strong>参考来源与扩展阅读</strong>：Nicolas Cole 专栏文章《<a href="https://artandbiz.substack.com/p/the-right-way-to-write-with-ai" target="_blank" rel="noopener">The Right Way to Write with AI</a>》，发表于《The Art & Business of Writing》。</p>
+        <p style="margin-top: 8px; font-size: 0.8rem; color: var(--text-tertiary);">AIKnowledge 知识库规范化归档 · 单文件自包含交付 · 2026-09-08</p>
+      </footer>
+
+    </article>
+  </main>
+
+  <!-- 原生 JavaScript 逻辑 -->
+  <script>
+    (function () {
+      "use strict";
+
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      /* 1. 主题切换与持久化 */
+      var themeBtn = byId("theme-toggle-btn");
+      var themeIcon = byId("theme-icon");
+      var themeText = byId("theme-text");
+
+      function applyTheme(theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        if (theme === "light") {
+          themeIcon.textContent = "🌙";
+          themeText.textContent = "切换深色";
+        } else {
+          themeIcon.textContent = "☀️";
+          themeText.textContent = "切换浅色";
+        }
+        try {
+          if (window.localStorage) {
+            window.localStorage.setItem("aike_theme_pref", theme);
+          }
+        } catch (e) {
+          /* 忽略隐私模式下的存储异常 */
+        }
+      }
+
+      if (themeBtn) {
+        themeBtn.addEventListener("click", function () {
+          var currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+          var nextTheme = currentTheme === "dark" ? "light" : "dark";
+          applyTheme(nextTheme);
+        });
+      }
+
+      /* 初始从 localStorage 读取主题，默认保持 dark */
+      try {
+        if (window.localStorage) {
+          var savedTheme = window.localStorage.getItem("aike_theme_pref");
+          if (savedTheme === "light" || savedTheme === "dark") {
+            applyTheme(savedTheme);
+          }
+        }
+      } catch (e) {}
+
+      /* 2. 阅读进度条与侧栏高亮 */
+      var progressBar = byId("reading-progress");
+      var statReadingPct = byId("stat-reading-pct");
+      var sections = [
+        byId("section-intro"),
+        byId("section-1"),
+        byId("section-2"),
+        byId("section-3"),
+        byId("section-4"),
+        byId("section-5"),
+        byId("section-ref")
+      ];
+      var tocItems = document.querySelectorAll(".toc-item");
+
+      function onScroll() {
+        var docElem = document.documentElement;
+        var scrollTop = window.pageYOffset || docElem.scrollTop || 0;
+        var scrollHeight = docElem.scrollHeight - docElem.clientHeight;
+        var progress = 0;
+        if (scrollHeight > 0) {
+          progress = Math.min(100, Math.max(0, (scrollTop / scrollHeight) * 100));
+        }
+
+        if (progressBar) {
+          progressBar.style.width = progress.toFixed(1) + "%";
+        }
+        if (statReadingPct) {
+          statReadingPct.textContent = "进度 " + Math.round(progress) + "%";
+        }
+
+        /* 查找当前视野中的章节 */
+        var currentSectionId = "";
+        for (var i = 0; i < sections.length; i++) {
+          var sec = sections[i];
+          if (sec) {
+            var rect = sec.getBoundingClientRect();
+            if (rect.top <= 140) {
+              currentSectionId = sec.id;
+            }
+          }
+        }
+
+        if (currentSectionId) {
+          for (var j = 0; j < tocItems.length; j++) {
+            var item = tocItems[j];
+            var anchor = item.querySelector("a");
+            if (anchor && anchor.getAttribute("href") === "#" + currentSectionId) {
+              item.classList.add("active");
+            } else {
+              item.classList.remove("active");
+            }
+          }
+        }
+      }
+
+      window.addEventListener("scroll", onScroll, { passive: true });
+      onScroll();
+
+      /* 3. 移动端侧栏汉堡菜单开关 */
+      var mobileBtn = byId("mobile-toggle-btn");
+      var sidebar = byId("sidebar");
+      if (mobileBtn && sidebar) {
+        mobileBtn.addEventListener("click", function () {
+          sidebar.classList.toggle("open");
+        });
+
+        /* 点击侧栏链接时在移动端自动收起 */
+        var links = sidebar.querySelectorAll("a");
+        for (var k = 0; k < links.length; k++) {
+          links[k].addEventListener("click", function () {
+            if (window.innerWidth <= 1080) {
+              sidebar.classList.remove("open");
+            }
+          });
+        }
+      }
+
+      /* 4. 代码/模板一键复制 */
+      var copyBtns = [byId("btn-copy-tool1"), byId("btn-copy-tool2")];
+      for (var b = 0; b < copyBtns.length; b++) {
+        var btn = copyBtns[b];
+        if (btn) {
+          btn.addEventListener("click", function (e) {
+            var targetBtn = e.currentTarget;
+            var targetId = targetBtn.getAttribute("data-target");
+            var targetCode = byId(targetId);
+            if (!targetCode) return;
+
+            var textToCopy = targetCode.textContent || "";
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(textToCopy).then(function () {
+                showCopiedFeedback(targetBtn);
+              }).catch(function () {
+                fallbackCopy(textToCopy, targetBtn);
+              });
+            } else {
+              fallbackCopy(textToCopy, targetBtn);
+            }
+          });
+        }
+      }
+
+      function fallbackCopy(text, btn) {
+        var textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand("copy");
+          showCopiedFeedback(btn);
+        } catch (err) {}
+        document.body.removeChild(textarea);
+      }
+
+      function showCopiedFeedback(btn) {
+        var oldText = btn.textContent;
+        btn.textContent = "已复制！";
+        btn.classList.add("copied");
+        setTimeout(function () {
+          btn.textContent = oldText;
+          btn.classList.remove("copied");
+        }, 2000);
+      }
+
+      /* 5. 变量叠加沙盘 Tab 切换 */
+      var topicsData = {
+        egg: {
+          s0: "热锅、倒油、打入鸡蛋、翻面、适度加盐出锅。步骤逻辑严谨，但遮住名字无人知晓作者是谁。",
+          s1: "作者表明自己是一位“单亲父亲”。开始具备标签识别度，但仍缺乏独一无二的具体温度。",
+          s2: "每天清晨 6 点赶在 7 岁儿子赶校车前煎一个溏心蛋，记录儿子从挑食到吃光的早晨细节。此时文字完全不可替代。"
+        },
+        lead: {
+          s0: "作为新管理者，要加强与下属沟通、明确目标对齐、合理制定任务排期。通用公理无可挑剔，但味同嚼蜡。",
+          s1: "作者说明自己是“技术开发转技术负责人半年，带领 4 人的初创前端团队”。情境开始显影。",
+          s2: "交代第一次做性能重构交付延期被业务方问责，因害怕打击下属积极性而自己熬夜改 Bug 导致失控的惨痛教训。读者瞬间感同身受。"
+        },
+        invest: {
+          s0: "不要加杠杆炒股，建议买入标普 500 指数并长期持有 10 年。任何财经百科都有的标配建议。",
+          s1: "作者说明自己是“华尔街前从业者、持牌财务顾问”。具备职业信誉背书，但依旧有距离感。",
+          s2: "讲述自己二十岁出头在投行因加杠杆炒期权爆仓导致压力大到斑秃失眠的亲身痛苦。通用理财建议瞬间具有千钧之力。"
+        }
+      };
+
+      var tabEgg = byId("tab-btn-egg");
+      var tabLead = byId("tab-btn-lead");
+      var tabInvest = byId("tab-btn-invest");
+      var desc0 = byId("desc-stage-0");
+      var desc1 = byId("desc-stage-1");
+      var desc2 = byId("desc-stage-2");
+
+      function selectSandboxTopic(topicKey, clickedBtn) {
+        var allBtns = [tabEgg, tabLead, tabInvest];
+        for (var i = 0; i < allBtns.length; i++) {
+          if (allBtns[i]) allBtns[i].classList.remove("active");
+        }
+        if (clickedBtn) clickedBtn.classList.add("active");
+
+        var data = topicsData[topicKey];
+        if (data && desc0 && desc1 && desc2) {
+          desc0.textContent = data.s0;
+          desc1.textContent = data.s1;
+          desc2.textContent = data.s2;
+        }
+      }
+
+      if (tabEgg) {
+        tabEgg.addEventListener("click", function () { selectSandboxTopic("egg", tabEgg); });
+      }
+      if (tabLead) {
+        tabLead.addEventListener("click", function () { selectSandboxTopic("lead", tabLead); });
+      }
+      if (tabInvest) {
+        tabInvest.addEventListener("click", function () { selectSandboxTopic("invest", tabInvest); });
+      }
+
+      /* 6. 自检清单交互与完成度计算 */
+      var chk1 = byId("chk-item-1");
+      var chk2 = byId("chk-item-2");
+      var chk3 = byId("chk-item-3");
+      var chk4 = byId("chk-item-4");
+      var progressFill = byId("stat-checklist-progress");
+      var summaryText = byId("stat-checklist-summary");
+
+      var chkArray = [chk1, chk2, chk3, chk4];
+
+      function updateChecklistProgress() {
+        var checkedCount = 0;
+        for (var i = 0; i < chkArray.length; i++) {
+          var chk = chkArray[i];
+          var row = byId("row-chk-" + (i + 1));
+          if (chk && chk.checked) {
+            checkedCount++;
+            if (row) row.classList.add("checked");
+          } else {
+            if (row) row.classList.remove("checked");
+          }
+        }
+
+        var pct = Math.round((checkedCount / chkArray.length) * 100);
+        if (progressFill) {
+          progressFill.style.width = pct + "%";
+        }
+        if (summaryText) {
+          if (checkedCount === chkArray.length) {
+            summaryText.textContent = "已全部完成核验 (100% · 可放心交付)";
+            summaryText.style.color = "var(--emerald)";
+          } else {
+            summaryText.textContent = "完成度: " + checkedCount + " / " + chkArray.length + " (" + pct + "%)";
+            summaryText.style.color = "var(--text-secondary)";
+          }
+        }
+      }
+
+      for (var c = 0; c < chkArray.length; c++) {
+        if (chkArray[c]) {
+          chkArray[c].addEventListener("change", updateChecklistProgress);
+        }
+      }
+
+      updateChecklistProgress();
+
+    })();
+  </script>
+</body>
+</html>

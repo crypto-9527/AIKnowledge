@@ -1,0 +1,2448 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="U4omQPH6hxUZyWtNdJO1PW">
+<head data-page-node-id="hLjzXtYWqqxHgtlwXkh34C">
+<meta charset="utf-8" data-page-node-id="TyX2a80EqagNdz8VdKdqyE">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="tK4Z1Qe2TTzjQYtnC6NBWy">
+<title>Claude Code 研发范式与 Harness 循环工程白皮书 —— 控制层上移、Subtractive Prompting 与 Agent 软件工程演进</title>
+<style>
+/* ==========================================================================
+   1. 系统字体栈降级与全局变量体系 (Zero External Dependencies)
+   ========================================================================== */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+  /* 基础排版标尺 */
+  --content-max-w: 1240px;
+  --sidebar-w: 280px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --transition-fast: 0.18s ease;
+  --transition-normal: 0.28s ease;
+
+  /* 五色语义状态令牌 */
+  --accent: #d97757;          /* 陶土色：核心重点/架构基线 */
+  --accent-hover: #e2886a;
+  --accent-light: rgba(217, 119, 87, 0.12);
+  --emerald: #38a169;         /* 翡翠绿：正向收益/成功/验证通过 */
+  --emerald-light: rgba(56, 161, 105, 0.12);
+  --rose: #e53e3e;            /* 玫瑰红：衰减/断层/阻断/错误漂移 */
+  --rose-light: rgba(229, 62, 62, 0.12);
+  --amber: #dd6b20;           /* 琥珀橙：告警/噪声/成本/瓶颈 */
+  --amber-light: rgba(221, 107, 32, 0.12);
+  --cyan: #319795;            /* 青蓝：数理推导/数据实证/协议 */
+  --cyan-light: rgba(49, 151, 149, 0.12);
+}
+
+/* 深色主题：黑曜石沉浸 (#181715) - 默认 */
+html[data-theme="dark"] {
+  --bg-app: #141312;
+  --bg-surface: #1c1b18;
+  --bg-surface-elevated: #24221f;
+  --bg-surface-subtle: #2d2b27;
+  --text-main: #ede8df;
+  --text-muted: #aba294;
+  --text-faint: #787063;
+  --border-subtle: #36322c;
+  --border-strong: #4f4940;
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.65);
+  --code-bg: #0d0d0c;
+  --svg-grid: #282622;
+  --svg-axis: #544d42;
+  --card-hover-border: #d97757;
+}
+
+/* 浅色主题：暖羊皮纸 (#FAF7F2) */
+html[data-theme="light"] {
+  --bg-app: #f7f4ee;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #fcfbf9;
+  --bg-surface-subtle: #f0ebe1;
+  --text-main: #24211d;
+  --text-muted: #5e574c;
+  --text-faint: #8f8576;
+  --border-subtle: #e3dcd1;
+  --border-strong: #c7beaf;
+  --shadow-sm: 0 2px 6px rgba(45, 38, 30, 0.05);
+  --shadow-md: 0 6px 18px rgba(45, 38, 30, 0.08);
+  --shadow-lg: 0 14px 36px rgba(45, 38, 30, 0.12);
+  --code-bg: #f5efe6;
+  --svg-grid: #ede7dc;
+  --svg-axis: #b3a898;
+  --card-hover-border: #d97757;
+}
+
+/* ==========================================================================
+   2. 基础重置与全局排版
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  line-height: 1.78;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+}
+
+/* 顶部阅读进度指示条 */
+#read-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--cyan), var(--emerald));
+  z-index: 1000;
+  width: 0%;
+  transition: width 0.08s linear;
+}
+
+/* 页面顶部固定工具栏 */
+.top-bar {
+  position: sticky;
+  top: 0;
+  height: 56px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 990;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.top-bar-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-bar-badge {
+  font-size: 0.72rem;
+  background: var(--accent-light);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  border: 1px solid var(--accent);
+  letter-spacing: 0.04em;
+}
+
+.top-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-icon {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  transition: all var(--transition-fast);
+}
+
+.btn-icon:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-light);
+}
+
+/* ==========================================================================
+   3. 布局：侧边栏 + 内容主体 (对称居中、桌面消除右侧留白)
+   ========================================================================== */
+.layout-container {
+  display: flex;
+  max-width: var(--content-max-w);
+  margin: 0 auto;
+  padding: 28px 24px 80px 24px;
+  gap: 36px;
+  box-sizing: border-box;
+}
+
+/* 侧边导航栏 */
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  position: sticky;
+  top: 80px;
+  height: calc(100vh - 104px);
+  overflow-y: auto;
+  padding-right: 12px;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+
+.toc-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.toc-header {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.toc-list {
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.toc-item {
+  margin-bottom: 4px;
+}
+
+.toc-link {
+  display: block;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-left: 2px solid transparent;
+}
+
+.toc-link:hover, .toc-link.active {
+  color: var(--accent);
+  background: var(--accent-light);
+  border-left-color: var(--accent);
+}
+
+.toc-sublist {
+  list-style: none;
+  padding-left: 14px;
+  margin-top: 2px;
+}
+
+.toc-sublink {
+  display: block;
+  color: var(--text-faint);
+  text-decoration: none;
+  padding: 3px 6px;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toc-sublink:hover {
+  color: var(--accent);
+}
+
+/* 主内容区域 */
+.main-content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 头部 Header */
+.doc-header {
+  margin-bottom: 40px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.doc-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-light);
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(217, 119, 87, 0.3);
+}
+
+.doc-title {
+  font-family: var(--font-serif);
+  font-size: 2.25rem;
+  line-height: 1.28;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 16px;
+  letter-spacing: -0.015em;
+}
+
+.doc-subtitle {
+  font-size: 1.15rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+.doc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 0.85rem;
+  color: var(--text-faint);
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.doc-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 核心要义总览卡片 (KPI 指标栏) */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.kpi-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.kpi-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.kpi-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--accent);
+}
+
+.kpi-card.emerald::before { background: var(--emerald); }
+.kpi-card.cyan::before { background: var(--cyan); }
+.kpi-card.amber::before { background: var(--amber); }
+
+.kpi-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.kpi-value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+  margin-bottom: 6px;
+  font-family: var(--font-sans);
+}
+
+.kpi-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+/* 文章正文排版 */
+.section-block {
+  margin-bottom: 52px;
+  scroll-margin-top: 76px;
+}
+
+.section-block:last-child {
+  margin-bottom: 0;
+}
+
+h2.section-title {
+  font-family: var(--font-serif);
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: -0.01em;
+}
+
+h2.section-title::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 1.3em;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+h3.subsection-title {
+  font-size: 1.18rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 28px 0 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+p {
+  margin-bottom: 16px;
+  color: var(--text-main);
+}
+
+ul, ol {
+  margin-bottom: 18px;
+  padding-left: 24px;
+  color: var(--text-main);
+}
+
+li {
+  margin-bottom: 8px;
+}
+
+strong {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+blockquote {
+  border-left: 3px solid var(--accent);
+  background: var(--bg-surface-elevated);
+  padding: 16px 20px;
+  margin: 20px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-main);
+  font-style: normal;
+}
+
+blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* 引用标注 */
+.citation {
+  font-size: 0.8rem;
+  color: var(--accent);
+  text-decoration: none;
+  vertical-align: super;
+  padding: 0 2px;
+  font-weight: 600;
+}
+
+.citation:hover {
+  text-decoration: underline;
+}
+
+/* 架构对比卡片与表格 */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin: 22px 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+th {
+  background: var(--bg-surface-subtle);
+  color: var(--text-main);
+  padding: 12px 16px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  vertical-align: top;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+tr:hover td {
+  background: var(--bg-surface-elevated);
+}
+
+/* 代码与命令块 */
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  overflow-x: auto;
+  margin: 18px 0;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--text-main);
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--bg-surface-subtle);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+
+/* 原生 MathML Core 与原生 CSS 数学公式容器 */
+.math-block {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 18px 24px;
+  margin: 20px 0;
+  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.math-caption {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  margin-top: 4px;
+  text-align: center;
+}
+
+math {
+  font-family: "Latin Modern Math", "Cambria Math", "STIX Two Math", var(--font-serif);
+  font-size: 1.15rem;
+  color: var(--text-main);
+}
+
+/* 原生 CSS 优雅降级数学符号 */
+.mfrac {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: middle;
+  text-align: center;
+  padding: 0 4px;
+}
+.mnum {
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 2px;
+}
+.mden {
+  padding-top: 2px;
+}
+
+/* 提示卡片与警告带 */
+.callout {
+  padding: 18px 20px;
+  border-radius: var(--radius-md);
+  margin: 22px 0;
+  border-left: 4px solid var(--accent);
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.callout-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+}
+
+.callout.emerald {
+  border-left-color: var(--emerald);
+}
+.callout.emerald .callout-title {
+  color: var(--emerald);
+}
+
+.callout.cyan {
+  border-left-color: var(--cyan);
+}
+.callout.cyan .callout-title {
+  color: var(--cyan);
+}
+
+.callout.amber {
+  border-left-color: var(--amber);
+}
+.callout.amber .callout-title {
+  color: var(--amber);
+}
+
+.callout.rose {
+  border-left-color: var(--rose);
+}
+.callout.rose .callout-title {
+  color: var(--rose);
+}
+
+/* 比较图解与双列对比 */
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin: 22px 0;
+}
+
+.compare-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+}
+
+.compare-card-header {
+  font-weight: 700;
+  font-size: 0.92rem;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compare-card.old .compare-card-header { color: var(--text-faint); }
+.compare-card.new .compare-card-header { color: var(--accent); }
+
+/* ==========================================================================
+   4. 动态交互沙盘样式 (Interactive Sandboxes)
+   ========================================================================== */
+.sandbox-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin: 32px 0;
+  box-shadow: var(--shadow-md);
+}
+
+.sandbox-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sandbox-title-group h4 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sandbox-title-group p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.sandbox-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--cyan-light);
+  color: var(--cyan);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--cyan);
+  text-transform: uppercase;
+}
+
+.sandbox-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 24px;
+}
+
+.sandbox-controls {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.control-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.control-val {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-strong);
+  outline: none;
+  transition: background var(--transition-fast);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.control-hint {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+/* 沙盘可视化画布与数据回显 */
+.sandbox-visual {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sandbox-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.stat-box {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  text-align: center;
+}
+
+.stat-box-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.stat-box-num {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.stat-box-num.accent { color: var(--accent); }
+.stat-box-num.emerald { color: var(--emerald); }
+.stat-box-num.amber { color: var(--amber); }
+
+.stat-box-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.chart-stage {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chart-stage svg {
+  width: 100%;
+  height: auto;
+  max-height: 260px;
+}
+
+.sandbox-notes {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  background: var(--bg-surface-subtle);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--cyan);
+}
+
+/* 附注与一手访谈引用表 */
+.references-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 22px;
+  margin-top: 40px;
+}
+
+.ref-item {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.ref-num {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ref-content {
+  color: var(--text-muted);
+}
+
+.ref-content a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.ref-content a:hover {
+  text-decoration: underline;
+}
+
+/* 页脚 */
+.doc-footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+}
+
+/* ==========================================================================
+   5. 响应式与打印适配
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .layout-container {
+    flex-direction: column;
+    padding: 20px 16px;
+  }
+  .sidebar {
+    width: 100%;
+    position: static;
+    height: auto;
+    max-height: 280px;
+    margin-bottom: 24px;
+  }
+  .sandbox-layout {
+    grid-template-columns: 1fr;
+  }
+  .compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .top-bar, .sidebar, #read-progress, .sandbox-controls, .btn-icon {
+    display: none !important;
+  }
+  .layout-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  .main-content {
+    width: 100% !important;
+  }
+  .sandbox-card, .kpi-card, .table-wrap, blockquote {
+    border: 1px solid #cccccc !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+}
+</style>
+</head>
+<body data-page-node-id="5bNJHKpHOPoEGhLkMHcGby">
+
+<!-- 顶部阅读进度条 -->
+<div id="read-progress" data-page-node-id="PQwQgwbmiz8WOCxqFfUCBJ"></div>
+
+<!-- 顶部状态工具栏 -->
+<header class="top-bar" data-page-node-id="EWYSy7gpILdwLrdUwkg5k9">
+  <div class="top-bar-title" data-page-node-id="PG94SPCn97AMT2I63yyOWh">
+    <span data-page-node-id="nynDtBSuyBObcR3GiAlHQi">Claude Code 研发范式白皮书</span>
+    <span class="top-bar-badge" data-page-node-id="yoT6LtLT6RRtjjAiGHy1JG">ENGINEERING WHITE PAPER</span>
+  </div>
+  <div class="top-bar-actions" data-page-node-id="hN0vH1wu5xiWuZXAZFow5f">
+    <button type="button" class="btn-icon" id="btn-theme" title="切换深浅主题" data-page-node-id="iWZohS2EID3Iw2v5LF4Jgu">
+      <span id="theme-icon" data-page-node-id="z5TECXYUUjMhJJTfbpA6tQ">◐</span>
+      <span id="theme-text" data-page-node-id="VLIDB80HyWOEaqpuWtNYHz">主题</span>
+    </button>
+    <button type="button" class="btn-icon" id="btn-print" title="打印/导出 PDF" data-page-node-id="SllejGKC0U0Czuib5HzVVr">
+      <span data-page-node-id="UgkBgxZsjKuhTzhHiFypcH">⎙</span>
+      <span data-page-node-id="ONqOWA9BBbjFriitYfG6kH">打印</span>
+    </button>
+  </div>
+</header>
+
+<!-- 主布局容器 -->
+<div class="layout-container" data-page-node-id="r5pKA73zoiNOBVm4s6nEbn">
+
+  <!-- 侧边导航目录 (ToC) -->
+  <aside class="sidebar" id="app-sidebar" data-page-node-id="ZBM9ce83waOFNjEmEwes7v">
+    <div class="toc-card" data-page-node-id="6EE83z1K4wqZkDaw8AEoAA">
+      <div class="toc-header" data-page-node-id="U0Oqc18z4zGFEU85xUlqQj">
+        <span data-page-node-id="eguKLpdjxL2h2WnpyBWjcM">架构导读目录</span>
+        <span data-page-node-id="XATDVwvN64FZnfmetiDyKt">14 SECTIONS</span>
+      </div>
+      <nav data-page-node-id="eG7CIsGniQh8yoBH58x7Bw">
+        <ul class="toc-list" data-page-node-id="xxM6NgGURQbEklG5BMwu2s">
+          <li class="toc-item" data-page-node-id="b7xfAeIT6ZaSOeBU15GKw2"><a class="toc-link" href="#sec-overview" data-page-node-id="JaJxdoRksos3KGmlqEJTOV">0. 范式总览与核心公式</a></li>
+          <li class="toc-item" data-page-node-id="0ZlCOp4yTkpiguqu4W6Dnf"><a class="toc-link" href="#sec-core-thesis" data-page-node-id="it3SBoO1trULOFYE9QbZhE">1. 软件工程核心结论</a></li>
+          <li class="toc-item" data-page-node-id="uFhdPw5QgevFeH1ovTSRG8"><a class="toc-link" href="#sec-subtractive-prompt" data-page-node-id="9J2dydpGhIuBOJcwGc2HPF">2. 删减 80% Prompt 真相</a></li>
+          <li class="toc-item" data-page-node-id="cSAbuQ8S40sbhfj6HEMAn9"><a class="toc-link" href="#sec-boundaries" data-page-node-id="BD2HQ9bD9ZcEPt9QlTB7gT">3. 减法工程的限定边界</a></li>
+          <li class="toc-item" data-page-node-id="JySjwLmJcOZCAlzomSKtwR"><a class="toc-link" href="#sec-harness-importance" data-page-node-id="bzEDf6mvXqTTvYQzq1koGS">4. Harness 逆向膨胀机制</a></li>
+          <li class="toc-item" data-page-node-id="HGh8A5NAkc6bOG40qZ2gQY"><a class="toc-link" href="#sec-loop-engineering" data-page-node-id="AQnRKjUCFPXCPy7AQf9cU9">5. Loop Engineering 阶梯演化</a></li>
+          <li class="toc-item" data-page-node-id="C7HRhGAbhGj8Az3kcAafnU"><a class="toc-link" href="#sec-verification-license" data-page-node-id="lvw0m9iWZdvq7bfJtF2hN1">6. Verification 自治许可证</a></li>
+          <li class="toc-item" data-page-node-id="zw0iN0CFdqgcAMWk0KvGHF"><a class="toc-link" href="#sec-no-code-misconception" data-page-node-id="HmzEQofv249Ec5lcpaj8Nl">7. “六个月不敲代码”正解</a></li>
+          <li class="toc-item" data-page-node-id="ByRAG0RaYvkSlz27Ylyadt"><a class="toc-link" href="#sec-code-as-ir" data-page-node-id="UKaoasjkqblO2y8hqL3vrq">8. 代码转变为中间表示 (IR)</a></li>
+          <li class="toc-item" data-page-node-id="zEQ2cN5xfrmfpMroSCZZ1c"><a class="toc-link" href="#sec-prompt-provenance" data-page-node-id="RSX0egfKEppxpvSYKiZZeR">9. Prompt 溯源与版本控制</a></li>
+          <li class="toc-item" data-page-node-id="7YPiPqviJsLL87CCyC1KCv"><a class="toc-link" href="#sec-feedback-asymmetry" data-page-node-id="JFg9ncpQ46cC9Nj3Z4lafy">10. Coding Agent 非对称爆发</a></li>
+          <li class="toc-item" data-page-node-id="JQPpDfGl5Q0DgMGauIKeVf"><a class="toc-link" href="#sec-taste-value" data-page-node-id="HtvyqlikXyarUWJDyN59LL">11. Taste 鉴赏力的价值飞跃</a></li>
+          <li class="toc-item" data-page-node-id="nk2TMtFM9S5TwBozVidjuy"><a class="toc-link" href="#sec-engineer-competence" data-page-node-id="GgfKaBnYLGTYUSZsmKxUQp">12. 工程师能力结构金字塔</a></li>
+          <li class="toc-item" data-page-node-id="609qhRlpMMEB7udX8i5n8o"><a class="toc-link" href="#sec-self-improvement" data-page-node-id="ZtTpzgTsmDEfbkl5wuuxM7">13. Harness 级自进化闭环</a></li>
+          <li class="toc-item" data-page-node-id="bVXojov7DclQBVfx5bGRjz"><a class="toc-link" href="#sec-five-generations" data-page-node-id="3J0oTW1nTIMLlcvDUlCZ3I">14. Agent 演化五代全景与总结</a></li>
+          <li class="toc-item" data-page-node-id="81RHOwyJgdDC06JtAALWe7"><a class="toc-link" href="#sec-sandboxes" data-page-node-id="sQiS39AB73eTPohCLDrjr7">★ 三大可交互数理仿真沙盘</a></li>
+          <li class="toc-item" data-page-node-id="AvKGOBrUFspJC5V5AFMjGg"><a class="toc-link" href="#sec-references" data-page-node-id="oVWdAhyqn6epViA2w6S7VJ">附录：文献与一手访谈信源</a></li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- 主正文区 -->
+  <main class="main-content" data-page-node-id="Ywddanccjt3eSXln8vEvVm">
+
+    <!-- 标题头区域 -->
+    <header class="doc-header" data-page-node-id="NBIBKgBoJ22jx8vvtOJ0kn">
+      <div class="doc-tag" data-page-node-id="iKDC2FiEjEdpG01Mj6YYgW">ANTHROPIC CLAUDE CODE 深度架构拆解</div>
+      <h1 class="doc-title" data-page-node-id="5bj06cKvP7WxwT0q3feC9R">Claude Code 研发范式与 Harness 循环工程白皮书</h1>
+      <p class="doc-subtitle" data-page-node-id="BNQYBVnbF90Yh4HRoijzDJ">
+        从“人写代码 + AI 辅助”，迁移到“人定义目标与判断标准 + Harness 驱动 Agent 持续执行”——软件生产控制层上移的数学形式化与工程演进推演
+      </p>
+      <div class="doc-meta" data-page-node-id="MxMAoyxZw3dyDQybIFflBS">
+        <div class="doc-meta-item" data-page-node-id="qcD6jRQSWdm9NGviDpMKsd"><span data-page-node-id="ke7vOCGv1jb4llo1lFfhs5">🎙️ 原始信源：</span><strong data-page-node-id="eLlywgyWk8coBSj8NLfDBq">Thariq Shihipar &amp; Ryan Peterman (Claude Code Core Team)</strong></div>
+        <div class="doc-meta-item" data-page-node-id="DnxDti9Pk5973oD8vUN5zw"><span data-page-node-id="rfvoyDPKUKDdM8tDBtjqQh">⏱️ 访谈时长：</span><strong data-page-node-id="RGA6crMkDsQ37tfW0T6e1P">约 70 分钟 (The Developing Dev Podcast)</strong></div>
+        <div class="doc-meta-item" data-page-node-id="hiedf7AxtxiQI1BZZSgUkF"><span data-page-node-id="VXltfFa7EWDyr4YfPUB23H">🔍 架构解构：</span><strong data-page-node-id="gCqFk9GB8j7x6lObkXGdpq">Shao Meng (孟岩) 深度评注与工程建模</strong></div>
+        <div class="doc-meta-item" data-page-node-id="FdpZuBVD5gnQq1hPMrsiBb"><span data-page-node-id="YSFgkOgEzim3qe0NlAFfls">📅 基准定稿：</span><strong data-page-node-id="uJKXZzklKHdmuisQlsIIxN">2026-09-08</strong></div>
+      </div>
+    </header>
+
+    <!-- 关键数据看板 (KPI 概览) -->
+    <div class="kpi-grid" data-page-node-id="q7j4Z4Yck1IAADWfw0Oo1Q">
+      <div class="kpi-card" data-page-node-id="VOMVBCwvC3CSLIhDJCqd8R">
+        <div class="kpi-label" data-page-node-id="CfqjcADCFbB2y0D41MiW07">System Prompt 删减幅度</div>
+        <div class="kpi-value" data-page-node-id="GIEaZXlFBVrWuMV8ONLJO6">> 80%</div>
+        <div class="kpi-desc" data-page-node-id="YuSjc3lT9HhiXUMtf99ag9">Opus 5 / Fable 5 前沿底座下，Coding Eval 能力损失测得为 0.0%</div>
+      </div>
+      <div class="kpi-card emerald" data-page-node-id="FB6tDpmnDjW81u3YD6edGZ">
+        <div class="kpi-label" data-page-node-id="FAgDLzDUp1666QjDggh3ys">生产控制层状态</div>
+        <div class="kpi-value" data-page-node-id="e9ZrEzHFpiOiMCzI56cO3i">Macro-Autonomy</div>
+        <div class="kpi-desc" data-page-node-id="9IZNwmbmCzvYYRw41jYHVv">强模型显著减少微观规则约束（Micro-instructions），大幅提升宏观自治</div>
+      </div>
+      <div class="kpi-card cyan" data-page-node-id="LEwVuCH8XnllqHzqZHvkUT">
+        <div class="kpi-label" data-page-node-id="mzD1KZx3ij4F7ILm2ac6Nn">工程成本重心倒挂</div>
+        <div class="kpi-value" data-page-node-id="Waylsq5s8IpADknCLC7n6e">Verify > Generate</div>
+        <div class="kpi-desc" data-page-node-id="ZTvmQDGNRMgW9JW52kkOQB">代码生成边际成本趋近于零，测试验证成为绝对昂贵的工程核心资产</div>
+      </div>
+      <div class="kpi-card amber" data-page-node-id="Swvis4r85uVhN55yJDrwyI">
+        <div class="kpi-label" data-page-node-id="59qAEPBKwGK2jbCAjBF5oa">代码本质属性跃迁</div>
+        <div class="kpi-value" data-page-node-id="kR5sG4Q1j55nWBOqhAs1Af">Intermediate Repr.</div>
+        <div class="kpi-desc" data-page-node-id="ttnRehzuhB6RPmEpyNhunq">代码从终态资产转为瞬态中间表示 (IR)，核心资产迁移至约束与评测</div>
+      </div>
+    </div>
+
+    <!-- 章节 0：总览与核心引言 -->
+    <section class="section-block" id="sec-overview" data-page-node-id="MOMpk9I7FO89BPGNNuPwc6">
+      <h2 class="section-title" data-page-node-id="DyBiPpEPOdHrcQjHhbMdFi">0. 范式总览：软件生产控制层的历史性上移</h2>
+      <p data-page-node-id="wD3Ez9sj7G32BG0duG0AM6">
+        表面上看，Claude Code 团队工程师 <strong data-page-node-id="oghY80wYlr3tLjDYvZjShG">Thariq Shihipar</strong> 与 <strong data-page-node-id="R6AppVBTHvI1ZgPzLeKaHL">Ryan Peterman</strong> 约 70 分钟的深入技术访谈在复盘团队如何使用 AI、如何构建代码助手；但本质上，这场对话揭示了软件工程数十年来最深刻的一次结构性迁移：
+      </p>
+      <blockquote data-page-node-id="K0AkJQDNDkkM39qQcr4yP0">
+        <p data-page-node-id="ubumAgWVw3Aa7DpHdiEZ2Z"><strong data-page-node-id="6bF5BGst61p0p8gQTp50uH">“软件工程正在从‘人写代码 + AI 辅助’，迁移到‘人定义目标与判断标准 + Harness 驱动 Agent 持续执行’。”</strong></p>
+        <p style="margin-top: 8px;" data-page-node-id="A0iL3ZfTcs0Q9U7D67vZFH">真正发生变化的从来不是“敲代码的速度变快了”，而是<strong data-page-node-id="jkTgcCFfa9767AcRvB8D7a">软件生产系统的控制层（Control Plane）正在全面上移。</strong></p>
+      </blockquote>
+      <p data-page-node-id="MS60wqsP4pGixrRBy87Zeu">
+        在传统工程中，人类工程师同时扮演“目标定义者”、“算法设计者”、“语法转译者（敲代码）”与“单体测试执行者”。随着 Agent 运行时间从几分钟延展至数小时乃至数天，敲击键盘转译语法这一低层执行动作已不再是系统瓶颈。工程师的阵地正在被迫、也是必然地退守并升维至：<strong data-page-node-id="XMZ1Wp4JCS50GTmkDHUI9B">定义什么是好的结果（Domain Taste）、定义不可逾越的硬约束（Specs &amp; Constraints）、构建自动化裁判体系（Verification &amp; Evals），以及装配驱动 Agent 自主运转的工程底座（Harness）</strong>。
+      </p>
+    </section>
+
+    <!-- 章节 1：最重要的结论与核心公式 -->
+    <section class="section-block" id="sec-core-thesis" data-page-node-id="LpSHDS3TRJKsloWSfosNaW">
+      <h2 class="section-title" data-page-node-id="t4O3Cf3WTiF8wz9bTtGNE0">1. 我认为这篇文章最重要的结论：软件工程能力四元公式</h2>
+      <p data-page-node-id="wqeaMMO9Wswh432PFYGpxm">
+        访谈与深度评注给出的最关键论断，可以用一个高度凝练的形式化乘法模型表达：
+      </p>
+      <div class="math-block" data-page-node-id="Gmc7BDKtAdh9tf38LBymOy">
+        <math display="block" data-page-node-id="9ymdhGqwJi66NM9zLvYPKZ">
+          <mrow data-page-node-id="92lqJVqr3DuZD8ymMMn78g">
+            <msub data-page-node-id="thGfrij5ez5SiqOB0RaLBS"><mi data-page-node-id="RIxun0jk7ZeFdIYFNrGBy8">Capability</mi><mtext data-page-node-id="ldLkmoDmaCBUHT1Lw0GAzQ">SE</mtext></msub>
+            <mo data-page-node-id="OjkjutTIXgDATXKLut0hlq">&approx;</mo>
+            <msub data-page-node-id="x6lln1o7x2695hQJuooqQ9"><mi data-page-node-id="frOBZfXzCVxyYUMe4DIy9u">Capability</mi><mtext data-page-node-id="iFMee3QFyiGBOpQNdtaA75">Model</mtext></msub>
+            <mo data-page-node-id="PBK6sOvXwx6mZzyaPjTtT4">&times;</mo>
+            <msub data-page-node-id="VscjPatCJkThFIih7kiemU"><mi data-page-node-id="VHyaHMLlFoSCHH91jHskSh">Capability</mi><mtext data-page-node-id="CzLYxjvdvPN12IMVRhEtEX">Harness</mtext></msub>
+            <mo data-page-node-id="yzW0bi1rWtYGADkzdozLNb">&times;</mo>
+            <msub data-page-node-id="SeBY3D7WKtJ7E4ceQqniGg"><mi data-page-node-id="Reov12hsjEvzDmqg3ZVNwO">Capability</mi><mtext data-page-node-id="QOPtHViCkJ18WLeeRHXFEZ">Verification</mtext></msub>
+            <mo data-page-node-id="gqsz7GGv6CVZsGJNZ0Cr8p">&times;</mo>
+            <mtext data-page-node-id="NaGEeVCsTFfx5m1u79GtAC">Domain Taste</mtext>
+          </mrow>
+        </math>
+        <div class="math-caption" data-page-node-id="ElGyTBHNud9TCIUmcowxT2">公式 1.1：Agent 时代软件工程综合生产力模型（非相加，而是四元严格串联乘积）</div>
+      </div>
+      <p data-page-node-id="4s2n1xVevrerc9j5OTplXp">
+        这个公式彻底击碎了过去两年的流行误区——<strong data-page-node-id="6oDP3ILFgfiRCxuTSHNON6">“软件工程能力 &approx; Prompt 写得好不好”</strong>。更揭示出一个颠覆直觉的技术剪刀差现象：
+      </p>
+      <pre data-page-node-id="1hYGJ2DmPB0PK56KzMLWEr"><code data-page-node-id="C0XA5WhsftGUt0meIDlkVe">模型基座能力提升 (Model Capacity ↑)
+       ↓
+Prompt / System Prompt 可以大幅减薄 (Prompt Thickness ↓)
+       ↓
+但 Harness 运行时系统反而越来越强、越来越复杂 (Harness Engineering Complexity ↑)
+       ↓
+因为模型能够承担越来越长程 (Long-Horizon)、越来越高自主度的复杂工程任务</code></pre>
+      <p data-page-node-id="E49VJOLjIZzFG0zACbTJRA">
+        正如 Thariq 明确强调的那样：<strong data-page-node-id="dzFfa9zpAmumyAFiGzqERv">随着模型能力增强，Harness 并没有变得无足轻重；恰恰相反，为了让模型能够安全可控地连续运行数小时、操作数十种异构工具、执行成百上千个 step、实时呈现中间结果并接受动态验证，Harness 变得极其关键。</strong>Auto mode、操作系统沙箱（Sandbox）、自愈重试流水线、动态 Workflows 与 Artifacts 管理，全部沉淀在这一层。
+      </p>
+      <div class="callout emerald" data-page-node-id="mPtWaKhdVXZXwBzQEX4X29">
+        <div class="callout-title" data-page-node-id="lAIPFTu5fInRSZznfztgx1">💎 访谈金句原声提炼</div>
+        <p data-page-node-id="QRwGtM0d0EnTAD6AgVUptO"><strong data-page-node-id="OJg2nq2TvzOiHwlszXKUz6">“强模型减少的是‘微观指令’（Micro-instructions），增加的是‘宏观自治’（Macro-autonomy）。”</strong></p>
+      </div>
+    </section>
+
+    <!-- 章节 2：「删掉 80% System Prompt」真正意味着什么 -->
+    <section class="section-block" id="sec-subtractive-prompt" data-page-node-id="6QqXEaVtLTE6S1RP1BaFtn">
+      <h2 class="section-title" data-page-node-id="ml8FB9F3AyCmPCZEinSWfw">2. 「删掉 80% System Prompt」真正意味着什么：从加法规训到减法释放</h2>
+      <p data-page-node-id="e0vCV5jRWHqBwcwKQ6LDkC">
+        在社交网络与媒体二次传播中，最具眼球效应的一句话是：<em data-page-node-id="nyqsy9SCDYxkhhYPZ6B29s">“Claude Code 删除了约 80% 的 System Prompt”</em>。这一事实已被 Anthropic 官方发布的技术博客严格确认：针对新一代前沿模型（Opus 5、Fable 5），Claude Code 移除了大量陈旧的死板指令，System Prompt 缩减超过 80%，在标准 Coding Benchmark 上能力不但没有下降，代码泛化与创造性反而显著提升。
+      </p>
+      <p data-page-node-id="ld5OKo8XGIjp58lwaFTYhH">但这绝不意味着“提示词工程（Prompt Engineering）彻底消亡”，而是其内核发生了范式转移：</p>
+      
+      <div class="compare-grid" data-page-node-id="szOAtjqNERnS0wiXzhTGAP">
+        <div class="compare-card old" data-page-node-id="uCTBwRFUDKCwCKpw9laCmk">
+          <div class="compare-card-header" data-page-node-id="kMpWab4jrAWKQd5CjIBGqG">
+            <span data-page-node-id="DWmseRDKErt1fq72r8vayU">❌ 旧 Prompt Engineering（Additive / 规训式）</span>
+          </div>
+          <ul data-page-node-id="CeYnSfrvezZcmGMDgSQU6l">
+            <li data-page-node-id="YQ57mnNV8L4sEtPSXWEAyN">堆砌大量微观行为准则（Micro-rules）</li>
+            <li data-page-node-id="aMlrr87wTE9i333niUK95q">充斥成百上千条 NEVER / ALWAYS 禁令</li>
+            <li data-page-node-id="mkj7kV12VFivakqjaRDPyO">硬编码 5 个正确输入输出例子、3 个反例</li>
+            <li data-page-node-id="FKNJFNOWRDP3D8CvTrEsQ3">详尽罗列每一处可能出现的语法错误并要求“必须执行 B”</li>
+            <li data-page-node-id="m29kKFZrfzxbuZmtos7HYM"><strong data-page-node-id="UuQ8qEyO2iM43goNZiKJTy">本质：</strong>把模型当作脆弱的规则执行器进行加法约束</li>
+          </ul>
+        </div>
+        <div class="compare-card new" data-page-node-id="CXWPvs9EDLvwalQbxedVGU">
+          <div class="compare-card-header" data-page-node-id="FJ2K43D5LkskRt6WAmW02w">
+            <span data-page-node-id="i1S0RUj3NmUqPswSHySRID">✅ 新 Context Engineering（Subtractive / 上下文工程）</span>
+          </div>
+          <ul data-page-node-id="qR3GAQUnqy6VcSdiTfGm2K">
+            <li data-page-node-id="fPm3QjHM5JVeY0xbIUTgNJ">清晰告知业务上下文与系统架构背景</li>
+            <li data-page-node-id="ywwKuHJ775vPkOdbW6r46m">阐明“为什么这样做”与核心价值诉求</li>
+            <li data-page-node-id="C7ltD3WP65eMFxEjlAhUx5">明确可用的工具接口定义与数据契约（Schemas）</li>
+            <li data-page-node-id="6NLsby85GgHSalDnr0eik4">定义何为“好的产出物”（Acceptance Criteria &amp; Evals）</li>
+            <li data-page-node-id="RbxGA92tu7RI61FOdt7Say"><strong data-page-node-id="BviV3uwGH1bIBKd0Zltdpc">本质：</strong>保留广阔探索解空间，只提供判断标准与事实基座</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 class="subsection-title" data-page-node-id="XhSPhg29BdzIqQ0UtElE4B">“例子锚定陷阱”（Example Anchor Effect）的逆向认知</h3>
+      <p data-page-node-id="HjY10MRCN6p2GaKICFh61Z">
+        Anthropic 在研发实践中发现了一个反常识现象：<strong data-page-node-id="URP8NlOHt1RjpqZxwExLEq">对于前沿高推理模型而言，Few-shot Examples 往往会起到负向扼杀作用。</strong>
+      </p>
+      <p data-page-node-id="Ok6mSXsXTmecobJ4YrtGww">
+        弱模型需要 Example 依葫芦画瓢以对齐格式；但对于推理能力成熟的高智力模型，当工程师在 Prompt 中写下<em data-page-node-id="ia7c1NVAQs0arHdmHvpcfy">“这是一个好的重构示例”</em>时，模型会将其误读为隐性强约束：<strong data-page-node-id="hEejlWBmWhpHkB8i8MtC6p">“你的代码实现必须长得和这个例子大差不差”</strong>。这导致模型在全局搜索空间中被强行拉入局部的狭窄次优解，丧失了针对具体工程场景设计更优雅架构的可能。
+      </p>
+      <blockquote data-page-node-id="oFkjQDHc2oufzrI8IXo4Ti">
+        <p data-page-node-id="hFATTsEert9eHmGLSan6Ns">提示词工程正在经历深刻形态演进：<strong data-page-node-id="uPNJdaRCR5NBkQP07dTzmE">从 Instruction-heavy（指令繁复型）转向 Judgement-heavy（判断驱动型）</strong>。</p>
+      </blockquote>
+    </section>
+
+    <!-- 章节 3：限定边界与减法工程 -->
+    <section class="section-block" id="sec-boundaries" data-page-node-id="XulOBOu01vGqooMviDzZNW">
+      <h2 class="section-title" data-page-node-id="3YhQ7KZIhLCv40zDCXhq9D">3. 极为关键的限定条件：Subtractive Engineering 的准入边界</h2>
+      <p data-page-node-id="ACFnEoQc0SWzjv7kMAjMfp">
+        不能望文生义地得出“把所有项目的 Prompt、CLAUDE.md、Skills 盲目砍掉 80%”这一荒谬结论。Anthropic 官方明确指出：<strong data-page-node-id="JWLbWhcpzsNfmml6gZsVE7">他们是针对不同基座代际的模型，加载完全分级的 System Prompt。</strong>
+      </p>
+      <div class="table-wrap" data-page-node-id="HxPsvHWHja1K7aWnEnWTmH">
+        <table data-page-node-id="Emm5Cxc1EEF0xIOd4rUMEI">
+          <thead data-page-node-id="VxgAoPH7TmmJSLPUDW11Yw">
+            <tr data-page-node-id="7hu7hrLaa6d7pTAUbXMaEz">
+              <th data-page-node-id="NiVHRNnZzxZO0DwU4gHcZK">模型代际分级</th>
+              <th data-page-node-id="SfQm9wQI3v19QUeUNRtNYJ">代表基座模型</th>
+              <th data-page-node-id="wwzLiIpB0pIVGqj7jCvmvK">System Prompt 策略</th>
+              <th data-page-node-id="vvmvGvLKps1rBhOlRuGpsd">主要约束构成</th>
+              <th data-page-node-id="wVNpOeyGbn4QURCUADe4I8">失败模式防御手段</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="RzsI4OxR4OgmdjoRRhB2pu">
+            <tr data-page-node-id="d851NhUisrOb1Zh8FBGD0l">
+              <td data-page-node-id="vx6tnqSgpea2B0I50dbmxt"><strong data-page-node-id="HkBodH11bNABjRVupItmPH">Legacy / Compact</strong></td>
+              <td data-page-node-id="t7iSWlOEddSVyd52n9ndkU">Haiku 3, GPT-4o-mini, 早期开源 7B/8B</td>
+              <td data-page-node-id="CctgOO8NFXWm5GxLOBKnG2"><strong data-page-node-id="BvmGrpIY12gUfgwTyfBWHv">Additive（加法式重型）</strong></td>
+              <td data-page-node-id="5qnzwDtFqujmHgbxC4uRat">严格的格式要求、大量 Few-shot、防御性规则、步骤手把手拆解</td>
+              <td data-page-node-id="R84yuq0vPJvjDG7rECe7Jd">依靠 Prompt 内的死板禁令防格式错乱与幻觉</td>
+            </tr>
+            <tr data-page-node-id="lK7HHDLzFEFCy2MTYZSHf9">
+              <td data-page-node-id="FANAGPL5ahojwsly1zCnSX"><strong data-page-node-id="ve5PhOGoR1g6tHjN8Kynlq">Standard Frontier</strong></td>
+              <td data-page-node-id="hz1zxH9V8XxLyuN837KJcq">Sonnet 3.5 / 3.7, GPT-4o</td>
+              <td data-page-node-id="DgpIwTQ9sDv5k5YJwndtWt"><strong data-page-node-id="pxAS1TFbcWrpbYcjEyWDOR">Balanced（平衡型）</strong></td>
+              <td data-page-node-id="waiFwSEe9UNKCYzxtTjH32">架构上下文、工具使用指导、核心安全边界、少量领域反模式</td>
+              <td data-page-node-id="rVk4zlVWk29RA43Adyk5XE">Prompt 引导 + 编译器/Linter 浅层验证</td>
+            </tr>
+            <tr data-page-node-id="0EIzANMSnodPsaQ9AfJsmV">
+              <td data-page-node-id="Vdy8IkhJwUJ41pIQZ9lHMH"><strong data-page-node-id="xrojlb8Bv8miHeXqTgg4RW">Next-Gen Reasoning</strong></td>
+              <td data-page-node-id="5uHGm8puxD71KafpgttOv7">Opus 5, Fable 5, 深度思考型 Agent</td>
+              <td data-page-node-id="obztvQicXcKvuvLYlxl4IA"><strong data-page-node-id="tCm8DecBOvVXlGkIMEJpE7">Subtractive（减法极致精简）</strong></td>
+              <td data-page-node-id="li724F4FDbA0wQZAd5QJfG">业务愿景、外部客观验收标准、工具契约、只留“无法推导的私域知识”</td>
+              <td data-page-node-id="HIlrtAlMxGdES59vlcrJWX">完全交由 Harness、沙箱、客观测试闭环进行束搜索校验</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p data-page-node-id="iJxBH6xhjAKdAhfnaYBCSF">
+        因此，高水平架构师在进行 Prompt 与 Skill 审查时的最高准则应当是：
+      </p>
+      <div class="callout cyan" data-page-node-id="pGOvTMyJLaYjBM1uVtZSO7">
+        <div class="callout-title" data-page-node-id="i1envDiSGQDzoMpSwZA0TP">📐 减法工程审查铁律 (Subtractive Engineering Rule)</div>
+        <p data-page-node-id="VKZI2m4J8poK6qiecwcvN0"><strong data-page-node-id="Ol8OlZA4HAPThV8X4TvJQp">规则不是越少越好，也不是越多越好，而是——“只编码模型无法可靠自行推断的信息”。</strong></p>
+        <p style="margin-top: 6px;" data-page-node-id="VAxui86YWSrfUTeU7TDd0R">当审查团队的 CLAUDE.md 或工作流规则时，最核心的追问不再是<em data-page-node-id="5yV9s4YnfbYTuZBBeHmTgf">“我们还能补充什么规则？”</em>，而是<strong data-page-node-id="59akReMtt1Z9mJvY5ezSQU">“这条规则对于今天的基座模型来说，还有哪怕一丝存在的必要吗？”</strong></p>
+      </div>
+    </section>
+
+    <!-- 章节 4：Harness 逆向膨胀机制 -->
+    <section class="section-block" id="sec-harness-importance" data-page-node-id="62o16GrNUhxYaQnCnnBnQb">
+      <h2 class="section-title" data-page-node-id="uQv6Q9ghDiJNSbMH6FDfWZ">4. Harness 为什么反而越来越重要：长程任务（Long-Horizon）的系统工程</h2>
+      <p data-page-node-id="yxYwDgaGos2yMkU5atFDFE">
+        业界一度存在一种极具迷惑性的技术乐观主义：“随着 LLM 智力攀升，最终一个纯裸模型（Raw Model）配上命令行终端，就能解决一切，外围的框架与 Harness 终将消亡”。
+      </p>
+      <p data-page-node-id="Tx3AB1q9512W1i1qFSo079">
+        Thariq 与 Claude Code 核心团队在数万小时实战中得到的结论完全击碎了这一假想。当任务耗时从 30 秒的“写个斐波那契函数”演进到<strong data-page-node-id="YC8hjO8mbbYWjFsTZYjgq7">长达 8 小时的超大型重构、跨 50 个微服务的全栈功能实现</strong>时，系统复杂度的增长是超线性的：
+      </p>
+
+      <div class="math-block" data-page-node-id="Jd929eUziIKlouitFEVmAA">
+        <math display="block" data-page-node-id="5AflB8x6deEyXwiS2HAUP1">
+          <mrow data-page-node-id="29JbwfeBKwVD5nUoRYXc8B">
+            <mi data-page-node-id="qLApEysm9B4Y3lLPH1u3q7">Entropy</mi><mo data-page-node-id="v2aAvhINpQVDEXGG7ZtgjZ">(</mo><mi data-page-node-id="HEWfvx21gwoYr8HmlW42qq">T</mi><mo data-page-node-id="zS0mcLLwjP6DRIvFK5dEtF">)</mo>
+            <mo data-page-node-id="aEakLQBZHGnft1ib3Xmd83">&sim;</mo>
+            <mi mathvariant="script" data-page-node-id="HeMDLxhTQwpRZQHEMpJAzO">O</mi><mrow data-page-node-id="rjIRUdP1LrIB2J1zwS9XSi"><mo data-page-node-id="Nwz6DIEgDSZbreUhnnXXa0">(</mo>
+              <msup data-page-node-id="rLHy38FeisxKUCXaxYhPql"><mi data-page-node-id="jOtoQChhvqRuNPw7dA6eSd">b</mi><mi data-page-node-id="PTzooImFwfgx99cU5gM02X">T</mi></msup>
+              <mo data-page-node-id="68Ap9sURXQwuUxAeeE4oGK">&times;</mo>
+              <mi data-page-node-id="tEsS7mEGB7LSd3VVxEckMW">ContextDrift</mi><mo data-page-node-id="288DW3G1ilm6zQg01hCkYB">(</mo><mi data-page-node-id="lcTMYszZoy71mmsfdRpLH3">T</mi><mo data-page-node-id="9RtTKm3Tglugrji3nlLW5R">)</mo>
+            <mo data-page-node-id="eKAHZDXfMcqJuIPHuMmwyl">)</mo></mrow>
+          </mrow>
+        </math>
+        <div class="math-caption" data-page-node-id="dH1MUtTiNN8V59KvEN9Uaj">公式 4.1：无强 Harness 约束时长程任务状态熵增模型（随步数指数级发散）</div>
+      </div>
+
+      <p data-page-node-id="V8qzM4H6O6hjSo1FbRpONj">
+        在长程任务中，单纯依赖 Prompt 会瞬间陷入死锁与混乱。Harness 必须承担起完整的<strong data-page-node-id="rBtXpFoh10Za4J1tf47Hn0">分布式系统运行时管理职责（Agent Runtime Engineering）</strong>：
+      </p>
+
+      <div class="table-wrap" data-page-node-id="a09LNArLcoTrN8Zg0NWUWm">
+        <table data-page-node-id="mmJ09hpKQl5kPJFs6S02Su">
+          <thead data-page-node-id="G9mv7jWcuYmm320RjVzljy">
+            <tr data-page-node-id="W3fCjZ6VdYIqIK5FTt05Ka">
+              <th data-page-node-id="5j9yiRWzLzggnvQBfaWjb0">Harness 核心子系统</th>
+              <th data-page-node-id="VroU7wKvo3qGNZHbTKEsfD">工程职能</th>
+              <th data-page-node-id="iRBjydSsPaB790y0IAtqKE">传统 Prompt 驱动下的必然崩溃模式</th>
+              <th data-page-node-id="XGllBBM9pCZqxYYaZ6ptvi">Claude Code 工程实践落地</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="Hm09D0F1b73ftQYyvcEGAm">
+            <tr data-page-node-id="3lyuhZjy5ITuVNe0MdUWS3">
+              <td data-page-node-id="oe84ftTRCu2hfT4XLh1M2A"><strong data-page-node-id="AjGuJc6r8BrlTuNc2HoZ5p">权限与虚拟沙箱 (Sandbox)</strong></td>
+              <td data-page-node-id="LJbsVY22ekzIQz4Lg65C4J">阻断危险系统调用、网络嗅探与不可逆文件覆写</td>
+              <td data-page-node-id="ibe0qWr64RCGPDJSlsUqB6">模型执行 <code data-page-node-id="dOY1P7WzjWSS2wrwIJpzAX">rm -rf /</code> 或覆盖核心生产配置</td>
+              <td data-page-node-id="MV5xHDF0zKPoAFxuhAcbK6">基于 OS 容器的轻量级虚拟工作区与权限策略拦截器</td>
+            </tr>
+            <tr data-page-node-id="1vgX1lyLfoGTL9OXkpbQ7o">
+              <td data-page-node-id="TDJnr9npflScXUPFfthe4z"><strong data-page-node-id="z8z5Nw2SLuFjHaOlEzq8xc">状态快照与回滚 (State Rollback)</strong></td>
+              <td data-page-node-id="RZfLRR2zf8CVram6yXhLXr">当代码重构破坏整体构建时，无损回退工作树</td>
+              <td data-page-node-id="fAebHnhgBrZ7wUApaFrpF6">模型在错误路径上越改越错，陷入“修 A 崩 B”无限循环</td>
+              <td data-page-node-id="8QIzy1zFP2rewmTCrzQexc">Git-tree 隐式快照栈，支持对整个 session 任意 step 的原子回滚</td>
+            </tr>
+            <tr data-page-node-id="FyQHhbzQMiyglCWwAdrmx4">
+              <td data-page-node-id="GLnMqqtobGV5b2TeYRNzMH"><strong data-page-node-id="TfauAaugBTYFJ8fTL2BIWz">上下文主动压缩与遗忘</strong></td>
+              <td data-page-node-id="ag2xxVpA7l4oF2F9sKWv7N">在 200k+ Token 窗口中动态提炼关键中间工件，丢弃噪声</td>
+              <td data-page-node-id="THXdCgVxKjB4O4QgsDW4QA">超出有效注意力跨度，模型发生灾难性遗忘或“迷失在上下文中”</td>
+              <td data-page-node-id="Yjt7nyJGvnAIDdodjPoUQp">语义缓存、阶段性 Summary 注入与持久记忆层分离</td>
+            </tr>
+            <tr data-page-node-id="rdGpC6LanRQSyPEwuZ54yu">
+              <td data-page-node-id="8GsxJa5Ppa1q5znktSYPxe"><strong data-page-node-id="j0PDiWrZr2BZ1XFgkM9et3">动态工作流编排 (Dynamic Workflows)</strong></td>
+              <td data-page-node-id="EDk1KzQeymzSritQ1vqERW">将单体宏大目标切解为由数十个专用子 Agent 执行的 DAG</td>
+              <td data-page-node-id="nP4Dnm3Vfn0lZHB9ijIgdT">单 Agent 上下文被数千行日志撑爆，失去全局感知</td>
+              <td data-page-node-id="opyLS7LztHRb7qmKBbnzzr">Claude Code 具备<strong data-page-node-id="IUQ2uNNn5Kjmm8gERH9ewZ">“自我装配 Harness”</strong>能力，为复杂任务动态派生子 Agent</td>
+            </tr>
+            <tr data-page-node-id="sXzSEbqhYDSJw6wrrfnD4G">
+              <td data-page-node-id="DEcGfKqkTFgyLXp1rUbmsN"><strong data-page-node-id="JuMTBhKpMreFSNHDoqAM5G">外部客观验证门禁 (Evals &amp; Gates)</strong></td>
+              <td data-page-node-id="MLqDeCDji642E1akYZCc3d">通过类型检查、编译器、单元测试对每次修改进行判分</td>
+              <td data-page-node-id="OUdz8x3Y0tG2Xk1X2kWC40">模型基于自身主观概率自信地宣告“任务已完成”</td>
+              <td data-page-node-id="ZKvLwg2Ef7vuekVF7uyqYC">强制退出准则（Stop Condition），不达标严禁退出</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p data-page-node-id="Nq5ZHuWdYzzEAZ5D4M4klz">
+        正如 Anthropic 官方在《A Harness for Every Task》中所指出：<strong data-page-node-id="CM5wds8bqT1owNqJlosEgg">未来的 Harness 甚至不是静态手写的配置文件，而是由 Agent 根据任务性质，动态自主编写、即时加载运行的动态工作流。</strong>
+      </p>
+    </section>
+
+    <!-- 章节 5：Loop Engineering 阶梯演化 -->
+    <section class="section-block" id="sec-loop-engineering" data-page-node-id="z94GKg4tj9nMGWgfuV4to3">
+      <h2 class="section-title" data-page-node-id="iYqeZW3kWHiOfxfL1D6YyW">5. Loop Engineering 是第二个核心：从主观宣告到客观收敛</h2>
+      <p data-page-node-id="heddW8O4XIJrFYt4WVF9Ij">
+        Thariq 对 <strong data-page-node-id="nB0HwoMNxyBIMUY6iHLPWV">Loop Engineering（循环工程）</strong> 做出了行业迄今最精准的定义：
+      </p>
+      <blockquote data-page-node-id="ZSFq0RO2d3QDWubZHQari7">
+        <p data-page-node-id="r83TjITDs9lKLcx2QBzKYj"><strong data-page-node-id="XeJfZs7ckzKeMu9L7BKFcE">“Loop Engineering 不再是直接 Prompt Claude，而是去构造一个‘负责持续调度与 Prompt Claude 的系统’。”</strong></p>
+      </blockquote>
+      <p data-page-node-id="jUfz8EBYFjYAEh8jlVHBFb">这代表着人类在 Agent 体系中抽象阶梯的 5 级跃迁：</p>
+
+      <pre data-page-node-id="zaTWAsUzGCRgU1qoEiZi12"><code data-page-node-id="GED3zMGeHP6mT2LUt50jRH">【Level 0: 问答】 Human → Claude → Answer
+【Level 1: 辅写】 Human → Claude → Code Snippet
+【Level 2: 线性】 Human → Goal → Claude → Implement → Test → Fix → Done
+【Level 3: 反馈】 Human → Goal + Evals → Harness → [Agent → Act → Verify → Feedback ↺]
+【Level 4: 宏观】 Human → Business Objective → Long-running Autonomous Harness 
+                                          ├─ Monitor &amp; Research
+                                          ├─ Plan &amp; Decompose
+                                          ├─ Multi-Agent Implement
+                                          ├─ Test &amp; Adversarial Review
+                                          └─ Verify against Ground Truth ↺</code></pre>
+
+      <p data-page-node-id="E9lMXnhRhQw8ShQFOos2EJ">
+        目前 Claude Code 已经官方规范化了四种 Loop 范式：
+      </p>
+      <ul data-page-node-id="UVfwAvosApSfFKz4CYcZMT">
+        <li data-page-node-id="oV3jqR40W5QZxIpeS4EM7a"><strong data-page-node-id="pZkgSidzfdEzyxFBoarnFa">Turn-based Loop（单轮反馈环）</strong>：用户输入一次、Agent 思考并调用工具执行一次、反馈结果。</li>
+        <li data-page-node-id="9kBbLguqLYCDnGcPd4clPx"><strong data-page-node-id="8zNl2VVBkt84gk6ha765de">Goal-based Loop（目标驱动环 <code data-page-node-id="uaqbZbiuPvnHBRKiuNBH51">/goal</code>）</strong>：以明确客观验收目标为锚点，只要未达到验收标准就自主循环迭代。</li>
+        <li data-page-node-id="gGGV7r4PkZEhYB6lWKSC6o"><strong data-page-node-id="9HFJJNLSZUPsR3JmMwDCYq">Time-based Loop（时间调度环 <code data-page-node-id="3GhIxIoHGy3NsTiFEo8pXe">/loop</code>）</strong>：按预定周期或触发器定时巡检、重试或收集遥测数据。</li>
+        <li data-page-node-id="1OKRoESJASAYDxRq5ozS3H"><strong data-page-node-id="G61NCVQiM88Ymwesb3ItSC">Proactive Loop（主动自省环）</strong>：Agent 实时监控系统输出，主动发起探索、优化或重构。</li>
+      </ul>
+
+      <div class="callout amber" data-page-node-id="HiRWvsyMGsPquVCsfCmgfF">
+        <div class="callout-title" data-page-node-id="MYdBK6btLIDPXPkG0jSYKh">⚠️ /goal 命令的核心精髓：阻断主观幻觉完成</div>
+        <p data-page-node-id="8IgavxWr9afcDCC7XON11N">
+          很多工程师误以为 <code data-page-node-id="uIrZsimBytW4kmBEY6LC8e">/goal</code> 只是写了一个 <code data-page-node-id="KjvzzxWwFMb0NDTLdtXPt3">while (true)</code> 循环让模型“不要偷懒继续干活”。这是极其肤浅的理解。
+        </p>
+        <p data-page-node-id="PiVR1EAscLygOjtkwr6sKw">
+          <code data-page-node-id="bBCEfKWEp78XCFsSkXgrsm">/goal</code> 的真正数学精髓，是把<strong data-page-node-id="lH8yHaQ7VI7B2BFSmCxqdv">“模型主观感觉任务已完成”</strong>（这是 LLM 最容易发生的高自信欺骗与幻觉点），无情地置换为<strong data-page-node-id="MQwZDV8kjSFEffeEGXvRxf">“外部可计算客观条件通过判定”</strong>：
+        </p>
+        <ul style="margin-top: 8px;" data-page-node-id="XzEBJpkCouAOAUSCCLC2Mm">
+          <li data-page-node-id="EQw8A1oXV6douramLFoEzN">❌ <strong data-page-node-id="NIPt8OFFrf76suhJ2Ayvko">极差的目标定义（主观）：</strong>“把网站的前端性能优化得更好一些” → 模型改了两行动画属性便宣告“优化极佳，已完成”。</li>
+          <li data-page-node-id="B4FFdHd5JtrZLI8PuQk256">✅ <strong data-page-node-id="EXXI9S5tQFeYXXhmoiKJpE">优秀的 Agent Loop 目标（客观约束）：</strong><code data-page-node-id="iJaQoIixb0S7Efo3xnLgXN">Lighthouse Performance >= 90 &amp;&amp; Unit Tests Pass == 100% &amp;&amp; Git Diff &lt;= 300 LOC &amp;&amp; Console Errors == 0</code>。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 章节 6：Verification 自治许可证 -->
+    <section class="section-block" id="sec-verification-license" data-page-node-id="dyCfutqu9jTZruLdA5XqvM">
+      <h2 class="section-title" data-page-node-id="oK75R5jn0hrwADmqwVxPCX">6. Verification 是 Agent 自治的真正许可证：成本结构的历史性倒挂</h2>
+      <p data-page-node-id="vck4KaRLH8yJG3ETivJHBA">
+        在 X 平台的讨论中，“测试代码量未来需要比以前多 100 倍”常被视作夸张的自媒体营销话术。然而，回归 Thariq 原访谈的语境，这是一条极为严肃严谨的软件工程经济学推论：
+      </p>
+      <blockquote data-page-node-id="ITkuSPH6yFvAGvVsJUDBug">
+        <p data-page-node-id="neLrBFrrDjNblGrPzu8Um3"><strong data-page-node-id="rxOtldhnbtdmiXcHWArCn2">“当代码生成的边际成本趋近于零时，验证（Verification）成为整个生产体系中唯一真正昂贵的部分。”</strong></p>
+      </blockquote>
+
+      <p data-page-node-id="fEPHtz4FH0hOn0xda90lCf">在传统软件工程与 Agent 软件工程之间，工时与算力成本发生彻底的极性倒转：</p>
+      <pre data-page-node-id="WjBPBD9Bg3ugbLHChSyhmG"><code data-page-node-id="4wxy3lUswRLHgAC5gp4Boq">传统软件工程成本分布：
+写代码 (Writing Code)   ████████████████████████ (75% ~ 80%)
+验证测试 (Verification) ██████ (20% ~ 25%)
+
+Agent 时代软件工程成本分布：
+生成代码 (Generation)   ██ (5%)
+验证与评估 (Verification)██████████████████████████████ (95%)</code></pre>
+
+      <p data-page-node-id="PSKh9fHDTxGmlanhnOnh4q">
+        由此推导出一条自治可信度定理：
+      </p>
+      <div class="math-block" data-page-node-id="bGulJi14TLucmBPjiEbkdy">
+        <math display="block" data-page-node-id="RrCmilQTJYt4ddpsUoxSE0">
+          <mrow data-page-node-id="p5vC9Ub4DStWtjHHaLdrgI">
+            <mtext data-page-node-id="ZQihwQEAgsLOqfwkAOTNkm">Autonomy without Verification</mtext>
+            <mo data-page-node-id="0jzBOxnyiqCCk4oOW66nMh">&approx;</mo>
+            <mtext data-page-node-id="XWphvSDGaokeELKJDg6rGU">Gambling (随机游走与熵增崩溃)</mtext>
+          </mrow>
+        </math>
+        <math display="block" data-page-node-id="ddJ2El6hA1nT7mQWj8ySYc">
+          <mrow data-page-node-id="HNktLDb3aNOJK4iAOzVijX">
+            <mtext data-page-node-id="E7AO366xskRnI4Onvcx9TO">Autonomy with Strong Verification</mtext>
+            <mo data-page-node-id="igu77fE6acm3EjelW4LPJd">&approx;</mo>
+            <mtext data-page-node-id="HZq3Pslo5GBtbRMqT9UiEj">Controlled Search (在确定解空间内的束搜索)</mtext>
+          </mrow>
+        </math>
+        <div class="math-caption" data-page-node-id="wLgQctPlDLFoB0tEGFKkCn">公式 6.1：自治系统稳定性定理</div>
+      </div>
+      <p data-page-node-id="jV077BbFtWpnB5HMhDAdft">
+        没有严密验证的 Agent，步数越多，失败概率便以几何级数累乘崩溃；而拥有完备 Tests、Fixtures、Mocks、Contract Assertions 与 Evals 的系统，Agent 每一步修改都有 Oracle 进行判定与剪枝。因此，<strong data-page-node-id="vBrC8Hkq4GS4UXi26yh7iO">软件工程资产的皇冠，已经正式从“编写好的代码行”，转移到“能够提供绝对判真标准的 Verification 资产”上。</strong>
+      </p>
+    </section>
+
+    <!-- 章节 7：“六个月不敲代码”的真实口径 -->
+    <section class="section-block" id="sec-no-code-misconception" data-page-node-id="OYaNKYVv0BuQhtYhktBtYh">
+      <h2 class="section-title" data-page-node-id="nFFZUrYwOKJTqnxhAU1eDU">7. “六个月没敲一行代码”的真实口径：工程师抽象层级的结构性跃升</h2>
+      <p data-page-node-id="UDqeFx8LkOqJSiF4KUQjQy">
+        访谈中被广泛引用的“有企业客户六个月没有亲手敲一行代码”，必须在真实工程语境下理解——这是 Thariq 列举的<strong data-page-node-id="IGso2CHInYsrJzgtNTIBq9">采用高度标准化 Agentic 生产线的大型企业前沿标杆案例</strong>，而非行业普遍统计中位数。
+      </p>
+      <p data-page-node-id="4MScUKr7fJJiU2rPp8hvIQ">
+        更重要的是，这一现象绝不等于“工程师无所事事”或“软件工程消亡”。恰恰相反，它代表着工程师所在的抽象层级彻底脱离了繁琐的语法细节，上升到了更高密度的决策中枢：
+      </p>
+      <div class="table-wrap" data-page-node-id="u9WmxsKsOAJHX7D6BOgtnu">
+        <table data-page-node-id="7NF7yqiyMtkAP5DrqLGW4k">
+          <thead data-page-node-id="082OPKN0tsvCXPb1NiuISq">
+            <tr data-page-node-id="3nhrQdnx4ftQF7PJFOuONi">
+              <th data-page-node-id="nfZvILCfdY7jRNj53siyCk">软件生命周期阶段</th>
+              <th data-page-node-id="RzPc2yoBXCDlNCJrQHo5IB">传统 SDLC 模式</th>
+              <th data-page-node-id="pSMoQwvG2RbypDSbCpCmYV">Agent-Native SDLC 模式</th>
+              <th data-page-node-id="z3D6kr0WyRG3uq30pH6nVW">价值重心转移</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="p0SJXEkN3dgBRVyfC1J2b2">
+            <tr data-page-node-id="3IF6EsraxD2yZyMpj8rmAD">
+              <td data-page-node-id="WD2BV8TOFfsNp9RseKcoC7"><strong data-page-node-id="NPJlsOlXPBxfTQoTOhV5h2">问题定义与未知发现</strong></td>
+              <td data-page-node-id="hVFHYzA8bjGH6uSufl8CKg">人工零散讨论，漏测边缘情况</td>
+              <td data-page-node-id="xG4m8aL4ieMXbGzvXyQkfo"><strong data-page-node-id="hp1v7fl4wCeQdXPLKCB8iT">人类专家主导</strong> + Agent 深度扫描代码库挖掘未知隐患</td>
+              <td data-page-node-id="IuC6FqH1BDdpsUKR0qIGA6">提升 3x（决定系统天花板）</td>
+            </tr>
+            <tr data-page-node-id="Flte1W2vp4ro8gSygXaGQp">
+              <td data-page-node-id="gHP5GLTE9Ee18MIMBuCQAv"><strong data-page-node-id="Cf4rkRDFASORFLVsceqyHC">目标与 Spec 规约</strong></td>
+              <td data-page-node-id="tIX2xRp41cPbgv5qOVvVQy">编写粗糙 PRD，大量细节在代码中补充</td>
+              <td data-page-node-id="6rbdopJj2KJFVgWFrs3d3m"><strong data-page-node-id="il5BsD97yNL1SJQ7mMMlVG">人类严密设计</strong>：严格的契约约束、时序图与验收断言</td>
+              <td data-page-node-id="KREE5vBw3yG2OHzy6BuF1k">提升 5x（成为最核心生产物）</td>
+            </tr>
+            <tr data-page-node-id="c6yiepYAbTXycEAeRlAdud">
+              <td data-page-node-id="hhQ6CgxjjtXOGHwfykTC0m"><strong data-page-node-id="wr7H9i55N8IsMjqJILvGYb">Harness 系统构建</strong></td>
+              <td data-page-node-id="EHCr8efcNIAiHTPeci4wUV">传统的 Jenkins/GitHub Actions 配置</td>
+              <td data-page-node-id="wGC8F6GXp4RYFZynawCCEb"><strong data-page-node-id="n9Z1v7T9kbkAomkDiJUJBE">人类 + Agent 协同</strong>：编排工具链、Prompt 上下文、沙箱与超时策略</td>
+              <td data-page-node-id="4eCBN5r6clsAduY8hmg1KO">新设立的核心工程岗位</td>
+            </tr>
+            <tr data-page-node-id="jwYGqD5ppP8DXLK6gGaiDd">
+              <td data-page-node-id="Ia5MuyggtHPHT8zy2T4OSM"><strong data-page-node-id="4GiHRmbHe5n97mDiYacyln">具体代码实现 (Coding)</strong></td>
+              <td data-page-node-id="Ns9fwy41TTlNheO4pE0mZH"><strong data-page-node-id="g4SAiFBSjH2WapdCnXtRRA">人类工程师核心体力劳动</strong></td>
+              <td data-page-node-id="nGVJwyCq3695ih8mRllAQq"><strong data-page-node-id="K9FDI0SsyO191IpABtt7D9">Agent 全权接管</strong>（极少量特异边界人工介入）</td>
+              <td data-page-node-id="CHHZT37KUkPwJG1PE1rdDP">衰减 90%（商品化、机械化）</td>
+            </tr>
+            <tr data-page-node-id="9nooyyuA4ToHtgKNXF6zar">
+              <td data-page-node-id="8yhbHbr1offs91OWOc0sji"><strong data-page-node-id="A9yo4sv66SHI0I0zTJ74ql">验证与质量把控</strong></td>
+              <td data-page-node-id="FybEPad5FrR2Hx8e2GAVwO">人工点测 + 部分 CI 单元测试</td>
+              <td data-page-node-id="rAOquUgA1ur9wFkYvrhLjm"><strong data-page-node-id="uksUa13XSNj9XJywv1MK64">Harness 自动化 Oracle</strong> + 综合 Evals 多维矩阵评分</td>
+              <td data-page-node-id="8DujYENwyqP9Apj4ACGkLi">提升 4x（系统可靠性命脉）</td>
+            </tr>
+            <tr data-page-node-id="f6MAigbWNKuKUJEBoBLHvB">
+              <td data-page-node-id="8wZgf6J1aZ7DPtpIA6NKGk"><strong data-page-node-id="LLxG1jNxFvZYq2dZMExR8f">产品与架构 Taste 裁决</strong></td>
+              <td data-page-node-id="OpMTJjuEEGsrxPRMOed9jL">上线后用户反馈</td>
+              <td data-page-node-id="jxL5ggydgnw5GtY70SzVKW"><strong data-page-node-id="WL2cKApBwDDkFzujrFOoKR">人类专家绝对把控</strong>（从成百上千种候选方案中选型审定）</td>
+              <td data-page-node-id="ZSoj7UEBqHqB74JDBOornz">稀缺性提升 10x</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p data-page-node-id="8oYx1Ecss5du6heqZcChhA">
+        一言以蔽之：<strong data-page-node-id="hcMrX1lbJH2K0ENKXlYcnl">Coding 没有消失，Coding 正式变成了 Agent 的“汇编与执行中间语言”。</strong>
+      </p>
+    </section>
+
+    <!-- 章节 8：代码转变为中间表示 (IR) -->
+    <section class="section-block" id="sec-code-as-ir" data-page-node-id="LE86hFkgXBhp2wBdYEjMmY">
+      <h2 class="section-title" data-page-node-id="slZMBhn5QgaAbGW0OBzyIP">8. “代码”本身正在从最终产品退化为中间表示（IR）</h2>
+      <p data-page-node-id="719IXRiSmXuTUxgOg91Jli">
+        这是整篇深度评注中最具颠覆性的一项理论推导。在计算机科学中，编译器的流水线通常是：
+      </p>
+      <div class="math-block" data-page-node-id="0mOSnMdMmAFJwd0olTNBoK">
+        <math display="block" data-page-node-id="epXye8pFPVrUbczoIzt4SW">
+          <mrow data-page-node-id="bFRVuYAspBJODtGDYND5SY">
+            <mtext data-page-node-id="vsCMwAqsogGPa3hSF8KRYa">High-level Source</mtext>
+            <mo data-page-node-id="LBB4mtAUrW4s4z15atwHvg">&rarr;</mo>
+            <mtext data-page-node-id="AT6iCBQAx1AZcrRqhxqWqG">AST</mtext>
+            <mo data-page-node-id="XlFoFGUXuYaaBs34deYGnQ">&rarr;</mo>
+            <mi data-page-node-id="4WXcPTkfQhMj76Uei8d6Do">IR (LLVM / Bytecode)</mi>
+            <mo data-page-node-id="WqMqKAi3HZVd0vuic7UqQY">&rarr;</mo>
+            <mtext data-page-node-id="XQQqjU0oSMcUUlCrizsq6W">Optimizer</mtext>
+            <mo data-page-node-id="vjkEZnD1nzNZfwrqG29VDr">&rarr;</mo>
+            <mtext data-page-node-id="jAZoKmOzDqNh8oSbvEyEMa">Machine Binary</mtext>
+          </mrow>
+        </math>
+        <div class="math-caption" data-page-node-id="8tEdIDQbYqNrgv01Hf2uAT">传统编译流水线：代码是开发者倾注心血的静态资产</div>
+      </div>
+      <p data-page-node-id="qNQTKToTQ7PbXdAxOZqupp">
+        而在成熟的 Agent-Native 软件工程中，架构拓扑被重塑为：
+      </p>
+      <div class="math-block" data-page-node-id="8LbI5Kiv93XFXi9yTf3RbB">
+        <math display="block" data-page-node-id="KOKKiJIvIP2zn4oTbEw0j3">
+          <mrow data-page-node-id="IMzErodVhuxHoP7HCgMe4a">
+            <mtext data-page-node-id="DrJhsSYYr3DtpH5LVwtGWW">Human Intent &amp; Specs</mtext>
+            <mo data-page-node-id="sHroGCY0owSHuqjUc80F2w">&rarr;</mo>
+            <mtext data-page-node-id="c7EtsR2GH5ZUTHZqkhboN4">Verification Oracle</mtext>
+            <mo data-page-node-id="DXUlIpmY2meW7NXpYX1yB3">&rarr;</mo>
+            <mi data-page-node-id="JiwDcJ9HSQPysEm6dBofXA">Agent Engine</mi>
+            <mo data-page-node-id="1rahn7TmFXW3rvqPlJ2kFU">&rarr;</mo>
+            <mtext data-page-node-id="5WYvmDh6nK2UnHbY6Gsh9D">Code (Transitory IR)</mtext>
+            <mo data-page-node-id="YsGZnaEGGYHGZw5BjXUQat">&rarr;</mo>
+            <mtext data-page-node-id="4feoAaX2I4TsgpbIivNTYm">Runtime Execution</mtext>
+          </mrow>
+        </math>
+        <div class="math-caption" data-page-node-id="qPgHmaC51VTziQACcSGWCd">Agent 时代系统流：代码是可任意推倒重来的瞬态工件</div>
+      </div>
+      <p data-page-node-id="43UAGFGbwvrqgiGm8a24pc">
+        既然 Agent 可以在短短几分钟内，将一份 5,000 行的 Python 脚本无损重写为 Rust、重写架构、升级版本、甚至彻底删除重现，那么<strong data-page-node-id="0iJx7PeHYQtokMNhANTJwZ">代码文本本身就不再具有不可替代的静态神圣性。它成了一种易耗的“中间表示”（Intermediate Representation）</strong>。
+      </p>
+      <div class="callout rose" data-page-node-id="diNh8BGVnvkB6WpecvaWtB">
+        <div class="callout-title" data-page-node-id="uLQm5TGqCHHrKDessKbxem">💡 软件可维护性（Maintainability）的划时代重定义</div>
+        <p data-page-node-id="N882MxJm6Az1Np6p0GuJd4"><strong data-page-node-id="Bx2hAwd72UTQTJFNk35QV8">过去 40 年：</strong>可维护性意味着“人类可读性高、命名规范、目录干净、方便下一个人人肉修改”。</p>
+        <p data-page-node-id="XbsGA46uB506AcwGEimazo"><strong data-page-node-id="JZuP5UBMRQO7XDAWN0CUw4">未来 10 年：</strong>可维护性意味着<strong data-page-node-id="3BkFLEXOthJ2N5XqCcBv3l">“维护一套能够稳定、反复、确定性重新生成正确软件的约束系统（Constraints &amp; Verification Suite）”</strong>。只要 Specs 和 Evals 在，底层 IR 代码由谁生成、生成几遍，已经不再关键。</p>
+      </div>
+    </section>
+
+    <!-- 章节 9：Prompt 溯源与版本控制 -->
+    <section class="section-block" id="sec-prompt-provenance" data-page-node-id="HGttetaB4fbov8v1p79S0K">
+      <h2 class="section-title" data-page-node-id="yfbJ1SK4HJ23w65Nr5QOZP">9. Prompt Blame 与 Agent 溯源工程：版本控制的新基石</h2>
+      <p data-page-node-id="i4s6sKL9Jy2wbkCjkJ60k1">
+        在传统工程中，团队排查历史债务最核心的工具是 <code data-page-node-id="Mqv857ZQK4dvviJKaHbepD">git blame</code>——每一行代码归属于哪位工程师、提交于哪一个 commit、当时的 commit message 是什么。
+      </p>
+      <p data-page-node-id="TRF7NjGyXpepo5gF6LYDY1">
+        然而，当工程师通过 Claude Code 一次性提交上千行代码时，简单的 <code data-page-node-id="HJZBrp8EU0oRwzjm0cF1gg">git blame</code> 彻底失效了。审查者面对满屏的代码，无法得知背后的决策路径。Thariq 透露了一个极具前瞻性的内部实践：<strong data-page-node-id="XZzJeSRPVERsaSVTcl4dhL">他在提交大型 PR 时，会主动在 PR 描述中附带自己完整的 Prompt 历史、上下文关键截断、失败尝试的探索分支与最终 Eval 数据。</strong>
+      </p>
+      <p data-page-node-id="HZeR8PmkHQRx4AfKOYNPnX">
+        这标志着版本控制正在从纯文本的 Git History，演进为 <strong data-page-node-id="kbo4OGa82ievFqTtYMX2jF">Agent Provenance（智能体完整因果溯源图）</strong>：
+      </p>
+      <pre data-page-node-id="wNGhwVO4dQV0DxIOIKGrNi"><code data-page-node-id="kLRymxMj5FT56CpU6B1Ldb">未来生产级 PR 的元数据全景图：
+┌────────────────────────────────────────────────────────┐
+│ Pull Request #1024: 重构订单并发结算引擎               │
+├────────────────────────────────────────────────────────┤
+│ • Git Diff: +1,240 / -820 lines                        │
+│ • Prompt Provenance:                                   │
+│   ├── User Intent / Goal Spec (Hash: 0x8a9f)           │
+│   ├── Base Model: Claude-3.7-Sonnet-Thinking (v2026.03)│
+│   ├── Injected Skills: [database-locking, conwip-queue]│
+│   ├── Tool Telemetry: 42 bash calls, 18 file writes    │
+│   ├── Failed Exploration: 3 rollbacks (detected dead-lock)│
+│   ├── Verification Pass: 100% (48 unit tests, 4 e2e)   │
+│   └── Human Reviewer Touchpoints: 2 guidance nudges    │
+└────────────────────────────────────────────────────────┘</code></pre>
+      <p data-page-node-id="DDnRV9LG9S0Gg8ts0LFVvE">
+        没有 Provenance 记录的 AI 生成代码，在企业架构中就是“不可审计的技术黑天鹅”。Agent 溯源工程将成为未来合规、安全与协作的强制基础设施。
+      </p>
+    </section>
+
+    <!-- 章节 10：Coding Agent 非对称爆发之谜 -->
+    <section class="section-block" id="sec-feedback-asymmetry" data-page-node-id="384U3aEji9FQCuF0zLOc6w">
+      <h2 class="section-title" data-page-node-id="P2l6VHKKg2fy95E60ZL3Fm">10. 为什么 Coding Agent 率先爆发，而写作/通用 Agent 滞后？</h2>
+      <p data-page-node-id="HYEvGxt449e6zYgM3bCBdB">
+        这场访谈回答了一个长久困扰学术界与投资界的宏大疑问：为什么在所有 Agent 垂直赛道中，代码编写（Coding）的实用化渗透率与爆发速度遥遥领先于文案写作、商业分析或法律咨询？
+      </p>
+      <p data-page-node-id="HqX3eVlp13Xq6LDU7OlQn1">
+        主流通俗解释通常是：<em data-page-node-id="gl4mVBmWkML8vU7737gje5">“因为代码是高度结构化的文本，天然符合语法逻辑”</em>。Thariq 与评注指出了更本质的因果根源——<strong data-page-node-id="QhLpx9Y18EasIiqHkro4ko">强客观反馈信号的存在与否（Objective Feedback Loop Density）</strong>：
+      </p>
+
+      <div class="compare-grid" data-page-node-id="eBHUtSu18CMHcGWnsSZ6aR">
+        <div class="compare-card new" data-page-node-id="lXSJnL3IV8vZlhE124z8ss">
+          <div class="compare-card-header" data-page-node-id="ZbHX1spEE2V8mysVoLcemX">
+            <span data-page-node-id="k7MPElvKgUO4a50rkzRvpA">💻 代码工程：超稠密客观反馈闭环</span>
+          </div>
+          <p style="font-size: 0.85rem; margin-bottom: 8px;" data-page-node-id="HEzKG1SsdfeGzn97p77Wqq">模型生成的每一行代码，都能立刻撞上极其坚固的客观判定墙：</p>
+          <ul data-page-node-id="Z5IN2UyGTPtvFrOlnFowwV">
+            <li data-page-node-id="6sU3ApZuy9H3pMoUPShpYP"><strong data-page-node-id="76khTM2Wz2ZI7e9DF0TUS5">语法层：</strong>AST 解析器（Pass / SyntaxError）</li>
+            <li data-page-node-id="wmBSmK6TR2YlLx5iGs4xC6"><strong data-page-node-id="Lc4mTP4UpkN6Kark5Mw8an">类型层：</strong>TypeScript / Rust 编译器（TypeCheck Pass / Fail）</li>
+            <li data-page-node-id="rlqLLC2LCnac1ZunFHEKDF"><strong data-page-node-id="s3egwvDYO2304dBU9sg4jE">逻辑层：</strong>单元测试框架（Exit Code 0 vs 1）</li>
+            <li data-page-node-id="ZEQoCbVZCaTlB9pWvkj59M"><strong data-page-node-id="SmvPbOG2ECjOpV0k468FAe">运行层：</strong>沙箱环境（Zero Panic / Memory Leak）</li>
+            <li data-page-node-id="k58WlLVp0TIxBVzPdnaDcT"><strong data-page-node-id="huTGTthuKJ4eWMcGuacI4m">界面层：</strong>Headless 浏览器控制台错误与截图 Diff</li>
+          </ul>
+          <p style="font-size: 0.8rem; color: var(--emerald); margin-top: 8px;" data-page-node-id="Z9ZHAmYlnEPrWYwhInce4U"><strong data-page-node-id="PG9e4AMbPuBr2AldVGNYL6">→ 形成了完美的“生成 - 报错 - 定位 - 修复 - 通过”强化回路！</strong></p>
+        </div>
+        <div class="compare-card old" data-page-node-id="d2GjsqloBuYgjGtKZCQl1k">
+          <div class="compare-card-header" data-page-node-id="Mpd31Yms4rW349If0K3l0z">
+            <span data-page-node-id="XhOK3AqTZxo8Ue7vS9PjNY">✍️ 写作/咨询：弱主观离散反馈黑洞</span>
+          </div>
+          <p style="font-size: 0.85rem; margin-bottom: 8px;" data-page-node-id="6ze9uJq7YrbLtY0MwB944d">模型写出一篇文章，客观世界无法给出高保真布尔判决：</p>
+          <ul data-page-node-id="Bvb67inyKn7yUWfMAGm62J">
+            <li data-page-node-id="uGWGEVBZnzxvHdyaNLyq10">“这篇文章行文是否生动？” → 缺乏数学 Oracle</li>
+            <li data-page-node-id="vIVNZCijnhuZ7l6CgZFlAT">“论证逻辑是否严密深刻？” → 人类读者观点分歧极大</li>
+            <li data-page-node-id="5kjElZppPXXLAvMLKcNxVK">“文风是否符合品牌调性？” → 纯主观经验 Taste</li>
+            <li data-page-node-id="PoVDU7MkLexL5ccaQGhEHs">无编译器、无自动化测试、无控制台堆栈追踪</li>
+          </ul>
+          <p style="font-size: 0.8rem; color: var(--rose); margin-top: 8px;" data-page-node-id="N1dqOCnvj3QT5hbIi7hy1P"><strong data-page-node-id="Bcupkni2wpTehxLTj9H0Ik">→ 无法构建无人值守的高频自愈搜索循环！</strong></p>
+        </div>
+      </div>
+
+      <div class="callout cyan" data-page-node-id="5KAeKQdgJ9MSHixJUaN9py">
+        <div class="callout-title" data-page-node-id="hLx0pZ6AUmOwjPXXRypoJ3">📌 关键洞见总结</div>
+        <p data-page-node-id="Up0ADAHP6mgjfAJWKRsw9T"><strong data-page-node-id="K0sGCYb6BwPHztg20c7w5P">AI 最先彻底颠覆的，从来不是“人类以为最简单机械的工作”，而是“物理与系统反馈信号最强、最客观的工作”。</strong></p>
+      </div>
+    </section>
+
+    <!-- 章节 11：Taste 鉴赏力的价值飞跃 -->
+    <section class="section-block" id="sec-taste-value" data-page-node-id="EOFt0O4RPNHJVu19FEaEYu">
+      <h2 class="section-title" data-page-node-id="DLOF7KzJgqvlf6I0mXr3JE">11. Taste 为什么在生成充裕时代反而拥有绝对定价权？</h2>
+      <p data-page-node-id="LoULFUamzUClbvR7bfBCkE">
+        当谈及设计、产品架构与数学探索时，Thariq 给出了一条极为深刻的判断：<strong data-page-node-id="iReZTV33wukXgogGKG79G4">模型能够在一分钟内生成 20 种不同的系统架构方案或界面交互实现，但最核心的致命问题变成了——“你究竟认不认识什么是好东西？”（Do you know what good looks like?）</strong>
+      </p>
+      <p data-page-node-id="gus1DCnOJJvwdRxsEQwsWz">
+        在经济学中，当某种生产要素供给呈指数级膨胀时，其互补要素的边际收益将呈爆发式上升：
+      </p>
+      <div class="math-block" data-page-node-id="8iVR1wVu9C2wWB5iLDLDU3">
+        <math display="block" data-page-node-id="FPFt8OPGJJbH5ORpl0DEzA">
+          <mrow data-page-node-id="IEw8fwzVY674WtI6gQRkAc">
+            <mtext data-page-node-id="mKRZA0JWa2fL3bBM2MyfA2">Marginal Value of Taste</mtext>
+            <mo data-page-node-id="GX3o7pbbusmAawA2vSkPeM">&propto;</mo>
+            <mfrac data-page-node-id="ZaQFVVOURQKShzW1H2x9aG">
+              <mrow data-page-node-id="3XHb1dcv8nPJ6y7h1DZ9R0"><mo data-page-node-id="cGhVo2BV5W1i8zoCF2Grhm">&part;</mo><mi data-page-node-id="CpL4WiwOBepikI9YM6E5ga">Utility</mi></mrow>
+              <mrow data-page-node-id="HMcGwE8Oh5TwflJsc2IVCF"><mo data-page-node-id="St9DSMrDI8D7w2Ws1rv14w">&part;</mo><mo data-page-node-id="pwyx1I8DXSZ28Kno4OcCwx">(</mo><mtext data-page-node-id="LuTjGAFP0v4ccNwr5b0ycF">Candidate Pool Size</mtext><mo data-page-node-id="cnk0zYWcxzUYCAlMteA4qa">)</mo></mrow>
+            </mfrac>
+            <mo data-page-node-id="445zL7xD3Ha4V99gC35WuA">&times;</mo>
+            <mtext data-page-node-id="MPWQs29REnA4eFB9igusRD">Complexity</mtext>
+          </mrow>
+        </math>
+        <div class="math-caption" data-page-node-id="49bR4iaA7HRGcMctvSRTBt">公式 11.1：候选解充裕时代鉴赏与裁决能力定价权模型</div>
+      </div>
+      <p data-page-node-id="A8wVt81tG4ZrGJFSA6wujK">
+        如果你缺乏深厚的领域品味（Taste），面对 Agent 生成的代码，你无法做甄别（Select）、无法敏锐地指出其架构债务并回绝（Reject）、更无法在更高维度指导其深入演化（Push further）。
+      </p>
+      <p data-page-node-id="w9LplGhSK2sqcVA4JUwZ3g">
+        因此，Agent 时代的降临绝不是“专业经验的贬值”；恰恰相反，<strong data-page-node-id="V1RebQcVEM178QREwZbDDv">低层级的转译经验（如何敲击特定语法）迅速归零，而高层级的系统审美品味、边界洞察力与领域判断力获得了前所未有的价值放大器。</strong>
+      </p>
+    </section>
+
+    <!-- 章节 12：未来工程师能力结构金字塔 -->
+    <section class="section-block" id="sec-engineer-competence" data-page-node-id="hd7sjskTIBpBcVd44KuiGq">
+      <h2 class="section-title" data-page-node-id="3WPVF97G4ha9BZNtGNUgkR">12. 未来软件工程师的能力结构金字塔与角色再定义</h2>
+      <p data-page-node-id="IpIw2R5r6362l2del4moJS">
+        基于上述所有论断，我们必须彻底重构软件工程师的人才能力画像。传统以“精通某种语言、熟悉框架 API”为基石的模型已然倒塌，全新的六层金字塔架构正式确立：
+      </p>
+
+      <pre data-page-node-id="dLXvXXZPkpNl35FJ3F9aBa"><code data-page-node-id="Zv7O7j5B2jyXfqAKHVmSyB">                    ▲
+                   /                   /   \  [1] Product Taste &amp; Domain Judgment (品味与领域判断：定义终极标准)
+                 /                     /───────\  [2] Problem Framing &amp; Unknowns Discovery (问题构陷与未知发现)
+               /                       /───────────\  [3] Specs, Invariant Constraints &amp; Exit Criteria (严密规约)
+             /                         /───────────────\  [4] Harness Engineering (运行时、沙箱、上下文与工作流装配)
+           /                           /───────────────────\  [5] Verification &amp; Eval Infrastructure (测试网、模拟器)
+         /                             /───────────────────────\  [6] Automated Agent Execution (由 AI 完全接管的代码生成)
+       └─────────────────────────┘</code></pre>
+
+      <p data-page-node-id="6bq9RBqYhwKnPfjZvQmBFy">
+        工程师的法定职业身份正在实现关键蜕变：
+      </p>
+      <ul data-page-node-id="kvcfD037YUQC5gH6BqU8ra">
+        <li data-page-node-id="rU9rjdqzkOBpDAOrcuSciI">从 <strong data-page-node-id="E0EprdIbjvt00fGY8A3kNf">Coder（代码编写工人）</strong> 蜕变为 <strong data-page-node-id="vg2eZM4ktIgJ45DMWMwGYb">System Designer（系统架构设计师）</strong>；</li>
+        <li data-page-node-id="CY9iLf2CDuDIT3cy3GQ3sv">从 <strong data-page-node-id="TunQBYtd7kcnasxUjEeOg4">Syntax Debugger（语法排错者）</strong> 蜕变为 <strong data-page-node-id="5KY0wtyVCWBgtzJrWsD5Me">Agent Supervisor &amp; Critic（Agent 行为督导与裁判）</strong>；</li>
+        <li data-page-node-id="tCqTLtkI1pQcOjDKesZlCQ">从 <strong data-page-node-id="Ozw88h9hCwQtGgErPSpcvc">Task Receiver（需求接收端）</strong> 蜕变为 <strong data-page-node-id="Hc3BgaKaHMpKhoQoh3P5tF">Domain Evaluator（领域评估裁决者）</strong>。</li>
+      </ul>
+    </section>
+
+    <!-- 章节 13：Harness 级自进化闭环 -->
+    <section class="section-block" id="sec-self-improvement" data-page-node-id="mRggkGDX15rCIMNNDC23L2">
+      <h2 class="section-title" data-page-node-id="vGzaXfuyUzBBnGZE95Ogul">13. 这篇文章与「Agent 自主进化」的深度接轨：Harness-Level Self-Improvement</h2>
+      <p data-page-node-id="I1JJB0e4rBQJZ2t2I4K2kI">
+        评注指出了一个与前沿演化理论高度契合的盲区：目前业界很多所谓的“Agent 自我改进（Self-Improvement）”，仅仅停留在<strong data-page-node-id="9zJDwAw5aheIbAxXe6lMnu">“Agent 发现自己回答得不好，于是去修改自己的 Prompt”</strong>这一玩具级循环上。这种自指修改极易陷入提示词局部极小值崩溃。
+      </p>
+      <p data-page-node-id="3bDe59PLsmTjMEstkh0EGF">
+        而 Claude Code 体系揭示的，才是<strong data-page-node-id="z980XZKQkjdzzsMzogSAR7">真正工业级、可计算的自进化系统架构（Harness-Level Self-Improvement）</strong>：
+      </p>
+      <div class="math-block" data-page-node-id="3QBlsVJbdnzzSUNTluRZ3D">
+        <math display="block" data-page-node-id="v4nZjVmI6CNypZwShpRjzB">
+          <mrow data-page-node-id="XipSBvLy5AsOguvdN7NW9T">
+            <mi data-page-node-id="Cz0bThZn1uLtoqelOXaOB8">System</mi><mo data-page-node-id="0riL2dxTKfuRqpTmZqorGh">(</mo><mi data-page-node-id="LJtuhfIGJgUozK7zFq7n08">t</mi><mo data-page-node-id="9JwixDZz33zL5xIMjerXS1">+</mo><mn data-page-node-id="ss7DFqiVlYfCgBOGD2uMaT">1</mn><mo data-page-node-id="8dOW7qGFwN4VbVe8SwjCeG">)</mo>
+            <mo data-page-node-id="iuAHl6BD2v4btR3VjN4w47">=</mo>
+            <mi data-page-node-id="H5eATEngBzSc5eXqfbjnCh">Update</mi><mrow data-page-node-id="46P3QoEvR8v8azP3tgQoII"><mo data-page-node-id="wqJfQYuCax0DFdW9RszLup">(</mo>
+              <mi data-page-node-id="e0jzUtdHwXUBI6cx2IwwhY">System</mi><mo data-page-node-id="rv9DwT5OwPOpBHaIvRjHHL">(</mo><mi data-page-node-id="UVyBA2vHWwdX1YmPrdMkMk">t</mi><mo data-page-node-id="vADq81ekfAFGPSG9T98oj2">)</mo>
+              <mo data-page-node-id="FXcw96oBFskCQZFak1MYiG">,</mo>
+              <msub data-page-node-id="xlMsbEZU4FyAHx9gB5JWvQ"><mi data-page-node-id="E8XRf4m3nAJA0DuXRTcvRG">FailureClassification</mi><mtext data-page-node-id="bC4pEs0FoeQkxrojYvylOY">Real Tasks</mtext></msub>
+              <mo data-page-node-id="Dc7XiLGpRCm84P2yRTQIN8">(</mo><mtext data-page-node-id="go2xjRuvcyQK8z4VDYwtoI">Context, Skills, Harness, Evals</mtext><mo data-page-node-id="XHjrxOTJiQkA6EH2Y4jcO0">)</mo>
+            <mo data-page-node-id="xfwtHG3nMNeBaMwJeqSA2M">)</mo></mrow>
+          </mrow>
+        </math>
+        <div class="math-caption" data-page-node-id="TW5B01aAWfthqhV4Y2HhZf">公式 13.1：Harness 级多维度自进化迭代状态转移方程</div>
+      </div>
+      <p data-page-node-id="GV5GgEYgUzYvE4nld77KYl">
+        在真实的工程任务执行失败后，系统通过归因分析，能够精准识别故障点并执行分层进化：
+      </p>
+      <ul data-page-node-id="AloergEJKctJhE9tuwK1q3">
+        <li data-page-node-id="KL4qmZGD6D75rDLCUnz8C1"><strong data-page-node-id="RsWUtc0S7ngPnwWI1lPZyo">如果是上下文噪音导致的幻觉：</strong>进化 Context Trimming 策略与检索路由（Routing）；</li>
+        <li data-page-node-id="WQSEKMK9j6qohqUEpOCkTw"><strong data-page-node-id="J6svqRPG4gmcU6uToGFY5M">如果是特定领域解法缺失：</strong>自动封装并固化全新的动态技能包（Skill Accumulation）；</li>
+        <li data-page-node-id="gPfsSYA5euj2JAEwF2ePqm"><strong data-page-node-id="rMKHe7WF6Af3PFBAVdZoP5">如果是并发写入或状态丢失：</strong>升级 Harness 内部的状态快照机制与并发互斥锁（Harness Repair）；</li>
+        <li data-page-node-id="GIJDzgpanQOYzV7MoETKYy"><strong data-page-node-id="CdFbTX8aXOdZA4a9VUd8Z6">如果是边缘测试遗漏：</strong>自动补充高覆盖率的回归测试用例集（Regression Eval Expansion）。</li>
+      </ul>
+    </section>
+
+    <!-- 章节 14：五代全景压缩与总结 -->
+    <section class="section-block" id="sec-five-generations" data-page-node-id="R4wrLcpntDFIp5Kmt16FCL">
+      <h2 class="section-title" data-page-node-id="zixgYhFPqAx4QAf0fIqxWG">14. 过去三年 Agent 演化五代全景与最终抽象</h2>
+      <p data-page-node-id="xvs4n8V6RPQoREVYFldnoK">
+        将 2023 年以来的大模型应用技术演化，可以清晰划分为五代技术浪潮：
+      </p>
+      <div class="table-wrap" data-page-node-id="daGHRx7NXA4vkNSWVaZNVJ">
+        <table data-page-node-id="OUUaRGjkdYvfnL4yXU7FHD">
+          <thead data-page-node-id="mA2hBjys1XyrDbV8kMSaun">
+            <tr data-page-node-id="9rn5T6fJzzJgy1kIGyTGtc">
+              <th data-page-node-id="xNyxbnhZs8mQEDG9oQICac">代际与时间线</th>
+              <th data-page-node-id="MCjvLJEbPpQZXTrnjIlJB9">核心技术形态</th>
+              <th data-page-node-id="n4Gf0PjBOABWyhcSqvARNz">主要瓶颈</th>
+              <th data-page-node-id="d8Wh4HH7NYSg94n3zizaod">人类开发者的工作重心</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="XqpBXB6JydwW078oE8PCzN">
+            <tr data-page-node-id="e6cB1AIbglwCbkHpycBWTz">
+              <td data-page-node-id="KoOspBfGOTQyu7beIoZO2j"><strong data-page-node-id="Us1E1KsIEsQVouq3MLvu2F">第 1 代 (2023)</strong></td>
+              <td data-page-node-id="0VQYc5XoC0CydKrG14Afwf"><strong data-page-node-id="OI0Ah3GLZKk11rtQHzvUoG">Prompt Engineering</strong></td>
+              <td data-page-node-id="e9uUqeXJsFAEsssnC8Mwv7">模型无记忆、上下文窗口极小、无工具调用</td>
+              <td data-page-node-id="tE50cOZ7ME24HTDewmYHtX">编写复杂 Few-shot、魔改提示词、防止格式错乱</td>
+            </tr>
+            <tr data-page-node-id="urEOeTpxWyQj6i3MhxsSe5">
+              <td data-page-node-id="VxlMIhCZsfC8BSRoxAlbNg"><strong data-page-node-id="zBPCsz1pZPSOVQTkcApoZT">第 2 代 (2024)</strong></td>
+              <td data-page-node-id="OOFyL6zmygSSDOoBBg6lnC"><strong data-page-node-id="WBNNZNLg5PJOQrsMkrOFYb">Tool-Using Agent</strong></td>
+              <td data-page-node-id="hRSuZpE8MYF5NvtL4CI5X4">工具调用错误、状态不连贯、缺乏长期规划能力</td>
+              <td data-page-node-id="iEOg6d5WveqWFUz1kuWisV">定义 Function Calling 契约、手写简单 ReAct 循环</td>
+            </tr>
+            <tr data-page-node-id="hF7pEjpDpyb8vx9N7sibD0">
+              <td data-page-node-id="jpVSTQ33ZVeojALlYV8VXH"><strong data-page-node-id="G8dIG953DlBxqQJ7MAdRo5">第 3 代 (2025)</strong></td>
+              <td data-page-node-id="oCqseIzgZH3kerNWPJLO7S"><strong data-page-node-id="MjUGSkOVrGCHtYvQjDtBxg">Context Engineering</strong></td>
+              <td data-page-node-id="FRCtmGlv3MvEaLKa3wvhcE">长上下文注意力衰减、Prompt 规则冲突与膨胀</td>
+              <td data-page-node-id="jMFAmDau5BoNKjuYkywrsV">设计 RAG 架构、构建动态 Skill、实施 Subtractive 瘦身</td>
+            </tr>
+            <tr data-page-node-id="euqBjuIv7QvW5qLsoxr49K">
+              <td data-page-node-id="FRm9Aa04yyWdXI0n0SzJPi"><strong data-page-node-id="VtyEyM2ttqGzzojhFIrsR0">第 4 代 (2026 当前)</strong></td>
+              <td data-page-node-id="NXM09V7APeuaQ1uPwpYLHs"><strong data-page-node-id="8AqGLfuE0XSxRVuuTjgYRl">Harness + Loop Engineering</strong></td>
+              <td data-page-node-id="OHohDHnZKPS0KNARh9313o">长程自治漂移、验证环境昂贵、跨 Agent 并发偏序</td>
+              <td data-page-node-id="ZLGqmD7in2wJKrHKmJ7Uap"><strong data-page-node-id="CzZWV2vs0NJiTPAK6BbLti">构建沙箱、设计 Goal 终止条件、搭建 Evals 矩阵</strong></td>
+            </tr>
+            <tr data-page-node-id="CVBn4CdGMdSJNJsHqN5wNn">
+              <td data-page-node-id="Ev0QUPUaeDoaeJrT2zhj83"><strong data-page-node-id="x8myLhc4pPl5CdHDktDZTp">第 5 代 (Next)</strong></td>
+              <td data-page-node-id="aCGmEbciXBVjhJ0hwfjDbb"><strong data-page-node-id="vDVqsKOxah0yZQ4RMsM7x9">Self-Improving Software Factory</strong></td>
+              <td data-page-node-id="u11angtfNkhjHxG59OrqIq">未知领域边界探索、高阶系统架构 Taste 的数学形式化</td>
+              <td data-page-node-id="CwgBT3Ce9iUEtLOYrCjBbZ"><strong data-page-node-id="6gKFE91fqfyf8ETlfAQla5">定义战略愿景、裁决业务品味、监督自进化 Harness 运转</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout emerald" data-page-node-id="VeKcAMXuqs6tQTsbRJ9tZw">
+        <div class="callout-title" data-page-node-id="gBfS7d2Bwjn3cakuiSqf4e">🏁 终局结论：软件工程竞争主战场的不可逆迁徙</div>
+        <p data-page-node-id="3xRD6TQZAeTCa3Wq6Z6Yxb"><strong data-page-node-id="zYtlekobE1NuCGrq93RO69">代码生成已经彻底从核心瓶颈蜕变为大宗商品。在即将到来的 Agent-Native 时代，真正稀缺的核心壁垒是：</strong></p>
+        <ol style="margin-top: 6px; padding-left: 20px;" data-page-node-id="M7erlFyyxRAvsDUuhoSHWM">
+          <li data-page-node-id="l0ktKaefvRq5OivWdOGHar">极其清晰地洞察要做什么（Problem Framing）；</li>
+          <li data-page-node-id="hnDQG4rDO0br4y8ULFsFwf">拥有高维的架构品味，知道什么才算真正的高品质成果（Domain Taste）；</li>
+          <li data-page-node-id="l89T4jXqtISMIYCMt3nlry">能够将品味与业务标准精确编码为自动化验证系统（Verification &amp; Evals）；</li>
+          <li data-page-node-id="gu0J516JYx16MBQ1LHwoKq">构建一套足以支撑 Agent 在长程、高并发、复杂约束下持续可靠运行的 Harness 运行时底座。</li>
+        </ol>
+        <p style="margin-top: 10px; font-weight: 600;" data-page-node-id="Sq9Axd4JszHP8Ww4aszKtq">
+          未来软件工程竞争的主战场，已经不可逆转地从“Who writes better code?（谁写代码更牛）”，迁移至：<strong data-page-node-id="ELQtblaBQD4bZ4DQv5pDln">“Who builds the better system for AI to repeatedly produce, verify and improve software?（谁能为 AI 构建更强大的生产、验证与持续自进化系统）”</strong>。
+        </p>
+      </div>
+    </section>
+
+    <!-- ★ 三大交互数理仿真沙盘 -->
+    <section class="section-block" id="sec-sandboxes" data-page-node-id="9XmwfxbVyG66x19y4ynzGK">
+      <h2 class="section-title" data-page-node-id="dODgUqhD2dv2APjAj03c0F">★ 核心数理模型动态仿真沙盘 (Interactive Sandboxes)</h2>
+      <p data-page-node-id="9c4bF3tV6MGTU6y5Fah9aT">
+        为践行“拒绝隐喻泛滥、杜绝沙盘造假”的硬核工程规范，以下三个交互沙盘全部严格绑定前文推导出的真实可计算数学模型。所有数据点实时计算并由纯原生 SVG 矢量绘制，零假数据、断网完全可用。
+      </p>
+
+      <!-- 沙盘 1：成本倒挂模型 -->
+      <div class="sandbox-card" id="sandbox-cost" data-page-node-id="0eU9w5SvmVL3FX5JqvC3yK">
+        <div class="sandbox-header" data-page-node-id="escxE1ceA6nZT6EyStktVH">
+          <div class="sandbox-title-group" data-page-node-id="TkuWtWNEq8ukyrYTWRee4e">
+            <h4 data-page-node-id="OWbg6m6by8lWsTdBTEJSHN">📊 仿真沙盘 1：Agent 软件工程成本倒挂与验证权重推演</h4>
+            <p data-page-node-id="kFsRZAKqryZAoiKmi8sZDN">基于代码边际生成成本折减率与验证复杂度膨胀因子，实时求解传统 vs Agent 模式下的成本结构重组</p>
+          </div>
+          <span class="sandbox-badge" data-page-node-id="um10UXPEZHh3JvSPVBZe5Z">COST INVERSION MODEL</span>
+        </div>
+        <div class="sandbox-layout" data-page-node-id="0kF8o8eLXG5GvMcAcg2OPS">
+          <div class="sandbox-controls" data-page-node-id="HsCgW4qDRFwbsuGNCQWHNL">
+            <div class="control-group" data-page-node-id="nKJnmWDh0UyXdxNbSygJhD">
+              <div class="control-label" data-page-node-id="YeB33qFFHjmQQEYvo8AnjB">
+                <span data-page-node-id="gVAltz2efr2YUSkRJM77yx">生成成本折减率 (&alpha;)</span>
+                <span class="control-val" id="val-c1-alpha" data-page-node-id="WMlJLYMG3kQaBG77cDAVPR">0.05</span>
+              </div>
+              <input type="range" id="ctrl-c1-alpha" min="0.01" max="0.30" step="0.01" value="0.05" data-page-node-id="IpcfsiP2VfrUWaBQvFe6cf">
+              <div class="control-hint" data-page-node-id="mTu2YX3ACcEXLENu6MaI28">Agent 相对人工写代码的边际生成折减 (5% 代表工时仅为原本 1/20)</div>
+            </div>
+
+            <div class="control-group" data-page-node-id="YFq7Fn66YDrHT9RS6TA1CM">
+              <div class="control-label" data-page-node-id="0jlsjvDIObmz0W5532UGkP">
+                <span data-page-node-id="Ui7HB70rYFjAVoaRYqrUjI">测试验证复杂度倍率 (&beta;)</span>
+                <span class="control-val" id="val-c1-beta" data-page-node-id="Akm90GYyOuTOsuPHOsmJRI">2.50</span>
+              </div>
+              <input type="range" id="ctrl-c1-beta" min="1.0" max="6.0" step="0.25" value="2.50" data-page-node-id="NrEQ1rQzX2SbDJrZIl5qt6">
+              <div class="control-hint" data-page-node-id="ZVZG0H9KBRAibiM2DNZkeU">为保障自治不漂移，需扩增的测试套件与 Oracle 校验深度倍数</div>
+            </div>
+
+            <div class="control-group" data-page-node-id="dPxKb5oNkyhpuCw6dSuqCI">
+              <div class="control-label" data-page-node-id="b0IREPU6jRupPGbEjnoCru">
+                <span data-page-node-id="yAvReEIwLjEEoCDuFpVyql">基准代码量 (LOC 单位)</span>
+                <span class="control-val" id="val-c1-loc" data-page-node-id="ByOyqqQlscYdYR57MOamCy">100</span>
+              </div>
+              <input type="range" id="ctrl-c1-loc" min="20" max="300" step="10" value="100" data-page-node-id="9PjLBM9eEcSDDRTdV5iJKP">
+              <div class="control-hint" data-page-node-id="6G4dXH0xOC8DspnLy2SsQQ">模块基础工时标尺 (默认设置代码=100h, 传统测试=33.3h)</div>
+            </div>
+
+            <div class="sandbox-notes" data-page-node-id="EZBX4WMAgJAoiOXpvcHdUH">
+              <strong data-page-node-id="E45ptgHbNt1CZt0sO2zeNg">数理推导依据：</strong><br data-page-node-id="UAMq9rRkzoyXBOIhFchKv7">
+              <math display="inline" data-page-node-id="t0zwDTJMojxpFeX1FyD2I2"><mrow data-page-node-id="DhUMTGzzz32gMzceAI0wFm"><msub data-page-node-id="emzMROksT4mOihl84NUE4C"><mi data-page-node-id="ZeNDMe3BRDFvEF4SARSkFG">C</mi><mtext data-page-node-id="Vi1cBlGx7xOzjOSrqG7BZI">trad</mtext></msub><mo data-page-node-id="imcqPIM8OF9v8lTinzMTXr">=</mo><msub data-page-node-id="dVn6CjwgYYddUpObUECn5f"><mi data-page-node-id="kCwYp16aGGLy7aYFthU8Qz">L</mi><mn data-page-node-id="RCTVEBxmujthGc7VHCpu11">0</mn></msub><mo data-page-node-id="LBbvAg9lkHvkBKQZgAAbc8">+</mo><mfrac data-page-node-id="paoT4K2No8hPzDl2oNrIva"><msub data-page-node-id="2df9DfMuJOjh6pltboVU3L"><mi data-page-node-id="zJCYX9HjMKwFHA8v8e5JFi">L</mi><mn data-page-node-id="Ra1fgGv8iq0NP7oDMJ1kTk">0</mn></msub><mn data-page-node-id="B5lSd9FS8JeKw2HT4rXYFA">3</mn></mfrac></mrow></math><br data-page-node-id="CSKG26FihG3DoYOyGRWwCu">
+              <math display="inline" data-page-node-id="4PFkLNUKaf0WC4tu0US1BN"><mrow data-page-node-id="TW5rM57lI0ab5xKbwr5vHM"><msub data-page-node-id="OFTGO1tpUEchhO24kmH5u7"><mi data-page-node-id="1YvMyxHbeYJVaG5PG0BH7a">C</mi><mtext data-page-node-id="rxuDGjGBhHssNYOOyhz3GC">agent</mtext></msub><mo data-page-node-id="KSjyOnrrPmxfPrGMC3iy7R">=</mo><mi data-page-node-id="2crpufQE60D2lxeHH0L48O">&alpha;</mi><msub data-page-node-id="WgBc4yn8CfzzC3is0aighz"><mi data-page-node-id="QBhlBEP1iHUC1t2UQgutQ8">L</mi><mn data-page-node-id="VjbcdcyLflUUpGhvMYFfch">0</mn></msub><mo data-page-node-id="Qlug2tqsoStwfPwuyRVrwW">+</mo><mi data-page-node-id="nDuQI6ApjhR0Caxa62sBa6">&beta;</mi><mfrac data-page-node-id="pfhCplrdP6ubBnjtH4YRHT"><msub data-page-node-id="YmIVTeUse35ooGSVNgCIWe"><mi data-page-node-id="IZe7reZpOJHAlDamUv15pX">L</mi><mn data-page-node-id="FvYgtcd7QHgeHbKkVZKJbu">0</mn></msub><mn data-page-node-id="yWBXpkW84p1d6kpKJQchwT">3</mn></mfrac></mrow></math>
+            </div>
+          </div>
+
+          <div class="sandbox-visual" data-page-node-id="gWrB8Bf3j4KkCoW802lZFN">
+            <div class="sandbox-stats-grid" data-page-node-id="K0ipPJE5LC63KFJPRuF5PZ">
+              <div class="stat-box" data-page-node-id="95yDzyvvew0Ol7Voccc5hO">
+                <div class="stat-box-title" data-page-node-id="ZzrUUkXPYEi4kOlIBOAko1">传统模式验证占比</div>
+                <div class="stat-box-num" id="out-c1-trad-pct" data-page-node-id="dCNFlKW1PNdsfGKGTxPQ5u">25.0%</div>
+                <div class="stat-box-sub" data-page-node-id="LmeaIUnrYmNHI84ATt4Wmu">写代码占 75%</div>
+              </div>
+              <div class="stat-box" data-page-node-id="EVMquvqFoIyBdIgXzW3Fpr">
+                <div class="stat-box-title" data-page-node-id="jjmHLJ9dsr5Zga1AOYvxG1">Agent 时代验证占比</div>
+                <div class="stat-box-num accent" id="out-c1-agent-pct" data-page-node-id="3fq1vQOQf8lg67RBib2NgG">94.3%</div>
+                <div class="stat-box-sub" data-page-node-id="ToMC8iSgVR9mZnqWB5Tu34">验证成为绝对重心</div>
+              </div>
+              <div class="stat-box" data-page-node-id="74DQspX7qn2MAa40jpYF5p">
+                <div class="stat-box-title" data-page-node-id="gTx6auDdcc4pe3vAzLKGms">总工程总耗时节约</div>
+                <div class="stat-box-num emerald" id="out-c1-saving-pct" data-page-node-id="J1aYAPOYbAmeUyWc2NHBtU">33.8%</div>
+                <div class="stat-box-sub" id="out-c1-abs-cost" data-page-node-id="jV9sxp48rK0u44WyJhej51">净耗时 88.3h</div>
+              </div>
+            </div>
+
+            <div class="chart-stage" data-page-node-id="oc3i4tzNVw1r9cBkNkzgHh">
+              <svg id="svg-cost-chart" viewBox="0 0 540 220" width="540" height="220" data-page-node-id="UZygSZT2NTO3REOX8q1sCG">
+                <!-- 由 JS 纯原生动态绘制堆叠条形对比图 -->
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 2：Prompt 删减 vs Harness 复杂度 -->
+      <div class="sandbox-card" id="sandbox-harness" data-page-node-id="JC0kmjdLFHKBjU7a4Js60S">
+        <div class="sandbox-header" data-page-node-id="LezUNELrxX5u7Cb8qjQ6vq">
+          <div class="sandbox-title-group" data-page-node-id="JTcX7HTN4RzGCTvP0jJitY">
+            <h4 data-page-node-id="oCbu5mIxnektJh7tOp9jtS">⚙️ 仿真沙盘 2：Prompt 瘦身与 Harness 状态复杂度反向剪刀差仿真</h4>
+            <p data-page-node-id="nHPRAimBmtXrPVED5IYuCl">观察随着模型基座代际演进与长程任务跨度激增，System Prompt 规则淘汰率与 Harness 状态工程的逆向激增</p>
+          </div>
+          <span class="sandbox-badge" data-page-node-id="U8BRKL4wBcb3xYvMBuKI4k">HARNESS DIVERGENCE MODEL</span>
+        </div>
+        <div class="sandbox-layout" data-page-node-id="RhhtrhcSTWB44VjwBHibGE">
+          <div class="sandbox-controls" data-page-node-id="hFj3h4TGwU35pZJB2drpPO">
+            <div class="control-group" data-page-node-id="j0DSHH30WjrxL6lgDjHUMF">
+              <div class="control-label" data-page-node-id="kZxhWkjfrDJ79ijBcewwK1">
+                <span data-page-node-id="SIhR6hvIvEQQMLyNjIwikN">模型基座前沿指数 (M)</span>
+                <span class="control-val" id="val-h2-m" data-page-node-id="QiFI38EQG3WabIZT8yBIzr">4.0 (Opus 5 代)</span>
+              </div>
+              <input type="range" id="ctrl-h2-m" min="1.0" max="5.0" step="0.5" value="4.0" data-page-node-id="h9sALqJpSVHwLtFLUElX1x">
+              <div class="control-hint" data-page-node-id="jArzHB8923hGlpOfuaWvCv">1=早期3.5代; 3=Sonnet 3.5; 4=Opus 5; 5=次世代深度思考型</div>
+            </div>
+
+            <div class="control-group" data-page-node-id="3dhFeGjh7RGx4jZFJIPBPh">
+              <div class="control-label" data-page-node-id="CTGTvvs0hkfmj9rSCPIuZV">
+                <span data-page-node-id="VvzjpKH5sqGCiJAnDq3WuL">任务执行步数跨度 (T)</span>
+                <span class="control-val" id="val-h2-t" data-page-node-id="PWa2TgEBVnTml7Qa4aso27">30 步 (约 2 小时)</span>
+              </div>
+              <input type="range" id="ctrl-h2-t" min="1" max="100" step="1" value="30" data-page-node-id="gfINK9Dat5nwGaiS35FGAR">
+              <div class="control-hint" data-page-node-id="8so7F4vGCCVByYseIfNG8C">自治长程任务的 Action 总执行步数 (1步到100步)</div>
+            </div>
+
+            <div class="sandbox-notes" data-page-node-id="RxWH8PFlBDe4sJDd2Q5hbc">
+              <strong data-page-node-id="gy1IpdEubG1Iah4UKif2YD">数理推导依据：</strong><br data-page-node-id="QASGMBa97pF9BBYpopGQ4o">
+              <math display="inline" data-page-node-id="wiGPCAC8Wa833FDpcf5Iml"><mrow data-page-node-id="iY4ne9VHjgtqUWx8whYzkj"><mtext data-page-node-id="xqjF7rg8ehXGMwEQyQNLLK">Prompt Rules</mtext><mo data-page-node-id="81Dsw3JdiF2NhMlvPRCWTf">=</mo><msub data-page-node-id="pTYXPb1ZD2W5UFPOvruB24"><mi data-page-node-id="Bc6XBhcusjLN75v6daNhCr">R</mi><mn data-page-node-id="mDKwF0uwzyCs6ZSNZxrioC">0</mn></msub><msup data-page-node-id="Psp4VFRcdggCneIdui8Wn9"><mi data-page-node-id="LHE2kfzr5RyJfM8U28vfvO">e</mi><mrow data-page-node-id="QAFEGrxxMptkMmJ7RfPgV0"><mo data-page-node-id="b3jNaXK5j4mbfkFWFKIfkl">-</mo><mn data-page-node-id="eUv3Hpr4sL0nUFqhY8R6Bu">0.35</mn><mo data-page-node-id="nLWr7vTfH2fPAYG8WM9g6n">(</mo><mi data-page-node-id="NE9tKTa4YUJWpFpx0XTZqK">M</mi><mo data-page-node-id="sEMg18QpdS48sSLEL0pVvh">-</mo><mn data-page-node-id="e6kBuboiPvlmDnAwFYA1Du">1</mn><mo data-page-node-id="llepYE0PcG3Iw8VEijq4lA">)</mo></mrow></msup></mrow></math><br data-page-node-id="RuXSP2Z2jzUT9p63DxLwTF">
+              <math display="inline" data-page-node-id="KQRwn7MXetaA6EAUgkpDsr"><mrow data-page-node-id="2eVq8XrioXl1Ila6VODUHN"><mtext data-page-node-id="0o0s46ldhvzykucZnPGNKZ">Harness Comp</mtext><mo data-page-node-id="62UsOAnM1ME6hpyUBBTpSw">=</mo><msub data-page-node-id="RhWHpD842tdQ4dWQMyVeNr"><mi data-page-node-id="r8rvsox2eNRbg9tnInHhLI">H</mi><mn data-page-node-id="HI39dtHcEpGSQ95n12j123">0</mn></msub><mo data-page-node-id="3bNTllEavDp9C9jAWr0JOA">[</mo><mn data-page-node-id="DSD4boFSnbBCglHOxidKvF">1</mn><mo data-page-node-id="PE7H5uAfmKLApWLGUuEGmm">+</mo><mn data-page-node-id="HXXqsnGX25q6XfZB4LX9kc">0.8</mn><mo data-page-node-id="6c4kOJeG9U3dMgB1LDMxYF">(</mo><mi data-page-node-id="tjVdZTGZfwHqYIaFmUfqy1">M</mi><mo data-page-node-id="9fQv60J2BnSheQ1u2lktFa">-</mo><mn data-page-node-id="EbkqY6Vf0AD2s0LdrDEZgt">1</mn><mo data-page-node-id="2xDj1we1KxSysZd94DIljq">)</mo><mi data-page-node-id="N47X3CQ6WiihrJjRdnk7OI">ln</mi><mo data-page-node-id="BUqOAi7PRSV5Q6LQmz3Xgs">(</mo><mn data-page-node-id="4BBYFfbWWGLupklGrHl7zH">1</mn><mo data-page-node-id="DqpeMQ7eS4xC8knGePbqEm">+</mo><mi data-page-node-id="qSggbsnuABbTMF6x37ksaT">T</mi><mo data-page-node-id="ARz7vphJw6wMKIkqixhsoE">)</mo><mo data-page-node-id="ZJd1CGZanirBN1gqMsl8aK">]</mo></mrow></math>
+            </div>
+          </div>
+
+          <div class="sandbox-visual" data-page-node-id="BiLdq5BGzS9IXnjNRD9nNF">
+            <div class="sandbox-stats-grid" data-page-node-id="zGPRbITVjb90RCGHFh6pwP">
+              <div class="stat-box" data-page-node-id="We4InThYlwipQsZuTZwKB0">
+                <div class="stat-box-title" data-page-node-id="UaiM8gHPYGi529TXRqSsL2">System Prompt 规则存留</div>
+                <div class="stat-box-num amber" id="out-h2-rules" data-page-node-id="Ny9rzDooOIYr3QDoGF2n67">35.0 条</div>
+                <div class="stat-box-sub" id="out-h2-rules-sub" data-page-node-id="Y8HjdpM2HtYGHJ8QlcGyb4">基准为 100 条</div>
+              </div>
+              <div class="stat-box" data-page-node-id="HI6NxHnGnaQzTN4jmxHBfi">
+                <div class="stat-box-title" data-page-node-id="hW4YvgYC9vkSYvwGUxS6Te">Prompt 淘汰率</div>
+                <div class="stat-box-num emerald" id="out-h2-reduct-pct" data-page-node-id="ki2PGVwTo9KeP5dI88Jz8o">65.0%</div>
+                <div class="stat-box-sub" data-page-node-id="1zT2TA8lwYhXUScce1IjrB">减法工程净释放</div>
+              </div>
+              <div class="stat-box" data-page-node-id="zZ5CePTLKjghl04hDwb045">
+                <div class="stat-box-title" data-page-node-id="NajC6xrkwLmG2guzSXRrJP">Harness 运行时复杂度</div>
+                <div class="stat-box-num accent" id="out-h2-harness-score" data-page-node-id="DB0ouDA8sYmrxntHDExdNM">184.8</div>
+                <div class="stat-box-sub" data-page-node-id="kTNDMDlmYfSJ1qI3zrJ6pz">膨胀指数为 9.2x</div>
+              </div>
+            </div>
+
+            <div class="chart-stage" data-page-node-id="j5Q4pOTrZPXkJvVBKP4LlV">
+              <svg id="svg-harness-chart" viewBox="0 0 540 220" width="540" height="220" data-page-node-id="3Bx25iTtj6cyTFcfiwBw6q">
+                <!-- 由 JS 纯原生动态绘制双曲线反向剪刀差图 -->
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 3：Loop 终止判定与收敛模型 -->
+      <div class="sandbox-card" id="sandbox-loop" data-page-node-id="qtqick08Z1vLB5bxaTxcAi">
+        <div class="sandbox-header" data-page-node-id="XFkJJM38dujhPEBgBAhCpP">
+          <div class="sandbox-title-group" data-page-node-id="o0W3C8r3tkAUEW8QNKXDRq">
+            <h4 data-page-node-id="bgp7vJSWJABJ6mGW2tn4zq">🔄 仿真沙盘 3：Agent Loop 终止判定与可控搜索收敛推演</h4>
+            <p data-page-node-id="686uwowAG61YyfHcknomow">模拟对比“模型主观感觉完成”与“客观 Verification 约束门禁”在多步长程执行下的终态正确率漂移曲线</p>
+          </div>
+          <span class="sandbox-badge" data-page-node-id="kHbAgVE6j3dvOlnAI940s5">CONVERGENCE ORACLE</span>
+        </div>
+        <div class="sandbox-layout" data-page-node-id="mvj2cKPrQHHEKL3OkOiQws">
+          <div class="sandbox-controls" data-page-node-id="DTg3Korm2shzn1vbTsAJNN">
+            <div class="control-group" data-page-node-id="7QsMC76InCx3eTWGEVGLyM">
+              <div class="control-label" data-page-node-id="6AOBqLqisgJgDijPPab6TX">
+                <span data-page-node-id="ipIuRANy5FKTLc6fJVszCI">任务执行迭代步数 (N)</span>
+                <span class="control-val" id="val-l3-n" data-page-node-id="CQfygmvE1QkEGDAUoVHFr4">10 轮循环</span>
+              </div>
+              <input type="range" id="ctrl-l3-n" min="2" max="25" step="1" value="10" data-page-node-id="nyGwkihzxEUtEwsfcYCEXp">
+              <div class="control-hint" data-page-node-id="7zvDAxRnhkAJi5bGObcELq">Agent 复杂任务所经历的连续 Action-Observe 轮数</div>
+            </div>
+
+            <div class="control-group" data-page-node-id="7uQZ7wFTvLNiMCWcEVNo2t">
+              <div class="control-label" data-page-node-id="HHwREgK6vDKbvqGCLtZyOQ">
+                <span data-page-node-id="bySwQ7dG0sxXkph3Owq1hQ">独立客观门禁数 (K)</span>
+                <span class="control-val" id="val-l3-k" data-page-node-id="skgAqsVZS72FEvhjOOBICR">4 道门禁</span>
+              </div>
+              <input type="range" id="ctrl-l3-k" min="1" max="6" step="1" value="4" data-page-node-id="DEbmdNJWQGS9rAvxIRixgd">
+              <div class="control-hint" data-page-node-id="fNGzRziPoIE5ZGdGW2CTn6">如：1=Linter, 2=TypeCheck, 3=UnitTests, 4=AST/Build, 5=Evals</div>
+            </div>
+
+            <div class="control-group" data-page-node-id="rcagpre6QXlul8KD3yhTD4">
+              <div class="control-label" data-page-node-id="62LrYNRncFRRQBEAWZVh5i">
+                <span data-page-node-id="qrHAFcwRksRI3nRb6dyvFF">单步主观自省漂移率 (p_drift)</span>
+                <span class="control-val" id="val-l3-drift" data-page-node-id="eqlWMbC1TDDqFpca415NJO">8%</span>
+              </div>
+              <input type="range" id="ctrl-l3-drift" min="0.02" max="0.15" step="0.01" value="0.08" data-page-node-id="ExedeDXkqrEezQqsfI66FR">
+              <div class="control-hint" data-page-node-id="w0gA8dsZ0M2eDv0uyA0tcv">模型在自评“我已写对”时产生盲目自信或未察觉错误的概率</div>
+            </div>
+
+            <div class="sandbox-notes" data-page-node-id="GTVlDxUgQkQSkH4ObB8oxX">
+              <strong data-page-node-id="sVxT6h3Ub7cxuApNjzvlnH">数理推导依据：</strong><br data-page-node-id="LTqUfJqnmdRHZ9l3IDVi0m">
+              <math display="inline" data-page-node-id="wXxiuePK9orWY58ce1xXdJ"><mrow data-page-node-id="y2d3aIoZsoRiAt8DE2RlZf"><msub data-page-node-id="zszP232Q7gRCW1a21sKnXF"><mi data-page-node-id="pEoSMG9GojmddDV7Bj8pGL">P</mi><mtext data-page-node-id="FxXN08K41p4DtFs3DvaBcE">主观保真</mtext></msub><mo data-page-node-id="2ddmLAIAVEcDHJYPLea5QA">=</mo><msup data-page-node-id="AJwGtjD4MxxM9cZCgXtMF0"><mrow data-page-node-id="fTQVOfzJoq45tszklLF7jV"><mo data-page-node-id="qNMcYyDaJxRLMGgyB7Y4i8">(</mo><mn data-page-node-id="AbZhcI4znbCXW6DcCEphlS">1</mn><mo data-page-node-id="0OieTYpb2Gl3hIrKRQ9xEd">-</mo><msub data-page-node-id="E0mIJM3N3AFflaHa5ACBPA"><mi data-page-node-id="O7EU5wd8pk8qWnsOsAOLIm">p</mi><mtext data-page-node-id="F62D8xexHYxMHfJd2ypEL7">drift</mtext></msub><mo data-page-node-id="ealmdeqVyakor6xcv9uMLC">)</mo></mrow><mi data-page-node-id="8Q4RYJrVcU3pYBo3vZSwFC">N</mi></msup></mrow></math><br data-page-node-id="XZqHc5EBSIa4ocnweRHetu">
+              <math display="inline" data-page-node-id="N5zk72lkd2O4T6r6myCIOj"><mrow data-page-node-id="ai5MUA4RrvvhBl8BefGHGU"><msub data-page-node-id="eaVHEQLbCDYZEfEFCqSZke"><mi data-page-node-id="SBdluWMEUmrUbuPs5n5jic">P</mi><mtext data-page-node-id="BrpHXXPZ3xZtuF55iu8nHx">客观门禁</mtext></msub><mo data-page-node-id="nczSRrOFncvQzI1m2E7KHA">=</mo><mn data-page-node-id="G9OS8iCxMlk45ZBkW8AdwV">1</mn><mo data-page-node-id="5ga6nMFzmBdNPSG5OR7Vle">-</mo><msup data-page-node-id="FECB8FfDrf6boACuvA2Egb"><mi data-page-node-id="RCdALObeKsKBPjJjVFzzHh">&eta;</mi><mi data-page-node-id="zcAD5hcSQnRsZ33mESx17o">K</mi></msup></mrow></math>（&eta; 为单个门禁漏检基准 0.03）
+            </div>
+          </div>
+
+          <div class="sandbox-visual" data-page-node-id="bUkUzRIwC7D7jbbvtxaF5n">
+            <div class="sandbox-stats-grid" data-page-node-id="evRtrlEOvh2poHhuAvtOrF">
+              <div class="stat-box" data-page-node-id="iVvYPci6tQcI0xpd1uOX9C">
+                <div class="stat-box-title" data-page-node-id="LUGRmJZkKHKHrL13rEF5wK">主观判定最终保真率</div>
+                <div class="stat-box-num amber" id="out-l3-subj-pct" data-page-node-id="HSDkono01WqkBUyxXkk462">43.4%</div>
+                <div class="stat-box-sub" data-page-node-id="8MMcdNBRgpy3KsE7uoZadt">随步数呈指数级衰减</div>
+              </div>
+              <div class="stat-box" data-page-node-id="6OF3sDDmQ7RqImxd79vW2e">
+                <div class="stat-box-title" data-page-node-id="PuBsF8io0edrGaQVP5zkjM">客观门禁假通过率</div>
+                <div class="stat-box-num emerald" id="out-l3-leak-rate" data-page-node-id="PL5G58JE7UwaDHB1kglT1J">0.00008%</div>
+                <div class="stat-box-sub" data-page-node-id="gEfgl3mt7hzVijSYazw638">多层门禁正交过滤</div>
+              </div>
+              <div class="stat-box" data-page-node-id="DrhXr5jo75SWiDssa9igDV">
+                <div class="stat-box-title" data-page-node-id="3Koi4DzpX0EPHMwQ2sng67">最终工程闭环置信度</div>
+                <div class="stat-box-num accent" id="out-l3-obj-pct" data-page-node-id="rF1EQNB03G7v9wcJK2YN52">99.999%</div>
+                <div class="stat-box-sub" data-page-node-id="2advav2GNLDgiFgbdzatsE">实现确定性可控搜索</div>
+              </div>
+            </div>
+
+            <div class="chart-stage" data-page-node-id="7vC84u9FdeiW2c06CZDcGc">
+              <svg id="svg-loop-chart" viewBox="0 0 540 220" width="540" height="220" data-page-node-id="hPlVUflQSkieX0Kw5O59rT">
+                <!-- 由 JS 纯原生动态绘制主观衰减 vs 客观保真对比曲线 -->
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 附录：一手访谈与权威文献索引 -->
+    <section class="section-block" id="sec-references" data-page-node-id="9oa88MpaHE1uS9QDoostQK">
+      <h2 class="section-title" data-page-node-id="0SLeScUKdhemIRejZTQ7aB">附录：一手访谈原声与官方文献索引</h2>
+      <div class="references-card" data-page-node-id="DDQRBLgE2pNzY0GFX9v350">
+        <div class="ref-item" data-page-node-id="tNJlwahMurY9xiHC3efEs3">
+          <span class="ref-num" data-page-node-id="QcWsrs2lZA1x7E6mVOLSaf">[1]</span>
+          <div class="ref-content" data-page-node-id="jA9v3SSNyS8a7Yol0Cu1h3">
+            <strong data-page-node-id="CE0XBFGQbBaQ10jg3JiCHz">Thariq Shihipar &amp; Ryan Peterman (2026).</strong> <em data-page-node-id="AUQPclK9fzP6hwWBVktHTW">How Anthropic Builds And How Engineering Will Change Soon.</em> The Developing Dev Podcast (约 70 分钟完整播客与音频实录). 
+            <a href="https://www.developing.dev/p/how-anthropic-builds-and-how-engineering?utm_source=chatgpt.com" target="_blank" rel="noopener noreferrer" data-page-node-id="x4FleSA3w7NoVzIRkOkMHU">访问原始播客与完整文字稿 &rarr;</a>
+          </div>
+        </div>
+        <div class="ref-item" data-page-node-id="Lu8KtNrdD8MFVhsqEI0suq">
+          <span class="ref-num" data-page-node-id="SCYQfCfgMg4bwkXHWBLfs3">[2]</span>
+          <div class="ref-content" data-page-node-id="eKOElQRFmNUvg0kCRAcE1y">
+            <strong data-page-node-id="VnVwGXHkFmEXsZPMD9RjKL">Anthropic Engineering Team (2026).</strong> <em data-page-node-id="QNhFGr20pJDQ8u6JNvhZGY">The New Rules of Context Engineering for Claude 5 Generation Models.</em> Anthropic Official Research Blog. 
+            <a href="https://claude.com/blog/the-new-rules-of-context-engineering-for-claude-5-generation-models?reference=FUZZ&amp;utm_source=chatgpt.com" target="_blank" rel="noopener noreferrer" data-page-node-id="hTNPEIPbCQoU9cwDBFWQDs">阅读关于 System Prompt 缩减 80% 的官方技术声明 &rarr;</a>
+          </div>
+        </div>
+        <div class="ref-item" data-page-node-id="yP0VPgLLSLw3OAFUA6GdfK">
+          <span class="ref-num" data-page-node-id="aAAf1E4PCXDh5r5jJJJMvI">[3]</span>
+          <div class="ref-content" data-page-node-id="h4mUbofQ866cR4cCzjEwNt">
+            <strong data-page-node-id="zancBbns1MoetNGsUH1zSx">Simon Willison (2026).</strong> <em data-page-node-id="KlkZoLnmhTW0NFnMoewyXl">A Fireside Chat with Cat and Thariq from the Claude Code team.</em> Simon Willison’s Weblog. 
+            <a href="https://simonwillison.net/2026/Jul/21/cat-and-thariq/?utm_source=chatgpt.com" target="_blank" rel="noopener noreferrer" data-page-node-id="ntanETe8983aUhSj9U5vlt">探讨模型分级差异化 System Prompt 部署策略 &rarr;</a>
+          </div>
+        </div>
+        <div class="ref-item" data-page-node-id="Dqt49AzXfTbHKiqYgkWpq6">
+          <span class="ref-num" data-page-node-id="DHelAi6g0iOyX9S8hbNG6B">[4]</span>
+          <div class="ref-content" data-page-node-id="guS5s3QDibFtM0lOtdVHxm">
+            <strong data-page-node-id="alsc5rphu9JEsF6zGrfFFk">Anthropic Developer Relations (2026).</strong> <em data-page-node-id="yV2j8sNVXEUg1UFDQHohuw">Loop Engineering: Getting Started with Loops (/goal, /loop, proactive).</em> Claude Technical Docs. 
+            <a href="https://claude.com/blog/getting-started-with-loops?utm_source=chatgpt.com" target="_blank" rel="noopener noreferrer" data-page-node-id="Cm1QqIRUfBeaBfIrAJrnGj">循环工程四大核心要素与 /goal 自动化退出机制 &rarr;</a>
+          </div>
+        </div>
+        <div class="ref-item" data-page-node-id="uDPBmMWlmwQSZAnSbzvawO">
+          <span class="ref-num" data-page-node-id="Hj6HkmcnaKglmvnsljlSGB">[5]</span>
+          <div class="ref-content" data-page-node-id="TfdmBNh5ZSqpIlDU71CC2n">
+            <strong data-page-node-id="wXvh1emeFe4PCFJHo1oPUp">Anthropic Claude Code Core Team (2026).</strong> <em data-page-node-id="cOVOi1IiefrcWrLGX0nBBU">A Harness for Every Task: Dynamic Workflows in Claude Code.</em> Anthropic Official Engineering Blog. 
+            <a href="https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code?utm_source=chatgpt.com" target="_blank" rel="noopener noreferrer" data-page-node-id="8GCqUQm6CbwhtG9zv8EDFI">探讨 Agent 动态自我生成 Harness 与多 Agent 协同编排 &rarr;</a>
+          </div>
+        </div>
+        <div class="ref-item" data-page-node-id="gcj0sm7iQ08uPM257pI9Py">
+          <span class="ref-num" data-page-node-id="yeYsOLxCB2uEvlhSUoweAM">[6]</span>
+          <div class="ref-content" data-page-node-id="1F3nc9F3kbU2T4sP2n7d9S">
+            <strong data-page-node-id="GXTvW4aORr6XdxYbcVk5aF">Anthropic Engineering (2026).</strong> <em data-page-node-id="bAPmDeORfLKFGUA1zpEa8p">Building Verification Loops in Claude Code with Skills.</em> Anthropic Technical Guides. 
+            <a href="https://claude.com/blog/building-verification-loops-in-claude-code-with-skills?reference=FUZZ&amp;utm_source=chatgpt.com" target="_blank" rel="noopener noreferrer" data-page-node-id="xOBH9XqEdKJ59lLDeHUdDX">基于动作-度量-修复的验证闭环工程指南 &rarr;</a>
+          </div>
+        </div>
+        <div class="ref-item" data-page-node-id="mg1jHkC2fHHZyUpqVEEqwU">
+          <span class="ref-num" data-page-node-id="JTAsRDxbCLPCHcHQxj9IeO">[7]</span>
+          <div class="ref-content" data-page-node-id="fpyd6hAyRoslnb2pnmSGgG">
+            <strong data-page-node-id="kv7hdzkQEYchYCniCWByhj">Shao Meng (孟岩) (2026).</strong> <em data-page-node-id="egZAD8ilIMFR7qwZsbVd1V">Claude Code 团队访谈深度评注：软件工程控制层上移与控制论反思.</em> X / Twitter Post. 
+            <a href="https://x.com/shao__meng/status/2096962248808001608" target="_blank" rel="noopener noreferrer" data-page-node-id="Ec8w4yh9e0Mc15IXbTF6N0">阅读 X 平台原始评注推文 &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="doc-footer" data-page-node-id="NssXJYDRDAHF8ZqDC6mtWQ">
+      <p data-page-node-id="6Sp775WOCyCt4eg85Cjsop">AIKnowledge 架构专著工程交付体系 · 唯一合规存储路径：/Users/yangkejin/Documents/Openai/AIKnowledge/</p>
+      <p style="margin-top: 4px;" data-page-node-id="gwzxkVvNBJycOUX7NOnA2Z">本白皮书采用零外部依赖单文件 HTML5 + 原生 MathML Core + CSS 原生排版交付 · 离线 100% 完整可用</p>
+    </footer>
+
+  </main>
+</div>
+
+<!-- ==========================================================================
+   6. 原生 JavaScript 交互控制体系 (Zero External Dependencies)
+   ========================================================================== -->
+<script>
+(function() {
+  "use strict";
+
+  // 安全 DOM 检索辅助函数 (严禁使用 $ 符号命名，防止触发 LaTeX 正则误检)
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  // 1. 顶部阅读进度条更新
+  function initReadProgress() {
+    var progressBar = byId("read-progress");
+    if (!progressBar) return;
+    window.addEventListener("scroll", function() {
+      var docHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      if (docHeight > 0) {
+        var pct = (window.scrollY || document.documentElement.scrollTop) / docHeight * 100;
+        progressBar.style.width = Math.min(100, Math.max(0, pct)) + "%";
+      }
+    }, { passive: true });
+  }
+
+  // 2. 主题切换逻辑 (深色黑曜石 / 浅色暖羊皮纸)
+  function initTheme() {
+    var btnTheme = byId("btn-theme");
+    var themeIcon = byId("theme-icon");
+    var themeText = byId("theme-text");
+    if (!btnTheme) return;
+
+    // 默认主题深色
+    var currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      if (theme === "light") {
+        if (themeIcon) themeIcon.textContent = "○";
+        if (themeText) themeText.textContent = "浅色";
+      } else {
+        if (themeIcon) themeIcon.textContent = "◐";
+        if (themeText) themeText.textContent = "深色";
+      }
+      // 重绘 SVG 以确保坐标轴及配色自适应当前主题
+      renderCostChart();
+      renderHarnessChart();
+      renderLoopChart();
+    }
+
+    applyTheme(currentTheme);
+
+    btnTheme.addEventListener("click", function() {
+      var nextTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      applyTheme(nextTheme);
+    });
+
+    var btnPrint = byId("btn-print");
+    if (btnPrint) {
+      btnPrint.addEventListener("click", function() {
+        window.print();
+      });
+    }
+  }
+
+  // 3. 侧边栏高亮交互
+  function initTocHighlight() {
+    var links = document.querySelectorAll(".toc-link");
+    if (!links || links.length === 0) return;
+
+    var sections = [];
+    for (var i = 0; i < links.length; i++) {
+      var href = links[i].getAttribute("href");
+      if (href && href.indexOf("#") === 0) {
+        var sec = byId(href.substring(1));
+        if (sec) {
+          sections.push({ el: sec, link: links[i] });
+        }
+      }
+    }
+
+    window.addEventListener("scroll", function() {
+      var scrollPos = (window.scrollY || document.documentElement.scrollTop) + 120;
+      var activeLink = null;
+      for (var j = 0; j < sections.length; j++) {
+        if (sections[j].el.offsetTop <= scrollPos) {
+          activeLink = sections[j].link;
+        }
+      }
+      for (var k = 0; k < links.length; k++) {
+        links[k].classList.remove("active");
+      }
+      if (activeLink) {
+        activeLink.classList.add("active");
+      }
+    }, { passive: true });
+  }
+
+  // =========================================================================
+  // 4. 沙盘 1：成本倒挂与验证权重推演逻辑
+  // =========================================================================
+  var ctrlC1Alpha = byId("ctrl-c1-alpha");
+  var ctrlC1Beta = byId("ctrl-c1-beta");
+  var ctrlC1Loc = byId("ctrl-c1-loc");
+
+  var valC1Alpha = byId("val-c1-alpha");
+  var valC1Beta = byId("val-c1-beta");
+  var valC1Loc = byId("val-c1-loc");
+
+  var outC1TradPct = byId("out-c1-trad-pct");
+  var outC1AgentPct = byId("out-c1-agent-pct");
+  var outC1SavingPct = byId("out-c1-saving-pct");
+  var outC1AbsCost = byId("out-c1-abs-cost");
+  var svgCostChart = byId("svg-cost-chart");
+
+  function renderCostChart() {
+    if (!ctrlC1Alpha || !ctrlC1Beta || !ctrlC1Loc || !svgCostChart) return;
+    var alpha = parseFloat(ctrlC1Alpha.value);
+    var beta = parseFloat(ctrlC1Beta.value);
+    var loc = parseFloat(ctrlC1Loc.value);
+
+    if (valC1Alpha) valC1Alpha.textContent = alpha.toFixed(2);
+    if (valC1Beta) valC1Beta.textContent = beta.toFixed(2);
+    if (valC1Loc) valC1Loc.textContent = loc.toFixed(0);
+
+    // 传统模式：代码工时 = loc, 测试工时 = loc / 3.0
+    var cTradCode = loc;
+    var cTradTest = loc / 3.0;
+    var cTradTotal = cTradCode + cTradTest;
+    var tradVerifyPct = (cTradTest / cTradTotal) * 100;
+
+    // Agent 模式：生成工时 = loc * alpha, 测试工时 = (loc / 3.0) * beta
+    var cAgentCode = loc * alpha;
+    var cAgentTest = (loc / 3.0) * beta;
+    var cAgentTotal = cAgentCode + cAgentTest;
+    var agentVerifyPct = (cAgentTest / cAgentTotal) * 100;
+    var savingPct = ((cTradTotal - cAgentTotal) / cTradTotal) * 100;
+
+    if (outC1TradPct) outC1TradPct.textContent = tradVerifyPct.toFixed(1) + "%";
+    if (outC1AgentPct) outC1AgentPct.textContent = agentVerifyPct.toFixed(1) + "%";
+    if (outC1SavingPct) outC1SavingPct.textContent = savingPct.toFixed(1) + "%";
+    if (outC1AbsCost) outC1AbsCost.textContent = "净耗时 " + cAgentTotal.toFixed(1) + "h (原本 " + cTradTotal.toFixed(1) + "h)";
+
+    // 动态绘制 SVG 堆叠条形图
+    var maxVal = Math.max(cTradTotal, cAgentTotal) * 1.15;
+    var barW = 80;
+    var tradX = 110;
+    var agentX = 330;
+    var baseY = 175;
+    var chartH = 135;
+
+    var tradCodeH = (cTradCode / maxVal) * chartH;
+    var tradTestH = (cTradTest / maxVal) * chartH;
+
+    var agentCodeH = (cAgentCode / maxVal) * chartH;
+    var agentTestH = (cAgentTest / maxVal) * chartH;
+
+    var isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    var axisColor = isDark ? "#544d42" : "#b3a898";
+    var textSub = isDark ? "#aba294" : "#5e574c";
+
+    var svgHtml = '';
+    // 基准底线
+    svgHtml += '<line x1="40" y1="' + baseY + '" x2="500" y2="' + baseY + '" stroke="' + axisColor + '" stroke-width="1.5" />';
+
+    // 传统条形柱 (下方代码，上方测试)
+    var tradCodeY = baseY - tradCodeH;
+    var tradTestY = tradCodeY - tradTestH;
+    svgHtml += '<rect x="' + tradX + '" y="' + tradCodeY + '" width="' + barW + '" height="' + tradCodeH + '" fill="#d97757" rx="3" />';
+    svgHtml += '<rect x="' + tradX + '" y="' + tradTestY + '" width="' + barW + '" height="' + tradTestH + '" fill="#319795" rx="3" />';
+    svgHtml += '<text x="' + (tradX + barW / 2) + '" y="' + (baseY + 22) + '" text-anchor="middle" font-size="12" fill="' + textSub + '" font-weight="600">传统模式</text>';
+    svgHtml += '<text x="' + (tradX + barW / 2) + '" y="' + (tradTestY - 8) + '" text-anchor="middle" font-size="12" fill="#d97757" font-weight="700">' + cTradTotal.toFixed(0) + 'h</text>';
+
+    // Agent 条形柱 (下方生成代码，上方强化验证)
+    var agentCodeY = baseY - agentCodeH;
+    var agentTestY = agentCodeY - agentTestH;
+    svgHtml += '<rect x="' + agentX + '" y="' + agentCodeY + '" width="' + barW + '" height="' + agentCodeH + '" fill="#d97757" rx="3" opacity="0.6" />';
+    svgHtml += '<rect x="' + agentX + '" y="' + agentTestY + '" width="' + barW + '" height="' + agentTestH + '" fill="#319795" rx="3" />';
+    svgHtml += '<text x="' + (agentX + barW / 2) + '" y="' + (baseY + 22) + '" text-anchor="middle" font-size="12" fill="' + textSub + '" font-weight="600">Agent 模式</text>';
+    svgHtml += '<text x="' + (agentX + barW / 2) + '" y="' + (agentTestY - 8) + '" text-anchor="middle" font-size="12" fill="#38a169" font-weight="700">' + cAgentTotal.toFixed(1) + 'h</text>';
+
+    // 图例说明
+    svgHtml += '<rect x="180" y="12" width="12" height="12" fill="#d97757" rx="2" />';
+    svgHtml += '<text x="198" y="22" font-size="11" fill="' + textSub + '">编写/生成代码工时</text>';
+    svgHtml += '<rect x="330" y="12" width="12" height="12" fill="#319795" rx="2" />';
+    svgHtml += '<text x="348" y="22" font-size="11" fill="' + textSub + '">验证测试与 Evals 工时</text>';
+
+    svgCostChart.innerHTML = svgHtml;
+  }
+
+  if (ctrlC1Alpha) ctrlC1Alpha.addEventListener("input", renderCostChart);
+  if (ctrlC1Beta) ctrlC1Beta.addEventListener("input", renderCostChart);
+  if (ctrlC1Loc) ctrlC1Loc.addEventListener("input", renderCostChart);
+
+  // =========================================================================
+  // 5. 沙盘 2：Prompt 删减 vs Harness 复杂度仿真
+  // =========================================================================
+  var ctrlH2M = byId("ctrl-h2-m");
+  var ctrlH2T = byId("ctrl-h2-t");
+
+  var valH2M = byId("val-h2-m");
+  var valH2T = byId("val-h2-t");
+
+  var outH2Rules = byId("out-h2-rules");
+  var outH2RulesSub = byId("out-h2-rules-sub");
+  var outH2ReductPct = byId("out-h2-reduct-pct");
+  var outH2HarnessScore = byId("out-h2-harness-score");
+  var svgHarnessChart = byId("svg-harness-chart");
+
+  function renderHarnessChart() {
+    if (!ctrlH2M || !ctrlH2T || !svgHarnessChart) return;
+    var mVal = parseFloat(ctrlH2M.value);
+    var tVal = parseFloat(ctrlH2T.value);
+
+    var mNames = {
+      "1": "1.0 (GPT-3.5 代)",
+      "1.5": "1.5 (早期 4 代)",
+      "2": "2.0 (Claude 2 代)",
+      "2.5": "2.5 (早期混合代)",
+      "3": "3.0 (Sonnet 3.5 代)",
+      "3.5": "3.5 (Sonnet 3.7 代)",
+      "4": "4.0 (Opus 5 前沿代)",
+      "4.5": "4.5 (次世代推理代)",
+      "5": "5.0 (全自主前沿代)"
+    };
+    if (valH2M) valH2M.textContent = mNames[mVal.toString()] || (mVal.toFixed(1) + " 代");
+    if (valH2T) valH2T.textContent = tVal.toFixed(0) + " 步";
+
+    // 核心数理公式
+    var R0 = 100.0;
+    var H0 = 20.0;
+    var rulesCount = R0 * Math.exp(-0.35 * (mVal - 1.0));
+    var promptReductionPct = ((R0 - rulesCount) / R0) * 100;
+    var harnessComplexity = H0 * (1.0 + 0.8 * (mVal - 1.0) * Math.log(1.0 + tVal));
+    var harnessRatio = harnessComplexity / H0;
+
+    if (outH2Rules) outH2Rules.textContent = rulesCount.toFixed(1) + " 条";
+    if (outH2RulesSub) outH2RulesSub.textContent = "基准为 100 条 (删减 " + (100 - rulesCount).toFixed(1) + " 条)";
+    if (outH2ReductPct) outH2ReductPct.textContent = promptReductionPct.toFixed(1) + "%";
+    if (outH2HarnessScore) outH2HarnessScore.textContent = harnessComplexity.toFixed(1);
+
+    // 动态绘制两条曲线随 M (1 到 5) 的折线图，并在当前 M 处打标记点
+    var isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    var axisColor = isDark ? "#544d42" : "#b3a898";
+    var textSub = isDark ? "#aba294" : "#5e574c";
+
+    var leftX = 60;
+    var rightX = 490;
+    var topY = 30;
+    var botY = 180;
+    var graphW = rightX - leftX;
+    var graphH = botY - topY;
+
+    var ptsPrompt = [];
+    var ptsHarness = [];
+
+    // 计算当 M 从 1.0 到 5.0，步长 0.25 时的轨迹
+    for (var mStep = 1.0; mStep <= 5.001; mStep += 0.25) {
+      var xCoord = leftX + ((mStep - 1.0) / 4.0) * graphW;
+      
+      // Prompt 规则曲线 (100 -> 24.6) 映射到 Y 坐标
+      var rVal = R0 * Math.exp(-0.35 * (mStep - 1.0));
+      var yPrompt = botY - (rVal / 100.0) * graphH;
+      ptsPrompt.push(xCoord.toFixed(1) + "," + yPrompt.toFixed(1));
+
+      // Harness 复杂度曲线 (按当前 T 计算)
+      var hVal = H0 * (1.0 + 0.8 * (mStep - 1.0) * Math.log(1.0 + tVal));
+      var hMax = H0 * (1.0 + 0.8 * 4.0 * Math.log(1.0 + 100.0)); // 理论最高 ~315
+      var yHarness = botY - (hVal / hMax) * graphH;
+      ptsHarness.push(xCoord.toFixed(1) + "," + yHarness.toFixed(1));
+    }
+
+    var currentX = leftX + ((mVal - 1.0) / 4.0) * graphW;
+    var currentYPrompt = botY - (rulesCount / 100.0) * graphH;
+    var maxRef = H0 * (1.0 + 0.8 * 4.0 * Math.log(1.0 + 100.0));
+    var currentYHarness = botY - (harnessComplexity / maxRef) * graphH;
+
+    var svgHtml = '';
+    // 坐标轴
+    svgHtml += '<line x1="' + leftX + '" y1="' + botY + '" x2="' + rightX + '" y2="' + botY + '" stroke="' + axisColor + '" stroke-width="1.2" />';
+    svgHtml += '<line x1="' + leftX + '" y1="' + topY + '" x2="' + leftX + '" y2="' + botY + '" stroke="' + axisColor + '" stroke-width="1.2" />';
+
+    // 刻度标注
+    svgHtml += '<text x="' + leftX + '" y="' + (botY + 18) + '" font-size="10" fill="' + textSub + '" text-anchor="middle">M=1.0</text>';
+    svgHtml += '<text x="' + (leftX + graphW / 2) + '" y="' + (botY + 18) + '" font-size="10" fill="' + textSub + '" text-anchor="middle">M=3.0 (Sonnet)</text>';
+    svgHtml += '<text x="' + rightX + '" y="' + (botY + 18) + '" font-size="10" fill="' + textSub + '" text-anchor="middle">M=5.0 (Frontier)</text>';
+
+    // 折线 1: Prompt 曲线 (降落)
+    svgHtml += '<polyline points="' + ptsPrompt.join(" ") + '" fill="none" stroke="#dd6b20" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />';
+    // 折线 2: Harness 复杂度曲线 (攀升)
+    svgHtml += '<polyline points="' + ptsHarness.join(" ") + '" fill="none" stroke="#d97757" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />';
+
+    // 当前活跃位置垂直指示虚线
+    svgHtml += '<line x1="' + currentX.toFixed(1) + '" y1="' + topY + '" x2="' + currentX.toFixed(1) + '" y2="' + botY + '" stroke="' + axisColor + '" stroke-dasharray="3,3" />';
+    // 标记圆点
+    svgHtml += '<circle cx="' + currentX.toFixed(1) + '" cy="' + currentYPrompt.toFixed(1) + '" r="5" fill="#dd6b20" stroke="#ffffff" stroke-width="1.5" />';
+    svgHtml += '<circle cx="' + currentX.toFixed(1) + '" cy="' + currentYHarness.toFixed(1) + '" r="5" fill="#d97757" stroke="#ffffff" stroke-width="1.5" />';
+
+    // 图例文案
+    svgHtml += '<text x="' + (leftX + 20) + '" y="' + (topY + 14) + '" font-size="11" fill="#dd6b20" font-weight="600">↘ Prompt 规则量 (Subtractive)</text>';
+    svgHtml += '<text x="' + (leftX + 240) + '" y="' + (topY + 14) + '" font-size="11" fill="#d97757" font-weight="600">↗ Harness 复杂度 (Additive)</text>';
+
+    svgHarnessChart.innerHTML = svgHtml;
+  }
+
+  if (ctrlH2M) ctrlH2M.addEventListener("input", renderHarnessChart);
+  if (ctrlH2T) ctrlH2T.addEventListener("input", renderHarnessChart);
+
+  // =========================================================================
+  // 6. 沙盘 3：Loop 终止判定与收敛模型
+  // =========================================================================
+  var ctrlL3N = byId("ctrl-l3-n");
+  var ctrlL3K = byId("ctrl-l3-k");
+  var ctrlL3Drift = byId("ctrl-l3-drift");
+
+  var valL3N = byId("val-l3-n");
+  var valL3K = byId("val-l3-k");
+  var valL3Drift = byId("val-l3-drift");
+
+  var outL3SubjPct = byId("out-l3-subj-pct");
+  var outL3LeakRate = byId("out-l3-leak-rate");
+  var outL3ObjPct = byId("out-l3-obj-pct");
+  var svgLoopChart = byId("svg-loop-chart");
+
+  function renderLoopChart() {
+    if (!ctrlL3N || !ctrlL3K || !ctrlL3Drift || !svgLoopChart) return;
+    var nSteps = parseInt(ctrlL3N.value, 10);
+    var kGates = parseInt(ctrlL3K.value, 10);
+    var pDrift = parseFloat(ctrlL3Drift.value);
+
+    if (valL3N) valL3N.textContent = nSteps + " 轮循环";
+    if (valL3K) valL3K.textContent = kGates + " 道门禁";
+    if (valL3Drift) valL3Drift.textContent = (pDrift * 100).toFixed(0) + "%";
+
+    // 数理模型：主观判定正确率 = (1 - p_drift)^n
+    var pSubj = Math.pow(1.0 - pDrift, nSteps);
+    // 单门禁漏检基准 eta = 0.03
+    var eta = 0.03;
+    var leakRate = Math.pow(eta, kGates);
+    var pObj = 1.0 - leakRate;
+
+    if (outL3SubjPct) outL3SubjPct.textContent = (pSubj * 100).toFixed(1) + "%";
+    if (outL3LeakRate) outL3LeakRate.textContent = (leakRate * 100).toFixed(5) + "%";
+    if (outL3ObjPct) outL3ObjPct.textContent = (pObj * 100).toFixed(3) + "%";
+
+    // 绘制随步数 N (1 到 25) 的对比曲线
+    var isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    var axisColor = isDark ? "#544d42" : "#b3a898";
+    var textSub = isDark ? "#aba294" : "#5e574c";
+
+    var leftX = 55;
+    var rightX = 490;
+    var topY = 30;
+    var botY = 180;
+    var graphW = rightX - leftX;
+    var graphH = botY - topY;
+
+    var ptsSubj = [];
+    var ptsObj = [];
+
+    for (var step = 1; step <= 25; step++) {
+      var xPos = leftX + ((step - 1) / 24.0) * graphW;
+      var curSubj = Math.pow(1.0 - pDrift, step);
+      var ySubj = botY - curSubj * graphH;
+      ptsSubj.push(xPos.toFixed(1) + "," + ySubj.toFixed(1));
+
+      var yObj = botY - pObj * graphH;
+      ptsObj.push(xPos.toFixed(1) + "," + yObj.toFixed(1));
+    }
+
+    var curX = leftX + ((nSteps - 1) / 24.0) * graphW;
+    var curYSubj = botY - pSubj * graphH;
+    var curYObj = botY - pObj * graphH;
+
+    var svgHtml = '';
+    // 轴线
+    svgHtml += '<line x1="' + leftX + '" y1="' + botY + '" x2="' + rightX + '" y2="' + botY + '" stroke="' + axisColor + '" stroke-width="1.2" />';
+    svgHtml += '<line x1="' + leftX + '" y1="' + topY + '" x2="' + leftX + '" y2="' + botY + '" stroke="' + axisColor + '" stroke-width="1.2" />';
+
+    // 刻度
+    svgHtml += '<text x="' + leftX + '" y="' + (botY + 18) + '" font-size="10" fill="' + textSub + '" text-anchor="middle">N=1</text>';
+    svgHtml += '<text x="' + (leftX + graphW / 2) + '" y="' + (botY + 18) + '" font-size="10" fill="' + textSub + '" text-anchor="middle">N=13</text>';
+    svgHtml += '<text x="' + rightX + '" y="' + (botY + 18) + '" font-size="10" fill="' + textSub + '" text-anchor="middle">N=25</text>';
+
+    svgHtml += '<text x="' + (leftX - 8) + '" y="' + (topY + 6) + '" font-size="10" fill="' + textSub + '" text-anchor="end">100%</text>';
+    svgHtml += '<text x="' + (leftX - 8) + '" y="' + botY + '" font-size="10" fill="' + textSub + '" text-anchor="end">0%</text>';
+
+    // 客观门禁曲线 (水平稳定在接近 100% 处)
+    svgHtml += '<polyline points="' + ptsObj.join(" ") + '" fill="none" stroke="#38a169" stroke-width="2.5" stroke-linecap="round" />';
+    // 主观漂移曲线 (指数衰减)
+    svgHtml += '<polyline points="' + ptsSubj.join(" ") + '" fill="none" stroke="#e53e3e" stroke-width="2.5" stroke-linecap="round" />';
+
+    // 活跃点
+    svgHtml += '<line x1="' + curX.toFixed(1) + '" y1="' + topY + '" x2="' + curX.toFixed(1) + '" y2="' + botY + '" stroke="' + axisColor + '" stroke-dasharray="3,3" />';
+    svgHtml += '<circle cx="' + curX.toFixed(1) + '" cy="' + curYSubj.toFixed(1) + '" r="5" fill="#e53e3e" stroke="#ffffff" stroke-width="1.5" />';
+    svgHtml += '<circle cx="' + curX.toFixed(1) + '" cy="' + curYObj.toFixed(1) + '" r="5" fill="#38a169" stroke="#ffffff" stroke-width="1.5" />';
+
+    // 图例
+    svgHtml += '<text x="' + (leftX + 20) + '" y="' + (topY + 14) + '" font-size="11" fill="#38a169" font-weight="600">― 客观 Verification 约束门禁 (收敛稳定)</text>';
+    svgHtml += '<text x="' + (leftX + 280) + '" y="' + (topY + 14) + '" font-size="11" fill="#e53e3e" font-weight="600">-- 主观自省认定 (指数级漂移失效)</text>';
+
+    svgLoopChart.innerHTML = svgHtml;
+  }
+
+  if (ctrlL3N) ctrlL3N.addEventListener("input", renderLoopChart);
+  if (ctrlL3K) ctrlL3K.addEventListener("input", renderLoopChart);
+  if (ctrlL3Drift) ctrlL3Drift.addEventListener("input", renderLoopChart);
+
+  // 初始化所有系统
+  initReadProgress();
+  initTheme();
+  initTocHighlight();
+  renderCostChart();
+  renderHarnessChart();
+  renderLoopChart();
+
+})();
+</script>
+</body>
+</html>

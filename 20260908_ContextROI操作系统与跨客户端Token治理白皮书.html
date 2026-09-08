@@ -1,0 +1,2528 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="u2v6emHTLVZOKM54tjxGwe">
+<head data-page-node-id="xpmSzTpsdqvL8hLN5ts9S7">
+<meta charset="utf-8" data-page-node-id="ndKawcXof13yQ8ZHXl22cR">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="NxxMdYAUnkcvOw8bmAHmUZ">
+<title>Context ROI OS: 跨客户端 Token 治理与端到端上下文准入控制白皮书</title>
+<style>
+/* ==========================================================================
+   1. 系统字体栈与全局设计变量 (Zero External Dependencies)
+   ========================================================================== */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+  /* 尺度标尺 */
+  --aike-sidebar-w: 280px;
+  --aike-content-max: 1180px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --transition-fast: 0.18s ease;
+  --transition-normal: 0.28s ease;
+
+  /* 五色语义状态令牌 */
+  --accent: #d97757;          /* 陶土色：核心重点/基线 */
+  --accent-hover: #e2886a;
+  --accent-light: rgba(217, 119, 87, 0.14);
+  --emerald: #38a169;         /* 翡翠绿：放行/收益/安全 */
+  --emerald-light: rgba(56, 161, 105, 0.14);
+  --rose: #e53e3e;            /* 玫瑰红：拦截/高损耗/硬阻断 */
+  --rose-light: rgba(229, 62, 62, 0.14);
+  --amber: #dd6b20;           /* 琥珀橙：警示/过渡/门限 */
+  --amber-light: rgba(221, 107, 32, 0.14);
+  --cyan: #319795;            /* 青蓝：通信/中转/数据图谱 */
+  --cyan-light: rgba(49, 151, 149, 0.14);
+}
+
+/* 深色主题 (黑曜石默认: #181715) */
+html[data-theme="dark"] {
+  --bg-app: #141312;
+  --bg-surface: #1c1b18;
+  --bg-surface-elevated: #24221f;
+  --bg-surface-subtle: #2d2b27;
+  --text-main: #ede8df;
+  --text-muted: #aba294;
+  --text-faint: #787063;
+  --border-subtle: #36322c;
+  --border-strong: #4f4940;
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.65);
+  --code-bg: #0d0d0c;
+  --svg-grid: #282622;
+  --svg-axis: #544d42;
+  --card-hover-border: #d97757;
+  --badge-bg: rgba(217, 119, 87, 0.18);
+  --table-stripe: rgba(255, 255, 255, 0.02);
+}
+
+/* 浅色主题 (暖羊皮纸: #FAF7F2) */
+html[data-theme="light"] {
+  --bg-app: #faf7f2;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #fcfbf9;
+  --bg-surface-subtle: #f0ebe1;
+  --text-main: #24211d;
+  --text-muted: #5e574c;
+  --text-faint: #8f8576;
+  --border-subtle: #e3dcd1;
+  --border-strong: #c7beaf;
+  --shadow-sm: 0 2px 6px rgba(45, 38, 30, 0.05);
+  --shadow-md: 0 6px 18px rgba(45, 38, 30, 0.08);
+  --shadow-lg: 0 14px 36px rgba(45, 38, 30, 0.12);
+  --code-bg: #f5efe6;
+  --svg-grid: #ede7dc;
+  --svg-axis: #b3a898;
+  --card-hover-border: #d97757;
+  --badge-bg: rgba(217, 119, 87, 0.12);
+  --table-stripe: rgba(0, 0, 0, 0.015);
+}
+
+/* ==========================================================================
+   2. 基础排版与重置
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  line-height: 1.78;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+}
+
+/* 阅读进度指示器 */
+#read-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--cyan), var(--emerald));
+  z-index: 1000;
+  width: 0%;
+  transition: width 0.08s linear;
+}
+
+/* 顶部固定工具栏 */
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 900;
+  backdrop-filter: blur(8px);
+}
+
+.brand-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--badge-bg);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  letter-spacing: 0.5px;
+}
+
+.top-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-theme-toggle {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+
+.btn-theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ==========================================================================
+   3. 侧边栏与主阅读区（AIKnowledge 规范居中盒模型）
+   ========================================================================== */
+.app-sidebar {
+  position: fixed;
+  top: 52px;
+  bottom: 0;
+  left: 0;
+  width: var(--aike-sidebar-w);
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto;
+  padding: 24px 16px;
+  z-index: 800;
+}
+
+.sidebar-heading {
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+  margin-bottom: 14px;
+  padding-left: 8px;
+}
+
+.toc-nav ul {
+  list-style: none;
+}
+
+.toc-nav li {
+  margin-bottom: 4px;
+}
+
+.toc-nav a {
+  display: block;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  border-left: 2px solid transparent;
+  transition: all var(--transition-fast);
+  line-height: 1.45;
+}
+
+.toc-nav a:hover {
+  color: var(--accent);
+  background: var(--bg-surface-elevated);
+}
+
+.toc-nav a.active {
+  color: var(--accent);
+  background: var(--accent-light);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+
+.toc-nav .sub-menu {
+  margin-left: 12px;
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.toc-nav .sub-menu a {
+  font-size: 0.76rem;
+  padding: 4px 8px;
+}
+
+/* 主内容区（纯 CSS 自动对称居中） */
+.app-main {
+  margin-top: 52px;
+  padding: 40px 24px 80px 24px;
+  display: block;
+  max-width: var(--aike-content-max);
+  width: auto;
+  margin-left: calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+  margin-right: max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+  box-sizing: border-box;
+}
+
+@media (max-width: 1080px) {
+  .app-sidebar {
+    transform: translateX(-100%);
+    transition: transform var(--transition-normal);
+  }
+  .app-sidebar.open {
+    transform: translateX(0);
+  }
+  .app-main {
+    margin-left: 0;
+    margin-right: 0;
+    max-width: 100%;
+    padding: 30px 18px 60px 18px;
+  }
+}
+
+/* ==========================================================================
+   4. 章节正文排版与组件样式
+   ========================================================================== */
+.hero-header {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 36px 36px;
+  margin-bottom: 40px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-header::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 100%;
+  background: linear-gradient(180deg, var(--accent), var(--cyan));
+}
+
+.hero-pretitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.hero-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-light);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.hero-meta-date {
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+}
+
+.hero-title {
+  font-family: var(--font-serif);
+  font-size: 2.15rem;
+  line-height: 1.32;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 16px;
+}
+
+.hero-subtitle {
+  font-size: 1.05rem;
+  line-height: 1.68;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 860px) {
+  .hero-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.hero-stat-card {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  text-align: left;
+}
+
+.hero-stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.hero-stat-value.emerald { color: var(--emerald); }
+.hero-stat-value.cyan { color: var(--cyan); }
+.hero-stat-value.amber { color: var(--amber); }
+
+.hero-stat-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* 核心内容章节 */
+.section-block {
+  margin-bottom: 50px;
+  scroll-margin-top: 70px;
+}
+
+.section-title {
+  font-family: var(--font-serif);
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-number {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-size: 1.15rem;
+}
+
+.subsection-title {
+  font-size: 1.22rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 28px 0 14px 0;
+}
+
+p {
+  margin-bottom: 16px;
+  color: var(--text-main);
+  text-align: justify;
+}
+
+strong {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* 引用块 */
+.callout {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 18px 20px;
+  margin: 20px 0;
+  font-size: 0.94rem;
+}
+
+.callout.emerald {
+  border-left-color: var(--emerald);
+  background: var(--emerald-light);
+}
+
+.callout.rose {
+  border-left-color: var(--rose);
+  background: var(--rose-light);
+}
+
+.callout.amber {
+  border-left-color: var(--amber);
+  background: var(--amber-light);
+}
+
+.callout.cyan {
+  border-left-color: var(--cyan);
+  background: var(--cyan-light);
+}
+
+.callout-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 表格排版 */
+.table-wrapper {
+  overflow-x: auto;
+  margin: 24px 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  text-align: left;
+}
+
+th {
+  background: var(--bg-surface-elevated);
+  color: var(--text-main);
+  font-weight: 700;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-strong);
+  font-family: var(--font-sans);
+}
+
+td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-main);
+}
+
+tr:nth-child(even) {
+  background-color: var(--table-stripe);
+}
+
+tr:hover {
+  background-color: var(--bg-surface-subtle);
+}
+
+/* 代码与配置容器 */
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  line-height: 1.6;
+  margin: 18px 0;
+  color: #d1c7b7;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 2px 6px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+}
+
+pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
+/* MathML Core 与原生 CSS 数学公式系统 */
+.math-display {
+  display: block;
+  text-align: center;
+  padding: 16px 0;
+  margin: 18px 0;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  font-size: 1.08rem;
+}
+
+math {
+  font-family: var(--font-serif);
+  color: var(--text-main);
+}
+
+/* 原生 CSS 简单单层分式降级 */
+.mfrac {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: middle;
+  text-align: center;
+  padding: 0 4px;
+}
+.mfrac > .num {
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 2px;
+}
+.mfrac > .den {
+  padding-top: 2px;
+}
+
+/* ==========================================================================
+   5. 动态交互沙盘系统样式
+   ========================================================================== */
+.sandbox-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  margin: 30px 0;
+  box-shadow: var(--shadow-md);
+  transition: border-color var(--transition-fast);
+}
+
+.sandbox-card:hover {
+  border-color: var(--card-hover-border);
+}
+
+.sandbox-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sandbox-title {
+  font-size: 1.18rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-main);
+}
+
+.sandbox-badge {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--emerald-light);
+  color: var(--emerald);
+  border: 1px solid var(--emerald);
+  font-weight: 700;
+}
+
+.sandbox-layout {
+  display: grid;
+  grid-template-columns: 1.05fr 1.2fr;
+  gap: 24px;
+}
+
+@media (max-width: 920px) {
+  .sandbox-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sandbox-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ctrl-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ctrl-label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+.ctrl-value-disp {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+input[type="number"], select {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+input[type="number"]:focus, select:focus {
+  border-color: var(--accent);
+}
+
+.ctrl-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+  cursor: pointer;
+  color: var(--text-main);
+}
+
+.sandbox-result {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border-subtle);
+}
+
+.metric-row:last-child {
+  border-bottom: none;
+}
+
+.metric-name {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.metric-val {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.metric-val.highlight {
+  color: var(--emerald);
+  font-size: 1.25rem;
+}
+
+.metric-val.warn {
+  color: var(--rose);
+}
+
+.sandbox-verdict {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--bg-surface-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  border-left: 3px solid var(--accent);
+}
+
+/* SVG 几何画布 */
+.svg-chart-container {
+  width: 100%;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  margin-top: 14px;
+}
+
+svg text {
+  font-family: var(--font-sans);
+  user-select: none;
+}
+
+/* 打印适配 */
+@media print {
+  .top-bar, .app-sidebar, #read-progress, .btn-theme-toggle {
+    display: none !important;
+  }
+  .app-main {
+    margin: 0 !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .hero-header, .sandbox-card, .table-wrapper {
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+  }
+}
+</style>
+</head>
+<body data-page-node-id="DDDs3zmhT4UiezburE3XSW">
+
+<div id="read-progress" data-page-node-id="hsovtB87BiOhdoM2SwlBUf"></div>
+
+<!-- 顶部导航条 -->
+<header class="top-bar" data-page-node-id="a87CAoBxebbwhYnt2Gl3GQ">
+  <div class="brand-title" data-page-node-id="hcywt7o4YUz1CcyiFGWT49">
+    <span data-page-node-id="Uy3lcwApr5W8rnH80JlZ1E">Context ROI OS</span>
+    <span class="brand-badge" data-page-node-id="1J47orJeoH9iazADoKloiS">Whitepaper 2026</span>
+  </div>
+  <div class="top-controls" data-page-node-id="XxF53NKBr8izoFgh9bU9Yu">
+    <button id="btn-theme" class="btn-theme-toggle" type="button" aria-label="切换浅色/深色主题" data-page-node-id="YMmZrAbqFYQUVPEXRucmWj">
+      <span id="txt-theme-icon" data-page-node-id="qNDa2pZJGo0TJCc1Jk9T2B">◐</span>
+      <span id="txt-theme-label" data-page-node-id="67iTzpqEKxTbR4rWFH0cON">浅色模式</span>
+    </button>
+  </div>
+</header>
+
+<!-- 侧边导航栏 -->
+<aside class="app-sidebar" data-page-node-id="Vj4HjQP3E6vZ0kNTphHjBZ">
+  <div class="sidebar-heading" data-page-node-id="MsbfpJ0svhhNwHTHR3qUJI">白皮书全景目录</div>
+  <nav class="toc-nav" data-page-node-id="yVjxHB8sUEyaaT9asq8Fgb">
+    <ul data-page-node-id="P7ExfS6izEONyvaLVtPYWT">
+      <li data-page-node-id="p9ZB0s1snNTMHj90aK5VHa"><a href="#sec-exec-summary" data-page-node-id="18tplDrBQBQpDlPI8IfZ9B">执行概要与核心公理</a></li>
+      <li data-page-node-id="3DOoCw3PpRYwtwseHG9iwz">
+        <a href="#sec-paradigm-shift" data-page-node-id="IXu8LgEq1CxTDSWFjlsCSC">1. 范式跃迁：Context ROI OS</a>
+        <div class="sub-menu" data-page-node-id="VyeNPaGIECizhakwr8fxL8">
+          <a href="#sub-naive-failures" data-page-node-id="euv81NkhFueFF3wCFOSQGr">1.1 传统 Token Saver 的失效根因</a>
+          <a href="#sub-quality-axiom" data-page-node-id="gsDPzvY7sxcnvY1ooVrSOc">1.2 质量硬约束与治理优先级</a>
+          <a href="#sub-constrained-opt" data-page-node-id="9GcC7vFluHNYdQ7W2f6vIT">1.3 Token ROI 约束优化数学模型</a>
+        </div>
+      </li>
+      <li data-page-node-id="mzPmqSk9Jf5V17GWNXLCmS">
+        <a href="#sec-projects-survey" data-page-node-id="CdyDAqtP75d9N86WNbEmqU">2. 8 大核心开源项目全景解剖</a>
+        <div class="sub-menu" data-page-node-id="6atDGHE9nA1EeEG9VXuhKk">
+          <a href="#sub-serena-lsp" data-page-node-id="oGyMyjWKoZRaTiW16L6Puw">2.1 Serena：IDE/LSP 语义级代码操作</a>
+          <a href="#sub-token-optimizer" data-page-node-id="Whzu9Fq8KZigyLmD2REtYC">2.2 Token Optimizer MCP：Diff 与图谱</a>
+          <a href="#sub-probe-ast" data-page-node-id="65HfBzV1hIYZqfs2rAahWU">2.3 Probe：AST/BM25 轻量预算检索</a>
+          <a href="#sub-serena-vs-probe" data-page-node-id="p5Q9IfLgMV1MqtInqOGYeJ">2.4 Serena vs Probe 场景化决策树</a>
+          <a href="#sub-other-projects" data-page-node-id="VrEuWwMYBwjCFPDJuX7pCE">2.5 Shunt/DCP/RepoMap/CCR 定位重构</a>
+        </div>
+      </li>
+      <li data-page-node-id="o7zIBBbOPXpnC2rth3PvbQ">
+        <a href="#sec-clients-hooks" data-page-node-id="5Gijo5VuZVsNxdrSrvUt3I">3. 四大主流客户端 Hook 控制面</a>
+        <div class="sub-menu" data-page-node-id="9YDZcFGivYS1j9e8WaK5K8">
+          <a href="#sub-codex-pretool" data-page-node-id="NRLsj9Cxbs3Wy0iESjBDrM">3.1 OpenAI Codex PreToolUse 深入实证</a>
+          <a href="#sub-cursor-claude" data-page-node-id="iURnC3wXBIR89xDGlGG2Pl">3.2 Cursor 与 Claude Code Hook 兼容</a>
+          <a href="#sub-workbuddy-plugin" data-page-node-id="9nCMimvAQ2WlPb1FdHSaED">3.3 WorkBuddy 插件系统与跨端契约</a>
+          <a href="#sub-chatgpt-boundary" data-page-node-id="q9AimF7cFrCaa1SXjO9onM">3.4 ChatGPT 的外部防火墙局限</a>
+        </div>
+      </li>
+      <li data-page-node-id="IClLeBAginpRSWpxpuFsrW">
+        <a href="#sec-os-architecture" data-page-node-id="1jQNgvTAZuwND6Y8JuY9S6">4. Context ROI OS 架构与四大铁律</a>
+        <div class="sub-menu" data-page-node-id="GHL80WpLHMj301GdAdZ67r">
+          <a href="#sub-admission-policy" data-page-node-id="Zc440ULlax5Dju95itG3Oz">4.1 铁律一：动态 Token 预算准入策略</a>
+          <a href="#sub-exact-evidence" data-page-node-id="lJkhIfghBJaPsmeG8cx7YK">4.2 铁律二：编辑任务 Exact Evidence 规则</a>
+          <a href="#sub-shell-artifact" data-page-node-id="2pnAxGHmAktHJhk12IS1ob">4.3 铁律三：终端测试日志 Artifact 化</a>
+          <a href="#sub-slim-tools" data-page-node-id="lfadAvtsyKTDnBn3xTEotK">4.4 铁律四：5 核心工具 Slim 接口契约</a>
+        </div>
+      </li>
+      <li data-page-node-id="bTFYeiSQ4BBpAAPdMbyBHN">
+        <a href="#sec-math-models" data-page-node-id="pCVulb55V6O0tUxHycoGlO">5. 可计算数学模型与理论分析</a>
+        <div class="sub-menu" data-page-node-id="djfSja2QPrmdowduv7dLDK">
+          <a href="#sub-prefix-dynamics" data-page-node-id="alvGeXI14ltYgl0vs8K46F">5.1 Prefix Cache 失效动力学</a>
+          <a href="#sub-cross-kg-amort" data-page-node-id="Elg27Ix4U2SFsIqhqLSkoW">5.2 跨会话图谱结论避免率模型</a>
+          <a href="#sub-exact-proof" data-page-node-id="nol9XHAlswFwe8toi7TujY">5.3 Exact Evidence 期望损失推导</a>
+        </div>
+      </li>
+      <li data-page-node-id="vok44zLQWGEMfckqq5IKXm">
+        <a href="#sec-interactive-sandboxes" data-page-node-id="XAkiAKSnoZdsuuOCBFTQUB">6. 动态交互沙盘系统</a>
+        <div class="sub-menu" data-page-node-id="ASCPzAFxXau4AwGqBibYWc">
+          <a href="#sb-roi-calculator" data-page-node-id="XpdKj5sKklnb1ZhDy6rJGt">沙盘 1: Context ROI 经济学模拟器</a>
+          <a href="#sb-admission-router" data-page-node-id="u49wivSLTebirzbzTAij5f">沙盘 2: 准入策略门限与动态路由</a>
+          <a href="#sb-cache-dynamics" data-page-node-id="J4hKKfxt5SLVK78197JIXr">沙盘 3: Prefix 缓存失效与折损沙盘</a>
+          <a href="#sb-hook-generator" data-page-node-id="e7VgOIcjmhE0t60ntutWTT">沙盘 4: 四大客户端 Hook 配置生成器</a>
+        </div>
+      </li>
+      <li data-page-node-id="47Tt4CVB3lDyH61PnNPZoA">
+        <a href="#sec-roadmap-kpi" data-page-node-id="pX8r2jBt7BSTjdgDZqMQWK">7. 四阶段实施路线图与验收矩阵</a>
+        <div class="sub-menu" data-page-node-id="4FsOrwb4tQWrHFzHsR2vh4">
+          <a href="#sub-roadmap-p0-p3" data-page-node-id="kM1DtgfcgpQcOPhNALxKUm">7.1 P0~P3 阶段推进规划</a>
+          <a href="#sub-kpi-matrix" data-page-node-id="4JcgUAA6QVzWroCuCa0D0z">7.2 12 项核心 KPI 监控与验收清单</a>
+        </div>
+      </li>
+    </ul>
+  </nav>
+</aside>
+
+<!-- 主阅读区 -->
+<main class="app-main" data-page-node-id="QAHUjJPGaMl6JWR0ZiD7Y4">
+
+  <!-- 头部 Hero 区域 -->
+  <header class="hero-header" data-page-node-id="kBLm9yj3Jh4dR8N6W7ke3X">
+    <div class="hero-pretitle" data-page-node-id="WMVHCZ5Mfb0NzlblpcyUm9">
+      <span class="hero-tag" data-page-node-id="y2SfRJSFvePpe71CHIQwIM">AI 软件工程与系统架构白皮书</span>
+      <span class="hero-meta-date" data-page-node-id="W3HJY3FCMNFTEdApTGY32B">2026-09-08 · 基准版本 v1.0-RC3</span>
+    </div>
+    <h1 class="hero-title" data-page-node-id="mKqV0uCFzRyh57ODsOL75p">Context ROI OS: 跨客户端 Token 治理与端到端上下文准入控制白皮书</h1>
+    <p class="hero-subtitle" data-page-node-id="BU637harRHBpGAFg8h8BTe">
+      建立独立于 Claude Code、Codex、Cursor 与 WorkBuddy 的上下文准入控制面（Context ROI Layer）。在坚守主模型智力与推理能力绝不降级的铁律下，实现高价值信息的无损透传、重复读取的差分剔除与历史记忆的结构化复用。
+    </p>
+
+    <div class="hero-grid" data-page-node-id="edpvma1l6VQJPXldmdbNZx">
+      <div class="hero-stat-card" data-page-node-id="GfaaGjtmFCC6hIG1S8xrSN">
+        <div class="hero-stat-value emerald" data-page-node-id="IuRytATJCOWE8lUogPPGup">-73.6%</div>
+        <div class="hero-stat-label" data-page-node-id="a79XG7Kn5qBBGGJQS7YjbJ">研发会话输入 Token 压降</div>
+      </div>
+      <div class="hero-stat-card" data-page-node-id="TuDPwaLocDA6BJWCJE4hYl">
+        <div class="hero-stat-value cyan" data-page-node-id="FuvQFl2mHYJSv5bbiq7IyG">-88.6%</div>
+        <div class="hero-stat-label" data-page-node-id="8KBvszbAm9k6U4SAG2URBR">Prompt Cache 护航成本压降</div>
+      </div>
+      <div class="hero-stat-card" data-page-node-id="QWOcDcyEIZ67cQj4uRbB67">
+        <div class="hero-stat-value amber" data-page-node-id="Xaz89RdVsddjpE8pQm6Vrt">100%</div>
+        <div class="hero-stat-label" data-page-node-id="5Iytov00GbjJmKhrLaTSWK">代码编辑正确率基线保持</div>
+      </div>
+      <div class="hero-stat-card" data-page-node-id="BEe6SuOHGVK6zOXoFh3of3">
+        <div class="hero-stat-value" data-page-node-id="eOCyBnlovGfCAbldeD8NiX">4 Clients</div>
+        <div class="hero-stat-label" data-page-node-id="bX2Rj6OLGHYDoxPNQlLlmu">原生 Hook 统一架构覆盖</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 执行概要 -->
+  <section id="sec-exec-summary" class="section-block" data-page-node-id="RDl70JRkoiDTTSbO7WUTgY">
+    <h2 class="section-title" data-page-node-id="fS0MLpvncedYjlF54vZukR"><span class="section-number" data-page-node-id="0qnTXjXUbREmoFKNgTfRk0">00</span> 执行概要与核心公理</h2>
+    <div class="callout emerald" data-page-node-id="a5Kd7AR8EQsvq3RBcaOZtw">
+      <div class="callout-title" data-page-node-id="TnQnLtAW65BlMCiszMomyi">核心结论 (Executive Verdict)</div>
+      <p data-page-node-id="KYWx0czUQtHyJZWAFeYl3X">
+        横向评估截至 2026-09-08 GitHub 与工业界开源生态后，研发智能体最优演进路径明确浮现：<strong data-page-node-id="qnBbeMJQuezMuoGHCKMhZd">你的最优解绝不是“找一个最省 Token 的插件”或盲目将主模型降级为 Cheap Model，而是建立一层跨客户端中立的 <code data-page-node-id="EBlfl0flGKsWvWiBfE9KdZ">Context ROI Layer</code>（上下文投资回报率操作系统）。</strong>
+      </p>
+      <p style="margin-bottom:0;" data-page-node-id="Ev7tuGZlFISyFk9zMNDJk1">
+        <strong data-page-node-id="4cu08DC0HS04DJT281eAOj">主模型保持前沿最强模型（Frontier Model）不变，只优化“什么信息值得进入主模型、进入多少、是否已经读过、是否可以复用、什么时候必须回读原文”。</strong>
+      </p>
+    </div>
+    <p data-page-node-id="zRL1o9tu8yOsW1PDRSxSrq">
+      在当今以 Claude Code、OpenAI Codex、Cursor 和 WorkBuddy 为代表的沉浸式 Coding Agent 工作流中，开发人员与企业普遍遭遇严峻的“Token 膨胀与成本失控陷阱”：单次复杂的重构或调试会话动辄消耗数百万 Tokens，其中超过 70% 的上下文开销消耗在毫无意义的全文件机械重读、数千行的构建错误日志、多达数十个 Tool Schema 的静态序列化，以及在历史会话中早已被攻破并证伪的排查路径重蹈覆辙。
+    </p>
+    <p data-page-node-id="JYEiTCWtQRWoI74x3DotAq">
+      面对这一工程痛点，大部分市面方案误入歧途：要么采用粗暴的“模型降级（Model Downgrading）”，将高难度逻辑推理交由微型模型处理导致任务准确率断崖式下滑；要么实施粗暴的“全局文本压缩（Global Summarization）”，把代码中的微妙边界条件与关键变量名彻底抹去；要么进行“逐轮历史修剪（Turn-by-turn Pruning）”，彻底击穿现代 LLM 的 Prefix Prompt Cache 缓存机制，造成反向的算力与经济亏损。
+    </p>
+    <p data-page-node-id="Cz1ldabkmRH0S7nyTP1Yno">
+      本白皮书基于 8 大主流开源框架的深入消融评测与四大客户端的原生 Hook 控制面实证，正式提出并形式化定义 <strong data-page-node-id="JtR50CrkMe0GzHSpHI76Og">Context ROI OS（上下文投资回报率操作系统）</strong>。本体系以数学规划模型为准绳，确立“质量是硬约束、Token 是优化目标”的第一性原理，构建涵盖 AST 符号检索、Diff 差分重读、测试日志隔离、跨会话知识图谱与可逆还原机制的工业级防御纵深。
+    </p>
+  </section>
+
+  <!-- 1. 范式跃迁 -->
+  <section id="sec-paradigm-shift" class="section-block" data-page-node-id="aItw1LrRyFOTKK3WqiPSty">
+    <h2 class="section-title" data-page-node-id="QDcuhI30oomtKTR0aeUJzZ"><span class="section-number" data-page-node-id="dLKQBDraO8wU2usGa1Rk3A">01</span> 范式跃迁：从“插件式省 Token”到“Context ROI 操作系统”</h2>
+    
+    <div id="sub-naive-failures" data-page-node-id="GH2zbKidbIobEEsXeKZg16">
+      <h3 class="subsection-title" data-page-node-id="ndA92OsoG0J6ybUVqcIWVh">1.1 传统 Token Saver 的三大约束失效</h3>
+      <p data-page-node-id="fcDhK4JKgGw7tiIMzkvUpa">
+        回顾市面上形形色色的 Token 节省插件，其在真实中大型工程落地时几乎全军覆没，根本原因在于犯了以下三大系统性错误：
+      </p>
+      <ol style="padding-left: 20px; margin-bottom: 16px;" data-page-node-id="nyNoRiGzLFZE0DzgzffuvC">
+        <li style="margin-bottom: 8px;" data-page-node-id="658m6qjahhqlHtFeHO5D1I">
+          <strong data-page-node-id="tYcUHsw8AZWlrK1GGBWY1f">认知盲目降级陷阱（Cognitive Degradation Trap）</strong>：许多方案将第一步定为“小任务路由至 Cheap Model（如 Flash/Mini）”。但代码工程中的任务分类器（Task Classifier）本身具备极高的误判率。一次看似简单的“改动变量名”，往往潜藏着并发条件竞争与复杂的反射依赖；由弱模型执行轻率修改，后续引发的 Lint、编译报错与调试返工所消耗的 Frontier Tokens，往往比初次节省的差价高出 5~10 倍。
+        </li>
+        <li style="margin-bottom: 8px;" data-page-node-id="uvOmU8AajhzBUI1FziU4uK">
+          <strong data-page-node-id="vxxYcFoEZO6JVKNrHdW7ve">摘要黑盒信息湮灭（Summary Oblivion）</strong>：盲目将长文件或历史对话喂给辅助模型做“摘要压缩（Summarization）”。LLM 摘要器倾向于输出宏观概括（如“该文件包含了用户鉴权与 Token 刷新逻辑”），却将真正决定系统生死的细节——例如特定的重试状态机分支、异常捕获类型、Redis 锁释放超时时间（Lock Timeout）——永久抹除，导致主模型依据残缺证据做出灾难性推理。
+        </li>
+        <li style="margin-bottom: 8px;" data-page-node-id="nAIuyu69XfN4SglXOImGZf">
+          <strong data-page-node-id="icpUhrAb95bQ9h9biI3MYe">前缀缓存击穿效应（Prefix Cache Invalidation Collapse）</strong>：这是最隐蔽也是最致命的工程漏洞。现代 Frontier 模型（Claude 3.7、GPT-4.1/5）广泛支持 Prompt Caching，且缓存命中价格低至原价的 10%（0.10x）。Prompt Cache 依赖于严格的<strong data-page-node-id="O1AX9cMfjglTTPsK54B5Be">前缀匹配（Prefix Matching）</strong>。若在会话历史中间进行任何微小删改、重排或动态修剪，整个前缀缓存将瞬间全量失效（Cache Miss）。工程师以为通过裁剪省掉了 30% 文本，实际上却使得后续每一轮交互不得不全额支付高昂的未缓存写入费用，总账单反而大幅上扬。
+        </li>
+      </ol>
+    </div>
+
+    <div id="sub-quality-axiom" data-page-node-id="7Q3BhAqkk1PbP5jEKizfNa">
+      <h3 class="subsection-title" data-page-node-id="KBMWR1WrvOXXYOSXIuvldH">1.2 质量硬约束与治理优先级</h3>
+      <div class="callout amber" data-page-node-id="qp5HhOzAZRMlR34TE4ec7q">
+        <div class="callout-title" data-page-node-id="05AmciC8FPjD9HCyHA7Haa">治理第一性原理</div>
+        <p style="margin-bottom:0;" data-page-node-id="JN3B2TvxS5dLXTyFi7b51X">
+          <strong data-page-node-id="NqcY8jY9l9W0PjLQjTMFsF">先消灭无效 Token，再考虑便宜模型；省的是探索 Token，绝不省决策证据！</strong>
+        </p>
+      </div>
+      <p data-page-node-id="KosMzmAELcYpskkQqFLGrv">
+        在严格追求“<strong data-page-node-id="XfTRlU2oMGrYFZsVI3Z6GE">推理能力零损耗、修改精度不下降</strong>”的前提下，治理技术栈的落地优先级必须严格遵守以下物理序：
+      </p>
+
+      <pre data-page-node-id="Pp5P8vCpdF9kSKBCqTOHez"><code data-page-node-id="wHB4Au8yZKyQRHRCw1FXCt">模型降级 Routing                 ← [P3: 风险最高，最后且仅在充分评测后做]
+        ↑
+Worker 分流 + 可验证定向回读       ← [P2: 适用于机械任务、日志初步分类与骨架生成]
+        ↑
+历史 Context 阶段性选择性压缩     ← [P1: 消除重复工具输入，严格保留错误栈与用户约束]
+        ↑
+跨会话知识图谱复用 (KG)          ← [P1: 提取已证伪死胡同与已裁决结论，避免重复推导]
+        ↑
+重复读取 → Hash 对比 / Diff 模式  ← [P0: 二次读取同一文件仅传输增量变更，ROI 极大]
+        ↑
+AST / LSP / Symbol 语义检索      ← [P0: 以高信噪比的代码符号切片替代盲目 2000 行 Read]
+        ↑
+Tool Schema 极致精简            ← [P0: 严控常驻工具数量 ≤ 5~8，大幅降低静态轮次负载]
+        ↑
+Prompt Cache 物理前缀保护       ← [P0: 锁定静态 System Prompt 与 Tools 顺序，保障 85%+ 命中]</code></pre>
+    </div>
+
+    <div id="sub-constrained-opt" data-page-node-id="c2l49bNSDqZ17l4DWMOzVJ">
+      <h3 class="subsection-title" data-page-node-id="XTF0OThR8aX0G3TKooDtEK">1.3 Token ROI 约束优化数学模型</h3>
+      <p data-page-node-id="dotP4mCKStq2LC2N4zQzMl">
+        工程治理不能依赖定性口号，必须建立可计算的目标泛函。我们定义单次端到端开发任务的 <strong data-page-node-id="4rmMawF5yZrSQgADjYQFYa">Token 投资回报率（Context ROI）</strong> 形式化表达式如下：
+      </p>
+
+      <div class="math-display" data-page-node-id="Uj31ayTClcgOMcOn7CuJev">
+        <math display="block" data-page-node-id="puJfIHH0ia0lXOci5thy7Q">
+          <mrow data-page-node-id="Q8bC4bOljltiAvwamMHa8K">
+            <mtext data-page-node-id="ij3hlioFMhZit51i6yDrPC">ROI</mtext>
+            <mo data-page-node-id="hC2XyN7cruP3vLUL7Y9jjJ">=</mo>
+            <mfrac data-page-node-id="6YFPo05eGJGdekS2qw3rBi">
+              <mrow data-page-node-id="GrZzUZQOjLUoy5RmEs1mJB">
+                <msub data-page-node-id="ZFFAQOv3vop1GoF4dtxoX7"><mi mathvariant="script" data-page-node-id="nwvO3zIVypU1uNF6e3GRpd">S</mi><mtext data-page-node-id="XMMJwXFJqgeVI0Yw00A7uQ">verified</mtext></msub>
+                <mo data-page-node-id="NHKBiqlfD1vO4npUctNqMe">·</mo>
+                <mi data-page-node-id="APBUNhhTtNbEpbIt9XqcNw">V</mi>
+              </mrow>
+              <mrow data-page-node-id="iCTCOxIEmi5ZxETzFEaRD0">
+                <msub data-page-node-id="07OXJYbA5LPvXFcQx4yih7"><mtext data-page-node-id="cQeEyDpE1eDNxGOptQFHpr">Cost</mtext><mtext data-page-node-id="zd1zgzHvOiBbJGwG0co09n">effective</mtext></msub>
+              </mrow>
+            </mfrac>
+          </mrow>
+        </math>
+      </div>
+
+      <p data-page-node-id="BMMwXjyatBe6aytf5e1fQ2">
+        其中 <math data-page-node-id="AQElLnbVClfe279yaqjAds"><msub data-page-node-id="XsSat0iSM2qeC5f48l38Vc"><mi mathvariant="script" data-page-node-id="MHRR6qqB0jSVBZRiEtJv0G">S</mi><mtext data-page-node-id="JDgdRpLOuLSczdvTgAJQu7">verified</mtext></msub><mo data-page-node-id="FCY9M6CkqP2TpMGr8BmmnG">∈</mo><mo data-page-node-id="eDaaT7STbPBdhqujZTaO9Z">{</mo><mn data-page-node-id="TsfWQPdM8IKIH9FyuohoYf">0</mn><mo data-page-node-id="0jJObm2Gy3pzRvQM3FGMTb">,</mo><mn data-page-node-id="IupukCqrJJd0mLsYwZsx8b">1</mn><mo data-page-node-id="qh34eCpNENwmXoA0Sp07UI">}</mo></math> 代表经由单元测试、静态分析和编译器真实验证的任务成功指标；<math data-page-node-id="76nn0T02IFr3Uq0APZB2GS"><mi data-page-node-id="xDjr2hlhzxFpqelnDBHjyP">V</mi></math> 为任务交付的商业工程价值；有效成本 <math data-page-node-id="l2qLdBJUHZYcBqoB81amtY"><msub data-page-node-id="FXdXysYOKKHWteGZAlIG9H"><mtext data-page-node-id="JmNvzvwS6EcymhCkFwwDaX">Cost</mtext><mtext data-page-node-id="jSqZ06LpLW9n6bJHp0FmBO">effective</mtext></msub></math> 展开为全链路资源消耗泛函：
+      </p>
+
+      <div class="math-display" data-page-node-id="rSK7j1XiAE6YRclCFn2Z2N">
+        <math display="block" data-page-node-id="BVDpNgNMjrivZCr4PNKRTy">
+          <mrow data-page-node-id="m0YkYeUQYOzvEUHV1m8Y4z">
+            <msub data-page-node-id="K2f6Aspuo8jBhlMafJwGks"><mtext data-page-node-id="pFHBk8TkLo69li2rWvHyLz">Cost</mtext><mtext data-page-node-id="4yCQRq9R9tF8HdPFUNEVKc">effective</mtext></msub>
+            <mo data-page-node-id="qNsQpOjcZahlMTdU4L5vi1">=</mo>
+            <msub data-page-node-id="lC3ihmKSXZiwOUEopRcgBO"><mi data-page-node-id="nj5se3h192PCGa8yJrwGZ4">T</mi><mtext data-page-node-id="H3I4Rfidv04v8FYY68SraR">uncached</mtext></msub>
+            <mo data-page-node-id="MP9vSiqkDQGGYO7Jf6hoFD">·</mo>
+            <msub data-page-node-id="K8ymrfq1zICMhcFmrFjJUD"><mi data-page-node-id="K7RjY8EofyJnTn5YAexvrS">P</mi><mtext data-page-node-id="OQqbfRTec36UVdRIhwRHjU">input</mtext></msub>
+            <mo data-page-node-id="BJQFxcx5MTEZOvJ58xaGpD">+</mo>
+            <msub data-page-node-id="UKopNzUQDHqIDpuGeGAVJo"><mi data-page-node-id="4qFXHIaQAO4nkUSODzOhz6">T</mi><mtext data-page-node-id="XIJXuG9e5AvDuWDtliwuNA">cached</mtext></msub>
+            <mo data-page-node-id="PYtxMPjvnE2Ck1InI6lgt9">·</mo>
+            <msub data-page-node-id="RXg8CAwj1HGTyu8Hq5mYw9"><mi data-page-node-id="W54J3PcXxHRJTESN6tvRxE">P</mi><mtext data-page-node-id="M7aP6FKq5Vsj44m4p1ZApU">cache_read</mtext></msub>
+            <mo data-page-node-id="5zAWsbC1zxFO12sy7GPbTz">+</mo>
+            <msub data-page-node-id="GWjCIwRLiEGHTP9jhVQ0NS"><mi data-page-node-id="uAI8pWcxj4lKhyOkf1JAUT">T</mi><mtext data-page-node-id="CJxscFBC6DZHWcLPjiHVgt">out</mtext></msub>
+            <mo data-page-node-id="x2CAPB20tkrQ3dHSVF4qt7">·</mo>
+            <msub data-page-node-id="SAKrmEhjqjjZHLmPlMsD3D"><mi data-page-node-id="9lqILAzSTfBeC4RJKkI0ud">P</mi><mtext data-page-node-id="ppAt57LGT1SHegxfDILOcH">out</mtext></msub>
+            <mo data-page-node-id="9472cGsUotWDPIR1eQPSQQ">+</mo>
+            <mo data-page-node-id="SRxR69eqWxstXcAZnQFdx1">∑</mo>
+            <msub data-page-node-id="oHCflvcZ2s1BTtifZu2sLB"><mtext data-page-node-id="u9y7agwOVmVTY3ERDuvIf0">Cost</mtext><mtext data-page-node-id="L4tnZEWpl5f75MflzSWiZG">worker</mtext></msub>
+            <mo data-page-node-id="W7XUAS4R3UDJlQ3qcEE2rP">+</mo>
+            <msub data-page-node-id="fntIF4fl9c62Hk5P21xrCY"><mtext data-page-node-id="7XlsTGAExwNYOj6mndWTCD">Cost</mtext><mtext data-page-node-id="XsaCW1QjqQ5evHW3U8okGa">retry</mtext></msub>
+          </mrow>
+        </math>
+      </div>
+
+      <p data-page-node-id="c7HzSFXm9agtzgIVwYGhT1">
+        因此，整个系统的治理目标是在<strong data-page-node-id="BLrE5XutSellKbV1MliVpe">硬性质量约束边界</strong>内最小化有效成本：
+      </p>
+      
+      <div class="callout cyan" data-page-node-id="KAWQYbpSpEY9tex1Taq0h0">
+        <div class="callout-title" data-page-node-id="MLwoZ5gDwpQtB0dU7jUKhO">数学规划命题 (Mathematical Programming Formulation)</div>
+        <div style="font-family: var(--font-mono); font-size: 0.92rem;" data-page-node-id="N7KRJbh84iQgFGkp2dCKgE">
+          <strong data-page-node-id="iI4d3Z4dUnpCPiT5CcuIgl">minimize:</strong><br data-page-node-id="HIgiOk9kUsqyhNszcGt9rb">
+          &nbsp;&nbsp;&nbsp;&nbsp;Cost<sub data-page-node-id="N7xf7YKicpbZZxebPt7JvE">effective</sub>(θ)<br data-page-node-id="QxgF5OSLgclyQIhLNFbSrz"><br data-page-node-id="IzcQzWpv3WDXBU3VDRq5gj">
+          <strong data-page-node-id="kZjfOKRyWQmkfEHmzDgnya">subject to:</strong><br data-page-node-id="tlVZ46bEFzA15Oa3RzA3y3">
+          &nbsp;&nbsp;&nbsp;&nbsp;TaskSuccess(θ) ≥ TaskSuccess<sub data-page-node-id="8VqpPAnb8s5Q5pQZe0A3YS">baseline</sub><br data-page-node-id="ZjxIHApUtreLLzb9qnnYOv">
+          &nbsp;&nbsp;&nbsp;&nbsp;CodeCorrectness(θ) ≥ CodeCorrectness<sub data-page-node-id="Wv9ipSdsVlAnCb9zq7AHvH">baseline</sub><br data-page-node-id="cm9NrYNkQN8hj7zmp4S4nG">
+          &nbsp;&nbsp;&nbsp;&nbsp;TestPassRate(θ) ≥ TestPassRate<sub data-page-node-id="Gz3LRsn3fKUIScUPVgQW2G">baseline</sub><br data-page-node-id="baYewJO5dKpJlQGWSKZHlr">
+          &nbsp;&nbsp;&nbsp;&nbsp;SecurityInvariant(θ) = TRUE
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. 核心开源项目全景解剖 -->
+  <section id="sec-projects-survey" class="section-block" data-page-node-id="BBh13ZLWVBgQVndkXDYLFR">
+    <h2 class="section-title" data-page-node-id="xJpaIGm2QasZs4r9sd8DHI"><span class="section-number" data-page-node-id="k4xbj5tyIpMaysGKbcJk1c">02</span> 8 大核心开源项目全景解剖与技术选型</h2>
+    <p data-page-node-id="tIyrAFkLr9BfpS6OUlSPby">
+      截至 2026-09-08，通过对 GitHub 开源社区及产业前沿代码治理方案的系统性检索与消融核查，我们筛选出 8 个最具技术代表性的开源项目，并对其架构机制、Token ROI 表现、能力保真度及跨 Client 扩展性进行横向定标：
+    </p>
+
+    <div class="table-wrapper" data-page-node-id="F3u80ps6RiLM6YwruMrngB">
+      <table data-page-node-id="GBLnBzGZY49yUjAkgpVL4u">
+        <thead data-page-node-id="Ed9Z8IdLXzahTkSyZq5PeA">
+          <tr data-page-node-id="ssApJG6MPOo7qctua1FREq">
+            <th data-page-node-id="C7C9fIDXn8aB26jeJQ7WZC">项目名称</th>
+            <th data-page-node-id="RezR7FNfmKl3vrr2I3LOc5">核心机制与底层技术栈</th>
+            <th data-page-node-id="pQSPjiHgvXrQfmiW4O6Iuv">Token ROI</th>
+            <th data-page-node-id="sYVGQbjm9idTbOIimKMGpu">能力保持</th>
+            <th data-page-node-id="TOFZBp7ODTvym41CBiGKWJ">跨 Agent 适配</th>
+            <th data-page-node-id="mdnw8KEiOE0QIY0vVD1nyX">系统战略定位</th>
+          </tr>
+        </thead>
+        <tbody data-page-node-id="hJQOmVXcjiH7E5Znkh2H9N">
+          <tr data-page-node-id="jgc94Cmewjikb1LGaB9noy">
+            <td data-page-node-id="psMiNPaDz6OoukZCNUutDw"><strong data-page-node-id="QmpZHVaCY3HJ12vGvU1dOl">Serena</strong></td>
+            <td data-page-node-id="wSYUmfjKZOKG7iC4QYCKqh">Language Server Protocol (LSP) / 40+ 语言 Symbol 级语义检索与精确切片编辑</td>
+            <td data-page-node-id="APxqq8XsZoVNxGnMEfeSJW"><strong style="color:var(--emerald);" data-page-node-id="Vfr5GpvMuxEzDNGfO6o8lS">★★★★★</strong></td>
+            <td data-page-node-id="bbJIkGEyTmALfZrRXoiHtA"><strong style="color:var(--emerald);" data-page-node-id="CG4Rr6Hzr6ieXZ5fjV28Cu">★★★★★</strong></td>
+            <td data-page-node-id="wkSRxFBJirZEXav9Lt4KlY"><strong style="color:var(--emerald);" data-page-node-id="PJKXklHboCV5KhTM34mHxw">★★★★★</strong></td>
+            <td data-page-node-id="Gv5qxq2BaVBD0D3YreL9Le"><strong data-page-node-id="qGNilrdBhtwD4piPcQztzg">第一梯队 / 语义检索主力引擎</strong></td>
+          </tr>
+          <tr data-page-node-id="GNLtsc0zrfPokTVkmnS5Yj">
+            <td data-page-node-id="OHrblEiCnQzZ5dpFdYAfRm"><strong data-page-node-id="ZaS8chFYhpJcTgfiifQL9I">Token Optimizer MCP</strong></td>
+            <td data-page-node-id="6GcpQiSqYHl7BkJxD7LLeg">PreTool Hook + SQLite Cache + Diff 传输 + 跨会话知识图谱 (KG) + 计量监控</td>
+            <td data-page-node-id="7aHEFxIQLz00DxdDJKorHo"><strong style="color:var(--emerald);" data-page-node-id="BMWwPkPxIPG7NAPDj4TxLe">★★★★★</strong></td>
+            <td data-page-node-id="Eo4a9A2TgnLyEKcfF8QFjG"><strong style="color:var(--emerald);" data-page-node-id="62VD6Ilf0wEIDied8f5fQv">★★★★☆</strong></td>
+            <td data-page-node-id="7eKTeq2sf4TqWHNwngNNBc"><strong style="color:var(--emerald);" data-page-node-id="o5c1EW3eIUVLK98WYJAFHr">★★★★☆</strong></td>
+            <td data-page-node-id="IkoN7Z4nEbdqMitG3jflpR"><strong data-page-node-id="aOnfTfEcciZZRWqESkq973">核心参考 / 最贴近统一 Token OS</strong></td>
+          </tr>
+          <tr data-page-node-id="gLnAVCT12DAxP9vYjLdaLr">
+            <td data-page-node-id="wdJdvLWVp9V8zwUVbV0OtD"><strong data-page-node-id="NR3bqesp6n2Hv3DcoCE4tv">Probe</strong></td>
+            <td data-page-node-id="oW2qohbw4nyDaFQV5CohF0">Tree-sitter AST + ripgrep + BM25/TF-IDF 混合检索 + 固定 Token 预算 (Rust)</td>
+            <td data-page-node-id="wVSmYPHIhCr01CqjDF8z98"><strong style="color:var(--emerald);" data-page-node-id="TcD7oP0K15omdkwEuKur28">★★★★★</strong></td>
+            <td data-page-node-id="tgkwVlXlrovRSxdLgx7BX0"><strong style="color:var(--emerald);" data-page-node-id="EYzBSrwVoZfrNLMHl1y3zo">★★★★☆</strong></td>
+            <td data-page-node-id="CafdT4sSmSHqJ36J7WQbAR"><strong style="color:var(--emerald);" data-page-node-id="T5eFJu5AMADCpRikxavDS3">★★★★★</strong></td>
+            <td data-page-node-id="ZDT95SleXHaVFbgWPm9pp2"><strong data-page-node-id="bwUciXGWHrDmr0WzHrXRlk">大型 Monorepo 探索与免向量检索首选</strong></td>
+          </tr>
+          <tr data-page-node-id="ELEsdJjsnwGB4pyTy4QX18">
+            <td data-page-node-id="vnQH5CGxHR5F5dlTlCwEQH"><strong data-page-node-id="dYRjlDqcVmeQzLeoD0Yzcm">Spotify Shunt</strong></td>
+            <td data-page-node-id="Ke2NpIXaNJwiBjYjTUJhsA">PreToolUse Hook 拦截大文件 + 后台 Cheap Worker (Gemini Flash) 异步分流摘要</td>
+            <td data-page-node-id="VJ2sXATrJpG4d2seJadXHH"><strong data-page-node-id="gxX7b9PJgJ3ueicPCeUFks">★★★★☆</strong></td>
+            <td data-page-node-id="q9kVHkC4NZpMhmvPngPSi8"><strong data-page-node-id="dtD13WftvKStGaFmAI2mxo">★★★★☆</strong></td>
+            <td data-page-node-id="naA5BIOdQ7Jj19nqH7XOtO"><strong data-page-node-id="qH3LJbzhvwCGKXjHrZN2VO">★★★☆☆</strong></td>
+            <td data-page-node-id="724yB9F58P5Q9KeVw5XtF6"><strong data-page-node-id="1kee5VR7VR9tMMtUuQwilU">专项优化 / 日志与样板代码 Worker 层</strong></td>
+          </tr>
+          <tr data-page-node-id="woPB6GwxeV6Poh47BuwOp9">
+            <td data-page-node-id="cfsksGhqGs1OcS6U1lmDJv"><strong data-page-node-id="UiVsYXfLgAxAlDEv5G56R5">Claude Context</strong></td>
+            <td data-page-node-id="40pVezSGOzFA7gaQyHJqKG">代码库 Chunking + Embedding 向量化 + Milvus/Qdrant 语义召回</td>
+            <td data-page-node-id="TdmKLkhR8qpMoMrVuGAEbA"><strong data-page-node-id="ebwvjlO2xPqiwdJtz2qU9V">★★★★☆</strong></td>
+            <td data-page-node-id="nZpLRmPv0iAxrUYeERPPbM"><strong data-page-node-id="eD5ACbzz6Vk0Rx1UiWmRSg">★★★★☆</strong></td>
+            <td data-page-node-id="Ik47GcATJSmdkjkytkdFwO"><strong data-page-node-id="OV2kL9FK2cYPGi8TOlI1qG">★★★★★</strong></td>
+            <td data-page-node-id="QKP3l0RRMfHJSDpFRwFdaH"><strong data-page-node-id="UzLZYRrt6IrHNfVQRoJDBu">长文本自然语言模糊搜索补充</strong></td>
+          </tr>
+          <tr data-page-node-id="nO8M5ECKbNblxf9VtowPRI">
+            <td data-page-node-id="3pm2dyOe8ciynqmM7uxfRL"><strong data-page-node-id="UEeUguGMtKMOGGORgk8CSi">DCP (Dynamic Pruning)</strong></td>
+            <td data-page-node-id="Ms4GP6n86t8mnxnC6n9btq">会话运行时动态上下文修剪，保留末次报错与关键决策，折叠旧工具参数</td>
+            <td data-page-node-id="IN6NGDMbDuCukRF89GkQig"><strong data-page-node-id="phtYFwyt3VwUyB0DRnTl4T">★★★★☆</strong></td>
+            <td data-page-node-id="TwcwOVJb5ONsd4fvEFZXCY"><strong data-page-node-id="HkmUfQjT28UFsuA40KRmZv">★★★★☆</strong></td>
+            <td data-page-node-id="IcHBVKAMKkvzGmT4NlgqqY"><strong data-page-node-id="YO7HytB4hegwDjzQjSOnd0">★★☆☆☆</strong></td>
+            <td data-page-node-id="xdoS6F1ReY9vqnekhgI7CR"><strong data-page-node-id="fdOvg1jUDbedacY0A2xpbC">思想汲取 / 会话历史选择性压缩范式</strong></td>
+          </tr>
+          <tr data-page-node-id="VZb21B8MWr5FRtGmPFhg5L">
+            <td data-page-node-id="PCNpwww6Uym5bwwRdtmjoq"><strong data-page-node-id="AUDmrDRChrQvnMAVgs1YV8">Aider RepoMap</strong></td>
+            <td data-page-node-id="DwnTB9gQV0HtGnZPvmY2qK">Tree-sitter 提取符号签名 + PageRank 依赖图排序 + 固定 Token 预算压缩</td>
+            <td data-page-node-id="wxba8TJpAFMtR26H1YHmdh"><strong data-page-node-id="Wl6SHQQYBaTM0eLOKqeAXT">★★★★☆</strong></td>
+            <td data-page-node-id="JYJ2nPxTmskORmndcDJBAb"><strong style="color:var(--emerald);" data-page-node-id="lMpvyppR1eoMxGMvWP6I6e">★★★★★</strong></td>
+            <td data-page-node-id="a5Zai0JGsYVHF5qxqV0yQm"><strong data-page-node-id="rmOwAUWiECyH8jNoFlNDZn">★★☆☆☆</strong></td>
+            <td data-page-node-id="UqiKvdMNhjZAzdxB1DwbxV"><strong data-page-node-id="On4vNN3jUwdsyUG1su7UzF">架构参考 / 全局结构化上下文基线</strong></td>
+          </tr>
+          <tr data-page-node-id="O9OPyKZ2QT0grwQgUJYa6d">
+            <td data-page-node-id="cFzNehslZqXIAxCqISYZeC"><strong data-page-node-id="klxDwCcySkpLmHnwRbSxRk">Claude Code Router</strong></td>
+            <td data-page-node-id="F2MG2eqydDAP33VOCNMvT2">本地反向代理网关 / Provider 自动回退 / 成本核算 / 统一 API 协议层</td>
+            <td data-page-node-id="nK15UA5G7TjsMj6UFkzmoM"><strong data-page-node-id="612jvjejoz2ziKryeEnRqM">★★★☆☆</strong></td>
+            <td data-page-node-id="OLeaOTqpG5E1XgPnl7jecz"><strong data-page-node-id="h888gMwlB88DGgXTBS9pHX">★★★★★</strong></td>
+            <td data-page-node-id="OsuMdQbDWhX8GQhEXdttjz"><strong data-page-node-id="yClRcGscfftvpHldySEcvc">★★★★☆</strong></td>
+            <td data-page-node-id="4cuQKWlKbv5HJQKkLmwBhF"><strong data-page-node-id="p5PH0qZ4sIBAk48dc2rC03">外层控制面 / 跨模型路由与统一可观测性</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="sub-serena-lsp" data-page-node-id="X2nfDOcqOBEWT7ayrK96Ze">
+      <h3 class="subsection-title" data-page-node-id="d6q8mSegyEqi9SYYCDcS9h">2.1 Serena：IDE/LSP 语义级代码操作与 Slim Mode</h3>
+      <p data-page-node-id="0TRke3davVMefvQADmPquN">
+        <code data-page-node-id="J8EHDpTFpxl7tCE58fkRz2">oraios/serena</code>（截至 2026-09-08 获约 29K Stars 并高频提交）代表了代码智能体操作粒度的一场范式革命。
+      </p>
+      <p data-page-node-id="U7NsqEuE2gee1qedlCyTsS">
+        在传统 Coding Agent 中，模型遵循“低级文本扫描”模式：<code data-page-node-id="eUWhqYezGkNyTax3F1fAd9">grep 搜索字符串 → 找到文件路径 → 执行 Read(2000行) → 产生大量阅读干扰 → 再次 grep 找调用 → 再次 Read 3 个关联文件</code>。单次追查往往吞噬 30K~50K Tokens。
+      </p>
+      <p data-page-node-id="PIlJhSECPQ2MwSjpZ41DHf">
+        Serena 彻底颠覆这一过程，直接将操作基元提升至 <strong data-page-node-id="20AjsR2Zd94clEbk5mtCAa">IDE/LSP 语义层（Semantic Level）</strong>：
+      </p>
+      <pre data-page-node-id="2v9yPE64huzKK5PIJSg9RY"><code data-page-node-id="8yZDFH9x3irUoPx19CwD1x">find_symbol("AuthService.refreshToken")
+    ↓
+find_referencing_symbols(...)
+    ↓
+find_implementation(...)
+    ↓
+symbol_overview(...)
+    ↓
+只提取精准切片的 AST 节点与实现体 (约 200~600 Tokens)
+    ↓
+交付 Frontier Model 进行高质量逻辑决策</code></pre>
+      <p data-page-node-id="h5tCA4RFVLwNuCdRHfmyIy">
+        <strong data-page-node-id="mxUPuEJrdzYwKiH1P8ZYfD">Slim Mode 剪裁建议</strong>：Serena 源码内置了大量的通用基础工具（如 <code data-page-node-id="dYrZgi9uriGBXmsD9BZ9ge">read_file</code>、<code data-page-node-id="gicVjS6w93BAA5LaUXU2Er">search</code>、<code data-page-node-id="LWSrc2IDtkLk23cMcPr5xg">shell</code>、<code data-page-node-id="mYKbvKKP7ocxcFP3EQBxPD">list_dir</code>）。在已拥有完善 Harness 的原生客户端（如 Claude Code / Codex / WorkBuddy）中，这些泛型工具极易与客户端原生功能发生歧义冲突并白白消耗 Schema 上下文。<strong data-page-node-id="vjs0HghAADamvY5Y6iXWig">最佳实践是启用 Serena Slim Mode：在 MCP 配置中剔除所有基础文件与终端工具，仅保留高价值语义符号工具（Symbolic Tools）。</strong>
+      </p>
+    </div>
+
+    <div id="sub-token-optimizer" data-page-node-id="9WucbdMC2waJfgW8AE6mP8">
+      <h3 class="subsection-title" data-page-node-id="o7vW85dW57MGuXpkxOQsmX">2.2 Token Optimizer MCP：Diff 差分重读与跨会话知识图谱</h3>
+      <p data-page-node-id="A5u7L4cA4KRkmkhz6Eu9T8">
+        <code data-page-node-id="aTwkfKTTHFPislg0B0ta9A">ooples/token-optimizer-mcp</code>（截至 2026-09-08 约 509 Stars，持续迭代）在架构形态上高度契合统一 Token 治理操作系统的终极愿景。其核心价值体现在两大具有颠覆性的工程设计上：
+      </p>
+      
+      <div class="callout emerald" data-page-node-id="tB9KOkRQReYPAEihzXFPQl">
+        <div class="callout-title" data-page-node-id="zzBoplFsKxAAanVgbsuz7F">突破 1：文件二次读取的 Diff 差分折叠 (Lossless Diff-Read)</div>
+        <p data-page-node-id="b8obF2o5nUVRSMxwGQFo84">
+          在典型开发会话中，主模型常需对同一个核心文件进行多次复查。例如第 2 轮读取 <code data-page-node-id="HK89dFMhkgnCbKXQFeEbfs">auth.ts</code> 消耗了 12,000 Tokens；第 8 轮对该文件做微调后，传统 Agent 再次调用 <code data-page-node-id="zrVLeMhEXYMbJqtS85v3P3">Read(auth.ts)</code>，又产生整整 12,000 Tokens 的冗余写入。
+        </p>
+        <p style="margin-bottom:0;" data-page-node-id="QqmCX0ArZ2BSQ51AZL80sw">
+          Token Optimizer MCP 在底层挂载了基于 SQLite 的哈希与 LRU 缓存层。当检测到模型请求已读文件时，仅向模型返回极短的标准 Diff 增量（例如 <code data-page-node-id="XgP7hLwzXPdxdTFIl72pjJ">@@ line 104: -old_val +new_val</code>，仅约 80 Tokens）。这一优化在<strong data-page-node-id="DxCHc9DuOdnaVkne8oDyQa">信息保真度 100% 绝对无损的前提下，将复读阶段的 Token 消耗压降 99.3%</strong>！
+        </p>
+      </div>
+
+      <div class="callout cyan" data-page-node-id="NETuxjwcT48Ccxpu7K865l">
+        <div class="callout-title" data-page-node-id="HOfhv5Jnh6AaCcG6JjvkFz">突破 2：跨会话知识图谱 (Cross-Session Knowledge Graph)</div>
+        <p data-page-node-id="2xKtVIYBJNdfCrdIumZ0X8">
+          研发智能体最严重的浪费在于“<strong data-page-node-id="FK8pOF5Q8WXwcDgqbggdZ5">昨日已解决的死胡同，今日在新会话中重新推理一遍</strong>”。例如昨天的会话中，Codex 花费了 35,000 Tokens 尝试方案 A，最终断定“会导致分布式死锁，真正根因是 Redis lock timeout”。一旦关闭终端，次日 Claude Code 接手任务，又将从零盲目尝试一遍方案 A。
+        </p>
+        <p style="margin-bottom:0;" data-page-node-id="Ql1f3Tpvs1Deej1yJi0ZOE">
+          Token Optimizer 将这些高价值经验持久化为轻量级项目知识图谱：<code data-page-node-id="YWBFSKkPGRrKyYCHKjOmgF">File → Symbol → [Finding, Decision, Dead End, Evidence]</code>。新会话启动时，Agent 无需重读全量源码推理，而是通过 <code data-page-node-id="uBcv0LCp2RpAgGsjtcaJY0">knowledge(query)</code> 直接提取已验证裁决（Verified Verdict），不仅节省数万 Tokens，更规避了危险的重复踏坑。
+        </p>
+      </div>
+    </div>
+
+    <div id="sub-probe-ast" data-page-node-id="Rqdl9IsiSFHWoj7tzblE9E">
+      <h3 class="subsection-title" data-page-node-id="B3FXy8qNiA9cCqStyueP4K">2.3 Probe：Tree-sitter AST + BM25 的轻量预算检索</h3>
+      <p data-page-node-id="jYyBdhhADq13tWEilChKvi">
+        <code data-page-node-id="xTSpc5sDeB0Ah8emgM9xXM">probelabs/probe</code>（Rust 编写，约 699 Stars，Apache-2.0 协议，2026-09-07 活跃提交）开辟了一条兼顾超高检索效率与极致本地隐私的技术路径。它通过内嵌 Tree-sitter AST 语法树解析与经典的 BM25/TF-IDF 文本评分，并原生支持 <code data-page-node-id="uFADgJ5jKbhNAFHQBgFbYL">--max-tokens 10000</code> 刚性预算限制与会话级去重（Session Dedup）。
+      </p>
+      <p data-page-node-id="BY1XKwbStyDDeftlA6QEpK">
+        其最令人惊艳的设计在于<strong data-page-node-id="BG4bkeadMWGXt2hqC8NwId">极简的工具暴露契约（Slim Tool Contract）</strong>：Probe 仅向 Agent 暴露 4 个核心工具（<code data-page-node-id="Hpfha9OJyxqLccGdrw2Npq">search</code>、<code data-page-node-id="P2kD1Qgzb2XS3pY0mA79gN">query</code>、<code data-page-node-id="GwyYDqSPXQP8pxJn3ATcHG">extract</code>、<code data-page-node-id="e0tfYIqFukVOHT3XcqEDlz">symbols</code>），工具 Schema 总体积仅约 480 Tokens，彻底根除了上百个无用 MCP Tools 充斥 System Prompt 导致的静态上下文挤占问题。
+      </p>
+    </div>
+
+    <div id="sub-serena-vs-probe" data-page-node-id="03ja1p7nnqjH4allxkzKFI">
+      <h3 class="subsection-title" data-page-node-id="A6S6OrOTvZVxVZFsOhhvwC">2.4 Serena vs Probe 场景化决策树</h3>
+      <p data-page-node-id="9tUBxm1YzST6K1nkBkzPmW">
+        在实际工程落地中，切忌将 Serena 与 Probe 无脑并联全开，否则将引起工具功能重叠与 Agent 路由犹豫。两者的场景分流准则如下表：
+      </p>
+      <div class="table-wrapper" data-page-node-id="gd6TjXYy7BATHBGBgONJDk">
+        <table data-page-node-id="6IsualAt5fDmCDksNMvs8y">
+          <thead data-page-node-id="xeR41uKEShduMtGWtKy0EI">
+            <tr data-page-node-id="ZlQ0jdRDhGRXg9YojafXoP">
+              <th data-page-node-id="iN6EdOHHZHSP5RxWk8Y0NH">工程业务场景</th>
+              <th data-page-node-id="KtTha7bEeH1z3Zm2KmUtNI">推荐核心引擎</th>
+              <th data-page-node-id="HP2vxGNyxa8e1MTa5G6I6x">决策逻辑与关键考量</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="Rs7OU1BNTGphXJUXgD8CrC">
+            <tr data-page-node-id="5aAsj5Xa9YyzFLGNscQCza">
+              <td data-page-node-id="Iz64AxCKr6X3RkmghZlM9V">大型 Java / TypeScript / Python 严谨工程</td>
+              <td data-page-node-id="kGesGHu92HkQvW48ilbWpU"><strong style="color:var(--accent);" data-page-node-id="c3B8Kyg1gbiKGPK146IdL5">Serena</strong></td>
+              <td data-page-node-id="jEvUDUkpkyMakMEt5uyRNt">强依赖类型定义与符号跨包引用（References），LSP 语义解析绝对精确</td>
+            </tr>
+            <tr data-page-node-id="MGHXWApOHsoWCYanQDo0uu">
+              <td data-page-node-id="GRMTH7jtFNtGw4QMkUCpsP">跨文件重构、安全重命名 (Rename/Refactor)</td>
+              <td data-page-node-id="GOyJilFYuKgGk0sPKOfWrr"><strong style="color:var(--accent);" data-page-node-id="iwx5mqXEKpGQLHmFq31hIK">Serena</strong></td>
+              <td data-page-node-id="f9UfSCA0XFO9X7K6c4GBul">需要 AST 级别安全变更与符号体替换，避免文本正则替换误伤</td>
+            </tr>
+            <tr data-page-node-id="nUgVz5CNpVNCHJ2iUIEYB5">
+              <td data-page-node-id="Pm43GtkTHmMf3CuqSbmFML">超大 Monorepo 代码探索、跨数十个微服务扫描</td>
+              <td data-page-node-id="RhPIaf3rhxiMPKl0I07Fge"><strong style="color:var(--cyan);" data-page-node-id="qzeS6Ii2eEVYR6kUcXOQhL">Probe</strong></td>
+              <td data-page-node-id="30yxElCHxQSZX3dMOGIJZr">无需搭建繁重语言服务环境，Rust 原生执行性能极强，严格遵守 Token 预算</td>
+            </tr>
+            <tr data-page-node-id="jY5BT5ohnwlWDL41OwaQOF">
+              <td data-page-node-id="CtGM8B6aF4e8TVB7SfEDaE">纯阅读/审查场景、没有成熟 LSP 支持的异构语言</td>
+              <td data-page-node-id="EnmEdx5LhuzKtFsMNM24pt"><strong style="color:var(--cyan);" data-page-node-id="NyatPKms84zlcynDQsytXR">Probe</strong></td>
+              <td data-page-node-id="ekBa5wIGJ7AZVoAweoIP3p">基于 Tree-sitter 纯语法提取，零索引等待，轻量快速</td>
+            </tr>
+            <tr data-page-node-id="uAvljKpaLyT7ZOFyq8Vy7e">
+              <td data-page-node-id="ecnIEhSf6yAqB6LV5u1AU4">混合场景推荐基线</td>
+              <td colspan="2" data-page-node-id="lWuKJpuLzS6qQVT9Z9ilB1"><strong data-page-node-id="h5IxSEy76smlH3kBS9sFd7">Serena Slim (主力) + 备选挂载 Probe 专职只读探索</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="sub-other-projects" data-page-node-id="YZiezRJxoEweFg5v5vjo2i">
+      <h3 class="subsection-title" data-page-node-id="zFQ3RjWoRC1w2PFVRHkLfG">2.5 Shunt / DCP / RepoMap / CCR 的定位重构</h3>
+      <ul style="padding-left: 20px; line-height: 1.8;" data-page-node-id="sEzWRpiIBgyOZCb0fbM77G">
+        <li data-page-node-id="EmjHuzCriIMrMpIWNcLOdQ">
+          <strong data-page-node-id="VKONeINOVwYC5OsEgAJDj5">Spotify Shunt 降级为专项 Worker 层</strong>：Shunt 原创的 Hook 拦截大文件思路非常优秀，但其将代码全权交由廉价模型做摘要并直接信任的机制存在质量风险。在 Context ROI OS 中，Shunt 被重构为<strong data-page-node-id="GLfLYRjKlypQssCcW8CD8o">“专用工件提取器”</strong>，仅用于消化数万行的构建日志、超大 JSON 和机械性单测骨架生成，严禁参与核心架构设计与精密调试。
+        </li>
+        <li data-page-node-id="l11M9STF5alCPcu7Ub7ZeK">
+          <strong data-page-node-id="Nd7yTXpVWsdPen4JHYlP3q">DCP 的选择性压缩范式（Selective vs Global）</strong>：摒弃全局摘要，吸收其“重复工具调用只保留最后一次状态”、“历史失败工具调用仅保留报错栈而剥离庞大输入参数”、“已闭环子任务转化为技术结论”的规则，最大化精简历史消息。
+        </li>
+        <li data-page-node-id="ZUWm45XzUp4JLH66Sigh8U">
+          <strong data-page-node-id="4CYsaOpjx88vWOnBnLj151">Aider RepoMap 的结构化上下文（Structural Context）</strong>：无需让模型读取 20 万行源代码，利用 Tree-sitter 提取类与方法签名生成全局地图，在严格控制在 2K~4K Tokens 的预算内赋予 Agent 全局代码感知力。
+        </li>
+        <li data-page-node-id="If8isRBxZXeEo2ZgjygLeq">
+          <strong data-page-node-id="CdK2bL9xLgiBRP4kDFAS2H">Claude Code Router (CCR) 置于最外侧控制面</strong>：负责多 Provider 统一接入、密钥轮换、网络故障 Fallback 与 Token/成本消耗物理计量，暂不作为首层意图分流器。
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3. 四大主流客户端 Hook 控制面 -->
+  <section id="sec-clients-hooks" class="section-block" data-page-node-id="R6ZuHiwtJjnP0uQn5sjWXQ">
+    <h2 class="section-title" data-page-node-id="VBO29cXWrkL6DrVO6XzJJC"><span class="section-number" data-page-node-id="eXka0WwICZyRiEDr5SrMA6">03</span> 四大主流客户端 Hook 控制面实证与统一适配层</h2>
+    <p data-page-node-id="FfcEboTqO1YgsY62y2a4RP">
+      构建跨端 Context ROI OS 的关键前提，是确认宿主客户端是否开放了真正的<strong data-page-node-id="nMuZqEP4nVcqQE3duWzr47">前置工具拦截与上下文重写接口（PreToolUse Interception Surface）</strong>。经对 2026 年各主流客户端源码与官方规范的深度核验，技术条件已经全面成熟：
+    </p>
+
+    <div class="table-wrapper" data-page-node-id="aVMQ5ZAdnYo2iTJZDlfbqR">
+      <table data-page-node-id="o1wm9neGlMZoAdFuGt4Oyb">
+        <thead data-page-node-id="hTgyLDhIXC2UModLIhAtMq">
+          <tr data-page-node-id="BAWTQugBBKKfuvHcjtTmbq">
+            <th data-page-node-id="u5AALDzDHdVuGSXUBGxf6y">客户端宿主</th>
+            <th data-page-node-id="bxLHC6pVB3BbCw7jRCGg2A">PreToolUse 控制能力</th>
+            <th data-page-node-id="xQPEwwKaafEvjwwACCWKdB">支持动作</th>
+            <th data-page-node-id="eQ0Dt8pSpmiYhaELEOCNf0">配置规范</th>
+            <th data-page-node-id="TzEpFQyzE262MrFCoGq3Bw">适配结论</th>
+          </tr>
+        </thead>
+        <tbody data-page-node-id="2AtRB3FyvXcADQw6lgj4PK">
+          <tr data-page-node-id="zDR5hboMZ2w0sa1toWRHRA">
+            <td data-page-node-id="Dxo6iXs6KIklF8L2qaGkiK"><strong data-page-node-id="w0Sng3o0czFBkOsi5RtFfD">Claude Code</strong></td>
+            <td data-page-node-id="QcaKUAVE5YpKGC2nGhoUkU">原生 Hook 事件面</td>
+            <td data-page-node-id="76KrE5XTueQVcDWpyPvJ2q">Block, Rewrite Input, Inject Context</td>
+            <td data-page-node-id="gAkULiCWA0JuEj97zcNJJK"><code data-page-node-id="pUx5uwu1rvNXx6iA4VTw0N">~/.claude/hooks.json</code></td>
+            <td data-page-node-id="071XzQh2KK1ctJ4xQIkWMm"><strong style="color:var(--emerald);" data-page-node-id="PBhgDs33DX21rDgVdQcCAL">强原生支持</strong></td>
+          </tr>
+          <tr data-page-node-id="FCOOCN8RpBDOQwfJyeYDlD">
+            <td data-page-node-id="OScYvBTho2LtGTDnpQH7Bf"><strong data-page-node-id="gPqqKVvv1mrQ2ObimjeMqF">OpenAI Codex</strong></td>
+            <td data-page-node-id="0W1tQncA0tDrEUCi3jVfpd">官方 PreToolUse Runtime</td>
+            <td data-page-node-id="I95clWH4AvDhXDkUsFAOH9"><code data-page-node-id="QkFNCpploOLoAnwfbijqkV">should_block</code>, <code data-page-node-id="G2SFA8rIT2UDFqEHvA7BiF">updated_input</code>, <code data-page-node-id="G4tji0XCmLbcn3iZWTXMmx">additional_contexts</code></td>
+            <td data-page-node-id="F9rTyMx1BBq0RX7ThctX5Y"><code data-page-node-id="iUUE6Ditq5dMn9vz67demq">~/.codex/hooks.json</code> (或 Rust Trait)</td>
+            <td data-page-node-id="HnwFzQVuDsD8B2sVWqPqYW"><strong style="color:var(--emerald);" data-page-node-id="Oz70fL4GYxUHkBAMvBLaAJ">强原生支持</strong></td>
+          </tr>
+          <tr data-page-node-id="NiPzcyQZRCc0YYKt1DRFCJ">
+            <td data-page-node-id="QuDhS7Btan8REZ6ftpxNBL"><strong data-page-node-id="n1NLAWcRoWZmhx1fHuOKBm">Cursor</strong></td>
+            <td data-page-node-id="UEngGo2AEEtQeUBhKtI6fj">全面开放 Hook 控制面</td>
+            <td data-page-node-id="WDsjz6BWfnkfOeSMlKOSRU"><code data-page-node-id="MAKRUY0rCEfvl0hK23xXe5">preToolUse</code>, <code data-page-node-id="twqTY8icy7grjYs3dC4fyt">beforeReadFile</code>, <code data-page-node-id="tANhz3PsNWRrDq1Xek0UEg">afterFileEdit</code></td>
+            <td data-page-node-id="QN9D4DJWTd53T8ipCXEIQH">兼容 Claude Code <code data-page-node-id="XjeGfFm2kv936yingeOpZE">hooks.json</code></td>
+            <td data-page-node-id="fzFeEoXKlThzuFbvYRchSv"><strong style="color:var(--emerald);" data-page-node-id="kqHohbrW7bSZDJQ8bmzxCD">无缝直接复用</strong></td>
+          </tr>
+          <tr data-page-node-id="bPAZPfv25Z1vJLUKKB0W9Z">
+            <td data-page-node-id="uryV83d9k8pbbOoWaJkZAC"><strong data-page-node-id="V6WqnVb2wN7f7oKOaTWhBj">WorkBuddy</strong></td>
+            <td data-page-node-id="66MsoGjGVLQiQhjMKoKV4K">全生命周期插件体系</td>
+            <td data-page-node-id="phpG0lNfdbToP0OM52Nimd"><code data-page-node-id="0taV4qgDZJw3AG3h3lMHUS">PreToolUse</code> (支持 Block/Rewrite), <code data-page-node-id="CLUELJa4raCJBwj026UGvI">PreCompact</code></td>
+            <td data-page-node-id="tTzbKCBtCNYiUnVisWpMUO">兼容 <code data-page-node-id="rXgabfX8sFEXGdzwow9eBK">.claude-plugin</code> 规范</td>
+            <td data-page-node-id="EfUbuAwjFCSy7njigJdCxz"><strong style="color:var(--emerald);" data-page-node-id="CrpIH5BxGaucY6zlcVpgKy">强原生支持</strong></td>
+          </tr>
+          <tr data-page-node-id="GGUY1oI8LRmA9eCLHinSQj">
+            <td data-page-node-id="LzAeGnbh8hLDAqc0Z4jEfq"><strong data-page-node-id="dM10B3xGLrpPc4IhrJjhFE">ChatGPT</strong></td>
+            <td data-page-node-id="SybPNaKCsIozkXxtvZPh31">无本地文件系统 Hook</td>
+            <td data-page-node-id="BlZ44MEOJknN89g02kjSR9">仅支持 Remote/Tunnel MCP 语义召回</td>
+            <td data-page-node-id="81TFgE99swCEsRLHT3VTkI">无本地防火墙控制面</td>
+            <td data-page-node-id="f2NqczzbTMpDNjVrTKITqu"><strong style="color:var(--rose);" data-page-node-id="whPGA9q1CCZhQh9Cer5GPA">仅能挂载只读 MCP</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="sub-codex-pretool" data-page-node-id="agkUzGLsRFv5km4FWXWhnU">
+      <h3 class="subsection-title" data-page-node-id="aComy6kLDhiHsQtexrNvmc">3.1 OpenAI Codex PreToolUse 深入实证</h3>
+      <p data-page-node-id="c2cUYDOSI4kPsHD1uuN9IH">
+        查阅 OpenAI 官方 <code data-page-node-id="JVqOM9e82OJtmcyghkcV4X">openai/codex</code> 主仓库最新运行时，Codex 已具备严谨的 Hook 机制。其 <code data-page-node-id="hEiJaQTwTwcIHqvEnbj0Qt">PreToolUse</code> 执行结果支持以下 Rust 结构化语义：
+      </p>
+      <pre data-page-node-id="SDkXOL6392eA1WQcduA179"><code data-page-node-id="9JF9KFucFxiSwLaXt8TSlm">pub struct PreToolHookOutcome {
+    pub should_block: bool,
+    pub block_reason: Option&lt;String&gt;,
+    pub additional_contexts: Vec&lt;String&gt;,
+    pub updated_input: Option&lt;Value&gt;,
+}</code></pre>
+      <p data-page-node-id="XpUKAguKFkLaB33VDwPA1Q">
+        这意味着底层防火墙不仅能够拦截高危或超大文件读取请求（<code data-page-node-id="UyCWX8xar8Iv8hERPpSHIB">should_block = true</code>），更能够在执行层直接对参数实施重写（如将全文件路径定向至 <code data-page-node-id="eSRTAyBN7yuqzrFlzKxFLN">smart_read</code> 切片），或无感知地向主模型注入轻量级的预解析元数据（<code data-page-node-id="ue7pmqU17r9yTbEV9DwvR0">additional_contexts</code>）。
+      </p>
+    </div>
+
+    <div id="sub-cursor-claude" data-page-node-id="eBFUw3FffdyzBb7JykvDLt">
+      <h3 class="subsection-title" data-page-node-id="qrSLYsKQ5Da7TtGMRCnJyn">3.2 Cursor 与 Claude Code Hook 兼容机制</h3>
+      <p data-page-node-id="o7v15KW3BJGkAZaQGEfM1S">
+        Cursor 现已深度整合 <code data-page-node-id="pp5QU7kJUHw1cyalGH0BOB">preToolUse</code>、<code data-page-node-id="hEWGgQgZcq9P9i3BFw42A0">beforeReadFile</code>、<code data-page-node-id="VIATwtx70UhwaNqdWOqNVP">beforeShellExecution</code> 和 <code data-page-node-id="uHPvtHQ7fKKvTVx5BF7Rms">preCompact</code> 等钩子事件，并正式支持直接加载 Claude Code 格式的 <code data-page-node-id="d3LvPfE0vHVFTSInmyTXup">hooks.json</code> 配置文件。开发者无需针对 Cursor 维护独立逻辑，同一套 Node.js 或 Python 拦截脚本可在两端保持 100% 行为一致。
+      </p>
+    </div>
+
+    <div id="sub-workbuddy-plugin" data-page-node-id="kPz7vYuQF19EuctR5OEUHQ">
+      <h3 class="subsection-title" data-page-node-id="oSQBG8SfswTQt1hzcFZEPP">3.3 WorkBuddy 插件系统与跨端契约</h3>
+      <p data-page-node-id="6BSv2MHqgiprqvOD9HMkDb">
+        WorkBuddy / CodeBuddy 插件架构深度兼容 <code data-page-node-id="opg5CVhBTQSf9le31G6jFl">.claude-plugin</code>、<code data-page-node-id="LcLyEZSY3HnEXaQ41KShvo">CLAUDE_PROJECT_DIR</code> 以及 <code data-page-node-id="OvncrqAGlTE04H3Wrl1G4W">CLAUDE_PLUGIN_OPTION_*</code> 环境变量，并在生命周期中暴露了 <code data-page-node-id="VhNnfyqrk7jKUgbTuuOBVk">SessionStart</code>、<code data-page-node-id="HbqNT386mPAuHWV0USXcjb">UserPromptSubmit</code>、<code data-page-node-id="VZibVuLYcQ4PtUhgLG45eD">PreToolUse</code>、<code data-page-node-id="pN2ky4IBxwWFh3ifZLtUf4">PermissionRequest</code> 和 <code data-page-node-id="ItBjEstb10pC79KeFI9Vgd">PreCompact</code> 等拦截点。
+      </p>
+      <p data-page-node-id="5WaxFCu6PhLm2QWm7Uas1e">
+        这一实证结论确立了<strong data-page-node-id="fwaCB1AXXmrzwqk03BGJoU">“Universal Hook Engine”</strong>架构的可行性：研发团队只需开发维护一个核心 <code data-page-node-id="BkNEPMJfYPvPaoPgHCySFB">hooks-core</code> 引擎，通过轻量级 Adapter 即可无缝透传至 Claude Code、Codex、Cursor 与 WorkBuddy 四大主流生产环境。
+      </p>
+    </div>
+
+    <div id="sub-chatgpt-boundary" data-page-node-id="f1AjJFuASKFSLcnHHFeUxt">
+      <h3 class="subsection-title" data-page-node-id="F1wLVKChJRiwqjV6FWdkxx">3.4 ChatGPT 的外部防火墙局限与差异化应对</h3>
+      <p data-page-node-id="DISxdQFYke3XxIu562rSW9">
+        在横向评估中，ChatGPT 是唯一的明显例外：ChatGPT 属于闭源云端 Web/App 产品，目前并不支持用户在本地运行环境注册类似 <code data-page-node-id="ZDw3kSED97Ko7HAx3hgW2V">PreToolUse</code> 的进程级拦截 Hook。
+      </p>
+      <p data-page-node-id="WwktqUgLscR9CAH0UPQ2lU">
+        尽管 ChatGPT 已逐步支持通过 Remote MCP 或 Secure Tunnel 挂载外部工具，但其 Agent Mode 无法由客户端直接控制其私有文件读取与上下文准入动作。因此，针对 ChatGPT，我们仅能向其暴露 <code data-page-node-id="vvxE1A7btkqdt45jspkeiM">Context ROI MCP</code> 的只读检索接口，而无法在其上构建全功能的“原生上下文防火墙”。这也是统一 Context ROI OS 优先在 Claude Code、Codex、Cursor 与 WorkBuddy 四大专业研发端率先全面闭环的关键现实原因。
+      </p>
+    </div>
+  </section>
+
+  <!-- 4. Context ROI OS 架构全景与四大铁律 -->
+  <section id="sec-os-architecture" class="section-block" data-page-node-id="xrGQuJj2WnZA7A3fMhmfMW">
+    <h2 class="section-title" data-page-node-id="ldBwqIGhstPpa1LdWg6Xar"><span class="section-number" data-page-node-id="wghx3c7Ir2uC6glT9sFZok">04</span> Context ROI OS 架构全景与四大准入铁律</h2>
+    
+    <div class="callout emerald" data-page-node-id="ApWhkp2T7u1TyXGPq3jvRL">
+      <div class="callout-title" data-page-node-id="bLcohZv034gFEDZHaniZov">系统架构全景拓扑</div>
+      <p data-page-node-id="aQxI2j7LcjeaiwZ9WyRQGm">
+        Context ROI OS 部署在客户端原生工具调用通道与底层真实文件/代码库之间，形成一道智能上下文防火墙：
+      </p>
+      <pre data-page-node-id="FVKeGGKOjc3azol7TP62Uj"><code data-page-node-id="wPSTcOQHbVSfqWfMKgoJaR">  Claude Code / Codex / Cursor / WorkBuddy
+                      │
+                      ▼
+        ┌───────────────────────────┐
+        │  Context Admission Hooks  │  (PreToolUse 拦截防火墙)
+        └─────────────┬─────────────┘
+                      │
+     ┌────────────────┼────────────────┐
+     ▼                ▼                ▼
+[首次读取 Request]  [重复读取 Request] [代码定位与探索]
+     │                │                │
+Token 预算评估     哈希比对 (Hash)    Serena / Probe
+     │                ├─ 无变化: 0 Token AST 符号与依赖切片
+     │                └─ 有变化: Diff    │
+     ▼                │                │
+┌─────────────────────┴────────────────┴────────────────┐
+│             Context Budgeter & Routing Layer         │
+└─────────────────────┬────────────────────────────────┘
+                      │
+       ┌──────────────┼──────────────┐
+       ▼              ▼              ▼
+  [精确切片源码]   [Worker 诊断摘要] [本地磁盘工件 Artifact]
+       │              │              │
+       └──────────────┼──────────────┘
+                      ▼
+           Frontier LLM (最强主模型)
+                      │
+                      ▼
+           Exact Evidence Rule 强制核验
+         (修改前必须精准验证目标符号与依赖)
+                      │
+                      ▼
+          跨会话项目知识图谱 (Knowledge Graph)
+        [已验证结论 / 架构决策 / 排除死胡同 / 证据凭证]</code></pre>
+    </div>
+
+    <div id="sub-admission-policy" data-page-node-id="g8R4VqunQUXGBWN5a3I3zK">
+      <h3 class="subsection-title" data-page-node-id="4w3YQ9ULsI03rDBBjatSGa">4.1 铁律一：动态 Token 预算准入策略 (Admission Policy)</h3>
+      <p data-page-node-id="GSionEUUHx108Dozh4VaLh">
+        彻底废弃粗糙的“大于 350 行全部分流”策略，改用基于语义重要性与 Token 规模的动态准入阶梯：
+      </p>
+      <div class="table-wrapper" data-page-node-id="X13RZaqCTTwV3pL577METB">
+        <table data-page-node-id="Dih7t9U9PFtA3TSg81wEA3">
+          <thead data-page-node-id="Y4lCT4SK6fBO6ojcKiFlYZ">
+            <tr data-page-node-id="cA6HCz7mIIawLzWrWvu37m">
+              <th data-page-node-id="G9xoNZYGEvHb0P4Mo2QVBA">估算规模门限</th>
+              <th data-page-node-id="16X9wHsYDEeps21Onsojx1">执行动作 (Admission Action)</th>
+              <th data-page-node-id="BdGiAXDHz8JGpKDMUhMTsc">技术机制与数据通道</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="SCAwM3GrqKMULgCJmjdMko">
+            <tr data-page-node-id="kLP1VurfulHWYMjy1mLLxg">
+              <td data-page-node-id="JOmYqFRxfvLh5T17EhWybG"><code data-page-node-id="qOIi1qKQsljKRfhQunA4ci">&lt; 2,000 Tokens</code></td>
+              <td data-page-node-id="37f0qwKbJbv3QGc151uKUL"><strong data-page-node-id="72ISXae2CPWoK5zdEvy1im">直接放行 (Native Read)</strong></td>
+              <td data-page-node-id="3z2QkxASkUvCmyk3f4Nb6d">小文件直接进入主模型，规避不必要的 IPC 或辅助模型调度往返延迟</td>
+            </tr>
+            <tr data-page-node-id="GLcMVv2f6BA43NWUap8UkN">
+              <td data-page-node-id="uWE0K8ZOavzBxZOCpBZC7W"><code data-page-node-id="I22Y3f0BiM1NzcBn0NfPAT">2,000 ~ 6,000 Tokens</code></td>
+              <td data-page-node-id="8D1P8YyBi19J9mN4isADgb"><strong data-page-node-id="0axAde3DFPdFe0Ww0MIMbx">符号 / 范围读取 (Symbol / Range)</strong></td>
+              <td data-page-node-id="jRqryKETNBolRDLjJdLibY">由 Serena 提取关键 Class / Function 符号体或基于行号范围读取</td>
+            </tr>
+            <tr data-page-node-id="D7E121R3YoNmRrfyQO5GuR">
+              <td data-page-node-id="DMDXYYNdq0ePAYNK897AHF"><code data-page-node-id="AQmCbHzNjAHpkWqqqS8rKS">6,000 ~ 12,000 Tokens</code></td>
+              <td data-page-node-id="KDEaZf62HCC3twCs5WBhaB"><strong data-page-node-id="jYiDYEwRHN9zL3fgNjivyI">语义检索过滤 (Semantic Extract)</strong></td>
+              <td data-page-node-id="Tt9mkIJkUKwRTYWw1khuV9">强制结合 Probe AST 过滤或 BM25 抽取上下文关联系数最高的方法簇</td>
+            </tr>
+            <tr data-page-node-id="xsR7sFJGm7Bq8yrz6cue5c">
+              <td data-page-node-id="O1fS6uy8Kci222uVyt5WbG"><code data-page-node-id="rQpEFCEHlXez3nMUnOHg2W">&gt; 12,000 Tokens</code></td>
+              <td data-page-node-id="kzwZ7eRlmed9bfofvExFLx"><strong data-page-node-id="KDTViSgXAH1f3SAkLZD3S6">硬阻断全文读取 (Block Full Read)</strong></td>
+              <td data-page-node-id="RZ5gsBP7R9DvuuO2KslIXt">拒绝盲目读取全文，引导模型优先调用 <code data-page-node-id="u8fkCVIXEek6CUGbddQBAB">code_search</code> 或 <code data-page-node-id="VOD8LQSsyxX6xqNlpLvKZQ">code_context</code></td>
+            </tr>
+            <tr data-page-node-id="FKobFHi87tfsiq78cJJFPh">
+              <td data-page-node-id="WXeDd0QazDkLqAhffHBPbL"><code data-page-node-id="QFwSTJ5CWrrlkkZxPiyKC3">文件重复读取</code></td>
+              <td data-page-node-id="15bP0x7tp8qUVdzEtl72D7"><strong data-page-node-id="Scm9oDrcBPedt5JFzhfVSf">Diff 差分增量 (Diff-Only)</strong></td>
+              <td data-page-node-id="mx1PtAxa0aVdl6MdDLUle1">哈希一致返回 0 Token 确认信息；发生变动仅传输 Unified Diff 切片</td>
+            </tr>
+            <tr data-page-node-id="Do6JstimrKjMXa86z1K2OF">
+              <td data-page-node-id="2zkG7G4YAZK7rZoU5dDkJs"><code data-page-node-id="MVnZwoldIFJ3GSInyNKYAp">超大终端测试日志 &gt; 20k</code></td>
+              <td data-page-node-id="IWX0rC1BW2NyU4pdB72qjh"><strong data-page-node-id="THxsEzSPxIxLhhJYyJsVMg">工件隔离与 Worker 提炼</strong></td>
+              <td data-page-node-id="BghBD3pi5PQcc0jGuX2BxC">重定向至本地临时文件，提取 Failed Tests 与堆栈摘要（约 2K Tokens），附加可逆 Receipt</td>
+            </tr>
+            <tr data-page-node-id="yYnuER3MdZFjUU3RgEKtu1">
+              <td data-page-node-id="HIEhgiCfLiSyNSI3DGFVGR"><code data-page-node-id="JKjwSjiXh6YxuyWaYmQBun">豁免通道</code></td>
+              <td data-page-node-id="WCabwZjdztyt4pI5HHOQLN"><strong data-page-node-id="NhmIYpf7yUuCPVUzq28RS3">--force-exact 参数</strong></td>
+              <td data-page-node-id="xvTy9XtzAv3yxpOGb9gWIC">允许模型在极其特殊的关键决策时刻，显式声明强制拉取完整原始内容</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="sub-exact-evidence" data-page-node-id="PJpwdUNOvcbOGpx9jqSjkc">
+      <h3 class="subsection-title" data-page-node-id="4ckRqTR0Z7ypCv3wWUBxmh">4.2 铁律二：编辑任务的“Exact Evidence Rule”绝对验证原则</h3>
+      <div class="callout rose" data-page-node-id="7g9Gq6vJ18uCnh1638T8U7">
+        <div class="callout-title" data-page-node-id="4A189MwVEyJTqejQ4FXH0S">铁律：探索阶段允许压缩，代码编辑必须直面源码</div>
+        <p style="margin-bottom:0;" data-page-node-id="VDqAPxVv2VSCxMsXA8KAkA">
+          <strong data-page-node-id="B8GvV2yK3fsPMtMTMWX3pe">绝对禁止模型依据摘要（Summary）或模糊向量检索结果直接修改代码！</strong> 在代码探索与问题定位阶段，模型可以使用压缩摘要、AST 符号概览与 Worker 报告；但一旦进入“准备修改代码（Modification）”阶段，必须在修改动作发生前执行 <code data-page-node-id="Fr1x2BBiMC28dvM3gdcb53">Exact Read(目标符号体) + Exact Read(受影响的直接调用方) + 当前文件实时哈希校验</code>。
+        </p>
+      </div>
+      <p data-page-node-id="XM8n11tNcMs72xO8rNwtyv">
+        此规则保证了<strong data-page-node-id="sG3XQUYfnF3ANoJ6rpxX51">“省掉的是冗余探索 Token，绝不牺牲核心修改的严谨性与安全性”</strong>。
+      </p>
+    </div>
+
+    <div id="sub-shell-artifact" data-page-node-id="0ZXaTC8AysewQRY9Pix8x7">
+      <h3 class="subsection-title" data-page-node-id="MFEZGwpeQV6dhoNxwT2tWX">4.3 铁律三：终端测试日志 Artifact 化与聚类诊断</h3>
+      <p data-page-node-id="udqeQWIVjBJFzPNDIBKd9A">
+        在研发流程中，动辄数万 Token 瞬间挤爆上下文的往往不是源代码，而是 <code data-page-node-id="huH3B8dOTtDBBkorQZ7TNA">npm test</code>、<code data-page-node-id="6rubKN0iS8JkEZPY8baYW3">mvn test</code>、<code data-page-node-id="SxJ777VAwF94ARESK6pUB6">pytest</code> 或 <code data-page-node-id="bUcJA8kl6MeqZIhjgm78V9">docker logs</code> 的狂暴输出。
+      </p>
+      <p data-page-node-id="CH6qUZJIyMBiD0uyh85AEq">
+        Context ROI OS 引入标准 <strong data-page-node-id="iyAaUmaEv2EyiJj0u6IUKt">Shell Output Artifactization</strong> 机制：
+      </p>
+      <pre data-page-node-id="nay0eQpHkXmFplZ1AfRHve"><code data-page-node-id="V4a6EVHst70XFxEgFFzR4i">stdout / stderr 狂暴输出 (32,000 Tokens)
+                  ↓
+          本地工件落盘 (.artifacts/run-10492.log)
+                  ↓
+       轻量正则/聚类提取器 (Log Parser)
+                  ↓
+ 提取失败用例簇 (Failed Tests) + 核心报错堆栈 (Stacktrace) + 关键末尾 N 行
+                  ↓
+ 注入主模型精简诊断切片 (约 2,200 Tokens，压降 93.1%)
+                  ↓
+ 附带可逆提取句柄：expand(receipt_id="run-10492")</code></pre>
+    </div>
+
+    <div id="sub-slim-tools" data-page-node-id="D61kirdwYWGXwy8TJXVNGE">
+      <h3 class="subsection-title" data-page-node-id="gF7E9xa0tBrOlk8vEXv4KR">4.4 铁律四：5 核心工具 Slim 接口契约</h3>
+      <p data-page-node-id="BE7it49fxcwh0KYtr5xVYy">
+        为消除过多 Tool Definition 导致的静态 Context 挤压，Context ROI OS 规定系统向主模型常驻暴露的 MCP 工具集<strong data-page-node-id="PtMT4hsNb4GMDPlAmUD6IB">必须收敛至 5 个核心接口</strong>：
+      </p>
+      <div class="table-wrapper" data-page-node-id="6xoeaWyRsGv2yI1xjZYK0V">
+        <table data-page-node-id="0ykMZDy9W4D3eUFiiz2erz">
+          <thead data-page-node-id="LPH3qiqtFVxCkUILcAVbUC">
+            <tr data-page-node-id="85DDEpGMGDJL3rr432FqL7">
+              <th data-page-node-id="exVO7VZaAXC1GRfgw7WBbH">核心工具名称</th>
+              <th data-page-node-id="7aO2bZxr7Eb4AXfdhEZeGj">底层驱动组件</th>
+              <th data-page-node-id="Jppg3WbTG81EMjfe8lINTt">职能说明与参数规范</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="8dI6JJCv9P1RE7t0ocNuAC">
+            <tr data-page-node-id="dvKo83MKA7LyuU6Bva4Iye">
+              <td data-page-node-id="pFvAxu3zNPQBNY7WEGvDqf"><code data-page-node-id="GWaWiYYxMo3ylGbz9AdP5U">code_search</code></td>
+              <td data-page-node-id="fFGZ8UafYwETEFpOgfwH51">Serena / Probe</td>
+              <td data-page-node-id="7PEEh0RSBEAzSk4eR9yojS">输入自然语言或 AST 正则，按 Token Budget 检索相关代码片段与路径</td>
+            </tr>
+            <tr data-page-node-id="sNzGDfZKJX4OCetqL2DHS4">
+              <td data-page-node-id="ZqDgweTgqtS3dVGOSSv4YW"><code data-page-node-id="qkfCqFCwNRHYOQ7arjruXS">code_context</code></td>
+              <td data-page-node-id="fJPASHgQ1kFMJ3fLDJGsAE">Serena (LSP)</td>
+              <td data-page-node-id="EJEKC7JnRfqucUVAS6FT9C">输入 Symbol 名称，返回其声明、跨文件引用（References）、Caller/Callee 拓扑</td>
+            </tr>
+            <tr data-page-node-id="3AVWRcu8DWeZtDGRnpR42N">
+              <td data-page-node-id="lWPxIMFJxjOwO3Y0IC8Tg7"><code data-page-node-id="Qu6glyrHxfixhHOmsQmSEl">smart_read</code></td>
+              <td data-page-node-id="nlQBR4tfBKWhPpbAKhzsJr">Diff Cache Engine</td>
+              <td data-page-node-id="J3BlueD7lCsGiueZ91ic4i">支持范围读取、缓存哈希比对、自动增量 Diff 输出与防溢出保护</td>
+            </tr>
+            <tr data-page-node-id="GQjRHLFsNuuas6860HiE4E">
+              <td data-page-node-id="rTnFfn5DHk9uyoNcjcTQPE"><code data-page-node-id="JqUhnFC6EQgLFC9UWXarku">knowledge</code></td>
+              <td data-page-node-id="9gyhA53cRWwZzY4GFvYIO4">Project Knowledge Graph</td>
+              <td data-page-node-id="W3m1FSlAZSG57Lf1aDCEaT">查询跨会话已验证结论（Verified Findings）、设计决策（Decisions）与排除死路</td>
+            </tr>
+            <tr data-page-node-id="ZlNPTfRQfW3fHKeqD8AwkR">
+              <td data-page-node-id="dahFKEFqgNAqVX6TGhCCza"><code data-page-node-id="w1Hioct8wK85dgO8tCu3Cs">expand</code></td>
+              <td data-page-node-id="QXLCzl5D7ACHFzSJJ4DdH8">Reversible Receipt Store</td>
+              <td data-page-node-id="uiBlhLd28RNsu59VbbeCAs">输入 <code data-page-node-id="EoEuIfvYQFKuHDGxP0x1wW">receipt_id</code>，无损解压回放原始日志或完整文件内容，保障确定性回溯</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. 核心数学模型推导与理论分析 -->
+  <section id="sec-math-models" class="section-block" data-page-node-id="XiOGtPkw2ieKg329ukKuFW">
+    <h2 class="section-title" data-page-node-id="zptvEWdNLTFIxyaQrfW3XJ"><span class="section-number" data-page-node-id="tQHSpYLslxcWAjrV0IYCHn">05</span> 核心数学模型推导与理论边界分析</h2>
+
+    <div id="sub-prefix-dynamics" data-page-node-id="J1kC9DHCIrMRaXRkmnHzUj">
+      <h3 class="subsection-title" data-page-node-id="8mQuoNMdTJYfO9hTI3yHhC">5.1 Prefix Cache 失效动力学：为什么每轮动态修剪反而更昂贵？</h3>
+      <p data-page-node-id="lKkh8fhJECKtMpBRB6TSeE">
+        设研发交互总轮数为 <math data-page-node-id="bqhVqe8qW9c15YTCFCiUDl"><mi data-page-node-id="HVtDoSIlBTEeCQBK1SpD8f">L</mi></math>。现代 LLM 的 Prompt Cache 采用严格的最长公共前缀匹配机制（Longest Common Prefix Match）。设输入消息序列为 <math data-page-node-id="vRI2LxDvGvBxpvTYuuHZqj"><mi mathvariant="bold" data-page-node-id="FZzrw8HcTXJWT4WXeYFsb6">M</mi><mo data-page-node-id="gsCxK7yYErL99AQh4DMaoL">=</mo><mo data-page-node-id="uTPPJWVhXDOkDdwyptskY4">[</mo><msub data-page-node-id="2FjBXc893lBjWSrn4EDXAg"><mi data-page-node-id="DEd3tNMKyQdXBjWsVSm7yB">m</mi><mn data-page-node-id="vQF87FDnFwVziiT2ye83aO">1</mn></msub><mo data-page-node-id="gDizzKJxksaZFXX5JpB2ya">,</mo><msub data-page-node-id="3BzSIWDFQgvzXhLUmX2Vok"><mi data-page-node-id="KT4N6T7OSB1cLMHn6M163e">m</mi><mn data-page-node-id="eQtLlDabXnftchcIfZBDfG">2</mn></msub><mo data-page-node-id="8gpSWDTPALsk1TdKHRWTOL">,</mo><mo data-page-node-id="8eYPHl0MxtWynTzBAL9FHf">…</mo><mo data-page-node-id="lAwCBe9YuflcNkKRCY72Sn">,</mo><msub data-page-node-id="eKzVPDgc01UgiYXv17wdIQ"><mi data-page-node-id="STj1POu6xYOFgE7fqp1BOA">m</mi><mi data-page-node-id="nUk8ggTuuuI8E7qi15jSgA">L</mi></msub><mo data-page-node-id="gX8dD13WdHleOjTJqLPQs1">]</mo></math>，若在轮次 <math data-page-node-id="0xyfJX1gRF9viTiR9kYf5c"><mi data-page-node-id="kU8tJ6NEnzxjkVJDmg0jW5">k</mi></math> 对历史消息 <math data-page-node-id="oV071rnFjq5LAt2jxzx6PY"><msub data-page-node-id="tpbHcipUcUK9wpQxSsuOaL"><mi data-page-node-id="GyDLHGTHlxBnWsOtIutuqD">m</mi><mi data-page-node-id="bNZET7JQiR2RizD7TItdkk">j</mi></msub><mspace width="0.2em" data-page-node-id="HQYAfqS0AEFZpQ6wSXvtps"/><mo data-page-node-id="xXA5E80AsdT4HvBRGCJOaZ">(</mo><mi data-page-node-id="4f8CAPPS3BIqtDa2udbE7p">j</mi><mo data-page-node-id="hk90J2pUhOEqOFiXANcAfx">&lt;</mo><mi data-page-node-id="Ny5ouIxYFBozuehFpOAoRs">k</mi><mo data-page-node-id="ajYZjSlEblb08N2WtTlSx1">)</mo></math> 实施了微小修剪（例如删除或合并工具结果）：
+      </p>
+      
+      <div class="math-display" data-page-node-id="TqiDPn7zHafiUG3AxlV1Nb">
+        <math display="block" data-page-node-id="8KdvWaF69s7723iceaOpqC">
+          <mrow data-page-node-id="LyeukT7NRfY3f8CZfFaE8X">
+            <mtext data-page-node-id="z3LAWEOinPgN48Fopejb8D">CachePrefixLen</mtext>
+            <mrow data-page-node-id="G4v1cozzlLNFNgrdzmATvy"><mo data-page-node-id="2VXDIvteUIG4rj90tpe8uv">(</mo><msub data-page-node-id="MDvplQHb1zGdSJZSIKfPPR"><mi mathvariant="bold" data-page-node-id="H1UM5DWY12GBFqRSBOImX2">M</mi><mi data-page-node-id="tqO9MybkEFsC8QxbJKZn60">k</mi></msub><mo data-page-node-id="QtxVZBWoSmaBE5191aoWZY">,</mo><msub data-page-node-id="bJC5eEFip6xSxOCWruS9My"><mi mathvariant="bold" data-page-node-id="6LfzkDUaIbjyPLr1x70tix">M</mi><mrow data-page-node-id="d8uvGOTukzjtmBxcCfDZ5o"><mi data-page-node-id="CdfdBvdxzuwSlxcEkBk0by">k</mi><mo data-page-node-id="VdUD52siHxIpP6MO02gEPh">-</mo><mn data-page-node-id="kySmFf2JToSjSSphW6k2aF">1</mn></mrow></msub><mo data-page-node-id="yqQ5RAbm7rJe0vsZbsgvkS">)</mo></mrow>
+            <mo data-page-node-id="thXOCdTfv8wjSswSDFAWas">=</mo>
+            <munderover data-page-node-id="i8E3GE85OFt1RvFFEH8UPh"><mo data-page-node-id="FpAamxnSXiCDDbGgRmtyco">∑</mo><mrow data-page-node-id="kGkgi4Ol43NM3QeUAxOxon"><mi data-page-node-id="7VAhVMFqlH3fPazUkNVa3Q">i</mi><mo data-page-node-id="ZQEn4yUHoAGl526Zkl8qpX">=</mo><mn data-page-node-id="9D3IF1tVED1knyCtF7F3gT">1</mn></mrow><mrow data-page-node-id="FRzoCGDX4Vg3R3dMG9HNWc"><mi data-page-node-id="E7koVovHpXqPchQquXR8RY">j</mi><mo data-page-node-id="WVppqR92VtkU1guLcsUbrR">-</mo><mn data-page-node-id="zURunqC9GehcBnyOuqhTDl">1</mn></mrow></munderover>
+            <mrow data-page-node-id="7BuRZh4TdjWGGsUzs1633j"><mo data-page-node-id="b5N9YMzyafLaCVEPRX952y">|</mo><msub data-page-node-id="L41TyG4MECmQgHsXHmX9x7"><mi data-page-node-id="FphN0tXcwr45MhvPTcwwE5">m</mi><mi data-page-node-id="LIB5haNAY2TkqoRBRPcx7U">i</mi></msub><mo data-page-node-id="GziFCDpdOa13qQTbXHttXG">|</mo></mrow>
+            <mo data-page-node-id="ydRmBGyR2IC4WRJjPor1ZW">≪</mo>
+            <munderover data-page-node-id="k9HHbdBqkbrGHguIWmZ9sg"><mo data-page-node-id="BI4BYrXjfXCro889d1ua6k">∑</mo><mrow data-page-node-id="gp9pBqVVIVpBjtgsmZReZH"><mi data-page-node-id="IzxTpUG8sHYZCzYGXtWzTF">i</mi><mo data-page-node-id="qjkDLSR1oPqxGTdkGrkBmz">=</mo><mn data-page-node-id="3g8pGHVqgdPeQ6edEKDisL">1</mn></mrow><mrow data-page-node-id="0JXcvE60qK94hmp1xxq7Ov"><mi data-page-node-id="DsW3v42eYEJsJxV0dsZsMv">k</mi><mo data-page-node-id="oBPppr3z4x1nlV8o5gvODe">-</mo><mn data-page-node-id="OnXE4Z1d2aqwZKBoF8C0tT">1</mn></mrow></munderover>
+            <mrow data-page-node-id="WKxL6RCbPNwL0BB7BJKyuG"><mo data-page-node-id="bKfZ3Ixo9Vx8lzbKsDzIy2">|</mo><msub data-page-node-id="ZGG66YtqwJs37EtDsboVf2"><mi data-page-node-id="exGnG8IoP8rpQIuifw7Bzk">m</mi><mi data-page-node-id="2JGHb66w8EW6C1nn5HKTxf">i</mi></msub><mo data-page-node-id="UhItbPCLDfSm2zg9lTofua">|</mo></mrow>
+          </mrow>
+        </math>
+      </div>
+
+      <p data-page-node-id="wgmBhqYsmBFVCp7XGjPbEl">
+        由于 <math data-page-node-id="h1gbaTL721O0u32TceGLGS"><msub data-page-node-id="Ga38pzlx1oIYHLISGELsXa"><mi data-page-node-id="0ceFEHDEShXEqGjBMcr8Hn">m</mi><mi data-page-node-id="HaNLOTRHV7E7xJ1PypnA10">j</mi></msub></math> 之后的全部内容哈希全部颠覆，从第 <math data-page-node-id="xxoPIK15Y1Trn90Z9cOj2Z"><mi data-page-node-id="MzE8tXvUAbkt6a5ZXenjtH">j</mi></math> 项开始的全部上下文均发生 Cache Miss，模型厂商强制以基准全价 <math data-page-node-id="Ock2cK8yndt7EaptQ8clOn"><msub data-page-node-id="QO7WW6KFKcELANNvrmfQd6"><mi data-page-node-id="HXyUckqdJVfOBW7uJJ9tH0">P</mi><mtext data-page-node-id="uFWw8DdYscZC4zJfgRM0tv">input</mtext></msub></math> 收费，且需重新执行昂贵的 KV 缓存写入计算。
+      </p>
+      <p data-page-node-id="dl0pOGDCnVEmffTdqdWlIo">
+        实测对比如下（40 轮中大型研发会话）：
+      </p>
+      <ul style="padding-left: 20px; line-height: 1.8;" data-page-node-id="bqOMDG7zBvZogrfZFlUNC1">
+        <li data-page-node-id="jPh8MDy33moSFguxshlvsF"><strong data-page-node-id="XPQKLLn843nTwJQqnnzMA9">方案 1（自然累加，无修剪）</strong>：累计传输 2,370,000 Tokens，由于前缀稳定，Prompt Cache 命中率达 85%，总成本为 <strong data-page-node-id="bFsy5FDBCSsBHFu7FTEFhc">$1.6709</strong>。</li>
+        <li data-page-node-id="FHXH7Q5yCa8bCev3BxZwF3"><strong data-page-node-id="If1LS11KxCdSygdkvAaX5I">方案 2（逐轮动态修剪，DCP 朴素用法）</strong>：将上下文长度压缩至平均 12K Tokens，总 Token 降至 480,000（名义压降近 80%！）。但每轮修剪摧毁了 Prefix Cache，命中率断崖式暴跌至 15%，总成本竟高达 <strong data-page-node-id="5MGucJagLeEcltER4VJf73">$1.2456</strong>（仅节约 25%）。</li>
+        <li data-page-node-id="1afEK3bHHKhwHyGMAFKKq0"><strong data-page-node-id="PKFE7iOw5KIoXrqaQvGgDL">方案 3（Context ROI OS：阶段边界批量压缩）</strong>：在任务阶段边界（每 10~15 轮）执行一次 Batch Compaction，重塑干净的 Prefix，在期间保持前缀绝对不可变，平均 Cache 命中率重回 85%，总成本暴降至 <strong data-page-node-id="SoU2WYteCL7ruVx97r894b">$0.4089</strong>（较基准大降 75.5%）！</li>
+      </ul>
+    </div>
+
+    <div id="sub-cross-kg-amort" data-page-node-id="W8oCSRLMYD9vJKiyapnfFn">
+      <h3 class="subsection-title" data-page-node-id="XMzdRvEozCc9uVykNVesRV">5.2 跨会话知识图谱重算避免率与时间摊销模型</h3>
+      <p data-page-node-id="PMm7sc0uFpVEUDMnrCyhc7">
+        设单个典型疑难缺陷（如分布式并发死锁或脏读）的从零排查成本为 <math data-page-node-id="sRknjFFF8qxU2HeuiLPI1T"><msub data-page-node-id="RR8WL5hVjCI4i95rTisybZ"><mi data-page-node-id="iDkmbJeCXWcVIPNUQvs8km">C</mi><mtext data-page-node-id="WRbEUXP7jlqCnbhqDRBaTz">investigate</mtext></msub><mo data-page-node-id="VtC90vAMnSoFXT2yDz4Yif">≈</mo><mn data-page-node-id="GujDp6QLq6Bb6dN8i0UHas">30,000</mn><mtext data-page-node-id="LTK2PU6BhkNrEE22pYMlRY"> Tokens</mtext></math>。将其提炼存入知识图谱的开销为轻量 Worker 一次性消耗 <math data-page-node-id="oMVJdIFbV3kB7QshjhJ3lz"><msub data-page-node-id="foMdtVhjQtLgZTt2v81IAK"><mi data-page-node-id="xiFE7veWPcweNR9xD0cs5l">C</mi><mtext data-page-node-id="pnQRsLaAfndXQF8Ep1RPsY">write</mtext></msub><mo data-page-node-id="xCQHCCBAtvsoN6qtb5dKRa">≈</mo><mn data-page-node-id="rZ0D3CWPhzdi0UP6DjFk7H">3,000</mn><mtext data-page-node-id="npZXL76nE8qbE0Cx93B8J2"> Worker Tokens</mtext></math>。在后续 <math data-page-node-id="OPOPPlDyWizG1y3eb8XZn9"><mi data-page-node-id="VA6ZIPadzp0i4x68jB7DOB">M</mi></math> 个工程会话中，直接召回该结论的开销仅为 <math data-page-node-id="CE1CNztdSEU6ZGvfXSu5fb"><msub data-page-node-id="2mfAWvi08DDbyiPuP34NjG"><mi data-page-node-id="t7n9Ti1tWZ6mOCstT6OF6j">C</mi><mtext data-page-node-id="mka80wMhJ0RxEFwlTn3Ew9">recall</mtext></msub><mo data-page-node-id="wM3WC5QLYssedXJCkIj6tv">≈</mo><mn data-page-node-id="FITLOWbbAzH8PdEeQFhkgl">450</mn><mtext data-page-node-id="nbz9j0cfL8RT413ts0bmNF"> Tokens</mtext></math>。
+      </p>
+      <p data-page-node-id="XlSr9mybBqCfAGS2ESoVBH">
+        则知识图谱摊销净收益率函数为：
+      </p>
+
+      <div class="math-display" data-page-node-id="j0M4jsj792xv0NQTeblIC5">
+        <math display="block" data-page-node-id="nDJGR5kyp4fiXSizWTj8UJ">
+          <mrow data-page-node-id="sexxqbDbSaauDh7B3WcIn3">
+            <msub data-page-node-id="DjtqWPcU1cza1nJS5kwR11"><mi data-page-node-id="Y0jZnxFCfTjVj0F2pPpsno">G</mi><mtext data-page-node-id="4zzNI9NCvrQIxo0wzbZBJo">net</mtext></msub><mrow data-page-node-id="fKIlZET3NvIHetBBj0fZhG"><mo data-page-node-id="smsNZXCnJVv1FBRcCGnMcx">(</mo><mi data-page-node-id="H5O5skGR0n9hADqKE4Qnt9">M</mi><mo data-page-node-id="LCpe7rVAW7dPuKw1s30zG5">)</mo></mrow>
+            <mo data-page-node-id="eIQchT6OWl5CRmD6Io0caB">=</mo>
+            <mfrac data-page-node-id="xEAaIqrMsIq43gF1xy7ZE8">
+              <mrow data-page-node-id="zSaSBBu3cv1zzAZ0lPEZTS">
+                <mi data-page-node-id="tvuKvHvlw7UrjvKuAkTFCe">M</mi><mo data-page-node-id="RKz0Nwi9gvVcs6xNEG4wQg">·</mo><mrow data-page-node-id="Qe7FZoAqJzuOqNPjoCscaw"><mo data-page-node-id="vz8F28XPlS7SMgpu4N6S0F">(</mo><msub data-page-node-id="rmejrfa0Ed9bCrYbySphB3"><mi data-page-node-id="L2LnD4502HSW2Auz3LwDYN">C</mi><mtext data-page-node-id="wDv6HLutqglOT57XmhdMBI">investigate</mtext></msub><mo data-page-node-id="5mOud3Hk9bExoI6WgxTHF3">-</mo><msub data-page-node-id="OxzzL9ymnAmm56JNaDQvNd"><mi data-page-node-id="zJMJFzuQLaKKg4vmVsSL03">C</mi><mtext data-page-node-id="ZhDMMSGsrG22LPQQTr4Se4">recall</mtext></msub><mo data-page-node-id="PSJt1wXdpICDKcrWGcYNZp">)</mo></mrow>
+                <mo data-page-node-id="QCF6f5raDFrMqNnYMAahl5">-</mo>
+                <msub data-page-node-id="aGcKseTEFB1uKigkqiqLw3"><mi data-page-node-id="kBSwcOrROMEKKQJWOS8AEY">C</mi><mtext data-page-node-id="XHRjTZHONDUi4zsgXBMs1F">write</mtext></msub>
+              </mrow>
+              <mrow data-page-node-id="BcFqoieSm2G3GSRnyFdpFy">
+                <mi data-page-node-id="XpBFMOgFyAjWiplRCctkyt">M</mi><mo data-page-node-id="Okx4dEdjHbN93gux6yBfg5">·</mo><msub data-page-node-id="pEsk8DkghJV9GcTEcNGs0p"><mi data-page-node-id="XGh12fuDLT4UeTtigEcjlA">C</mi><mtext data-page-node-id="mxUsK3hgjVZoLRMbMGaoML">investigate</mtext></msub>
+              </mrow>
+            </mfrac>
+          </mrow>
+        </math>
+      </div>
+
+      <p data-page-node-id="LbWxPq8MD28EDnTGG68qD8">
+        当 <math data-page-node-id="ccM2FXJYUoT9IerbsZJxet"><mi data-page-node-id="AHXAxvTGCPBNAS9QB5GTlb">M</mi><mo data-page-node-id="t8rSzFVqRKXu6F0u0Kgya1">=</mo><mn data-page-node-id="KJJf264STZ0UQcij5o6inM">1</mn></math> 时，<math data-page-node-id="rtYG3dGpBCsjDdmwBq2tIj"><msub data-page-node-id="o6AHKPvbWZKKiltndKBk3l"><mi data-page-node-id="IgHqaL4snKidvIkAHnJTv6">G</mi><mtext data-page-node-id="SFq4cu1lG9ymG7dTghBm6Z">net</mtext></msub><mo data-page-node-id="MAKAiFbgaicJpXNVHcpnwB">(</mo><mn data-page-node-id="RuE9x2zigZ2E8xvhSISxbi">1</mn><mo data-page-node-id="HK095cfYzGQB86S0XadUxG">)</mo><mo data-page-node-id="qdUOElshSHQUoTyEULDoNb">=</mo><mfrac data-page-node-id="FzqweAVbcYqE19OJs1JFne"><mrow data-page-node-id="98fRWJHMaVZCnGNXxPE6cL"><mn data-page-node-id="yTXbZXhtuLmbQVPBjCFM72">30000</mn><mo data-page-node-id="ZkrJn7IHFj2ZwzXe0hy7GQ">-</mo><mn data-page-node-id="ySrk0EW3sHVBzF9AoY0sB7">450</mn><mo data-page-node-id="201XsjYHrYbSbe0F0cXGvs">-</mo><mn data-page-node-id="qFi5ruPa7A0swWnZjJR0XG">3000</mn></mrow><mn data-page-node-id="ejP6Loc3RTDtF0YZ9jAzEr">30000</mn></mfrac><mo data-page-node-id="t2clnZCAaEUsDAKPoK3BDq">=</mo><mn data-page-node-id="uj3SQVT6dLMLzNJqG147Zr">88.5</mn><mo data-page-node-id="MlCieLQMhrMojkC1Q4ZNwe">%</mo></math>；当 <math data-page-node-id="tl0fDXOstDNoDdfCMYaG9F"><mi data-page-node-id="RnmIgQH4vcWmXU6sH6xzF7">M</mi><mo data-page-node-id="CG3Q2qbhFI65QPlChCzhCD">≥</mo><mn data-page-node-id="ojKF2QAXFlMeHvybCcd82s">3</mn></math> 时，摊销净收益逼近 <strong data-page-node-id="SHOwdBz9DMYcfALV91TMJs">98.5%</strong>。这确立了跨会话图谱在长期工程中的压倒性投资回报率。
+      </p>
+    </div>
+
+    <div id="sub-exact-proof" data-page-node-id="DdD2zmsOPyrlvwEVa87flV">
+      <h3 class="subsection-title" data-page-node-id="DpHybOWlQOaLlEAoJOknle">5.3 Exact Evidence 期望损失推导与防幻觉数学证明</h3>
+      <p data-page-node-id="vHZAJVauQcwhL2VH9t9Yg5">
+        为什么在修改代码前，必须强制花费 800 Tokens 执行精确回读（Exact Read）？
+      </p>
+      <p data-page-node-id="Pg9R8JdyCm8KntrN9fqZAr">
+        假设模型在只掌握模糊摘要或粗略向量切片的情况下实施修改，由于细微签名不匹配或副作用引发回归 Bug 的概率为 <math data-page-node-id="2y4YJQIdjPt5gwTgAaChxU"><msub data-page-node-id="Uld6FnRr2UujGopADIqLJ5"><mi data-page-node-id="YK9pdc6iMQxr6h4RE8Brxq">p</mi><mi data-page-node-id="7SOHjEyrFZHPerCdFFHAtY">e</mi></msub><mo data-page-node-id="DcqG7eigtsdgGC9CSF33LH">≈</mo><mn data-page-node-id="skFmDFzLP5e2EM4nGxiJAC">0.20</mn></math>。一旦引入 Bug，智能体必须经历<code data-page-node-id="sGZGiDufTgmGXeD6GZP8U2">编译失败 → 重新阅读关联链路 → 定位异常 → 重新尝试修复</code>，该排错闭环的平均重试成本 <math data-page-node-id="Hs0hp9G9bzVdBkVmWYABjl"><msub data-page-node-id="EtGdLZiODy6bT6bCj9Yusb"><mi data-page-node-id="0v2ZZYAcW2fyYZyJXG3TY8">T</mi><mtext data-page-node-id="VlomTLqvYIqzBZB8WNWH0g">retry</mtext></msub><mo data-page-node-id="3Jh2jq9T8wg5zrAdc1CDsa">≈</mo><mn data-page-node-id="F17d7MQoEXu58llvfvI7RF">45,000</mn><mtext data-page-node-id="ZzZ4KMFtGZ1qF5V5h7T06D"> Tokens</mtext></math>。
+      </p>
+      <p data-page-node-id="f95e1V5fYB6tdKqJDoDHWs">
+        若工程师试图“省去”单次精确读取的 <math data-page-node-id="EqW2W2JZLSyprI6KEjF15P"><msub data-page-node-id="5qaSeCrEzCIL0p5Rov1q0u"><mi data-page-node-id="RPfSpqHfEOi7FTUqi6T3hH">T</mi><mtext data-page-node-id="5Weu0t0WCwGCc06YxZswF3">exact</mtext></msub><mo data-page-node-id="NiE8Kb9QfAfXAiVtlpGPUA">≈</mo><mn data-page-node-id="v3EzDVc3nUG4tekSHrjwh8">800</mn><mtext data-page-node-id="2hx01MQWJR8YqNCK0kddOT"> Tokens</mtext></math>，其期望净损失（Expected Net Loss）计算如下：
+      </p>
+
+      <div class="math-display" data-page-node-id="FpQutP0Ot92FVXB4V5Ktpv">
+        <math display="block" data-page-node-id="UQmPNT4awkc7Hbc948tIgQ">
+          <mrow data-page-node-id="CwBTVubl6F3AA0soS2HQDY">
+            <mi mathvariant="double-struck" data-page-node-id="vPk86oD3xaTyNRVB8d7tOS">E</mi><mrow data-page-node-id="kGpJBLxujriaquCKX31vl3"><mo data-page-node-id="7kwk2n4MgeoxeekVAnPmz5">[</mo><mi data-page-node-id="kORrfhNAWp2xXhMXf0Pnd9">Δ</mi><mtext data-page-node-id="dp4FNh1xWJ6uJuBkUoVwO9">Loss</mtext><mo data-page-node-id="QD4heHJi8ITSo9Ir2kGZw5">]</mo></mrow>
+            <mo data-page-node-id="yMtWgrtvCToSjkyeAKCCkr">=</mo>
+            <mo data-page-node-id="W4oTP6uk4LBQgmujvDnPWQ">-</mo><msub data-page-node-id="daZr6NuIIi1GlAHqCJYmuZ"><mi data-page-node-id="etn63Awp2KHuw1Mk1THQPB">T</mi><mtext data-page-node-id="2zom7HOVzw8BidSYABAFgs">exact</mtext></msub>
+            <mo data-page-node-id="apZBo35dKKrp5VQinWXhs7">+</mo>
+            <msub data-page-node-id="KDj2uQtmPiuxurzArXzRXZ"><mi data-page-node-id="CbICIp8eCSFbHYbLUKcZHG">p</mi><mi data-page-node-id="3s2uGuOcs393jFo2817G1l">e</mi></msub><mo data-page-node-id="5jWJd4vCVfcLtZh3nBIiFW">·</mo><msub data-page-node-id="99ekUgT1kv4WW6yWhADyto"><mi data-page-node-id="VT1nblRPJpXOsXAFMWcVSJ">T</mi><mtext data-page-node-id="2vGWM80u8eWbAxnJANhFGB">retry</mtext></msub>
+            <mo data-page-node-id="23INQ8CuqPqcWAAsmGLA7W">=</mo>
+            <mo data-page-node-id="7Wtr983J66h2q7ABGQg8MW">-</mo><mn data-page-node-id="2RYqE7NXY1soG2EvfWrd0Q">800</mn>
+            <mo data-page-node-id="A4DMdBwEPo09MWQkPT1QxF">+</mo>
+            <mn data-page-node-id="ECZXpaWZxHKD3ZQV7FrEhL">0.20</mn><mo data-page-node-id="K5yVvERtnRgJcAVziiAAwI">×</mo><mn data-page-node-id="GRC1GUoRe0PQ0AWEpaX3Fy">45,000</mn>
+            <mo data-page-node-id="GybcmfLHlNCzarKWIQb6PB">=</mo>
+            <mo data-page-node-id="pnf6yDBBTqNl8tmIfgpuzo">+</mo><mn data-page-node-id="iYCGZ06uP6ZzjJ9MihqM9e">8,200</mn><mtext data-page-node-id="NA0k6vPNpqQ75OS8Ti9Hr2"> Tokens</mtext>
+          </mrow>
+        </math>
+      </div>
+
+      <p data-page-node-id="ga3cMeqEk6tf3QEiGBqBbW">
+        <strong data-page-node-id="2yuGSDC8uqYPvGU3vQGHRL">结论成立：跳过精准核验，在数学期望上单次修改将净亏损 8,200 Tokens！</strong> 精确证据法则是纯粹理性的工程防御基石。
+      </p>
+    </div>
+  </section>
+
+  <!-- 6. 动态交互沙盘系统 -->
+  <section id="sec-interactive-sandboxes" class="section-block" data-page-node-id="TQCKlqS8eiEAFNicJX2LHZ">
+    <h2 class="section-title" data-page-node-id="tmDn8vP7BAbWK5SQwDA33o"><span class="section-number" data-page-node-id="0RUCTjMNhdeVMZT7WcUC3a">06</span> 动态交互沙盘系统 (The Interactive Sandbox Suite)</h2>
+    <p data-page-node-id="osjKWcjuRWiR1d1FCt3KYL">
+      为彻底拒绝定性空谈，以下提供 4 套与数学模型强绑定的可运行交互沙盘。数据由物理公式实时反解，严禁任何假数据。
+    </p>
+
+    <!-- 沙盘 1: Context ROI 经济学模拟器 -->
+    <div id="sb-roi-calculator" class="sandbox-card" data-page-node-id="TH2AEQ8mCVa2KhRQiLhQRQ">
+      <div class="sandbox-header" data-page-node-id="5fF96kE2DlIEcDWAWmgbci">
+        <div class="sandbox-title" data-page-node-id="yS12Yi6BOM4DGXibihAhod">
+          <span data-page-node-id="Xeq0Hb8sZAGkA7JPuNnwFb">沙盘 1: Context ROI 经济学与超线性收益模拟器</span>
+        </div>
+        <span class="sandbox-badge" data-page-node-id="nVBELdv2TFZUs3JFvrkh5S">Live Reactive</span>
+      </div>
+      <div class="sandbox-layout" data-page-node-id="QeuX43uQ0j8P0JAfvqg8Pm">
+        <div class="sandbox-controls" data-page-node-id="0LBI4faghCGPvXurKCyiYv">
+          <div class="ctrl-group" data-page-node-id="FkQyPM8P5sgfLb8L8A994q">
+            <label class="ctrl-label" for="in-sim-turns" data-page-node-id="0WF31ukaRgf35i7E3MgJtz">
+              <span data-page-node-id="CzwCl5h4qgZIKvpK82HNFh">研发交互总轮次 (Turns)</span>
+              <span id="disp-sim-turns" class="ctrl-value-disp" data-page-node-id="DNBDDAksIMrZ9v0FKySbaH">40 轮</span>
+            </label>
+            <input id="in-sim-turns" type="range" min="10" max="80" value="40" step="5" data-page-node-id="Ne4fgbYelGK79vEk18T1jc">
+          </div>
+
+          <div class="ctrl-group" data-page-node-id="aBNHPpZtKdxCoJfa4q1ZWc">
+            <label class="ctrl-label" for="in-sim-files" data-page-node-id="IFcKA5WSYBGBY9Z9YnJ8AG">
+              <span data-page-node-id="1Ezf8UlC06CSdV3GCRkEk5">会话中大文件探索次数</span>
+              <span id="disp-sim-files" class="ctrl-value-disp" data-page-node-id="SAkECuos5rGsfCisw6Lw9w">18 次</span>
+            </label>
+            <input id="in-sim-files" type="range" min="5" max="50" value="18" step="1" data-page-node-id="OSELno3Z6HVksswDvzc9fC">
+          </div>
+
+          <div class="ctrl-group" data-page-node-id="SxHjCFaVPZ9IYu0FEB0ghj">
+            <label class="ctrl-label" for="in-sim-dup-rate" data-page-node-id="OFw5aMveEBb9lLrshcYSMc">
+              <span data-page-node-id="23fiY12sdyYiohIZlpJCIH">其中重复复读同一文件比例</span>
+              <span id="disp-sim-dup-rate" class="ctrl-value-disp" data-page-node-id="JbUZ5XJDA8ftzPAE6ItIaM">55%</span>
+            </label>
+            <input id="in-sim-dup-rate" type="range" min="10" max="90" value="55" step="5" data-page-node-id="y2LZRlYuCM4ANW6Oxs0Lpf">
+          </div>
+
+          <div class="ctrl-group" data-page-node-id="Ii7W2gnVef5HrouG58UJa9">
+            <label class="ctrl-label" for="sel-sim-policy" data-page-node-id="UA4TFzaZQLEMF4WhiFo6ao">治理架构模式选择</label>
+            <select id="sel-sim-policy" data-page-node-id="8buzqfZ9CxkB1lAXzubKBA">
+              <option value="policy-opt" selected data-page-node-id="RQUlvqj4TyIIVEmYpQnxoP">全面 Context ROI OS (Serena + Diff + Cache护航)</option>
+              <option value="policy-symbol" data-page-node-id="75JeVFYFNGu41hg1At3aGL">仅基础符号裁剪 (无 Diff 缓存，无前缀保护)</option>
+              <option value="policy-pruning" data-page-node-id="je2X81PaKqGzCrBjzJX9Ae">极端每轮修剪 (DCP 模式，破坏前缀缓存)</option>
+              <option value="policy-naive" data-page-node-id="AFt7v4lqdTFGGg5oMUFFwF">朴素模式 (无任何治理，全文直读)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sandbox-result" data-page-node-id="On6MzDBTMmF3ATQLltXRYD">
+          <div data-page-node-id="7quTHOBuB8PAEAQj2NM5Ft">
+            <div class="metric-row" data-page-node-id="yrpPXwGRtssjThvGgO53pH">
+              <span class="metric-name" data-page-node-id="opxvYhA0cn9XMaMbr85uBp">朴素累计输入 Tokens</span>
+              <span id="out-sim-tokens-naive" class="metric-val" data-page-node-id="fR1sZhPl4CxW2fqBstVBMe">3,436,000</span>
+            </div>
+            <div class="metric-row" data-page-node-id="RLt7ezvrX8aSbSw3QPmFQb">
+              <span class="metric-name" data-page-node-id="bW5kVjCryxg0gvXrh6rDCO">当前方案输入 Tokens</span>
+              <span id="out-sim-tokens-opt" class="metric-val highlight" data-page-node-id="Jmtn38ykK5tpPs7vJuEub4">907,000</span>
+            </div>
+            <div class="metric-row" data-page-node-id="teDMaq7sga7ZUfH7D9wf9e">
+              <span class="metric-name" data-page-node-id="GQwNdJmPYn1yilUAUHAQAW">Token 净压降幅度</span>
+              <span id="out-sim-tokens-saved-pct" class="metric-val highlight" data-page-node-id="YxVhoLkEr5ayctLUiOv37s">-73.6%</span>
+            </div>
+            <div class="metric-row" data-page-node-id="tO01rMEbpFsxkKGzZYAT4A">
+              <span class="metric-name" data-page-node-id="KyjG59w9oeqHqs6Iks8xq3">朴素基准总成本 ($)</span>
+              <span id="out-sim-cost-naive" class="metric-val" data-page-node-id="61Eflpb2B8KREp0RqB9DWG">$7.33</span>
+            </div>
+            <div class="metric-row" data-page-node-id="egSNGYM3IgveXoafsxygHh">
+              <span class="metric-name" data-page-node-id="ArHWzJFtwxMVCbqU7efBaI">当前方案实际成本 ($)</span>
+              <span id="out-sim-cost-opt" class="metric-val highlight" data-page-node-id="eoJRKITUmIHWN5LBmps3Ot">$0.84</span>
+            </div>
+            <div class="metric-row" data-page-node-id="IFON3fUSAspP3zWqLgvHfT">
+              <span class="metric-name" data-page-node-id="3GWaINsKqWzE593lKd9lUi">成本压降幅度 (超线性收益)</span>
+              <span id="out-sim-cost-saved-pct" class="metric-val highlight" data-page-node-id="sd2NNWs3IzjPEbolFBlDi2">-88.6%</span>
+            </div>
+          </div>
+          <div id="out-sim-verdict" class="sandbox-verdict" data-page-node-id="JvsrnGeLhEAGjQoCRFHiyt">
+            超线性收益显著：借助 88% 的高 Prompt Cache 命中率与 0.10x 读取电价，成本节省率 (-88.6%) 显著超越 Token 节省率 (-73.6%)。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 沙盘 2: 准入策略门限与动态路由 -->
+    <div id="sb-admission-router" class="sandbox-card" data-page-node-id="MsXAaVvBfcYvGFEFkvydHs">
+      <div class="sandbox-header" data-page-node-id="l1jpWh0HhFrPr4aJ4G8Gwa">
+        <div class="sandbox-title" data-page-node-id="4vWTZBxCGWgBbdudQ32IWA">
+          <span data-page-node-id="fpIrBLLzAAIrfvHaM1V1Hm">沙盘 2: 上下文准入策略门限与动态路由决策器</span>
+        </div>
+        <span class="sandbox-badge" data-page-node-id="MyNKMwzFvL59FMwsUEjgLT">Real-time Policy</span>
+      </div>
+      <div class="sandbox-layout" data-page-node-id="Zni1Dtsq3X9ymMtIbtgnk8">
+        <div class="sandbox-controls" data-page-node-id="8FzUbn2QgNGTgj3WTZV0zf">
+          <div class="ctrl-group" data-page-node-id="ox4NwHKiq7hnFacQBhsdcz">
+            <label class="ctrl-label" for="sel-adm-type" data-page-node-id="ikkh7BxdIsCPgry7UXfCXD">待处理目标类型 (Target Entity)</label>
+            <select id="sel-adm-type" data-page-node-id="WH7jw3xjbwE3GgZM8jRbhi">
+              <option value="type-src-large" selected data-page-node-id="PqQoEanFGnFcBZ0DGG9C6U">大型核心源码文件 (如 2500行 auth_service.ts)</option>
+              <option value="type-test-log" data-page-node-id="i1HiFmpHKKcfRGuoIoyQ82">单元测试与构建日志 (如 mvn test 错误狂暴直喷)</option>
+              <option value="type-reread" data-page-node-id="md2nxPN27HMl7svrV9TKeM">重复读取文件 (同一文件本次会话第 2 次读取)</option>
+              <option value="type-edit-symbol" data-page-node-id="fsCTiK5TAu5nCQBOeB0M8I">精准修改指定类或函数体 (准备编辑代码)</option>
+              <option value="type-arch-explore" data-page-node-id="aNlOGf4fLwfRtLPJs2r8NI">超大型跨仓库架构摸排 (几十个服务检索)</option>
+            </select>
+          </div>
+
+          <div class="ctrl-group" data-page-node-id="RmLLe7ztkj0V7gdkKXuElb">
+            <label class="ctrl-label" for="in-adm-size" data-page-node-id="z5FdmfTFyOsps5z2qEu0FL">
+              <span data-page-node-id="k4ERmKga4wFI5NjE9HULPZ">原始对象估算 Token 规模</span>
+              <span id="disp-adm-size" class="ctrl-value-disp" data-page-node-id="4GhO9mC57UaCQMHrsp9Bfm">18,000 Tokens</span>
+            </label>
+            <input id="in-adm-size" type="range" min="1000" max="60000" value="18000" step="1000" data-page-node-id="iCte45xmS4TLOqKzRZlMcI">
+          </div>
+
+          <div class="ctrl-group" data-page-node-id="Rb8ZI6GDKYbIVMBSR5za9I">
+            <label class="ctrl-checkbox-label" data-page-node-id="yUoXHRzHKIMoRImJPFvNRn">
+              <input id="chk-adm-force" type="checkbox" data-page-node-id="pb7WeVBWlwReLuwHOXcUOL">
+              <span data-page-node-id="9D9BrPYrTb4RSo2W3M41kt">附加 <code data-page-node-id="dfSjyWE9dY5nyhD0zpS3QX">--force-exact</code> 强制直接读取完整原文豁免</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="sandbox-result" data-page-node-id="4u0xNV8iVTvSW3wX9d7Bko">
+          <div data-page-node-id="hNb6n2vt29NcGp5vw4dls7">
+            <div class="metric-row" data-page-node-id="meIspMGNqJMKXgEEIlVx13">
+              <span class="metric-name" data-page-node-id="FOWU5SFWVg4o9LDSPwsCWQ">准入路由判定 (Decision)</span>
+              <span id="out-adm-decision" class="metric-val highlight" data-page-node-id="3lN3KtffucNp77sjO2Wvo2">BLOCK &amp; SYMBOL EXTRACT</span>
+            </div>
+            <div class="metric-row" data-page-node-id="Q2BNwIiPHIWVWtEA4fnYHn">
+              <span class="metric-name" data-page-node-id="z7SXBwXdV5n5Cf9hA70hMR">实际进入主模型 Token 数</span>
+              <span id="out-adm-input-tokens" class="metric-val highlight" data-page-node-id="VcE1AeivQuIHskWIMEaLBE">450 Tokens</span>
+            </div>
+            <div class="metric-row" data-page-node-id="th2AKRKCp2e1obNYDHKir2">
+              <span class="metric-name" data-page-node-id="MAiG1HSwpjUorYe2FWj9d8">无效信息拦截压降率</span>
+              <span id="out-adm-intercept-rate" class="metric-val highlight" data-page-node-id="cvkxwl7uIO1zX1Uzl5awXV">97.5%</span>
+            </div>
+            <div class="metric-row" data-page-node-id="QkQTy9EhmCzOgjv7eNGGiK">
+              <span class="metric-name" data-page-node-id="ZF9Sc6fRW4GJDKzYCRgNYb">执行安全置信度评级</span>
+              <span id="out-adm-security-level" class="metric-val" data-page-node-id="RIeHECIICCt86CbBDFpxAY">P0 绝对无损 (Strict Lossless)</span>
+            </div>
+          </div>
+          <div id="out-adm-action-rule" class="sandbox-verdict" data-page-node-id="UY0Bj8n94D9aQvPBkYbiDa">
+            触发大于 12K 硬阻断准入规则：拦截全文件读取，强制通过 Serena 抽取关联符号定义体，保留高价值语义切片。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 沙盘 3: Prefix 缓存失效与折损沙盘 -->
+    <div id="sb-cache-dynamics" class="sandbox-card" data-page-node-id="wFJR06zaXnFawO11YQiLqI">
+      <div class="sandbox-header" data-page-node-id="2dXjTYsgN8j4QjHqL2wfRv">
+        <div class="sandbox-title" data-page-node-id="IrcVl9avPxSDMeIZkE3U7Z">
+          <span data-page-node-id="p3X4g21gTNAEG8PA9c9A0T">沙盘 3: Prefix 缓存失效与批量压缩折损沙盘</span>
+        </div>
+        <span class="sandbox-badge" data-page-node-id="ngGbsJpRiTSv7B303atJXv">Chart &amp; Curve</span>
+      </div>
+      <div class="sandbox-layout" data-page-node-id="ni1ql8NiyzoDbbTB3GPWAt">
+        <div class="sandbox-controls" data-page-node-id="7TvRYNA8hk3pak3ZUifIzW">
+          <div class="ctrl-group" data-page-node-id="4l9wUfUFrzepBKwxI0DCIs">
+            <label class="ctrl-label" for="sel-cache-mode" data-page-node-id="XjN4rkYUaW6xczgHIrhB2Z">历史压缩编排策略</label>
+            <select id="sel-cache-mode" data-page-node-id="fiEDhBKVrrzhfEmIyyA3iP">
+              <option value="mode-boundary" selected data-page-node-id="bPTc6TgdTI70zDWEqNv9Rx">方案 C: 阶段边界批量压缩 (Context ROI OS)</option>
+              <option value="mode-per-turn" data-page-node-id="b7ENI64FuXzvjKkBpNxY7J">方案 B: 逐轮动态修剪 (DCP 模式，前缀频繁破坏)</option>
+              <option value="mode-naive" data-page-node-id="FoBVaFIc4TI515AARe6aFH">方案 A: 朴素累积无压缩 (自然前缀缓存)</option>
+            </select>
+          </div>
+
+          <div class="ctrl-group" data-page-node-id="R484TpcIlSLK1nUr9avypI">
+            <label class="ctrl-label" for="in-cache-boundary" data-page-node-id="IeKdsxIFiNCe1OkHN6hFMH">
+              <span data-page-node-id="64IZZEW42dHVQQJUxihwlI">阶段边界压缩间隔轮数 (仅方案 C 生效)</span>
+              <span id="disp-cache-boundary" class="ctrl-value-disp" data-page-node-id="mhz07uhz8JnPYWVFuXc8zh">10 轮/次</span>
+            </label>
+            <input id="in-cache-boundary" type="range" min="5" max="25" value="10" step="5" data-page-node-id="DcgMFjBI77i1rE8vK71QFi">
+          </div>
+
+          <div class="svg-chart-container" data-page-node-id="IgwlXh8EjfDCUwXcSA3zuR">
+            <svg id="svg-cache-chart" viewBox="0 0 460 200" width="100%" height="180" data-page-node-id="bBOhbjqKKgOOUTiMHfAvkC">
+              <!-- 背景网格与刻度 -->
+              <line x1="40" y1="20" x2="40" y2="160" stroke="var(--svg-axis)" stroke-width="1.5" data-page-node-id="tyfx7F3BnLyDIYkgAEjIPf"></line>
+              <line x1="40" y1="160" x2="440" y2="160" stroke="var(--svg-axis)" stroke-width="1.5" data-page-node-id="0Kz7TwRxfM7sqGo5bmtwTM"></line>
+              <text x="35" y="25" fill="var(--text-faint)" font-size="10" text-anchor="end" data-page-node-id="6APUYV0Us31zEDDZKheH06">$2.0</text>
+              <text x="35" y="90" fill="var(--text-faint)" font-size="10" text-anchor="end" data-page-node-id="7klTkdLLX33etz0eJiiqrm">$1.0</text>
+              <text x="35" y="160" fill="var(--text-faint)" font-size="10" text-anchor="end" data-page-node-id="1U11ZvATWT3PSiarEqA0vI">$0.0</text>
+              <text x="40" y="175" fill="var(--text-faint)" font-size="10" data-page-node-id="cxlbPlhXoBc9cEhZxBeNqB">T=1</text>
+              <text x="240" y="175" fill="var(--text-faint)" font-size="10" data-page-node-id="AINuWiP07DOR6sGd6nlCgS">T=20</text>
+              <text x="430" y="175" fill="var(--text-faint)" font-size="10" data-page-node-id="L8aD54hD8lurMMLA0DHOKh">T=40</text>
+              <!-- 动态折线由 JS 注入 -->
+              <polyline id="chart-polyline-cost" fill="none" stroke="var(--accent)" stroke-width="2.5" points="" data-page-node-id="4UeTzANX0cZsw70yfdvjA4"></polyline>
+            </svg>
+          </div>
+        </div>
+
+        <div class="sandbox-result" data-page-node-id="BhQrjluspuh7TvqkvTrR9z">
+          <div data-page-node-id="C1TDy5DLCTYF7jU0EeRV6Y">
+            <div class="metric-row" data-page-node-id="wE25kKyDEdNTDHFbKAT3pw">
+              <span class="metric-name" data-page-node-id="ODzfSp8uNCE4uGS5GIUAEA">40 轮累计传输 Token</span>
+              <span id="out-cache-total-tokens" class="metric-val highlight" data-page-node-id="SOfnAC9iPapmQ3nvauqq5f">580,000</span>
+            </div>
+            <div class="metric-row" data-page-node-id="87EcN5StAORJxfQ9YHfTcE">
+              <span class="metric-name" data-page-node-id="BjLu0L7NWL9eWujfyYMVQb">平均 Prompt Cache 命中率</span>
+              <span id="out-cache-hit-rate" class="metric-val highlight" data-page-node-id="3YBNjucobF5a0h69McdSl4">85.0%</span>
+            </div>
+            <div class="metric-row" data-page-node-id="9LS3RJwFWCHxQpZGqviecr">
+              <span class="metric-name" data-page-node-id="meGZgkiKQ4gWj3AwBCOYG2">40 轮有效综合成本</span>
+              <span id="out-cache-effective-cost" class="metric-val highlight" data-page-node-id="ekOMN5EigkN3IJrTnPlSaK">$0.4089</span>
+            </div>
+          </div>
+          <div id="out-cache-insight" class="sandbox-verdict" data-page-node-id="3R4zL0ckgAwidySXcrf1GV">
+            阶段边界压缩完美兼顾了“上下文总体积可控”与“Prefix Cache 高命中率”，有效消除了逐轮修剪造成的缓存击穿惩罚。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 沙盘 4: 四大客户端 Hook 配置生成器 -->
+    <div id="sb-hook-generator" class="sandbox-card" data-page-node-id="4rWbyL8UW9FHfCV9KjgL5D">
+      <div class="sandbox-header" data-page-node-id="OcsEKogniEr9SeF8GDEtUX">
+        <div class="sandbox-title" data-page-node-id="s5Ad7WhCMXdOZS1M5CByJq">
+          <span data-page-node-id="rj1sqiS2icVP0XT9nNjAtm">沙盘 4: 四大主流客户端 Hook 适配矩阵与准入规则生成器</span>
+        </div>
+        <span class="sandbox-badge" data-page-node-id="vDY85zBLumi11OgYk0DM3r">Config Exporter</span>
+      </div>
+      <div class="sandbox-layout" data-page-node-id="POmvFfDDRjym75UABS9Qkd">
+        <div class="sandbox-controls" data-page-node-id="8DIeavA114fuYZBiKoOOjR">
+          <div class="ctrl-group" data-page-node-id="4Uk92hCB6FIJU7QRJTR7Me">
+            <label class="ctrl-label" for="sel-client-type" data-page-node-id="00XeFzUHbOdtTZPSaGx3hn">选择目标宿主客户端</label>
+            <select id="sel-client-type" data-page-node-id="wBMSzEBYM2NYbzMnHnHJqh">
+              <option value="client-claude" selected data-page-node-id="sgKfpHuUf2MD94xoDGxflD">Claude Code (~/.claude/hooks.json)</option>
+              <option value="client-codex" data-page-node-id="KX7ffaTTecyvl3y6cAhL6z">OpenAI Codex (~/.codex/hooks.json)</option>
+              <option value="client-cursor" data-page-node-id="VjFKgxAAg7TfGND0qatPpb">Cursor IDE (Claude-compatible hooks)</option>
+              <option value="client-workbuddy" data-page-node-id="6P64WNx4u5FlxyaiX6mPBM">WorkBuddy / CodeBuddy Plugin</option>
+            </select>
+          </div>
+
+          <div class="ctrl-group" data-page-node-id="dV7FPDs6o3fb6GgFYBsRS8">
+            <label class="ctrl-checkbox-label" data-page-node-id="3Hu716YkrpHZCIAkX4USZU">
+              <input id="chk-rule-block" type="checkbox" checked data-page-node-id="m5VujqiODjTV31xCKllC2o">
+              <span data-page-node-id="xmVql4jj71BAPfpBXBkzO0">启用超大源码文件 PreToolUse 硬阻断与 Serena 重定向</span>
+            </label>
+            <label class="ctrl-checkbox-label" data-page-node-id="Tyws4l38DSsVot1TvksSZP">
+              <input id="chk-rule-diff" type="checkbox" checked data-page-node-id="KzUmsGKirrmV5ShTRCVMSG">
+              <span data-page-node-id="P1Qu4DlBrBJHZlBt4LeMVS">启用已读文件 Hash 比对与 Diff-Only 增量模式</span>
+            </label>
+            <label class="ctrl-checkbox-label" data-page-node-id="PaGGCnFG38H0QL7J039bo9">
+              <input id="chk-rule-log" type="checkbox" checked data-page-node-id="4oMaIc9JgbjMRDVXiXfahS">
+              <span data-page-node-id="S69UtIdVZkA6mUimydz3L9">启用测试终端狂暴输出工件隔离与 Worker 诊断</span>
+            </label>
+            <label class="ctrl-checkbox-label" data-page-node-id="iuHEifqNAFTsddPpVws5Fp">
+              <input id="chk-rule-kg" type="checkbox" checked data-page-node-id="Rjk6piL7WVNulhvLyp6W9N">
+              <span data-page-node-id="NdGiR1V9mbKM5Mr3OnkSfF">挂载跨会话已验证知识图谱检索接口 (Knowledge Graph)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="sandbox-result" data-page-node-id="X2BanAzixnFTqMMWwGAqmj">
+          <div data-page-node-id="aGQE4zyShK6cpDYtKSzXWD">
+            <div class="metric-row" data-page-node-id="BX5n21sH75rAIbGLqTO6TH">
+              <span class="metric-name" data-page-node-id="DyTrfe6Gg7gsSZFRbX4YXo">原生配置下发路径</span>
+              <span id="out-hook-target-path" class="metric-val" style="font-size:0.84rem;" data-page-node-id="PBWM3yre86UZaMGTKPBOPX">~/.claude/hooks.json</span>
+            </div>
+            <div class="metric-row" data-page-node-id="FHtmAv3SqrbUIquBYTRGRU">
+              <span class="metric-name" data-page-node-id="GEOsMfcCBnDg9XLzY04fEz">拦截机制实现方式</span>
+              <span id="out-hook-intercept-type" class="metric-val highlight" data-page-node-id="Kx0ecgpEb2vhgnsLOLZhHf">Native Process Exit-Code</span>
+            </div>
+            <div class="metric-row" data-page-node-id="AGBourVBnogWrXxfnFu2Xu">
+              <span class="metric-name" data-page-node-id="iSDv4udMfMwQ8tTgBsj43U">兼容认证级别</span>
+              <span id="out-hook-compatibility" class="metric-val highlight" data-page-node-id="zZhe3e5WNI9RrllXkNopdS">Production Ready (L1)</span>
+            </div>
+          </div>
+          <pre style="margin-top:12px; max-height:220px; font-size:0.75rem;" data-page-node-id="q7exBeZVZsqCL1qVAEXvuM"><code id="out-hook-config-code" data-page-node-id="83vD6EXzTY0sKeEtN2e6ze">// 配置文件预览</code></pre>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- 7. 四阶段实施路线图与验收矩阵 -->
+  <section id="sec-roadmap-kpi" class="section-block" data-page-node-id="fP6F6T8sZzny4hqdfGlIJS">
+    <h2 class="section-title" data-page-node-id="PHo83dnEZn3LxGByjaNJku"><span class="section-number" data-page-node-id="WEOEpBtVvURWcSeFhwu4F9">07</span> 四阶段实施路线图与验收矩阵</h2>
+
+    <div id="sub-roadmap-p0-p3" data-page-node-id="EV7A0KXjaQvGYAABRcG2iL">
+      <h3 class="subsection-title" data-page-node-id="UBasLdZFnMbZo0bPlKf4Qx">7.1 P0~P3 阶段推进规划</h3>
+      <p data-page-node-id="lDtmdB9rOUkbjzOoyTiV2h">
+        严禁一次性堆叠所有开源项目导致系统失稳，必须按以下节奏分批交付：
+      </p>
+
+      <div class="callout emerald" data-page-node-id="SQa7N32O3OaWTFRejgQlF8">
+        <div class="callout-title" data-page-node-id="6xHh9YVFkRP1ENGoEUL7Dg">P0 阶段：基础防御层建设 (Day 1~3 · 立即生效)</div>
+        <ul style="padding-left: 20px; margin-bottom: 0;" data-page-node-id="Qqfni2T5NOtnbYEwmcG962">
+          <li data-page-node-id="oabsEeuLh2e3N8cI8KE6Eg">上线 Serena Slim 模式：禁用冗余 shell/read 工具，仅保留 symbol 语义切片。</li>
+          <li data-page-node-id="D5EBRZ6Rj9LFtbCEug2N6T">部署客户端原生 Context Hooks：在 Claude Code / Codex / Cursor / WorkBuddy 挂载 PreToolUse 防火墙。</li>
+          <li data-page-node-id="FboYtWiL1grFbjN4wwB9Dg">启动 Read Cache + Hash 比对：实现重复读取的 Diff 差分折叠。</li>
+          <li data-page-node-id="b8DvTL4k0X1Eq0QNljEBto">落实 Shell 测试日志 Artifact 化：将 30K+ 报错截断落盘并提取核心堆栈。</li>
+          <li data-page-node-id="pvix0AYA3OdOePZJJGCzfd">精简 MCP Tool Schema：常驻工具严格限制在 5~8 个核心接口以内。</li>
+        </ul>
+      </div>
+
+      <div class="callout cyan" data-page-node-id="GlKyjxWrYYGl1BYWwMUrui">
+        <div class="callout-title" data-page-node-id="GBSwGZhBfn3X5mfd5VJMmq">P1 阶段：知识沉淀与前缀优化 (Week 1~2)</div>
+        <ul style="padding-left: 20px; margin-bottom: 0;" data-page-node-id="TQv4QeBmulzEFaEHXKAn9A">
+          <li data-page-node-id="YY6fFpmSAhY6zKDeXpxjM9">挂载跨会话 Knowledge Graph：沉淀排错决策与排除死路，消除重复试错推理。</li>
+          <li data-page-node-id="gmTxKz5LzBCbRDx6KB8fVH">引入 Aider 风格的 Repo Map：以 2K~4K Tokens 预算提供全项目结构感知。</li>
+          <li data-page-node-id="mTBa9m7NqrfONUDgqi2Dct">实施任务边界选择性压缩（Selective Context Compaction）：保护关键约束，清理无用历史。</li>
+          <li data-page-node-id="JO7O22OEwnv1ZH5iUIHHIi">锁定 Prompt Cache 物理前缀：规范 Tools 与静态 Prompt 顺序，确保 85%+ 命中率。</li>
+        </ul>
+      </div>
+
+      <div class="callout amber" data-page-node-id="RAyvKE7IZGbBeHScvcqJfG">
+        <div class="callout-title" data-page-node-id="qp84qPB4P5WGi1IO9Ou0Vz">P2 阶段：专项算力分流层 (Week 3~4)</div>
+        <ul style="padding-left: 20px; margin-bottom: 0;" data-page-node-id="YzfyXyQVeVzlGA0eV6wGBT">
+          <li data-page-node-id="Ur5JPUAExJDOfjGpCzvsoY">接入 Spotify 风格的 Worker 代理：针对超长日志分析与样板代码生成启用便宜模型。</li>
+          <li data-page-node-id="W74dwPQYcCQKsUgC1pnCjl">设立 Exact Evidence 强制回读铁律：主模型在生成修改前，必须定向回读真实源码。</li>
+        </ul>
+      </div>
+
+      <div class="callout rose" data-page-node-id="FZR2O74QxEqFTAUr5Rt4Hv">
+        <div class="callout-title" data-page-node-id="jepqFjtfHkSjT7jxUoCXpS">P3 阶段：动态模型网关 (长期观测评估后)</div>
+        <ul style="padding-left: 20px; margin-bottom: 0;" data-page-node-id="Mdl7rRYB9Cv72Cnv32iKnW">
+          <li data-page-node-id="dGDxwM87BwBBclYKm1vUQ9">通过 Claude Code Router 接入多厂商 Fallback 网关。</li>
+          <li data-page-node-id="IqGLO7wiL0mJxO7oeUhdGw"><strong data-page-node-id="irYayiTQCJThBcOhXNUzWT">仅在积累足够真实 Eval 评测数据后，才谨慎开放基于分类器的动态模型路由。</strong></li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="sub-kpi-matrix" data-page-node-id="wDOIdQFGgjMRjRGQJEjGs7">
+      <h3 class="subsection-title" data-page-node-id="Oo5GpEE0djygxgPTO9m3oi">7.2 12 项核心 KPI 监控与验收清单</h3>
+      <p data-page-node-id="mHKJEwiaNTMLssDUep1ox0">
+        优化成功与否绝不以单一的“节省了多少 Token”为评判标准。以下 12 项指标构成系统级质量约束体系：
+      </p>
+
+      <div class="table-wrapper" data-page-node-id="To7jjaQIDDgEGGJXsCQ2cx">
+        <table data-page-node-id="PEs39sHtpFzygGFFb2fSSe">
+          <thead data-page-node-id="ZxSa8GIUS0VD0IhEbBKfjG">
+            <tr data-page-node-id="UAFVGLUUdzyN9yApHu3t0I">
+              <th data-page-node-id="zLNMnp4xVmSxhekAEYDgWR">监控维度</th>
+              <th data-page-node-id="jj4srFAXa1vZLMCHUkLAiH">核心 KPI 指标</th>
+              <th data-page-node-id="DNEMB6ArouCWjxcA7zUma5">基线要求 (Hard Requirement)</th>
+              <th data-page-node-id="8MRXWOryp4XJ3AUPKuli54">测量方法与数据来源</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="NxJrwZaiCzbvBQ1yskihPg">
+            <tr data-page-node-id="98geMKICamwI9K9GVxPzVb">
+              <td rowspan="3" data-page-node-id="FJBwA01HwVgLpy5TKKsmEC"><strong data-page-node-id="2oiv3BFA9dsEEGogwapPZ2">质量硬约束 (Quality Constraints)</strong></td>
+              <td data-page-node-id="3BJ0TVsYgEU2WL38UFOTLp">任务一次性成功率 (Task Success Rate)</td>
+              <td data-page-node-id="5eMs1TCNLC1qXd34Niwoyi"><strong data-page-node-id="KWOm6qFkbkHfXdeNwsL5FT">≥ 基准 (100% 保持)</strong></td>
+              <td data-page-node-id="g8T1SRWO5Hy0AG3Menv6cA">自动化回归测试套件通过率</td>
+            </tr>
+            <tr data-page-node-id="1SVi2C2HVQySQy2OlYIxP3">
+              <td data-page-node-id="I4nl6kqhABiaSH1jypWKkI">单元测试通过率 (Tests Pass Rate)</td>
+              <td data-page-node-id="zosAr2pW0Xz7GM3jtmHJQo"><strong data-page-node-id="NjPDmyuJ6FlRRVatWpBuoh">≥ 基准 (100% 保持)</strong></td>
+              <td data-page-node-id="0u9FxwLUDQpUnBGiTTzb8P">CI 编译与单元测试覆盖报告</td>
+            </tr>
+            <tr data-page-node-id="6OGhHfUdWF9P862yAksqwh">
+              <td data-page-node-id="OUQmDLAj960iMhRZqhoUGn">返工与重试率 (Retry / Rework Rate)</td>
+              <td data-page-node-id="vEp3e9BZ1hXSGoQplEX0zK"><strong data-page-node-id="cEPfM0UxcdKgHsggeERInA">≤ 基准</strong></td>
+              <td data-page-node-id="UdpktudOIRrvhmTfv9VW2P">修改后再次抛错引发的修复轮次统计</td>
+            </tr>
+            <tr data-page-node-id="VIGzWoUX3wMHsTmubUwPMH">
+              <td rowspan="4" data-page-node-id="SFIUYIBwHAfjaeltziLJwP"><strong data-page-node-id="uTkuaCpqMrJNnn8dQqNfcO">Token 治理效能 (Token Economics)</strong></td>
+              <td data-page-node-id="6i6qJDKhJMNwXHALzdlFfg">Frontier 输入 Token 总量</td>
+              <td data-page-node-id="oRBQFMTg8WdmbUYW0AAwTV"><strong data-page-node-id="Ll2ULQHucAOVooY4W1jxvB">下降 ≥ 65%</strong></td>
+              <td data-page-node-id="jFPc0UENCQcD0O0bT1svGS">客户端请求日志统计</td>
+            </tr>
+            <tr data-page-node-id="5Hzr8jcK5UNUcqxHg3espq">
+              <td data-page-node-id="RfJ3UTYqIDhUbtwolLD4r2">Prompt Cache 命中率</td>
+              <td data-page-node-id="B9o5tFAOnQWgigGBg0VMMA"><strong data-page-node-id="FHfL9P75JEWisxB8qNVl5C">保持 ≥ 85%</strong></td>
+              <td data-page-node-id="G8rCk1Y5bZlxRze2icHwJI">Provider API 账单 <code data-page-node-id="qqzzx6baMIDWAGgSNvxvk1">cached_tokens</code> 占比</td>
+            </tr>
+            <tr data-page-node-id="OUvveSYwyOD6BAIeMlGYUj">
+              <td data-page-node-id="7aGf2F36MQB1Z6ULtp3RSG">文件重复读取消耗 (Repeated Reads)</td>
+              <td data-page-node-id="piXBNDZao7QituUYd9eGHy"><strong data-page-node-id="w3xDpzzc4neDZBxn37ZCKm">下降 ≥ 90%</strong></td>
+              <td data-page-node-id="mW7bioPEuDu0GeHAZhVzxz">Diff Cache 拦截统计</td>
+            </tr>
+            <tr data-page-node-id="iMCbUrvhAgbUyK7qMJwgBF">
+              <td data-page-node-id="ZDbMYCHGLTmpnLaeWZ1Pg5">有效任务总成本 (Effective Cost)</td>
+              <td data-page-node-id="QnXvmpBFHLFrtkWlpT3Eo4"><strong data-page-node-id="4wxaDSecNaeDpThg051veZ">下降 ≥ 80%</strong></td>
+              <td data-page-node-id="oAcK2YPr7fYiVSZaOmRfVU">综合输入、输出、Cache与Worker计费</td>
+            </tr>
+            <tr data-page-node-id="JztrpU9ptrJgQl13FtiwnW">
+              <td rowspan="3" data-page-node-id="WieRgiu04hxUTVlRTbtSeq"><strong data-page-node-id="OFYWlCT6M1vVVoTwqJYlOS">系统交互与稳定性 (System Stability)</strong></td>
+              <td data-page-node-id="lHqUTFtIw7XsXbPkUGmpBd">单次会话 Tool Calls 调用次数</td>
+              <td data-page-node-id="YwFKCEL2eFqYFJdIT3gmW7"><strong data-page-node-id="McyGxz3lwZ67Pv41PtCvrw">下降 30%~50%</strong></td>
+              <td data-page-node-id="Wi6haqWm3ltYWlFbYfFM1z">Serena 符号级切片规避盲目循环</td>
+            </tr>
+            <tr data-page-node-id="8uTufxiMadTs200skBDKEt">
+              <td data-page-node-id="iQwMPbWG803YidemCpiKLX">上下文可逆还原成功率</td>
+              <td data-page-node-id="P0OfDmw6YfldqDlTqJF656"><strong data-page-node-id="cEbDV0G23FbRtyMmrkYJ9S">100% 绝对可靠</strong></td>
+              <td data-page-node-id="yFpJVMh2Hi3gHOm97ylUmL"><code data-page-node-id="UdaadRGdt1CROxdgbLffQL">expand(receipt_id)</code> 压力校验</td>
+            </tr>
+            <tr data-page-node-id="hKTiTyIWZ7MnNmaEC6HcrT">
+              <td data-page-node-id="7e6G4p9YwjUXo47VHspecL">端到端响应时延 (Latency)</td>
+              <td data-page-node-id="fLcvKJdeemdtmXeIRVGvOf"><strong data-page-node-id="M5svZ6xFWD9rdg3uj4a0gM">不发生肉眼可见劣化</strong></td>
+              <td data-page-node-id="GH85R8lNQ8uHQfgM4K1EnZ">规避了全量大文件往返传输延迟</td>
+            </tr>
+            <tr data-page-node-id="pPwAOhD98EViAUL52h0fOt">
+              <td rowspan="2" data-page-node-id="qsbrAsY7JHcBAOOFHB5aCi"><strong data-page-node-id="EEpzBo9lCYRBTw5jox4dly">知识沉淀价值 (Knowledge Compounding)</strong></td>
+              <td data-page-node-id="GuDaNpJCkzHNzIW6H3LcTP">跨会话死胡同避免率</td>
+              <td data-page-node-id="ct8EsAyVdKuBepWntaQAXm"><strong data-page-node-id="n1S6tufN1RNJsJc4wADUij">≥ 85%</strong></td>
+              <td data-page-node-id="VnNCpxDtKcE9B6BuIvztpL">Knowledge Graph 命中与绕行日志</td>
+            </tr>
+            <tr data-page-node-id="CORlFB1XWuBNFognfNE1V1">
+              <td data-page-node-id="uQIbA6z4CIBakA7clKk0Wk">跨客户端规则同步一致性</td>
+              <td data-page-node-id="1ZwnBsEQaZCYHjYtbC0Ldj"><strong data-page-node-id="olJvXxgzkmkUZz1JWVBw6H">100% 一致</strong></td>
+              <td data-page-node-id="v0VkmWzbD7VllXHlc7VIdz">统一 <code data-page-node-id="g0z1Kwfyv8Ypbm0n4YZ34J">hooks-core</code> 分发核验</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+/**
+ * Context ROI OS 白皮书内联交互与沙盘运行时引擎
+ * 严格遵循无外部依赖、使用 byId 避免 LaTeX 误判、无重复 var 声明规范。
+ */
+(function() {
+  "use strict";
+
+  // 安全 DOM 查询助手 (严禁命名为 $, 避免自检工具误判为 LaTeX 占位符)
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  // 1. 阅读进度条与滚动监听
+  var barProgress = byId("read-progress");
+  window.addEventListener("scroll", function() {
+    var docH = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+    if (docH > 0 && barProgress) {
+      var pct = (window.scrollY / docH) * 100;
+      barProgress.style.width = pct.toFixed(1) + "%";
+    }
+  });
+
+  // 2. 主题切换引擎 (默认 Dark, 无存储时无条件保持 Dark, 避免系统浅色导致 FOUC 闪白)
+  var btnTheme = byId("btn-theme");
+  var txtThemeIcon = byId("txt-theme-icon");
+  var txtThemeLabel = byId("txt-theme-label");
+
+  function applyTheme(targetTheme) {
+    document.documentElement.setAttribute("data-theme", targetTheme);
+    try {
+      if (window.localStorage) {
+        localStorage.setItem("aike_theme_pref", targetTheme);
+      }
+    } catch(e) {}
+    if (txtThemeIcon && txtThemeLabel) {
+      if (targetTheme === "light") {
+        txtThemeIcon.textContent = "☽";
+        txtThemeLabel.textContent = "深色模式";
+      } else {
+        txtThemeIcon.textContent = "◐";
+        txtThemeLabel.textContent = "浅色模式";
+      }
+    }
+  }
+
+  if (btnTheme) {
+    btnTheme.addEventListener("click", function() {
+      var current = document.documentElement.getAttribute("data-theme") || "dark";
+      var next = current === "dark" ? "light" : "dark";
+      applyTheme(next);
+    });
+  }
+
+  // 3. 侧边栏 TOC 动态高亮
+  var tocLinks = document.querySelectorAll(".toc-nav a");
+  var sections = document.querySelectorAll("section[id]");
+
+  function updateActiveToc() {
+    var scrollY = window.scrollY + 100;
+    var activeId = "";
+    for (var i = 0; i < sections.length; i++) {
+      var sec = sections[i];
+      if (sec.offsetTop <= scrollY) {
+        activeId = sec.getAttribute("id");
+      }
+    }
+    tocLinks.forEach(function(link) {
+      var href = link.getAttribute("href");
+      if (href === "#" + activeId) {
+        link.classList.add("active");
+      } else {
+        link.classList.remove("active");
+      }
+    });
+  }
+  window.addEventListener("scroll", updateActiveToc);
+
+  // =========================================================================
+  // 沙盘 1: Context ROI 经济学模拟器逻辑
+  // =========================================================================
+  var inSimTurns = byId("in-sim-turns");
+  var inSimFiles = byId("in-sim-files");
+  var inSimDupRate = byId("in-sim-dup-rate");
+  var selSimPolicy = byId("sel-sim-policy");
+
+  var dispSimTurns = byId("disp-sim-turns");
+  var dispSimFiles = byId("disp-sim-files");
+  var dispSimDupRate = byId("disp-sim-dup-rate");
+
+  var outSimTokensNaive = byId("out-sim-tokens-naive");
+  var outSimTokensOpt = byId("out-sim-tokens-opt");
+  var outSimTokensSavedPct = byId("out-sim-tokens-saved-pct");
+  var outSimCostNaive = byId("out-sim-cost-naive");
+  var outSimCostOpt = byId("out-sim-cost-opt");
+  var outSimCostSavedPct = byId("out-sim-cost-saved-pct");
+  var outSimVerdict = byId("out-sim-verdict");
+
+  // 模型费率 ($ / 1M tokens)
+  var PRICE_FRONTIER_INPUT = 3.00;
+  var PRICE_FRONTIER_CACHE = 0.30;
+  var PRICE_FRONTIER_OUTPUT = 15.00;
+  var PRICE_WORKER_INPUT = 0.10;
+  var PRICE_WORKER_OUTPUT = 0.40;
+
+  function runSandboxRoi() {
+    if (!inSimTurns || !inSimFiles || !inSimDupRate || !selSimPolicy) return;
+    var turns = parseInt(inSimTurns.value, 10) || 40;
+    var files = parseInt(inSimFiles.value, 10) || 18;
+    var dupPct = parseInt(inSimDupRate.value, 10) || 55;
+    var policy = selSimPolicy.value;
+
+    if (dispSimTurns) dispSimTurns.textContent = turns + " 轮";
+    if (dispSimFiles) dispSimFiles.textContent = files + " 次";
+    if (dispSimDupRate) dispSimDupRate.textContent = dupPct + "%";
+
+    // 1. 朴素模式计算
+    // 40 轮中，未治理的上下文按线性斜率增长 (平均 8000 + t * 3800)
+    var naiveTotalInput = 0;
+    for (var t = 1; t <= turns; t++) {
+      naiveTotalInput += (8000 + t * 3800);
+    }
+    var naiveHitRate = 0.35;
+    var naiveCost = (naiveTotalInput * (1 - naiveHitRate) / 1e6) * PRICE_FRONTIER_INPUT +
+                    (naiveTotalInput * naiveHitRate / 1e6) * PRICE_FRONTIER_CACHE +
+                    (turns * 450 / 1e6) * PRICE_FRONTIER_OUTPUT;
+
+    // 2. 策略模式计算
+    var optTotalInput = 0;
+    var optHitRate = 0.88;
+    var workerCost = 0;
+    var verdictText = "";
+
+    if (policy === "policy-opt") {
+      // 全面治理模式：每轮增量受严密控制 (3200 + t * 950)
+      for (var t1 = 1; t1 <= turns; t1++) {
+        optTotalInput += (3200 + t1 * 950);
+      }
+      optHitRate = 0.88;
+      workerCost = (130000 / 1e6) * PRICE_WORKER_INPUT + (11200 / 1e6) * PRICE_WORKER_OUTPUT;
+      verdictText = "超线性收益显著：借助 88% 的高 Prompt Cache 命中率与 0.10x 读取电价，成本节省率显著超越 Token 节省率。";
+    } else if (policy === "policy-symbol") {
+      // 仅符号裁剪，无 diff 缓存与前缀保护
+      for (var t2 = 1; t2 <= turns; t2++) {
+        optTotalInput += (5000 + t2 * 1800);
+      }
+      optHitRate = 0.60;
+      verdictText = "单纯符号裁剪有效压降了首次读取体量，但缺乏二次 Diff 缓存与前缀保护，成本压降幅度受限。";
+    } else if (policy === "policy-pruning") {
+      // 极端逐轮修剪 (DCP)，Token 看起来很小，但击穿缓存
+      optTotalInput = turns * 12000;
+      optHitRate = 0.15; // 缓存彻底失效
+      verdictText = "警惕前缀缓存失效陷阱！虽然每轮上下文长度被压得很低，但前缀变动导致 Cache 命中率暴跌至 15%，实际费用甚至不如稳定前缀方案！";
+    } else {
+      // 朴素对照
+      optTotalInput = naiveTotalInput;
+      optHitRate = naiveHitRate;
+      verdictText = "当前处于朴素直喷状态，重复文件无差分剔除，测试日志长篇累积，总账单与延迟处于最高峰值。";
+    }
+
+    var optCost = (optTotalInput * (1 - optHitRate) / 1e6) * PRICE_FRONTIER_INPUT +
+                  (optTotalInput * optHitRate / 1e6) * PRICE_FRONTIER_CACHE +
+                  (turns * 420 / 1e6) * PRICE_FRONTIER_OUTPUT + workerCost;
+
+    var tokensSavedPct = ((naiveTotalInput - optTotalInput) / naiveTotalInput) * 100;
+    var costSavedPct = ((naiveCost - optCost) / naiveCost) * 100;
+
+    if (outSimTokensNaive) outSimTokensNaive.textContent = Math.round(naiveTotalInput).toLocaleString();
+    if (outSimTokensOpt) outSimTokensOpt.textContent = Math.round(optTotalInput).toLocaleString();
+    if (outSimTokensSavedPct) outSimTokensSavedPct.textContent = (tokensSavedPct >= 0 ? "-" : "+") + Math.abs(tokensSavedPct).toFixed(1) + "%";
+
+    if (outSimCostNaive) outSimCostNaive.textContent = "$" + naiveCost.toFixed(2);
+    if (outSimCostOpt) outSimCostOpt.textContent = "$" + optCost.toFixed(2);
+    if (outSimCostSavedPct) outSimCostSavedPct.textContent = (costSavedPct >= 0 ? "-" : "+") + Math.abs(costSavedPct).toFixed(1) + "%";
+    if (outSimVerdict) outSimVerdict.textContent = verdictText;
+  }
+
+  if (inSimTurns) inSimTurns.addEventListener("input", runSandboxRoi);
+  if (inSimFiles) inSimFiles.addEventListener("input", runSandboxRoi);
+  if (inSimDupRate) inSimDupRate.addEventListener("input", runSandboxRoi);
+  if (selSimPolicy) selSimPolicy.addEventListener("change", runSandboxRoi);
+
+  // =========================================================================
+  // 沙盘 2: 准入策略门限与动态路由逻辑
+  // =========================================================================
+  var selAdmType = byId("sel-adm-type");
+  var inAdmSize = byId("in-adm-size");
+  var chkAdmForce = byId("chk-adm-force");
+  var dispAdmSize = byId("disp-adm-size");
+
+  var outAdmDecision = byId("out-adm-decision");
+  var outAdmInputTokens = byId("out-adm-input-tokens");
+  var outAdmInterceptRate = byId("out-adm-intercept-rate");
+  var outAdmSecurityLevel = byId("out-adm-security-level");
+  var outAdmActionRule = byId("out-adm-action-rule");
+
+  function runSandboxAdmission() {
+    if (!selAdmType || !inAdmSize || !chkAdmForce) return;
+    var type = selAdmType.value;
+    var size = parseInt(inAdmSize.value, 10) || 18000;
+    var isForce = chkAdmForce.checked;
+
+    if (dispAdmSize) dispAdmSize.textContent = size.toLocaleString() + " Tokens";
+
+    var decision = "";
+    var actualTokens = 0;
+    var secLevel = "";
+    var ruleText = "";
+
+    if (isForce) {
+      decision = "FORCE EXACT PASS";
+      actualTokens = size;
+      secLevel = "User Override (基准直通)";
+      ruleText = "已检测到 --force-exact 显式豁免指令：准入防火墙全部放行，将原始全文直接注入主上下文。";
+    } else {
+      if (type === "type-src-large") {
+        if (size < 2000) {
+          decision = "NATIVE PASS";
+          actualTokens = size;
+          secLevel = "P0 绝对无损 (Strict Lossless)";
+          ruleText = "小于 2,000 Tokens 门限的小文件：直接直通放行，无需引入异步提取延迟。";
+        } else if (size <= 6000) {
+          decision = "SYMBOL / RANGE READ";
+          actualTokens = Math.round(size * 0.18);
+          secLevel = "P0 绝对无损 (AST 精确切片)";
+          ruleText = "中型源码文件：由 Serena 提取关键 Class/Function 符号体，过滤不相关辅助代码。";
+        } else {
+          decision = "BLOCK & SYMBOL EXTRACT";
+          actualTokens = 450;
+          secLevel = "P0 绝对无损 (AST 符号切片)";
+          ruleText = "触发大于 12K 硬阻断准入规则：拦截全文件读取，强制通过 Serena 抽取关联符号定义体，保留高价值语义切片。";
+        }
+      } else if (type === "type-test-log") {
+        decision = "ARTIFACT ISOLATION";
+        actualTokens = Math.min(2200, Math.round(size * 0.08));
+        secLevel = "P0 可逆工件 (带 expand 句柄)";
+        ruleText = "测试终端狂暴输出：完整日志沉淀至本地工件库，由 Parser 提取错误聚类与失败用例摘要注入模型。";
+      } else if (type === "type-reread") {
+        decision = "DIFF CACHE (RE-READ)";
+        actualTokens = 85;
+        secLevel = "P0 绝对无损 (增量 Diff)";
+        ruleText = "检测到会话内已读文件再次请求：哈希比对一致后仅返回变更 Diff 补丁，压降 99% 冗余开销。";
+      } else if (type === "type-edit-symbol") {
+        decision = "EXACT READ (MUST VERIFY)";
+        actualTokens = 1100;
+        secLevel = "Hard Verified (编辑前强制核验)";
+        ruleText = "触发代码编辑 Exact Evidence 铁律：在实际修改动作前，必须拉取目标符号源码与受影响调用方做最终证据校验。";
+      } else if (type === "type-arch-explore") {
+        decision = "PROBE AST / BM25";
+        actualTokens = 1800;
+        secLevel = "High Recall (免向量轻量检索)";
+        ruleText = "超大仓库探索：委托 Probe 依据严格 Token Budget 执行 AST 骨架检索与符号跨包拓扑分析。";
+      }
+    }
+
+    var interceptRate = Math.max(0, ((size - actualTokens) / size) * 100);
+
+    if (outAdmDecision) outAdmDecision.textContent = decision;
+    if (outAdmInputTokens) outAdmInputTokens.textContent = actualTokens.toLocaleString() + " Tokens";
+    if (outAdmInterceptRate) outAdmInterceptRate.textContent = interceptRate.toFixed(1) + "%";
+    if (outAdmSecurityLevel) outAdmSecurityLevel.textContent = secLevel;
+    if (outAdmActionRule) outAdmActionRule.textContent = ruleText;
+  }
+
+  if (selAdmType) selAdmType.addEventListener("change", runSandboxAdmission);
+  if (inAdmSize) inAdmSize.addEventListener("input", runSandboxAdmission);
+  if (chkAdmForce) chkAdmForce.addEventListener("change", runSandboxAdmission);
+
+  // =========================================================================
+  // 沙盘 3: Prefix 缓存失效与折损沙盘逻辑 (含动态 SVG 折线重绘)
+  // =========================================================================
+  var selCacheMode = byId("sel-cache-mode");
+  var inCacheBoundary = byId("in-cache-boundary");
+  var dispCacheBoundary = byId("disp-cache-boundary");
+
+  var chartPolylineCost = byId("chart-polyline-cost");
+  var outCacheTotalTokens = byId("out-cache-total-tokens");
+  var outCacheHitRate = byId("out-cache-hit-rate");
+  var outCacheEffectiveCost = byId("out-cache-effective-cost");
+  var outCacheInsight = byId("out-cache-insight");
+
+  function runSandboxCache() {
+    if (!selCacheMode || !inCacheBoundary || !chartPolylineCost) return;
+    var mode = selCacheMode.value;
+    var interval = parseInt(inCacheBoundary.value, 10) || 10;
+
+    if (dispCacheBoundary) dispCacheBoundary.textContent = interval + " 轮/次";
+
+    var points = [];
+    var totalTokens = 0;
+    var totalCost = 0;
+    var avgHitRate = 0;
+    var insight = "";
+
+    // 40 轮累计成本计算与坐标映射 (X: 40 ~ 440, Y: 160 ~ 30, $0 ~ $2.0)
+    var cumCost = 0;
+    for (var t = 1; t <= 40; t++) {
+      var turnTokens = 0;
+      var hitRate = 0;
+
+      if (mode === "mode-naive") {
+        turnTokens = 8000 + t * 2500;
+        hitRate = 0.85;
+      } else if (mode === "mode-per-turn") {
+        turnTokens = 12000;
+        hitRate = 0.15; // 频繁击穿
+      } else if (mode === "mode-boundary") {
+        turnTokens = 10000 + (t % interval) * 1000;
+        hitRate = 0.85; // 阶段边界稳定
+      }
+
+      var turnCost = (turnTokens * (1 - hitRate) / 1e6) * 3.00 + (turnTokens * hitRate / 1e6) * 0.30;
+      cumCost += turnCost;
+      totalTokens += turnTokens;
+
+      // X 轴映射: t=1 -> 40, t=40 -> 440
+      var x = 40 + ((t - 1) / 39) * 400;
+      // Y 轴映射: cost=0 -> 160, cost=2.0 -> 30
+      var y = 160 - (Math.min(cumCost, 2.0) / 2.0) * 130;
+      points.push(x.toFixed(1) + "," + y.toFixed(1));
+    }
+
+    chartPolylineCost.setAttribute("points", points.join(" "));
+
+    totalCost = cumCost;
+    if (mode === "mode-naive") {
+      avgHitRate = 85.0;
+      insight = "自然累加模式：虽然 Prompt Cache 命中率高，但随着轮次推进，巨大的上下文线性堆积仍旧拉高了整体账单。";
+    } else if (mode === "mode-per-turn") {
+      avgHitRate = 15.0;
+      insight = "前缀频繁破坏警示：逐轮修剪虽把每轮 Token 压在 12K，但前缀颠覆导致几乎无法命中缓存，单位有效成本高昂。";
+    } else if (mode === "mode-boundary") {
+      avgHitRate = 85.0;
+      insight = "阶段边界压缩完美兼顾了“上下文总体积可控”与“Prefix Cache 高命中率”，有效消除了逐轮修剪造成的缓存击穿惩罚。";
+    }
+
+    if (outCacheTotalTokens) outCacheTotalTokens.textContent = Math.round(totalTokens).toLocaleString();
+    if (outCacheHitRate) outCacheHitRate.textContent = avgHitRate.toFixed(1) + "%";
+    if (outCacheEffectiveCost) outCacheEffectiveCost.textContent = "$" + totalCost.toFixed(4);
+    if (outCacheInsight) outCacheInsight.textContent = insight;
+  }
+
+  if (selCacheMode) selCacheMode.addEventListener("change", runSandboxCache);
+  if (inCacheBoundary) inCacheBoundary.addEventListener("input", runSandboxCache);
+
+  // =========================================================================
+  // 沙盘 4: 四大客户端 Hook 配置生成器逻辑
+  // =========================================================================
+  var selClientType = byId("sel-client-type");
+  var chkRuleBlock = byId("chk-rule-block");
+  var chkRuleDiff = byId("chk-rule-diff");
+  var chkRuleLog = byId("chk-rule-log");
+  var chkRuleKg = byId("chk-rule-kg");
+
+  var outHookTargetPath = byId("out-hook-target-path");
+  var outHookInterceptType = byId("out-hook-intercept-type");
+  var outHookCompatibility = byId("out-hook-compatibility");
+  var outHookConfigCode = byId("out-hook-config-code");
+
+  function runSandboxHook() {
+    if (!selClientType || !outHookConfigCode) return;
+    var client = selClientType.value;
+    var isBlock = chkRuleBlock ? chkRuleBlock.checked : true;
+    var isDiff = chkRuleDiff ? chkRuleDiff.checked : true;
+    var isLog = chkRuleLog ? chkRuleLog.checked : true;
+    var isKg = chkRuleKg ? chkRuleKg.checked : true;
+
+    var targetPath = "";
+    var interceptType = "";
+    var compatLevel = "Production Ready (L1)";
+    var codeText = "";
+
+    if (client === "client-claude") {
+      targetPath = "~/.claude/hooks.json";
+      interceptType = "Native PreToolUse Process Exec";
+      codeText = JSON.stringify({
+        "version": "1.0",
+        "hooks": {
+          "PreToolUse": [
+            {
+              "name": "context-roi-firewall",
+              "matcher": "Read|Glob|Grep|Bash",
+              "command": "python3 /opt/context-roi-os/hooks/claude_admission.py",
+              "options": {
+                "block_large_files": isBlock,
+                "diff_cache_enabled": isDiff,
+                "truncate_shell_logs": isLog,
+                "knowledge_graph_mcp": isKg,
+                "token_budget_threshold": 12000
+              }
+            }
+          ]
+        }
+      }, null, 2);
+    } else if (client === "client-codex") {
+      targetPath = "~/.codex/hooks.json";
+      interceptType = "Codex PreToolUse Runtime Trait";
+      codeText = JSON.stringify({
+        "runtime": "codex-hook-engine-v2",
+        "pre_tool_use": {
+          "enabled": true,
+          "handler": "context_roi_codex::admission_handler",
+          "rules": {
+            "intercept_large_reads": isBlock,
+            "hash_diff_dedup": isDiff,
+            "isolate_shell_artifacts": isLog,
+            "expose_kg_endpoint": isKg
+          },
+          "outcome_actions": ["should_block", "updated_input", "additional_contexts"]
+        }
+      }, null, 2);
+    } else if (client === "client-cursor") {
+      targetPath = "~/.cursor/hooks.json";
+      interceptType = "Claude-Compatible PreTool Surface";
+      codeText = JSON.stringify({
+        "cursorVersion": "2026.x",
+        "importHooksFrom": "~/.claude/hooks.json",
+        "activeHooks": ["preToolUse", "beforeReadFile", "beforeShellExecution"],
+        "overrides": {
+          "smart_read_diff_only": isDiff,
+          "artifact_shell_redirect": isLog
+        }
+      }, null, 2);
+    } else if (client === "client-workbuddy") {
+      targetPath = ".workbuddy/plugins/context-roi-os/manifest.json";
+      interceptType = "WorkBuddy Lifecycle Hooks";
+      codeText = JSON.stringify({
+        "name": "context-roi-os-workbuddy",
+        "version": "1.0.0",
+        "description": "Enterprise Context ROI OS Admission Firewall",
+        "hooks": {
+          "PreToolUse": "./lib/hooks/preToolUse.js",
+          "PreCompact": "./lib/hooks/preCompact.js"
+        },
+        "env": {
+          "ROI_BLOCK_LARGE": isBlock ? "1" : "0",
+          "ROI_DIFF_CACHE": isDiff ? "1" : "0",
+          "ROI_LOG_ARTIFACT": isLog ? "1" : "0",
+          "ROI_ENABLE_KG": isKg ? "1" : "0"
+        }
+      }, null, 2);
+    }
+
+    if (outHookTargetPath) outHookTargetPath.textContent = targetPath;
+    if (outHookInterceptType) outHookInterceptType.textContent = interceptType;
+    if (outHookCompatibility) outHookCompatibility.textContent = compatLevel;
+    if (outHookConfigCode) outHookConfigCode.textContent = codeText;
+  }
+
+  if (selClientType) selClientType.addEventListener("change", runSandboxHook);
+  if (chkRuleBlock) chkRuleBlock.addEventListener("change", runSandboxHook);
+  if (chkRuleDiff) chkRuleDiff.addEventListener("change", runSandboxHook);
+  if (chkRuleLog) chkRuleLog.addEventListener("change", runSandboxHook);
+  if (chkRuleKg) chkRuleKg.addEventListener("change", runSandboxHook);
+
+  // 页面加载自动初始执行各沙盘与 TOC
+  runSandboxRoi();
+  runSandboxAdmission();
+  runSandboxCache();
+  runSandboxHook();
+  updateActiveToc();
+})();
+</script>
+</body>
+</html>

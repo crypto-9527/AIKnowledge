@@ -347,3 +347,57 @@ node scripts/runtime_smoke.js /tmp/backup/<原文件>
 **踩坑（正则替换已存在的属性）**：模式 `(\sattr=")[^"]*"` 的匹配串**包含结尾引号**，
 替换模板必须补回 `'"'`，否则产出 `data-theme="dark data-page-node-id="…` 这类**畸形标签**。
 替换后务必校验 `<html>` 标签的引号成对。
+
+### 8.7 侧栏贴左 · 正文在剩余区域居中（消除右侧多余留白）
+
+在桌面宽屏（1440px / 1920px / 2K / 4K）环境下，针对带有侧栏目录的文档，**严禁将正文仅凭固定 `margin-left` 贴着侧栏排布**，否则正文右侧会留下巨大的荒废空白区（严重失衡）。
+
+#### ① 视觉与布局目标
+- **左边侧栏目录**：稳固贴在屏幕最左侧（宽度 $S = \text{var(--aike-sidebar-w)}$，默认 280px）。
+- **正文阅读内容**：在除去侧栏后的**剩余视口区域**中，**绝对水平居中展示**，最大宽度 $C = \text{var(--aike-content-max)}$（1180px）。
+- **左右留白恒等**：侧栏右边缘到正文左边缘的留白，严格等于正文右边缘到屏幕右边界的留白。
+
+#### ② 数学模型与 CSS 盒模型实现
+令包含块（视口）宽度为 $100\%$，侧栏宽为 $S$，正文最大宽为 $C$：
+$$\text{autoMargin} = \max\left(0\text{px}, \frac{100\% - S - C}{2}\right)$$
+$$\text{marginLeft} = S + \text{autoMargin}$$
+$$\text{marginRight} = \text{autoMargin}$$
+
+实证推导：
+$$\text{左侧空白} = \text{marginLeft} - S = \text{autoMargin} = \text{marginRight} = \text{右侧空白}$$
+
+```css
+/* 统一排版基线注入层：纯 CSS 自动对称居中 */
+body:has(> .app-sidebar, > aside.app-sidebar, > .sidebar, > aside.sidebar, > .sidebar-nav){
+  display: block !important;
+}
+
+body:has(> .app-sidebar, > aside.app-sidebar, > .sidebar, > aside.sidebar, > .sidebar-nav)
+  > :is(.app-main, main, .main, .content-area, .main-content, .page-wrap, .main-wrapper){
+  display: block !important;
+  max-width: var(--aike-content-max) !important;
+  width: auto !important;
+  flex: none !important;
+  margin-left: calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2)) !important;
+  margin-right: max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2)) !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 1080px){
+  body:has(> .app-sidebar, > aside.app-sidebar, > .sidebar, > aside.sidebar, > .sidebar-nav)
+    > :is(.app-main, main, .main, .content-area, .main-content, .page-wrap, .main-wrapper){
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+}
+```
+
+#### ③ 为什么禁止改用 `position: sticky`？（深坑防御）
+很多实现倾向于将侧栏改为 `position: sticky`，但这在以下场景会直接崩塌：
+- 若页面祖先元素（包括 `body` 或 `html`）声明了 `overflow-x: hidden`（长文排版防溢出的常见写法），CSS 规范规定 `sticky` 将**彻底失效退化为相对定位**，滚动时侧栏直接滚出屏幕！
+- 保留 `position: fixed` + 经典块级盒模型（`display: block`），完全免疫任何祖先的 `overflow-x: hidden`，同时零破坏移动端的抽屉滑出交互。
+

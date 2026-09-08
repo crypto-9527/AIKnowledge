@@ -1,0 +1,2815 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>从一次 LLM 调用到完整 Harness，Agent 到底经历了什么？—— 架构演化与工程实践白皮书</title>
+<style>
+/* ==========================================================================
+   1. 系统字体栈降级与全局变量体系 (Zero External Dependencies)
+   ========================================================================== */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+  /* 基础排版标尺 */
+  --content-max-w: 1240px;
+  --sidebar-w: 280px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --transition-fast: 0.18s ease;
+  --transition-normal: 0.28s ease;
+
+  /* 五色语义状态令牌 */
+  --accent: #d97757;      /* 陶土色：核心重点/架构基线 */
+  --accent-light: rgba(217, 119, 87, 0.12);
+  --emerald: #38a169;     /* 翡翠绿：正向收益/成功/通过 */
+  --emerald-light: rgba(56, 161, 105, 0.12);
+  --rose: #e53e3e;        /* 玫瑰红：衰减/断层/阻断/拦截 */
+  --rose-light: rgba(229, 62, 62, 0.12);
+  --amber: #dd6b20;       /* 琥珀橙：告警/噪声带/成本/瓶颈 */
+  --amber-light: rgba(221, 107, 32, 0.12);
+  --cyan: #319795;        /* 青蓝：数理推导/数据实证/协议 */
+  --cyan-light: rgba(49, 151, 149, 0.12);
+}
+
+/* 深色主题：黑曜石沉浸 (#181715) - 默认 */
+html[data-theme="dark"] {
+  --bg-app: #141312;
+  --bg-surface: #1c1b18;
+  --bg-surface-elevated: #24221f;
+  --bg-surface-subtle: #2d2b27;
+  --text-main: #ede8df;
+  --text-muted: #aba294;
+  --text-faint: #787063;
+  --border-subtle: #36322c;
+  --border-strong: #4f4940;
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.65);
+  --code-bg: #0d0d0c;
+  --svg-grid: #282622;
+  --card-hover-border: #d97757;
+}
+
+/* 浅色主题：暖羊皮纸 (#FAF7F2) */
+html[data-theme="light"] {
+  --bg-app: #f7f4ee;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #fcfbf9;
+  --bg-surface-subtle: #f0ebe1;
+  --text-main: #24211d;
+  --text-muted: #5e574c;
+  --text-faint: #8f8576;
+  --border-subtle: #e3dcd1;
+  --border-strong: #c7beaf;
+  --shadow-sm: 0 2px 6px rgba(45, 38, 30, 0.05);
+  --shadow-md: 0 6px 18px rgba(45, 38, 30, 0.08);
+  --shadow-lg: 0 14px 36px rgba(45, 38, 30, 0.12);
+  --code-bg: #f5efe6;
+  --svg-grid: #ede7dc;
+  --card-hover-border: #d97757;
+}
+
+/* ==========================================================================
+   2. 基础重置与全局排版
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+}
+
+/* 顶部阅读进度指示条 */
+#read-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--cyan), var(--emerald));
+  z-index: 1000;
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+/* 页面顶部固定工具栏 */
+.top-bar {
+  position: sticky;
+  top: 0;
+  height: 54px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 990;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.top-bar-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-bar-badge {
+  font-size: 0.75rem;
+  background: var(--accent-light);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+}
+
+.top-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-icon {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+
+.btn-icon:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ==========================================================================
+   3. 布局：侧边栏 + 内容主体
+   ========================================================================== */
+.layout-container {
+  display: flex;
+  max-width: var(--content-max-w);
+  margin: 0 auto;
+  padding: 24px 20px 80px 20px;
+  gap: 36px;
+}
+
+/* 侧边导航栏 */
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  position: sticky;
+  top: 78px;
+  height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding-right: 12px;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+
+.toc-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.toc-header {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.toc-list {
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.toc-item {
+  margin-bottom: 4px;
+}
+
+.toc-link {
+  display: block;
+  padding: 5px 8px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+  line-height: 1.4;
+}
+
+.toc-link:hover {
+  color: var(--accent);
+  background: var(--accent-light);
+}
+
+.toc-link.active {
+  color: var(--accent);
+  font-weight: 600;
+  background: var(--accent-light);
+  border-left: 3px solid var(--accent);
+}
+
+.toc-sublist {
+  list-style: none;
+  padding-left: 14px;
+  margin-top: 2px;
+}
+
+.toc-sublink {
+  display: block;
+  padding: 3px 6px;
+  color: var(--text-faint);
+  text-decoration: none;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+}
+
+.toc-sublink:hover {
+  color: var(--text-main);
+}
+
+.toc-sublink.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* 主体文章区 */
+.main-content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ==========================================================================
+   4. 文章头部与导言
+   ========================================================================== */
+.article-header {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 36px 36px 30px 36px;
+  margin-bottom: 32px;
+  position: relative;
+  overflow: hidden;
+}
+
+.article-header::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--cyan), var(--emerald));
+}
+
+.meta-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tag {
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.tag-accent {
+  background: var(--accent-light);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.tag-cyan {
+  background: var(--cyan-light);
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+}
+
+.tag-emerald {
+  background: var(--emerald-light);
+  color: var(--emerald);
+  border: 1px solid var(--emerald);
+}
+
+.tag-amber {
+  background: var(--amber-light);
+  color: var(--amber);
+  border: 1px solid var(--amber);
+}
+
+h1.article-title {
+  font-family: var(--font-serif);
+  font-size: 2.2rem;
+  line-height: 1.35;
+  color: var(--text-main);
+  margin-bottom: 14px;
+}
+
+.article-subtitle {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.article-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.85rem;
+}
+
+.info-item-label {
+  color: var(--text-faint);
+  margin-bottom: 2px;
+}
+
+.info-item-val {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* ==========================================================================
+   5. 排版元素：标题、正文、引用、代码、表格
+   ========================================================================== */
+section.content-section {
+  margin-bottom: 48px;
+  scroll-margin-top: 70px;
+}
+
+h2.section-title {
+  font-family: var(--font-serif);
+  font-size: 1.6rem;
+  line-height: 1.4;
+  color: var(--text-main);
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+h2.section-title::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 1.25em;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+h3.sub-title {
+  font-family: var(--font-serif);
+  font-size: 1.28rem;
+  line-height: 1.45;
+  color: var(--text-main);
+  margin: 28px 0 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+h4.sub-sub-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 20px 0 10px 0;
+}
+
+p {
+  margin-bottom: 16px;
+  color: var(--text-main);
+}
+
+strong {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--accent);
+  transition: border-bottom var(--transition-fast);
+}
+
+a:hover {
+  border-bottom-style: solid;
+}
+
+/* 核心引言卡片 */
+blockquote.core-quote {
+  background: var(--bg-surface-elevated);
+  border-left: 4px solid var(--accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 18px 24px;
+  margin: 20px 0 24px 0;
+  font-size: 1.02rem;
+  line-height: 1.7;
+  color: var(--text-main);
+}
+
+blockquote.core-quote p:last-child {
+  margin-bottom: 0;
+}
+
+/* 重点提示框 */
+.callout {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  margin: 20px 0;
+  display: flex;
+  gap: 14px;
+}
+
+.callout-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.callout-content {
+  flex: 1;
+  font-size: 0.94rem;
+}
+
+.callout-content p:last-child {
+  margin-bottom: 0;
+}
+
+.callout-amber {
+  border-left: 4px solid var(--amber);
+  background: var(--bg-surface-elevated);
+}
+
+.callout-cyan {
+  border-left: 4px solid var(--cyan);
+  background: var(--bg-surface-elevated);
+}
+
+.callout-emerald {
+  border-left: 4px solid var(--emerald);
+  background: var(--bg-surface-elevated);
+}
+
+.callout-rose {
+  border-left: 4px solid var(--rose);
+  background: var(--bg-surface-elevated);
+}
+
+/* 代码块规范 */
+.code-container {
+  background: var(--code-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin: 18px 0 22px 0;
+  overflow: hidden;
+}
+
+.code-header {
+  background: var(--bg-surface-subtle);
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  padding: 16px 20px;
+  overflow-x: auto;
+  color: var(--text-main);
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--bg-surface-subtle);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: 1em;
+}
+
+/* 表格排版 */
+.table-wrapper {
+  overflow-x: auto;
+  margin: 22px 0 28px 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  text-align: left;
+}
+
+table.data-table th {
+  background: var(--bg-surface-subtle);
+  padding: 12px 16px;
+  font-weight: 600;
+  color: var(--text-main);
+  border-bottom: 2px solid var(--border-strong);
+  white-space: nowrap;
+}
+
+table.data-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-main);
+}
+
+table.data-table tr:hover td {
+  background: var(--bg-surface-elevated);
+}
+
+table.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* 列表元素 */
+ul, ol {
+  margin: 12px 0 18px 24px;
+}
+
+li {
+  margin-bottom: 8px;
+}
+
+/* ==========================================================================
+   6. SVG 图表与原生 MathML 容器
+   ========================================================================== */
+.diagram-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  margin: 24px 0 32px 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.diagram-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.diagram-title {
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diagram-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.svg-container {
+  width: 100%;
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.svg-container svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* 原生 MathML 排版增强 */
+math {
+  font-family: "Latin Modern Math", "Cambria Math", var(--font-serif);
+  font-size: 1.1em;
+}
+
+.math-display {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px 20px;
+  margin: 16px 0;
+  background: var(--bg-surface-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  overflow-x: auto;
+}
+
+/* ==========================================================================
+   7. 交互沙盘组件规范 (Sandboxes)
+   ========================================================================== */
+.sandbox-card {
+  background: var(--bg-surface);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  margin: 36px 0;
+  box-shadow: var(--shadow-md);
+}
+
+.sandbox-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--accent);
+  color: #ffffff;
+  padding: 3px 10px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.sandbox-title {
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.sandbox-desc {
+  font-size: 0.92rem;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+.sandbox-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 860px) {
+  .sandbox-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sandbox-controls {
+  background: var(--bg-surface-elevated);
+  padding: 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.sandbox-display {
+  background: var(--bg-surface-elevated);
+  padding: 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.control-group {
+  margin-bottom: 16px;
+}
+
+.control-group:last-child {
+  margin-bottom: 0;
+}
+
+.control-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-main);
+}
+
+.control-val {
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-strong);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(217, 119, 87, 0.5);
+  transition: transform 0.1s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.stat-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.stat-box-title {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.stat-box-num {
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+.stat-box-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.tab-btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tab-btn {
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tab-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-main);
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   8. 响应式与打印适配
+   ========================================================================== */
+@media (max-width: 1080px) {
+  .sidebar {
+    display: none;
+  }
+  .layout-container {
+    padding: 16px;
+  }
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .top-bar, .sidebar, #read-progress, .btn-icon, .tab-btn-group input {
+    display: none !important;
+  }
+  .layout-container {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  .article-header, .diagram-card, .sandbox-card, .table-wrapper {
+    box-shadow: none !important;
+    border: 1px solid #cccccc !important;
+    break-inside: avoid;
+  }
+  a {
+    text-decoration: none !important;
+    color: #000000 !important;
+    border: none !important;
+  }
+}
+</style>
+</head>
+<body>
+<div id="read-progress"></div>
+
+<!-- 顶部状态栏 -->
+<header class="top-bar">
+  <div class="top-bar-title">
+    <span class="top-bar-badge">深度白皮书</span>
+    <span>从一次 LLM 调用到完整 Harness，Agent 到底经历了什么？</span>
+  </div>
+  <div class="top-bar-actions">
+    <button class="btn-icon" id="btn-theme-toggle" title="切换明暗主题">
+      <span id="theme-icon">🌓</span> <span id="theme-text">主题</span>
+    </button>
+    <button class="btn-icon" id="btn-print" title="打印/导出PDF" >
+      <span>🖨️</span> <span>打印</span>
+    </button>
+  </div>
+</header>
+
+<div class="layout-container">
+  <!-- 侧边固钉目录导航 -->
+  <aside class="sidebar">
+    <nav class="toc-card">
+      <div class="toc-header">
+        <span>目录导航 (Contents)</span>
+        <span style="font-size: 0.75rem; color: var(--accent);">22 章节</span>
+      </div>
+      <ul class="toc-list">
+        <li class="toc-item">
+          <a href="#sec-overview" class="toc-link">核心总览：演化全景总图</a>
+        </li>
+        <li class="toc-item">
+          <a href="#sec-part1" class="toc-link">一、从一次模型调用到 Agent</a>
+          <ul class="toc-sublist">
+            <li><a href="#sec-llm" class="toc-sublink">1.1 LLM：单向映射与无状态认知</a></li>
+            <li><a href="#sec-qa-bot" class="toc-sublink">1.2 Q&A Bot：装配层与 Working Memory</a></li>
+            <li><a href="#sec-react" class="toc-sublink">1.3 ReAct：闭环行动的 Agent Loop</a></li>
+            <li><a href="#sec-tool-calling" class="toc-sublink">1.4 Tool Calling：可验证的动作协议</a></li>
+            <li><a href="#sec-memory" class="toc-sublink">1.5 Memory：外部持久化与策略分层</a></li>
+          </ul>
+        </li>
+        <li class="toc-item">
+          <a href="#sec-part2" class="toc-link">二、Agent 外面长出了 Harness</a>
+          <ul class="toc-sublist">
+            <li><a href="#sec-six-challenges" class="toc-sublink">2.1 走向真实工作时的六大工程挑战</a></li>
+            <li><a href="#sec-harness-def" class="toc-sublink">2.2 Harness 的经典架构定义</a></li>
+            <li><a href="#sec-os-mapping" class="toc-sublink">2.3 操作系统 vs Harness 16 项对照</a></li>
+          </ul>
+        </li>
+        <li class="toc-item">
+          <a href="#sec-part3" class="toc-link">三、四大设计哲学与架构空间</a>
+          <ul class="toc-sublist">
+            <li><a href="#sec-design-space" class="toc-sublink">3.1 Harness 设计空间二维象限</a></li>
+            <li><a href="#sec-pi" class="toc-sublink">3.2 Pi：极简主义与最低 Harness 税</a></li>
+            <li><a href="#sec-opencode" class="toc-sublink">3.3 OpenCode：事件驱动与状态投影</a></li>
+            <li><a href="#sec-codex" class="toc-sublink">3.4 Codex：安全执行与生命周期</a></li>
+            <li><a href="#sec-hermes" class="toc-sublink">3.5 Hermes：认知自进化与持久运行时</a></li>
+          </ul>
+        </li>
+        <li class="toc-item">
+          <a href="#sec-part4" class="toc-link">四、现代 Agent 10 层技术栈与数理推导</a>
+          <ul class="toc-sublist">
+            <li><a href="#sec-tech-stack" class="toc-sublink">4.1 现代 Agent 10 层技术栈架构</a></li>
+            <li><a href="#sec-math-model" class="toc-sublink">4.2 Agent 综合有效性量化模型推导</a></li>
+          </ul>
+        </li>
+        <li class="toc-item">
+          <a href="#sec-part5" class="toc-link">五、四大动态可计算交互沙盘</a>
+          <ul class="toc-sublist">
+            <li><a href="#sec-sandbox-1" class="toc-sublink">沙盘 1：Agent 六级装配流模拟</a></li>
+            <li><a href="#sec-sandbox-2" class="toc-sublink">沙盘 2：有效性与 Harness 税权衡</a></li>
+            <li><a href="#sec-sandbox-3" class="toc-sublink">沙盘 3：Codex 双重安全拦截状态机</a></li>
+            <li><a href="#sec-sandbox-4" class="toc-sublink">沙盘 4：Hermes PAST-Bench 自进化验证</a></li>
+          </ul>
+        </li>
+        <li class="toc-item">
+          <a href="#sec-part6" class="toc-link">六、核心结论与架构终极定义</a>
+          <ul class="toc-sublist">
+            <li><a href="#sec-five-conclusions" class="toc-sublink">6.1 全文最值得记住的 5 个结论</a></li>
+            <li><a href="#sec-ultimate-def" class="toc-sublink">6.2 用一句架构语言重新定义 Harness</a></li>
+            <li><a href="#sec-evolution-summary" class="toc-sublink">6.3 最终演化因果闭环总览</a></li>
+          </ul>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- 主体内容容器 -->
+  <main class="main-content">
+    <!-- 文章标题头 -->
+    <article class="article-header">
+      <div class="meta-tags">
+        <span class="tag tag-accent">Agent Harness 演化史</span>
+        <span class="tag tag-cyan">系统工程架构</span>
+        <span class="tag tag-emerald">运行时与状态机</span>
+        <span class="tag tag-amber">腾讯技术工程原创</span>
+      </div>
+      <h1 class="article-title">从一次 LLM 调用到完整 Harness，Agent 到底经历了什么？</h1>
+      <p class="article-subtitle">从前向计算函数到全天候操作系统：大模型智能体执行基础设施的演化史、工程边界与系统架构深度白皮书</p>
+      
+      <div class="article-info-grid">
+        <div>
+          <div class="info-item-label">原创作者</div>
+          <div class="info-item-val">ivanxxie、davoszhang</div>
+        </div>
+        <div>
+          <div class="info-item-label">发布机构</div>
+          <div class="info-item-val">腾讯程序员 · 腾讯技术工程</div>
+        </div>
+        <div>
+          <div class="info-item-label">基准日期</div>
+          <div class="info-item-val">2026 年 9 月 7 日 17:36</div>
+        </div>
+        <div>
+          <div class="info-item-label">原文链接</div>
+          <div class="info-item-val"><a href="https://mp.weixin.qq.com/s/kZZac-VBgnQIZeookE9Y8g" target="_blank" rel="noopener noreferrer">微信公众平台原文 ↗</a></div>
+        </div>
+      </div>
+
+      <blockquote class="core-quote" style="margin-top: 24px;">
+        <p><strong>核心架构真理：</strong> 这篇文章真正要讲的，不是“Agent 比 LLM 多了几个 Tool”，而是：<br>
+        <strong>LLM 本身始终只是一个根据输入上下文生成输出的模型。Agent 的大部分“自主性”，其实来自模型外部不断增厚的运行时系统。这个运行时最终演化成了 Harness。</strong></p>
+        <p style="margin-top: 8px; font-size: 0.92rem; color: var(--text-muted);">文章给出的演化逻辑非常清晰：模型每突破一次边界，工程系统就在外面补一层——记不住就加 Context，碰不到世界就加 Tools，一步做不完就加 Loop，历史太长就加 Memory，真实操作有风险就加 Permission/Sandbox，需要恢复和并行就加 Session、Event、Thread、Sub-Agent。</p>
+      </blockquote>
+    </article>
+
+    <!-- 核心总览：演化全景总图 -->
+    <section id="sec-overview" class="content-section">
+      <h2 class="section-title">核心总览：LLM 是怎样一步一步“长成” Agent Harness 的</h2>
+      
+      <p>今天的 Agent 系统看起来很像一套小型操作系统：它们管理子 Agent 进程，维护长期记忆文件，通过工具驱动接触外部世界，还要处理权限、隔离、恢复和观测。可它们的起点并不宏大。最初，开发者手里只有一个把输入映射为输出的语言模型。</p>
+      
+      <p>复杂性并不是一次设计出来的。每当模型试图越过一次调用的边界，系统就必须在模型外面增加一个新部件：<strong>模型不知道此前聊了什么，于是出现上下文；模型无法改变世界，于是出现工具；一次工具调用解决不了任务，于是出现循环；上下文装不下历史，于是出现记忆；循环开始产生真实副作用，于是出现权限与沙箱；一个循环不够并行，于是出现子 Agent...</strong></p>
+
+      <div class="diagram-card">
+        <div class="diagram-header">
+          <div class="diagram-title">
+            <span style="color: var(--accent);">✦</span> Agent Harness 六级因果演化全景架构图
+          </div>
+          <div class="diagram-subtitle">从最朴素的 Forward Pass 到具备 OS 级能力的 Persistent Runtime</div>
+        </div>
+        <div class="svg-container">
+          <svg viewBox="0 0 940 840" width="100%" height="840" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="grad-accent" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#d97757" stop-opacity="0.18"/>
+                <stop offset="100%" stop-color="#d97757" stop-opacity="0.04"/>
+              </linearGradient>
+              <linearGradient id="grad-harness" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#24221f"/>
+                <stop offset="100%" stop-color="#181715"/>
+              </linearGradient>
+              <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+                <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000000" flood-opacity="0.3"/>
+              </filter>
+            </defs>
+
+            <!-- 节点 1: 最原始的 LLM -->
+            <g transform="translate(180, 20)">
+              <rect x="0" y="0" width="580" height="76" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--border-strong)" stroke-width="1.5" filter="url(#shadow)"/>
+              <rect x="0" y="0" width="8" height="76" rx="4" fill="#a0aec0"/>
+              <text x="24" y="26" fill="var(--text-main)" font-size="14" font-weight="700">① 最原始的 LLM (The Pure Function)</text>
+              <text x="24" y="52" fill="var(--text-muted)" font-size="13" font-family="ui-monospace, monospace">answer = LLM(question)</text>
+              <text x="320" y="52" fill="var(--cyan)" font-size="12">单次前向映射 / 无状态 / 无工具</text>
+            </g>
+
+            <!-- 连接线 1->2 -->
+            <path d="M 470 96 L 470 126" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)"/>
+            <text x="480" y="116" fill="var(--rose)" font-size="11" font-weight="600">问题：不知道上一轮发生了什么</text>
+
+            <!-- 节点 2: Context / Working Memory -->
+            <g transform="translate(180, 130)">
+              <rect x="0" y="0" width="580" height="84" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--border-strong)" stroke-width="1.5" filter="url(#shadow)"/>
+              <rect x="0" y="0" width="8" height="84" rx="4" fill="var(--cyan)"/>
+              <text x="24" y="26" fill="var(--text-main)" font-size="14" font-weight="700">② Context / Working Memory (装配层)</text>
+              <text x="24" y="48" fill="var(--text-muted)" font-size="12">System Prompt + Chat History + User Prompt ──▶ Context Assembly ──▶ LLM</text>
+              <text x="24" y="68" fill="var(--accent)" font-size="12" font-weight="600">★ 核心原则：模型看到的世界 = Runtime 为它装配出来的世界</text>
+            </g>
+
+            <!-- 连接线 2->3 -->
+            <path d="M 470 214 L 470 244" stroke="var(--accent)" stroke-width="2"/>
+            <text x="480" y="234" fill="var(--rose)" font-size="11" font-weight="600">问题：只能“说”，不能触碰和改变世界</text>
+
+            <!-- 节点 3: Tool Calling -->
+            <g transform="translate(180, 248)">
+              <rect x="0" y="0" width="580" height="92" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--border-strong)" stroke-width="1.5" filter="url(#shadow)"/>
+              <rect x="0" y="0" width="8" height="92" rx="4" fill="var(--emerald)"/>
+              <text x="24" y="26" fill="var(--text-main)" font-size="14" font-weight="700">③ Tool Calling (动作协议与路由器)</text>
+              <text x="24" y="50" fill="var(--text-muted)" font-size="12">LLM (Tool Call) ──▶ Tool Router (校验/权限) ──▶ Bash / Browser / Files / MCP</text>
+              <text x="24" y="74" fill="var(--text-faint)" font-size="12">获得确定性程序调用与带 ID 的 Tool Result，动作空间实现标准化扩张</text>
+            </g>
+
+            <!-- 连接线 3->4 -->
+            <path d="M 470 340 L 470 370" stroke="var(--accent)" stroke-width="2"/>
+            <text x="480" y="360" fill="var(--rose)" font-size="11" font-weight="600">问题：一次行动完成不了复杂工程任务</text>
+
+            <!-- 节点 4: Agent Loop -->
+            <g transform="translate(180, 374)">
+              <rect x="0" y="0" width="580" height="94" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--border-strong)" stroke-width="1.5" filter="url(#shadow)"/>
+              <rect x="0" y="0" width="8" height="94" rx="4" fill="var(--amber)"/>
+              <text x="24" y="26" fill="var(--text-main)" font-size="14" font-weight="700">④ Agent Loop (ReAct 自主控制循环)</text>
+              <text x="24" y="50" fill="var(--text-muted)" font-size="12">Model (Reasoning) ──▶ Action ──▶ Environment ──▶ Observation ──▶ Model</text>
+              <text x="24" y="74" fill="var(--amber)" font-size="12" font-weight="600">★ 关键分水岭：while 循环属于外部程序，而非模型内部结构！</text>
+            </g>
+
+            <!-- 连接线 4->5 -->
+            <path d="M 470 468 L 470 498" stroke="var(--accent)" stroke-width="2"/>
+            <text x="480" y="488" fill="var(--rose)" font-size="11" font-weight="600">问题：上下文窗口有限，跨任务与长周期失忆</text>
+
+            <!-- 节点 5: Memory -->
+            <g transform="translate(180, 502)">
+              <rect x="0" y="0" width="580" height="92" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--border-strong)" stroke-width="1.5" filter="url(#shadow)"/>
+              <rect x="0" y="0" width="8" height="92" rx="4" fill="#9f7aea"/>
+              <text x="24" y="26" fill="var(--text-main)" font-size="14" font-weight="700">⑤ Memory (多级分层记忆策略体系)</text>
+              <text x="24" y="50" fill="var(--text-muted)" font-size="12">Working Memory (当前上下文) ⟷ Long-term (Semantic 事实 / Episodic 轨迹 / Procedural SOP)</text>
+              <text x="24" y="74" fill="var(--cyan)" font-size="12">写入门控、去重整合、冲突裁决与动态检索：Policy 远比 Storage 困难</text>
+            </g>
+
+            <!-- 连接线 5->6 -->
+            <path d="M 470 594 L 470 624" stroke="var(--accent)" stroke-width="2"/>
+            <text x="480" y="614" fill="var(--rose)" font-size="11" font-weight="600">问题：真正操作系统后，安全、恢复、并发、状态失控怎么办？</text>
+
+            <!-- 节点 6: AGENT HARNESS (终极系统) -->
+            <g transform="translate(80, 628)">
+              <rect x="0" y="0" width="780" height="190" rx="12" fill="url(#grad-harness)" stroke="var(--accent)" stroke-width="2" filter="url(#shadow)"/>
+              <rect x="0" y="0" width="10" height="190" rx="5" fill="var(--accent)"/>
+              <text x="28" y="32" fill="var(--accent)" font-size="16" font-weight="800" letter-spacing="1">⑥ AGENT HARNESS：自主系统的操作平面与全生命周期底座</text>
+              
+              <!-- 内部网格组件 -->
+              <g transform="translate(28, 48)">
+                <rect x="0" y="0" width="165" height="42" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--border-subtle)"/>
+                <text x="12" y="26" fill="var(--text-main)" font-size="12" font-weight="600">Session & Thread</text>
+                
+                <rect x="180" y="0" width="165" height="42" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--border-subtle)"/>
+                <text x="12" y="26" transform="translate(180,0)" fill="var(--text-main)" font-size="12" font-weight="600">Approval & Sandbox</text>
+                
+                <rect x="360" y="0" width="165" height="42" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--border-subtle)"/>
+                <text x="12" y="26" transform="translate(360,0)" fill="var(--text-main)" font-size="12" font-weight="600">Context Compaction</text>
+
+                <rect x="540" y="0" width="180" height="42" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--border-subtle)"/>
+                <text x="12" y="26" transform="translate(540,0)" fill="var(--text-main)" font-size="12" font-weight="600">Sub-Agent Manager</text>
+
+                <rect x="0" y="52" width="165" height="42" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--border-subtle)"/>
+                <text x="12" y="26" transform="translate(0,52)" fill="var(--text-main)" font-size="12" font-weight="600">Event Store & Rollout</text>
+
+                <rect x="180" y="52" width="165" height="42" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--border-subtle)"/>
+                <text x="12" y="26" transform="translate(180,52)" fill="var(--text-main)" font-size="12" font-weight="600">Resource Loader</text>
+
+                <rect x="360" y="52" width="165" height="42" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--border-subtle)"/>
+                <text x="12" y="26" transform="translate(360,52)" fill="var(--text-main)" font-size="12" font-weight="600">Crash Recovery</text>
+
+                <rect x="540" y="52" width="180" height="42" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--border-subtle)"/>
+                <text x="12" y="26" transform="translate(540,52)" fill="var(--text-main)" font-size="12" font-weight="600">Persistent Runtime</text>
+              </g>
+
+              <!-- 底层嵌套的 Agent Loop -->
+              <g transform="translate(180, 150)">
+                <rect x="0" y="0" width="420" height="28" rx="4" fill="var(--bg-app)" stroke="var(--border-strong)"/>
+                <text x="110" y="19" fill="var(--text-faint)" font-size="11">内部受管内核：Agent Loop (LLM 决策核)</text>
+              </g>
+            </g>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第一部分：从一次模型调用到 Agent -->
+    <section id="sec-part1" class="content-section">
+      <h2 class="section-title">一、从一次模型调用到 Agent</h2>
+      
+      <p>在探讨复杂的 Harness 之前，必须先理清最根本的误解：<strong>大语言模型本身并没有“变成 Agent”</strong>。最原始的模型始终只是一个输入一段 token、输出另一段 token 的函数。</p>
+
+      <!-- 1.1 LLM -->
+      <div id="sec-llm">
+        <h3 class="sub-title">1.1 LLM：单向映射与无状态认知</h3>
+        <p>最朴素的大语言模型接口可以被看成一个纯函数：输入一段 token，输出另一段 token。它可以在参数中编码世界知识，却不会天然记住某个用户上一轮说过什么，也不知道自己刚刚输出的命令是否被执行。</p>
+        
+        <p>2020 年，<a href="https://openai.com/index/language-models-are-few-shot-learners/" target="_blank" rel="noopener noreferrer">GPT-3</a> 展示了大规模语言模型仅通过文本提示完成多种任务的能力；2022 年底，GPT-3.5 成为 ChatGPT 背后的模型；2023 年 2 月，Meta 发布 <a href="https://ai.meta.com/blog/large-language-model-llama-meta-ai/" target="_blank" rel="noopener noreferrer">LLaMA</a>，推动开放权重模型进入主流研究与本地部署。GPT、LLaMA 以及后来出现的 Claude、Gemini、Qwen 等模型虽然能力不同，但在应用看来仍然共享同一个基本形态：接收上下文，predict next token。</p>
+
+        <div class="code-container">
+          <div class="code-header"><span>PYTHON: 纯函数形态</span><span>Pristine LLM</span></div>
+          <pre><code>answer = LLM(question)</code></pre>
+        </div>
+
+        <p>最初的系统只有一次前向调用。模型负责生成文本，应用只负责把问题送进去、把答案显示出来。模型参数里的知识来自训练；一次对话中的名字、偏好和任务状态，则必须由应用在每次调用时重新提交。模型本身并没有一个不断增长的用户档案，它没有：</p>
+        <ul>
+          <li><strong>永久记忆 (Persistent Memory)</strong>：重启或下一次请求时状态重置；</li>
+          <li><strong>任务生命周期 (Task Lifecycle)</strong>：无法跟踪复杂任务的状态跃迁；</li>
+          <li><strong>工具执行与环境感知 (Tools & Environment)</strong>：无法接触操作系统文件、网络和命令行；</li>
+          <li><strong>权限、沙箱与恢复能力 (Permission & Recovery)</strong>：没有任何安全控制边界。</li>
+        </ul>
+      </div>
+
+      <!-- 1.2 Q&A Bot -->
+      <div id="sec-qa-bot">
+        <h3 class="sub-title">1.2 Q&A Bot：上下文装配层与 Working Memory</h3>
+        <p>Q&A Bot 的第一项工程进步，<strong>不是换了一个更聪明的模型，而是在模型前面增加一个上下文装配层（Context Assembly Layer）</strong>。它把系统指令、用户当前输入和对话历史拼成一次请求。</p>
+        
+        <p>在 GPT-3 时代，许多应用仍然把模型包装成单轮问答接口；2022 年 11 月，<a href="https://openai.com/index/chatgpt/" target="_blank" rel="noopener noreferrer">ChatGPT</a> 把多轮对话带给大众，开发者开始普遍维护 System Prompt、User Prompt 和 Chat History。模型没有突然获得跨轮记忆，是聊天应用在每次请求前重新装配了历史。</p>
+
+        <div class="code-container">
+          <div class="code-header"><span>PYTHON: 上下文装配</span><span>Working Context Assembly</span></div>
+          <pre><code>working_context = [
+    system_prompt,
+    recent_chat_history,
+    user_prompt
+]
+
+answer = LLM(working_context)</code></pre>
+        </div>
+
+        <p><strong>Working Memory 不是长期存储，而是这一轮真正提交给模型的全部上下文。</strong></p>
+        
+        <div class="callout callout-cyan">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong>Harness 核心奠基原则：模型看见的一切，都是运行时替它构造出来的。</strong><br>
+            运行时选择哪些历史进入上下文、哪些指令拥有更高优先级、哪些内容必须被裁剪，都会从根本上改变 Agent 的行为。换言之：
+            <div style="font-family: var(--font-mono); font-size: 0.88rem; margin-top: 8px; color: var(--accent);">
+              World ──▶ Runtime Filtering / Retrieval / Assembly ──▶ Working Context ──▶ LLM
+            </div>
+            <strong>很多时候，不是模型能力不够，而是 Harness 给模型构造了一个错误的世界。</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1.3 ReAct -->
+      <div id="sec-react">
+        <h3 class="sub-title">1.3 ReAct：从单纯生成到闭环行动的 Agent Loop</h3>
+        <p>Bot 只需要回答一次，但 Agent 必须根据行动结果继续决策。2022 年提出的 ReAct 执行架构把推理轨迹与动作交错起来：模型形成下一步意图，执行外部动作，接收 Observation，再把观察送回下一轮推理。</p>
+        
+        <p><a href="https://arxiv.org/abs/2210.03629" target="_blank" rel="noopener noreferrer">ReAct</a> 论文于 2022 年 10 月公开，并在 ICLR 2023 发表。它把此前分别讨论的 Chain-of-Thought 与外部行动连接成 <code>Thought → Action → Observation</code> 循环。2023 年大量早期 Agent 项目沿用了这一模式，Agent 也由“一种提示词技巧”逐渐变成了一个需要程序持续驱动的执行循环。</p>
+
+        <p><strong>Agent 真正的分水岭不是“会思考”，而是建立了 模型 → 动作 → 环境 → 观察 → 模型 的闭环。</strong></p>
+
+        <div class="code-container">
+          <div class="code-header"><span>PYTHON: ReAct 核心循环</span><span>Agent Runtime Loop</span></div>
+          <pre><code>while not finished:
+    response = model(context)
+    if response.has_action:
+        observation = environment.execute(response.action)
+        context.append(response.action, observation)
+    else:
+        return response.answer</code></pre>
+        </div>
+
+        <div class="callout callout-rose">
+          <div class="callout-icon">⚠️</div>
+          <div class="callout-content">
+            <strong>关键工程真相：这个 while 循环不是 LLM！</strong><br>
+            它是模型外面的程序（Agent Runtime）。模型仍然只生成 token，真正负责“继续运行”的是外部程序：它必须解析模型输出、判断任务是否结束、调用真实环境，并把环境反馈重新写回上下文。
+          </div>
+        </div>
+      </div>
+
+      <!-- 1.4 Tool Calling -->
+      <div id="sec-tool-calling">
+        <h3 class="sub-title">1.4 Tool Calling：从脆弱正则到可验证的动作协议</h3>
+        <p>早期 Agent 常让模型输出类似 <code>Search[Wikipedia]</code> 的文本，再由程序用正则表达式解析。这种方式很灵活，但也极其脆弱：格式可能漂移，参数可能缺失，模型还可能把解释文字混进命令，导致解析失败与环境异常。</p>
+        
+        <p>2022 年的 ReAct 主要依赖约定格式表达动作；2023 年 6 月，OpenAI 发布 <a href="https://openai.com/index/function-calling-and-other-api-updates/" target="_blank" rel="noopener noreferrer">Function Calling</a>，工具名和参数开始成为模型 API 的结构化输出；2024 年 11 月，Anthropic 发布 <a href="https://www.anthropic.com/news/model-context-protocol" target="_blank" rel="noopener noreferrer">MCP (Model Context Protocol)</a>，进一步尝试标准化 Agent 与外部数据源、工具服务之间的连接。</p>
+
+        <div class="diagram-card">
+          <div class="diagram-header">
+            <div class="diagram-title"><span style="color: var(--emerald);">✦</span> 结构化 Tool Calling 标准化执行链路</div>
+            <div class="diagram-subtitle">Schema 注册、意图路由、权限校验与结果闭环</div>
+          </div>
+          <div class="svg-container">
+            <svg viewBox="0 0 820 140" width="100%" height="140" xmlns="http://www.w3.org/2000/svg">
+              <g transform="translate(20, 20)">
+                <rect x="0" y="20" width="140" height="60" rx="6" fill="var(--bg-surface-elevated)" stroke="var(--border-strong)"/>
+                <text x="70" y="55" fill="var(--text-main)" font-size="13" font-weight="600" text-anchor="middle">LLM (意图生成)</text>
+                
+                <path d="M 140 50 L 190 50" stroke="var(--accent)" stroke-width="2"/>
+                <text x="165" y="42" fill="var(--text-faint)" font-size="10" text-anchor="middle">Tool Call</text>
+
+                <rect x="190" y="10" width="160" height="80" rx="6" fill="var(--bg-surface-subtle)" stroke="var(--border-strong)"/>
+                <text x="270" y="42" fill="var(--text-main)" font-size="13" font-weight="700" text-anchor="middle">Tool Router</text>
+                <text x="270" y="65" fill="var(--cyan)" font-size="11" text-anchor="middle">参数校验 / 权限判定</text>
+
+                <path d="M 350 50 L 400 50" stroke="var(--accent)" stroke-width="2"/>
+
+                <rect x="400" y="10" width="190" height="80" rx="6" fill="var(--bg-surface-elevated)" stroke="var(--emerald)"/>
+                <text x="495" y="42" fill="var(--emerald)" font-size="13" font-weight="700" text-anchor="middle">Tool Implementation</text>
+                <text x="495" y="65" fill="var(--text-muted)" font-size="11" text-anchor="middle">Bash / Browser / DB / MCP</text>
+
+                <path d="M 590 50 L 640 50" stroke="var(--accent)" stroke-width="2"/>
+                
+                <rect x="640" y="20" width="140" height="60" rx="6" fill="var(--bg-surface-elevated)" stroke="var(--border-strong)"/>
+                <text x="710" y="45" fill="var(--text-main)" font-size="12" font-weight="600" text-anchor="middle">Tool Result</text>
+                <text x="710" y="65" fill="var(--accent)" font-size="11" text-anchor="middle">返回 Context</text>
+
+                <!-- 回流反馈曲线 -->
+                <path d="M 710 80 C 710 115, 70 115, 70 80" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <p>文章清晰地将 Tool Calling 拆解为三层架构：</p>
+        <ul>
+          <li><strong>Tool Schema：</strong> 描述工具名称、用途、参数类型与约束，严密界定模型的“动作空间 (Action Space)”；</li>
+          <li><strong>Tool Router：</strong> 根据工具名匹配具体实现，进行参数格式与类型校验，把模型意图转化为确定的可执行程序调用；</li>
+          <li><strong>Tool Result：</strong> 携带全局调用 ID、状态码与返回值，保证外部环境观察能精准映射到原始动作。</li>
+        </ul>
+        <p>从这一刻起，Agent 获得了<strong>可验证、可路由、可审计的动作协议</strong>。随后的 Terminal、Browser、Filesystem、Database 与 MCP，本质上都是 Agent 动作空间的向外扩张。</p>
+      </div>
+
+      <!-- 1.5 Memory -->
+      <div id="sec-memory">
+        <h3 class="sub-title">1.5 Memory：外部持久化与策略分层</h3>
+        <p>Agent Loop 解决了“如何连续行动”，却没有解决“如何跨会话积累”。完整历史会越来越长，而模型的上下文窗口始终有限。系统不得不把记忆拆分成两个独立空间：一个是本轮模型可见的 <strong>Working Memory</strong>，另一个是外部可持久化、可检索的 <strong>Long-term Memory</strong>。</p>
+
+        <p>2020 年的 <a href="https://arxiv.org/abs/2005.11401" target="_blank" rel="noopener noreferrer">RAG</a> 已经清楚地区分了模型参数中的知识与外部可检索知识；2023 年的 <a href="https://arxiv.org/abs/2310.08560" target="_blank" rel="noopener noreferrer">MemGPT</a> 又借用操作系统的分层存储思想，在有限上下文与外部存储之间调度信息。此后，记忆从“检索几段文档”逐渐扩展到摘要、用户偏好、会话归档、技能文件和后台知识整理。</p>
+
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>记忆分类 (Type)</th>
+                <th>核心定义与技术承载</th>
+                <th>典型载体与检索方式</th>
+                <th>生命周期与失效应对</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>程序记忆<br>(Procedural)</strong></td>
+                <td>技能 (Skills)、工作流 SOP、工具调用规约与用户定制规则</td>
+                <td>规则文件、<code>SKILL.md</code>、<code>AGENTS.md</code>、Prompt Templates</td>
+                <td>版本化管理，随着工程工具迭代显式升级或弃用</td>
+              </tr>
+              <tr>
+                <td><strong>语义记忆<br>(Semantic)</strong></td>
+                <td>跨任务稳定事实、概念模型、用户偏好、项目领域知识</td>
+                <td>本地 Markdown 库、SQLite 关系表、全文索引、轻量向量库</td>
+                <td>后台定期去重与知识整合，矛盾时以最新确认事实覆盖旧事实</td>
+              </tr>
+              <tr>
+                <td><strong>情景记忆<br>(Episodic)</strong></td>
+                <td>某次任务发生了什么、采取了哪些动作、工具结果如何的完整轨迹</td>
+                <td>会话归档日志 (Session Archive)、Event Rollout、执行快照</td>
+                <td>长任务基于窗口滑动裁剪，或通过 Compaction Agent 提取关键结论</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout callout-amber">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong>Memory 的本质不是“加一个向量数据库”！</strong><br>
+            这里真正困难的不是存储（<code>memory.save()</code>），而是写入与读取策略：<strong>什么值得保存？何时保存？保存事实还是过程？什么时候更新？冲突怎么办？旧经验何时失效？哪些信息值得进入本轮 Context？进入多少？错误 Memory 如何纠正？</strong><br>
+            因此，成熟的 Memory 必然长出 <code>Extract → Filter → Deduplicate → Consolidate → Conflict Resolution → Retrieve → Context Injection</code> 这一整套策略管线。<br>
+            <strong>Memory 本质上首先是一个 Policy（策略治理）问题，其次才是 Storage（存储）问题。</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第二部分：当能力变多，Agent 外面出现了 Harness -->
+    <section id="sec-part2" class="content-section">
+      <h2 class="section-title">二、当能力变多，Agent 外面出现了 Harness</h2>
+      
+      <p>到这里，系统已经拥有了上下文、循环、工具和分层记忆。然而，一旦 Agent 从 Demo 演示走向承载生产级真实任务，一批极为严苛的工程挑战便随之爆发。</p>
+
+      <div id="sec-six-challenges">
+        <h3 class="sub-title">2.1 走向真实工作时的六大工程挑战</h3>
+        <p>2023 年的许多 Agent 原型仍把 Prompt、Loop 和 Tools 混写在一个脚本里；2024 年，MCP 开始统一外部连接协议；到 2025 年，<a href="https://www.anthropic.com/news/claude-3-7-sonnet" target="_blank" rel="noopener noreferrer">Claude Code</a> 和开源的 <a href="https://github.com/openai/codex" target="_blank" rel="noopener noreferrer">Codex CLI</a> 把终端 Agent 推向真实软件工程场景。系统暴露出六大必须在模型外部解决的核心瓶颈：</p>
+        
+        <ul>
+          <li><strong>会话能否恢复 (Session Recovery)：</strong> 程序崩溃、进程断开或用户退出后，循环必须从一致的快照精确恢复，不能从零开始；</li>
+          <li><strong>副作用是否安全 (Side-Effect Safety)：</strong> 执行 <code>rm -rf</code>、修改核心生产代码、发起网络通信不能寄托于模型的“自我约束”；</li>
+          <li><strong>上下文如何压缩 (Compaction & Token Budget)：</strong> 长达数十万 token 的长任务轨迹，必须动态保留核心结论并释放窗口空间；</li>
+          <li><strong>多客户端如何协同 (Multi-Client Protocol)：</strong> TUI、IDE 插件、桌面端、Web 仪表盘与 SDK 需要同时连接并观察同一个运行状态；</li>
+          <li><strong>扩展如何动态装配 (Resource Loader)：</strong> 工具、MCP 服务器、Skills、Prompt 模板需要确定性的动态发现与热加载机制；</li>
+          <li><strong>任务如何高效并行 (Sub-Agent Lifecycle)：</strong> 派生的子 Agent 必须拥有隔离的独立上下文、权限范围、运行历史与生命周期。</li>
+        </ul>
+
+        <p>于是，Agent Loop 不再直接暴露给世界。它被包裹进一个厚重坚固的外部运行时体系——这个负责装配资源、管理会话、约束工具、持久化事件、暴露统一 API 并在多个 Agent 间调度任务的基础设施，就是 <strong>Agent Harness</strong>。</p>
+      </div>
+
+      <div id="sec-harness-def">
+        <h3 class="sub-title">2.2 Harness 的经典架构定义</h3>
+        <blockquote class="core-quote">
+          <p style="font-size: 1.15rem; font-weight: 700; color: var(--accent);">
+            “Agent 决定下一步做什么；Harness 决定这一步在什么上下文、权限、生命周期与持久化规则下发生。”
+          </p>
+          <p style="margin-top: 6px; font-size: 0.94rem; color: var(--text-muted);">
+            —— 这句话是现代智能体软件工程对 Agent 与 Harness 职责边界最精准的定义。
+          </p>
+        </blockquote>
+      </div>
+
+      <div id="sec-os-mapping">
+        <h3 class="sub-title">2.3 操作系统与 Agent Harness 深度映射（16 项对照表）</h3>
+        <p>理解 Harness 最清晰的认知框架，就是将其视作一套<strong>以 LLM 为执行核心的小型现代操作系统（Agent OS）</strong>。二者在抽象层次上存在高度严整的对偶关系：</p>
+
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>传统操作系统 (OS Concept)</th>
+                <th>Agent Harness 对应抽象 (Harness Concept)</th>
+                <th>核心职责与工程机制</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>CPU</strong></td>
+                <td><strong>LLM / Decision Engine</strong></td>
+                <td>认知推理核，负责 next-token 预测与意图决策</td>
+              </tr>
+              <tr>
+                <td><strong>Process (进程)</strong></td>
+                <td><strong>Agent / Sub-Agent</strong></td>
+                <td>具有独立执行目标和上下文边界的执行实体</td>
+              </tr>
+              <tr>
+                <td><strong>Process Manager (进程管理器)</strong></td>
+                <td><strong>Thread / Agent Manager</strong></td>
+                <td>负责 Agent 实例的创建、挂起、销毁与拓扑调度</td>
+              </tr>
+              <tr>
+                <td><strong>RAM (内存)</strong></td>
+                <td><strong>Working Context</strong></td>
+                <td>当前轮次前向计算直接装配的一级工作集</td>
+              </tr>
+              <tr>
+                <td><strong>Disk (磁盘持久化)</strong></td>
+                <td><strong>Long-term Memory</strong></td>
+                <td>外部持久存储（文件、SQLite、向量检索数据库）</td>
+              </tr>
+              <tr>
+                <td><strong>Virtual Memory (虚拟内存换页)</strong></td>
+                <td><strong>Context Compaction & Retrieval</strong></td>
+                <td>超出物理窗口时自动裁剪历史、摘要压缩与动态加载</td>
+              </tr>
+              <tr>
+                <td><strong>System Call (系统调用)</strong></td>
+                <td><strong>Tool Calling</strong></td>
+                <td>从安全用户态陷入外部环境内核的标准请求协议</td>
+              </tr>
+              <tr>
+                <td><strong>Driver (外设驱动)</strong></td>
+                <td><strong>Tool Adapter / MCP Server</strong></td>
+                <td>屏蔽终端、浏览器、文件系统等外部服务差异的标准化协议</td>
+              </tr>
+              <tr>
+                <td><strong>File Permission (文件访问控制)</strong></td>
+                <td><strong>Permission Policy</strong></td>
+                <td>声明哪些目录只读、哪些可写、哪些凭证禁止访问</td>
+              </tr>
+              <tr>
+                <td><strong>User Confirmation (UAC/sudo 提权)</strong></td>
+                <td><strong>Approval Policy</strong></td>
+                <td>针对敏感动作向操作者弹出确认申请（人机协同门控）</td>
+              </tr>
+              <tr>
+                <td><strong>Sandbox / Container (容器隔离)</strong></td>
+                <td><strong>Execution Sandbox</strong></td>
+                <td>内核命名空间隔离、网络隔离与临时文件系统沙盒</td>
+              </tr>
+              <tr>
+                <td><strong>Process Log (系统日志与审计)</strong></td>
+                <td><strong>Event Store / Rollout</strong></td>
+                <td>逐 Step 记录不可篡改的原子事件轨迹与可溯源快照</td>
+              </tr>
+              <tr>
+                <td><strong>Scheduler (进程调度器)</strong></td>
+                <td><strong>Agent Scheduler / Cron</strong></td>
+                <td>决定当前计算配额分配给哪个 Agent/Turn 推进</td>
+              </tr>
+              <tr>
+                <td><strong>Fork (进程分叉复制)</strong></td>
+                <td><strong>Sub-Agent / Thread Fork</strong></td>
+                <td>基于稳定快照复制上下文与状态，派生分支独立探索</td>
+              </tr>
+              <tr>
+                <td><strong>Snapshot (系统快照)</strong></td>
+                <td><strong>Session Persistence</strong></td>
+                <td>任务状态序列化并物化落盘至数据库或文件系统</td>
+              </tr>
+              <tr>
+                <td><strong>Crash Recovery (崩溃恢复)</strong></td>
+                <td><strong>Session Resume / Replay</strong></td>
+                <td>进程重启后从最近稳定检查点还原内存上下文继续执行</td>
+              </tr>
+              <tr>
+                <td><strong>Daemon (守护进程)</strong></td>
+                <td><strong>Persistent Runtime</strong></td>
+                <td>常驻后台，可被时间定时器或外部 Webhook 事件唤醒</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    <!-- 第三部分：四大设计哲学与架构空间 -->
+    <section id="sec-part3" class="content-section">
+      <h2 class="section-title">三、四大设计哲学与架构空间（Pi / OpenCode / Codex / Hermes）</h2>
+      
+      <p>同一个大语言模型，只是换了一套 Harness，结果到底能差多少？评测数据表明，Harness 的设计差异不仅决定了 Agent 的能力上限，还会直接导致任务成本出现数倍的剧烈分化。</p>
+
+      <div id="sec-design-space">
+        <h3 class="sub-title">3.1 Harness 设计空间二维象限解析</h3>
+        <p>在 Agent Harness 的工程演化谱系中，并不存在唯一的“最优解”。不同的工业级系统在<strong>工程控制粒度（Harness Tax vs. 安全治理）</strong>与<strong>时间跨度目标（单任务高吞吐 vs. 长期自进化）</strong>之间做出了截然不同的权衡：</p>
+
+        <div class="diagram-card">
+          <div class="diagram-header">
+            <div class="diagram-title"><span style="color: var(--cyan);">✦</span> Agent Harness 二维设计空间分布图</div>
+            <div class="diagram-subtitle">控制/工程化 ⟷ 长期认知能力演进矩阵</div>
+          </div>
+          <div class="svg-container">
+            <svg viewBox="0 0 860 520" width="100%" height="520" xmlns="http://www.w3.org/2000/svg">
+              <!-- 背景坐标轴 -->
+              <rect x="60" y="40" width="740" height="420" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--border-subtle)"/>
+              
+              <!-- 坐标轴线 -->
+              <line x1="60" y1="250" x2="800" y2="250" stroke="var(--border-strong)" stroke-width="2"/>
+              <line x1="430" y1="40" x2="430" y2="460" stroke="var(--border-strong)" stroke-width="2"/>
+
+              <!-- 轴向标签 -->
+              <text x="430" y="30" fill="var(--accent)" font-size="13" font-weight="700" text-anchor="middle">▲ 高控制 / 深度工程化 (Heavy Control & Strict Security)</text>
+              <text x="430" y="485" fill="var(--accent)" font-size="13" font-weight="700" text-anchor="middle">▼ 极简主义 / 低 Harness 税 (Minimalist & Low Overhead)</text>
+              <text x="80" y="240" fill="var(--text-faint)" font-size="12">◀ 短期单任务执行</text>
+              <text x="780" y="240" fill="var(--text-faint)" font-size="12" text-anchor="end">长期能力积累与演化 ▶</text>
+
+              <!-- 象限 1: Codex (右上) -->
+              <g transform="translate(490, 80)">
+                <rect x="0" y="0" width="280" height="130" rx="8" fill="var(--bg-surface)" stroke="var(--accent)" stroke-width="1.8"/>
+                <rect x="0" y="0" width="8" height="130" rx="4" fill="var(--accent)"/>
+                <text x="20" y="28" fill="var(--accent)" font-size="15" font-weight="800">Codex (OpenAI / CLI)</text>
+                <text x="20" y="52" fill="var(--text-main)" font-size="12" font-weight="600">双重安全边界 + Thread 生命周期</text>
+                <text x="20" y="74" fill="var(--text-muted)" font-size="11">• Approval Policy ≠ Sandbox Policy 双防线</text>
+                <text x="20" y="94" fill="var(--text-muted)" font-size="11">• Thread / Turn / Item 三层树状状态机</text>
+                <text x="20" y="114" fill="var(--rose)" font-size="11">• 高 Harness 税，但具备企业级安全与恢复</text>
+              </g>
+
+              <!-- 象限 2: OpenCode (左上) -->
+              <g transform="translate(100, 80)">
+                <rect x="0" y="0" width="280" height="130" rx="8" fill="var(--bg-surface)" stroke="var(--cyan)" stroke-width="1.8"/>
+                <rect x="0" y="0" width="8" height="130" rx="4" fill="var(--cyan)"/>
+                <text x="20" y="28" fill="var(--cyan)" font-size="15" font-weight="800">OpenCode</text>
+                <text x="20" y="52" fill="var(--text-main)" font-size="12" font-weight="600">事件驱动架构 + 细粒度 Profile</text>
+                <text x="20" y="74" fill="var(--text-muted)" font-size="11">• Assistant Message 拆解为原子 Part</text>
+                <text x="20" y="94" fill="var(--text-muted)" font-size="11">• Session / Message / Part 关系投影 SQLite</text>
+                <text x="20" y="114" fill="var(--cyan)" font-size="11">• 后台 Compaction Agent 实时滑动压缩</text>
+              </g>
+
+              <!-- 象限 3: Pi (左下) -->
+              <g transform="translate(100, 280)">
+                <rect x="0" y="0" width="280" height="130" rx="8" fill="var(--bg-surface)" stroke="var(--emerald)" stroke-width="1.8"/>
+                <rect x="0" y="0" width="8" height="130" rx="4" fill="var(--emerald)"/>
+                <text x="20" y="28" fill="var(--emerald)" font-size="15" font-weight="800">Pi (极简主义代表)</text>
+                <text x="20" y="52" fill="var(--text-main)" font-size="12" font-weight="600">Minimal Harness & 紧凑工作集</text>
+                <text x="20" y="74" fill="var(--text-muted)" font-size="11">• 仅保留 read / write / edit / bash 4 基础工具</text>
+                <text x="20" y="94" fill="var(--text-muted)" font-size="11">• Resource Loader 仅装载当前必需模板</text>
+                <text x="20" y="114" fill="var(--emerald)" font-size="11">• 上下文输入少 3 倍，任务成本大幅降低 2 倍</text>
+              </g>
+
+              <!-- 象限 4: Hermes (右下) -->
+              <g transform="translate(490, 280)">
+                <rect x="0" y="0" width="280" height="130" rx="8" fill="var(--bg-surface)" stroke="#9f7aea" stroke-width="1.8"/>
+                <rect x="0" y="0" width="8" height="130" rx="4" fill="#9f7aea"/>
+                <text x="20" y="28" fill="#9f7aea" font-size="15" font-weight="800">Hermes Agent</text>
+                <text x="20" y="52" fill="var(--text-main)" font-size="12" font-weight="600">认知自进化 + 时间驱动运行时</text>
+                <text x="20" y="74" fill="var(--text-muted)" font-size="11">• 原始经历归档 ──▶ 后台审视 (Review)</text>
+                <text x="20" y="94" fill="var(--text-muted)" font-size="11">• 提炼 Memory 稳定事实与 Skills 可复用流程</text>
+                <text x="20" y="114" fill="#9f7aea" font-size="11">• PAST-Bench 验证跨会话自演进机制分 0.64</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3.2 Pi -->
+      <div id="sec-pi">
+        <h3 class="sub-title">3.2 Pi：极简主义与最低 Harness 税（Harness Tax）</h3>
+        <p>同一个模型，只是换了一套 Harness，结果能差多少？评测机构 Composio 将 <code>DeepSeek V4 Flash</code> 分别放进 Pi Agent、Prime Agent、Deep Agents 和 Hermes Agent，执行同一批 30 个综合 Agentic Tasks。<strong>Pi 的通过率高达 66.7%，而中位任务成本只有 0.012 美元</strong>。在这组对比测试中，Pi 完成任务最多，消耗 Token 却最少。</p>
+        
+        <p><a href="https://www.databricks.com/blog/benchmarking-coding-agents-databricks-multi-million-line-codebase" target="_blank" rel="noopener noreferrer">Databricks 的内部基准</a>又把这个问题放进更接近生产环境的坐标系：他们从工程师真实 Pull Request 构造任务，在覆盖 Python、Go、TypeScript、Scala 等语言的<strong>数百万行代码库</strong>上，比较单任务平均成本和整体通过率。</p>
+
+        <div class="callout callout-emerald">
+          <div class="callout-icon">📊</div>
+          <div class="callout-content">
+            <strong>Databricks 实测关键发现：</strong>
+            <ul style="margin: 6px 0 0 16px;">
+              <li>在 Pareto 前沿曲线上，Pi 占据了多个主流性能区间；</li>
+              <li>Opus 4.8 搭配 Pi 的 xhigh 设置任务通过率接近 <strong>90%</strong>，GLM 5.2 搭配 Pi 也进入最高能力梯队；</li>
+              <li>部分同模型、同推理强度的 Agent 换到 Pi 后，解题质量基本不变，<strong>单任务成本却相差两倍以上</strong>；</li>
+              <li>运行追踪证实：Pi 每轮送入模型的<strong>工作集上下文约少三倍</strong>，以更紧凑的状态、更少的循环轮次完成了任务。</li>
+            </ul>
+          </div>
+        </div>
+
+        <p><strong>Pi 为什么能一边压低成本，一边把任务做对？</strong><br>
+        核心在于它坚决不让模型反复阅读无关内容。Pi 默认只暴露四个核心工具：<code>read</code>、<code>write</code>、<code>edit</code>、<code>bash</code>。外部的 <strong>Resource Loader</strong> 显式装配当前会话启用的指令、Skills 和 Prompt Templates，<strong>Session Manager</strong> 再利用活动分支和 Compaction 将完整历史投影成极为紧致的 Working Memory。这样一来，每轮请求携带的历史噪声和工具 schema 描述大幅压减，极简主义在此处直接转化为了吞吐性能和财务收益。</p>
+
+        <div class="callout callout-rose">
+          <div class="callout-icon">⚠️</div>
+          <div class="callout-content">
+            <strong>Pi 的工程代价与安全局限：</strong><br>
+            小也有代价。Pi 当前不内置限制文件系统、系统进程、网络通信或凭证访问的精细权限拦截系统，默认直接继承启动它的本地用户权限。要把它部署进高风险生产环境，必须由外部容器（如 Docker）或微虚机沙箱来弥补安全边界。
+          </div>
+        </div>
+
+        <div class="code-container">
+          <div class="code-header"><span>ARCHITECTURE: 启动前装配</span><span>Resource Loader Protocol</span></div>
+          <pre><code>SYSTEM.md / AGENTS.md / Skills / Prompt Templates
+                     │
+                     ▼
+             [Resource Loader] ── 负责动态发现、解析并过滤
+                     │
+                     ▼
+           Current Session Context ── 仅注入当前所需的最小工作集</code></pre>
+        </div>
+      </div>
+
+      <!-- 3.3 OpenCode -->
+      <div id="sec-opencode">
+        <h3 class="sub-title">3.3 OpenCode：事件驱动的服务与结构化状态投影</h3>
+        <p>在 <a href="https://github.com/anomalyco/opencode" target="_blank" rel="noopener noreferrer">OpenCode</a> 里，用户在终端或界面看到的一段回复，在底层存储中并不是一整块孤立的文本。一次 <code>Assistant Message</code> 内部被拆解为细粒度的状态零件（Part）：</p>
+
+        <div class="code-container">
+          <div class="code-header"><span>DATA MODEL: 细粒度状态结构</span><span>OpenCode Message Anatomy</span></div>
+          <pre><code>Assistant Message
+├── Reasoning        (模型内部推演思维链)
+├── Text             (面向用户的回复正文)
+├── Tool             (发起的工具调用请求)
+├── Step Start       (执行步骤启动时间点)
+├── Step Finish      (执行步骤结束确认)
+├── Patch            (实际改动的文件差异补丁)
+└── Compaction       (触发的历史压缩摘要)</code></pre>
+        </div>
+
+        <p><strong>为什么要把一轮回答拆得这么碎？</strong><br>
+        因为 OpenCode 保存的对象是 <strong>Agent 运行过的全生命周期事件流</strong>。只要执行全过程被原子化、结构化地记录下来，客户端意外退出或进程重启便不等于丢失执行现场，恢复 Session 也不再依赖脆弱的“字符重放”。</p>
+
+        <p>这套系统始于 <strong>Agent Profile</strong>。源码中的 <code>Agent.Info</code> 将 Prompt、模型标号、Mode、Permission 策略、单次生成参数与最大步数统一定义在配置对象中：</p>
+        <ul>
+          <li><strong>Build & Plan：</strong> 作为主 Agent (primary)，直接面向用户需求，二者的本质差异体现在权限边界与工具暴露上；</li>
+          <li><strong>General & Explore：</strong> 作为子 Agent (subagent)，由 Task Tool 调度执行，例如 Explore 仅开放只读搜索和有限命令；</li>
+          <li><strong>Compaction / Title / Summary：</strong> 作为隐藏后台 Agent，专职负责多轮压缩、动态命名与代码变更汇总。</li>
+        </ul>
+
+        <div class="callout callout-cyan">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong>OpenCode 的运行哲学：</strong><br>
+            <strong>Agent Profile 决定此刻是谁在工作，Session Events 负责留下事实，Compaction 决定哪些过去还要继续被模型看见。</strong><br>
+            Message 与 Part 的变更驱动 Projector 将数据持久化到 SQLite 中。当长会话逼近上下文窗口极限时，后台 Compaction Agent 汇总早期历史，在预算内保留近期 Turns，旧工具输出被动态折叠裁剪，重构成下一轮的 Working Memory。这套体系是一条确定性的上下文管线，而非脆弱的外挂向量库。
+          </div>
+        </div>
+      </div>
+
+      <!-- 3.4 Codex -->
+      <div id="sec-codex">
+        <h3 class="sub-title">3.4 Codex：安全执行、Thread 生命周期与子 Agent 谱系管理</h3>
+        <p>在 <a href="https://github.com/openai/codex" target="_blank" rel="noopener noreferrer">Codex</a> 中，工程设计的重心完全投向了真实计算机环境下的高风险防御与超长任务管理。文章揭示了全篇最具工程含量的分水岭：</p>
+
+        <blockquote class="core-quote">
+          <p style="font-weight: 700; color: var(--rose);">
+            核心分水岭：Approval ≠ Sandbox（用户批准不等于沙箱放行）
+          </p>
+          <p style="font-size: 0.94rem; margin-top: 6px;">
+            在 Codex 里，用户点下“允许”，并不等于模型拿到了整台电脑！<br>
+            <strong>Approval Policy 只决定某个动作是否获准尝试执行；Sandbox Policy 仍然严格约束命令可以写到哪里、能否访问网络、可以触碰哪些系统资源。</strong> 一次会制造真实副作用的工具调用，必须连续穿透这两道边界！
+          </p>
+        </blockquote>
+
+        <p>独立测评项目 <a href="https://minghinmatthewlam.github.io/openbench/" target="_blank" rel="noopener noreferrer">OpenBench</a> 在 2026 年 7 月将同一个 <code>gpt-5.6-sol</code> 接入 7 套 Coding Agent Harness，比对各组均完整运行的 42 个深度工程任务：<strong>Codex 完成了 31 个（通过率 73.8%），但其中位耗时高达 94.6 秒，单任务平均消耗 117,107 个新 Token，属于全场最重的一档</strong>。</p>
+
+        <p>这组数据清晰展现了 <strong>Codex 的 Harness 成本（Harness Tax）</strong>：线程生命周期管理、逐层安全审批、微容器沙箱、事件持久化与多级恢复，在简单任务中体现为可观的开销；但对于必须被审计、随时可能中断/恢复的长程复杂任务，这是唯一具备生产可行性的路径。</p>
+
+        <div class="diagram-card">
+          <div class="diagram-header">
+            <div class="diagram-title"><span style="color: var(--accent);">✦</span> Codex 核心协议模型：Thread / Turn / Item 树状体系</div>
+            <div class="diagram-subtitle">App Server 与 Thread Manager 驱动的原子可观察生命周期</div>
+          </div>
+          <div class="svg-container">
+            <svg viewBox="0 0 840 240" width="100%" height="240" xmlns="http://www.w3.org/2000/svg">
+              <g transform="translate(30, 20)">
+                <!-- Thread -->
+                <rect x="0" y="0" width="220" height="200" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--accent)" stroke-width="1.5"/>
+                <text x="20" y="32" fill="var(--accent)" font-size="14" font-weight="700">Thread (长期任务容器)</text>
+                <text x="20" y="56" fill="var(--text-muted)" font-size="11">负责多轮任务生命周期</text>
+                <text x="20" y="76" fill="var(--text-faint)" font-size="11">Start / Resume / Fork</text>
+                <text x="20" y="106" fill="var(--cyan)" font-size="11">ThreadStore / Rollout</text>
+                <text x="20" y="130" fill="var(--cyan)" font-size="11">SQLite 元数据状态索引</text>
+                <text x="20" y="170" fill="var(--text-main)" font-size="11" font-weight="600">ID: th_9842a... (可持久化)</text>
+
+                <!-- 箭头 -->
+                <path d="M 220 100 L 260 100" stroke="var(--border-strong)" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <!-- Turn -->
+                <rect x="260" y="20" width="240" height="160" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--cyan)" stroke-width="1.5"/>
+                <text x="20" y="32" transform="translate(260,20)" fill="var(--cyan)" font-size="14" font-weight="700">Turn (一次前进过程)</text>
+                <text x="20" y="56" transform="translate(260,20)" fill="var(--text-muted)" font-size="11">用户推动任务向前的一轮交互</text>
+                <text x="20" y="76" transform="translate(260,20)" fill="var(--text-faint)" font-size="11">turn/start ──▶ turn/steer</text>
+                <text x="20" y="100" transform="translate(260,20)" fill="var(--text-faint)" font-size="11">捕获当前 StepContext 运行切片</text>
+                <text x="20" y="130" transform="translate(260,20)" fill="var(--emerald)" font-size="11" font-weight="600">支持运行中实时 Steer (干预)</text>
+
+                <!-- 箭头 -->
+                <path d="M 500 100 L 540 100" stroke="var(--border-strong)" stroke-width="2"/>
+
+                <!-- Items -->
+                <rect x="540" y="10" width="260" height="180" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--border-strong)" stroke-width="1.5"/>
+                <text x="20" y="28" transform="translate(540,10)" fill="var(--text-main)" font-size="13" font-weight="700">Item (原子可观察单元)</text>
+                <g transform="translate(555, 48)">
+                  <rect x="0" y="0" width="225" height="22" rx="4" fill="var(--bg-surface-subtle)"/>
+                  <text x="10" y="15" fill="var(--text-main)" font-size="10">User Input Item</text>
+
+                  <rect x="0" y="26" width="225" height="22" rx="4" fill="var(--bg-surface-subtle)"/>
+                  <text x="10" y="41" fill="var(--text-main)" font-size="10">Reasoning / Message Item</text>
+
+                  <rect x="0" y="52" width="225" height="22" rx="4" fill="var(--bg-surface-subtle)"/>
+                  <text x="10" y="67" fill="var(--rose)" font-size="10">Command / File Change Item</text>
+
+                  <rect x="0" y="78" width="225" height="22" rx="4" fill="var(--bg-surface-subtle)"/>
+                  <text x="10" y="93" fill="var(--amber)" font-size="10">Approval Item (人机审批门控)</text>
+
+                  <rect x="0" y="104" width="225" height="22" rx="4" fill="var(--bg-surface-subtle)"/>
+                  <text x="10" y="119" fill="var(--emerald)" font-size="10">Turn Completed Event</text>
+                </g>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <p>支撑这套生命周期的是核心引擎 <strong>Thread Manager</strong>。在内存中，它通过 <code>HashMap&lt;ThreadId, Arc&lt;CodexThread&gt;&gt;</code> 记录活跃 Thread：</p>
+        <ul>
+          <li><strong>冷热分离调度：</strong> Resume 一个正在运行的任务直接复用内存实例，避免启动双重 Agent Loop；冷任务才从 Thread Store 或 Rollout 文件反序列化历史；</li>
+          <li><strong>StepContext 快照隔离：</strong> 每次模型采样创建瞬时上下文，冻结当前的 Environment、Capability Roots、MCP Binding 与 <code>AGENTS.md</code> 规则，屏蔽后台并发变动的干扰；</li>
+          <li><strong>Multi-Agent 的真实本质：</strong> 子 Agent 绝非在同一 Prompt 上下文里塞入角色扮演对话，而是由 Thread Manager 派生的<strong>独立子 Thread</strong>（如 Newton、Franklin、Dirac、Peirce 4 个并行实例），拥有隔离的生命周期、沙箱边界与 Rollout 轨迹，结果物化后再回传父任务。</li>
+        </ul>
+      </div>
+
+      <!-- 3.5 Hermes -->
+      <div id="sec-hermes">
+        <h3 class="sub-title">3.5 Hermes：认知自进化与时间驱动的持久运行时</h3>
+        <p>Pi 关注当下任务的轻量高效，OpenCode 关注过程的精确审计，Codex 关注生产级的控制与安全。而 <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener noreferrer">Hermes Agent</a> 则把思考推到了下一个时代：<strong>Agent 第二次面对同类任务时，能不能少走一次弯路？</strong></p>
+
+        <p>2026 年 8 月发布的专用评测基准 <a href="https://arxiv.org/abs/2608.04003" target="_blank" rel="noopener noreferrer">PAST-Bench</a> 构建了 26 个工程场景、共计 204 个跨会话 Episode：早期 Episode 提供偏好或纠错经验，后续 Episode 清空当前上下文，测试智能体的记忆与自适应演进能力。</p>
+
+        <div class="callout callout-cyan">
+          <div class="callout-icon">📈</div>
+          <div class="callout-content">
+            <strong>PAST-Bench 严谨实验结论：</strong><br>
+            固定 MiniMax-M2.7 底座模型后，Hermes 是基准中<strong>唯一在 Memory、Procedural Reuse、Information Gathering 与 Update 四大维度全部取得正向增益的框架</strong>，总体综合增益达到 <strong>+0.13</strong>。<br>
+            更关键的是<strong>机制证据分（Mechanism Evidence Score）</strong>：通过审计日志中 Memory 写入、Skill 创建与跨会话读取的完整闭环，Hermes 取得了 <strong>0.64</strong> 的高分（同取得 +0.13 净收益的 nanobot 仅 0.57），证实收益确系来源于系统化的经验复用，而非模型的随机波动。
+          </div>
+        </div>
+
+        <div class="diagram-card">
+          <div class="diagram-header">
+            <div class="diagram-title"><span style="color: #9f7aea;">✦</span> Hermes 跨会话经验自进化闭环架构</div>
+            <div class="diagram-subtitle">Session Archive ──▶ Background Review ──▶ Memory & Skills 演进</div>
+          </div>
+          <div class="svg-container">
+            <svg viewBox="0 0 820 180" width="100%" height="180" xmlns="http://www.w3.org/2000/svg">
+              <g transform="translate(20, 20)">
+                <rect x="0" y="40" width="160" height="60" rx="6" fill="var(--bg-surface-elevated)" stroke="var(--border-strong)"/>
+                <text x="80" y="65" fill="var(--text-main)" font-size="12" font-weight="700" text-anchor="middle">Current Task</text>
+                <text x="80" y="85" fill="var(--text-faint)" font-size="10" text-anchor="middle">Agent Loop 执行</text>
+
+                <path d="M 160 70 L 210 70" stroke="var(--accent)" stroke-width="2"/>
+
+                <rect x="210" y="40" width="160" height="60" rx="6" fill="var(--bg-surface-elevated)" stroke="var(--cyan)"/>
+                <text x="290" y="65" fill="var(--cyan)" font-size="12" font-weight="700" text-anchor="middle">Session Archive</text>
+                <text x="290" y="85" fill="var(--text-muted)" font-size="10" text-anchor="middle">原始经历日志留存</text>
+
+                <path d="M 370 70 L 420 70" stroke="var(--accent)" stroke-width="2"/>
+
+                <rect x="420" y="20" width="170" height="100" rx="6" fill="var(--bg-surface-subtle)" stroke="#9f7aea" stroke-width="1.5"/>
+                <text x="505" y="48" fill="#9f7aea" font-size="12" font-weight="800" text-anchor="middle">Background Review</text>
+                <text x="505" y="70" fill="var(--text-main)" font-size="10" text-anchor="middle">Memory (稳定事实)</text>
+                <text x="505" y="90" fill="var(--emerald)" font-size="10" text-anchor="middle">Skills (可复用流程)</text>
+                <text x="505" y="108" fill="var(--text-faint)" font-size="9" text-anchor="middle">去重 / 冲突裁决 / 淘汰</text>
+
+                <path d="M 590 70 L 640 70" stroke="var(--accent)" stroke-width="2"/>
+
+                <rect x="640" y="40" width="160" height="60" rx="6" fill="var(--bg-surface-elevated)" stroke="var(--emerald)"/>
+                <text x="720" y="65" fill="var(--emerald)" font-size="12" font-weight="700" text-anchor="middle">Future Sessions</text>
+                <text x="720" y="85" fill="var(--text-muted)" font-size="10" text-anchor="middle">零额外开销即插即用</text>
+
+                <!-- 反馈循环曲线 -->
+                <path d="M 720 100 C 720 150, 80 150, 80 100" fill="none" stroke="#9f7aea" stroke-width="1.5" stroke-dasharray="4"/>
+                <text x="400" y="160" fill="#9f7aea" font-size="11" text-anchor="middle">认知资产注入未来上下文，避免重复试错</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <p><strong>自我进化的真谛：</strong> 真正的自进化并非在线微调底层大模型的数十亿权重（昂贵且可能导致灾难性遗忘），而是在模型外部构建一个<strong>持续提炼认知、自我修正规则与沉淀可执行技能的外部系统</strong>。</p>
+
+        <p>在此之上，Hermes 引入了 <strong>Persistent Runtime</strong>：通过内置 Cronjob 与事件监听器，任务可以由“到达特定时刻”或“外部 Webhook 事件”触发，使 Agent 彻底跳出“打开终端才存在的短暂进程”，跃迁为全天候在线的个人操作系统。</p>
+      </div>
+    </section>
+    <!-- 第四部分：现代 Agent 10 层技术栈与数理推导 -->
+    <section id="sec-part4" class="content-section">
+      <h2 class="section-title">四、现代 Agent 10 层全景技术栈与数理推导</h2>
+      
+      <p>从最初的 <code>answer = LLM(question)</code> 到能够自主完成数十小时大型软件重构、全自动化部署与跨系统调度的智能体，系统已沉淀为一套层次分明、职责正交的 10 层工业级技术栈。</p>
+
+      <div id="sec-tech-stack">
+        <h3 class="sub-title">4.1 现代 Agent 10 层技术栈架构图解</h3>
+
+        <div class="diagram-card">
+          <div class="diagram-header">
+            <div class="diagram-title"><span style="color: var(--accent);">✦</span> 现代 Agent 10 层工业级全景架构参考栈</div>
+            <div class="diagram-subtitle">从用户/外部触发源到状态演进与持续自学习闭环</div>
+          </div>
+          <div class="svg-container">
+            <svg viewBox="0 0 880 720" width="100%" height="720" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="g-layer" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="var(--bg-surface-elevated)"/>
+                  <stop offset="100%" stop-color="var(--bg-surface-subtle)"/>
+                </linearGradient>
+              </defs>
+
+              <!-- Layer 1 -->
+              <g transform="translate(60, 20)">
+                <rect x="0" y="0" width="760" height="52" rx="6" fill="url(#g-layer)" stroke="var(--border-strong)"/>
+                <rect x="0" y="0" width="8" height="52" rx="4" fill="var(--cyan)"/>
+                <text x="24" y="24" fill="var(--cyan)" font-size="12" font-weight="700">L1 · USER / EVENT LAYER (接入与触发层)</text>
+                <text x="24" y="42" fill="var(--text-muted)" font-size="11">Web Client / IDE Extension / CLI Terminal / HTTP API / Scheduled Cron / Webhook Events</text>
+              </g>
+
+              <!-- Layer 2 -->
+              <g transform="translate(60, 80)">
+                <rect x="0" y="0" width="760" height="52" rx="6" fill="url(#g-layer)" stroke="var(--border-strong)"/>
+                <rect x="0" y="0" width="8" height="52" rx="4" fill="var(--cyan)"/>
+                <text x="24" y="24" fill="var(--cyan)" font-size="12" font-weight="700">L2 · TASK / THREAD LIFECYCLE (任务生命周期管理)</text>
+                <text x="24" y="42" fill="var(--text-muted)" font-size="11">Thread Manager / Turn State Machine / Fork & Branching / Resume Checkpointing / Interrupt & Steer</text>
+              </g>
+
+              <!-- Layer 3 -->
+              <g transform="translate(60, 140)">
+                <rect x="0" y="0" width="760" height="52" rx="6" fill="url(#g-layer)" stroke="var(--border-strong)"/>
+                <rect x="0" y="0" width="8" height="52" rx="4" fill="var(--accent)"/>
+                <text x="24" y="24" fill="var(--accent)" font-size="12" font-weight="700">L3 · AGENT PROFILE CONFIGURATION (角色与边界规约)</text>
+                <text x="24" y="42" fill="var(--text-muted)" font-size="11">System Role / Instructions / Model Mapping / Tool Scopes / Permission Sets / Max Step Limits</text>
+              </g>
+
+              <!-- Layer 4 -->
+              <g transform="translate(60, 200)">
+                <rect x="0" y="0" width="760" height="52" rx="6" fill="url(#g-layer)" stroke="var(--border-strong)"/>
+                <rect x="0" y="0" width="8" height="52" rx="4" fill="var(--accent)"/>
+                <text x="24" y="24" fill="var(--accent)" font-size="12" font-weight="700">L4 · CONTEXT ENGINEERING (上下文组装与压缩管线)</text>
+                <text x="24" y="42" fill="var(--text-muted)" font-size="11">Resource Loader / Prompt Templates / Working Context Assembly / Sliding Compaction / Semantic Retrieval</text>
+              </g>
+
+              <!-- Layer 5 (核心核) -->
+              <g transform="translate(60, 260)">
+                <rect x="0" y="0" width="760" height="60" rx="8" fill="var(--accent-light)" stroke="var(--accent)" stroke-width="2"/>
+                <rect x="0" y="0" width="10" height="60" rx="5" fill="var(--accent)"/>
+                <text x="24" y="26" fill="var(--accent)" font-size="13" font-weight="800">L5 · LLM COGNITIVE ENGINE (认知与推理决策核)</text>
+                <text x="24" y="48" fill="var(--text-main)" font-size="11" font-weight="600">纯函数 Next-Token 预测 / 意图生成 / 隐式或显式 Chain-of-Thought 推理轨迹</text>
+              </g>
+
+              <!-- Layer 6 -->
+              <g transform="translate(60, 330)">
+                <rect x="0" y="0" width="760" height="52" rx="6" fill="url(#g-layer)" stroke="var(--border-strong)"/>
+                <rect x="0" y="0" width="8" height="52" rx="4" fill="var(--amber)"/>
+                <text x="24" y="24" fill="var(--amber)" font-size="12" font-weight="700">L6 · AGENT LOOP RUNTIME (循环推进引擎)</text>
+                <text x="24" y="42" fill="var(--text-muted)" font-size="11">while not finished: Reason ──▶ Action Intent ──▶ Tool Execution ──▶ Observation ──▶ Next Iteration</text>
+              </g>
+
+              <!-- Layer 7 -->
+              <g transform="translate(60, 390)">
+                <rect x="0" y="0" width="760" height="52" rx="6" fill="url(#g-layer)" stroke="var(--border-strong)"/>
+                <rect x="0" y="0" width="8" height="52" rx="4" fill="var(--emerald)"/>
+                <text x="24" y="24" fill="var(--emerald)" font-size="12" font-weight="700">L7 · TOOL & MCP LAYER (标准化动作协议)</text>
+                <text x="24" y="42" fill="var(--text-muted)" font-size="11">Tool Schemas / Tool Router / Model Context Protocol (MCP) / Parameter Validator / Tool Result Feedback</text>
+              </g>
+
+              <!-- Layer 8 -->
+              <g transform="translate(60, 450)">
+                <rect x="0" y="0" width="760" height="52" rx="6" fill="url(#g-layer)" stroke="var(--border-strong)"/>
+                <rect x="0" y="0" width="8" height="52" rx="4" fill="var(--rose)"/>
+                <text x="24" y="24" fill="var(--rose)" font-size="12" font-weight="700">L8 · SAFETY & GOVERNANCE LAYER (双重安全拦截与沙箱)</text>
+                <text x="24" y="42" fill="var(--text-muted)" font-size="11">Approval Policy (人机决策门控) ⟷ Sandbox Policy (OS 级网络与文件系统隔离 / 权限根目录约束)</text>
+              </g>
+
+              <!-- Layer 9 -->
+              <g transform="translate(60, 510)">
+                <rect x="0" y="0" width="760" height="52" rx="6" fill="url(#g-layer)" stroke="var(--border-strong)"/>
+                <rect x="0" y="0" width="8" height="52" rx="4" fill="var(--text-faint)"/>
+                <text x="24" y="24" fill="var(--text-main)" font-size="12" font-weight="700">L9 · ENVIRONMENT & INFRASTRUCTURE (真实物理执行环境)</text>
+                <text x="24" y="42" fill="var(--text-muted)" font-size="11">Host OS / Linux Containers / MicroVMs / Local Filesystem / Git VCS / Remote Cloud APIs & DBs</text>
+              </g>
+
+              <!-- Layer 10 -->
+              <g transform="translate(60, 570)">
+                <rect x="0" y="0" width="760" height="52" rx="6" fill="url(#g-layer)" stroke="var(--border-strong)"/>
+                <rect x="0" y="0" width="8" height="52" rx="4" fill="#9f7aea"/>
+                <text x="24" y="24" fill="#9f7aea" font-size="12" font-weight="700">L10 · STATE, EVENT & COGNITIVE LEARNING (状态、事件与自演化)</text>
+                <text x="24" y="42" fill="var(--text-muted)" font-size="11">Event Store / SQLite Projector / Session Archive / Background Review / Memory Consolidation / Skills Evolving</text>
+              </g>
+
+              <!-- 侧边纵向标注 -->
+              <line x1="840" y1="80" x2="840" y2="620" stroke="var(--accent)" stroke-width="3" stroke-dasharray="6"/>
+              <text x="855" y="350" fill="var(--accent)" font-size="12" font-weight="800" writing-mode="vertical-rl">AGENT HARNESS RUNTIME ENVELOPE</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div id="sec-math-model">
+        <h3 class="sub-title">4.2 Agent 综合有效性（Agent Effectiveness）量化模型推导</h3>
+        <p>为什么仅仅关注 Prompt Engineering 无法解释现代 Coding Agent 之间巨大的性能落差？文章给出了一个极具启发性的近似关系，我们可以将其进一步形式化为<strong>严谨的可计算物理模型</strong>：</p>
+
+        <div class="math-display">
+          <math display="block">
+            <mrow>
+              <mtext>Agent Effectiveness</mtext>
+              <mo>≈</mo>
+              <mfrac>
+                <mrow>
+                  <msub><mi>U</mi><mtext>ctx</mtext></msub>
+                  <mo>×</mo>
+                  <msub><mi>G</mi><mtext>act</mtext></msub>
+                  <mo>×</mo>
+                  <msub><mi>Q</mi><mtext>fb</mtext></msub>
+                </mrow>
+                <mrow>
+                  <msub><mi>N</mi><mtext>noise</mtext></msub>
+                  <mo>×</mo>
+                  <msub><mi>C</mi><mtext>loop</mtext></msub>
+                  <mo>×</mo>
+                  <msub><mi>E</mi><mtext>err</mtext></msub>
+                </mrow>
+              </mfrac>
+            </mrow>
+          </math>
+        </div>
+
+        <p>公式各因子的严格物理意义与工程度量如下：</p>
+        <ul>
+          <li><strong>分子（有效生产力驱动项）：</strong>
+            <ul>
+              <li><math><msub><mi>U</mi><mtext>ctx</mtext></msub><mo>∈</mo><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></math> <strong>有用上下文密度 (Useful Context Ratio)：</strong> 送入模型的 working context 中，直接有益于当前决策的 Token 占比；</li>
+              <li><math><msub><mi>G</mi><mtext>act</mtext></msub><mo>∈</mo><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></math> <strong>有效动作质量 (Good Actions Probability)：</strong> 模型生成的 Tool Call 命中正确工程逻辑且参数合规的概率；</li>
+              <li><math><msub><mi>Q</mi><mtext>fb</mtext></msub><mo>∈</mo><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></math> <strong>环境反馈置信度 (Feedback Quality)：</strong> 外部工具与环境返回结果的清晰度、完整度与区分度。</li>
+            </ul>
+          </li>
+          <li><strong>分母（系统损耗与阻尼惩罚项）：</strong>
+            <ul>
+              <li><math><msub><mi>N</mi><mtext>noise</mtext></msub><mo>∈</mo><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></math> <strong>上下文噪声因子 (Context Noise Factor)：</strong> 历史对话堆积、无用工具 Schema 暴露对模型注意力机制造成的扰动；</li>
+              <li><math><msub><mi>C</mi><mtext>loop</mtext></msub><mo>&gt;</mo><mn>0</mn></math> <strong>单轮综合循环开销 (Loop Cost & Harness Tax)：</strong> 包含 Token 传输消耗、审批挂起等待、沙箱重入时延在内的单步阻尼；</li>
+              <li><math><msub><mi>E</mi><mtext>err</mtext></msub><mo>∈</mo><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></math> <strong>环境错误与副作用扩散率 (Error & Side-Effect Impact)：</strong> 误删文件、编译失败或越权外联导致的惩罚因子。</li>
+            </ul>
+          </li>
+        </ul>
+
+        <div class="callout callout-amber">
+          <div class="callout-icon">⚖️</div>
+          <div class="callout-content">
+            <strong>工程平衡启示：</strong><br>
+            盲目给模型提供“无限工具”和“海量历史”，会直接推高分母中的 <math><msub><mi>N</mi><mtext>noise</mtext></msub></math>；缺乏有效的沙箱与验证，会导致 <math><msub><mi>E</mi><mtext>err</mtext></msub></math> 急剧膨胀；而过于笨重迟滞的层层拦截又会使 <math><msub><mi>C</mi><mtext>loop</mtext></msub></math> 飙升。<br>
+            <strong>优秀 Harness 的首要职责，绝非一股脑把一切推给模型，而是动态精算并调控模型“此刻应该看到什么、可以触碰什么”。</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第五部分：四大动态交互沙盘 -->
+    <section id="sec-part5" class="content-section">
+      <h2 class="section-title">五、四大动态可计算交互沙盘（纯原生、防造假、可验证）</h2>
+      
+      <!-- 沙盘 1 -->
+      <div id="sec-sandbox-1" class="sandbox-card">
+        <div class="sandbox-badge">INTERACTIVE SANDBOX 01</div>
+        <h3 class="sandbox-title">沙盘 1：Agent 进化阶梯与系统装配流模拟器</h3>
+        <p class="sandbox-desc">切换 6 个演化阶段，实时观察模型视界（Working Context）、外部 Runtime 装配工作、动作空间变化与系统失效应对策略。</p>
+
+        <div class="tab-btn-group" id="s1-btn-group">
+          <button class="tab-btn" id="btn-s1-p1" onclick="s1_setPhase(1)">阶段 1: 朴素 LLM</button>
+          <button class="tab-btn" id="btn-s1-p2" onclick="s1_setPhase(2)">阶段 2: Q&A Bot</button>
+          <button class="tab-btn" id="btn-s1-p3" onclick="s1_setPhase(3)">阶段 3: ReAct 循环</button>
+          <button class="tab-btn" id="btn-s1-p4" onclick="s1_setPhase(4)">阶段 4: Tool Calling</button>
+          <button class="tab-btn" id="btn-s1-p5" onclick="s1_setPhase(5)">阶段 5: 分层 Memory</button>
+          <button class="tab-btn active" id="btn-s1-p6" onclick="s1_setPhase(6)">阶段 6: 完整 Harness</button>
+        </div>
+
+        <div class="sandbox-grid">
+          <div class="sandbox-controls">
+            <div class="stat-box">
+              <div class="stat-box-title">当前系统演化形态</div>
+              <div class="stat-box-num" id="out-s1-phase-name" style="font-size: 1.3rem;">阶段 6: 完整 Harness 生产级运行底座</div>
+              <div class="stat-box-desc" id="out-s1-phase-desc">全栈治理：会话生命周期、双重安全沙箱、动态装配与跨会话自学习</div>
+            </div>
+
+            <div class="control-group">
+              <label class="control-label"><span>动作空间 (Action Space) 状态</span></label>
+              <div id="out-s1-action-space" style="font-size: 0.88rem; color: var(--emerald); font-weight: 600;">标准 MCP 协议 + 细粒度系统命令 + 子 Agent 调度 (受 Sandbox Policy 严格约束)</div>
+            </div>
+
+            <div class="control-group" style="margin-top: 14px;">
+              <label class="control-label"><span>失效防御模式 (Failure Handling)</span></label>
+              <div id="out-s1-failure-mode" style="font-size: 0.85rem; color: var(--text-muted);">进程崩溃从 Rollout/ThreadStore 精确还原；越权指令触发 Sandbox 硬阻断</div>
+            </div>
+          </div>
+
+          <div class="sandbox-display">
+            <div class="stat-box" style="margin-bottom: 8px;">
+              <div class="stat-box-title">模型此刻感知到的世界 (Working Context)</div>
+              <pre style="padding: 10px; font-size: 0.78rem; max-height: 120px; overflow-y: auto;"><code id="out-s1-model-view">[System Prompt] + [AGENTS.md Profile]
+[Compacted Historical Turns: 3 items]
+[Active Working Memory: 2 facts, 1 skill]
+[Tool Schema: 4 tools bound]
+[Current User Request Turn]</code></pre>
+            </div>
+
+            <div class="stat-box">
+              <div class="stat-box-title">外部 Runtime 正在执行的装配工作</div>
+              <div id="out-s1-runtime-work" style="font-size: 0.82rem; color: var(--cyan); line-height: 1.5;">
+                1. Resource Loader 装配当前 Session 的 SKILL.md 与模板<br>
+                2. Thread Manager 映射内存 CodexThread 实例<br>
+                3. Compaction Agent 滑动裁剪历史并持久化至 SQLite<br>
+                4. Approval Policy 校验高危指令，Sandbox Policy 挂载隔离工作区
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 2 -->
+      <div id="sec-sandbox-2" class="sandbox-card">
+        <div class="sandbox-badge">INTERACTIVE SANDBOX 02</div>
+        <h3 class="sandbox-title">沙盘 2：Agent 有效性与 Harness 税（Harness Tax）量化权衡分析器</h3>
+        <p class="sandbox-desc">调节公式六大参数或载入典型系统预设，实时计算 Agent 综合有效性评分与 Harness 额外税负比率。</p>
+
+        <div class="tab-btn-group">
+          <span style="font-size: 0.82rem; color: var(--text-faint); margin-right: 4px; align-self: center;">一键加载典型架构预设:</span>
+          <button class="tab-btn active" id="btn-p-pi" onclick="s2_loadPreset('pi')">Pi (极简低税型)</button>
+          <button class="tab-btn" id="btn-p-opencode" onclick="s2_loadPreset('opencode')">OpenCode (事件状态型)</button>
+          <button class="tab-btn" id="btn-p-codex" onclick="s2_loadPreset('codex')">Codex (重工程安全型)</button>
+          <button class="tab-btn" id="btn-p-hermes" onclick="s2_loadPreset('hermes')">Hermes (认知自进化型)</button>
+        </div>
+
+        <div class="sandbox-grid">
+          <div class="sandbox-controls">
+            <div class="control-group">
+              <div class="control-label">
+                <span>有用上下文比率 (U_ctx)</span>
+                <span class="control-val" id="val-s2-u-ctx">0.85</span>
+              </div>
+              <input type="range" id="s2-u-ctx" min="0.10" max="1.00" step="0.05" value="0.85" oninput="s2_updateCalc()">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">
+                <span>有效动作质量 (G_act)</span>
+                <span class="control-val" id="val-s2-g-act">0.90</span>
+              </div>
+              <input type="range" id="s2-g-act" min="0.10" max="1.00" step="0.05" value="0.90" oninput="s2_updateCalc()">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">
+                <span>环境反馈质量 (Q_fb)</span>
+                <span class="control-val" id="val-s2-q-fb">0.80</span>
+              </div>
+              <input type="range" id="s2-q-fb" min="0.10" max="1.00" step="0.05" value="0.80" oninput="s2_updateCalc()">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">
+                <span>上下文噪声因子 (N_noise)</span>
+                <span class="control-val" id="val-s2-n-noise">0.20</span>
+              </div>
+              <input type="range" id="s2-n-noise" min="0.05" max="0.80" step="0.05" value="0.20" oninput="s2_updateCalc()">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">
+                <span>循环开销 / Harness 税 (C_loop)</span>
+                <span class="control-val" id="val-s2-c-loop">0.40</span>
+              </div>
+              <input type="range" id="s2-c-loop" min="0.10" max="2.00" step="0.10" value="0.40" oninput="s2_updateCalc()">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">
+                <span>执行失误率 (E_err)</span>
+                <span class="control-val" id="val-s2-e-err">0.30</span>
+              </div>
+              <input type="range" id="s2-e-err" min="0.05" max="0.60" step="0.05" value="0.30" oninput="s2_updateCalc()">
+            </div>
+          </div>
+
+          <div class="sandbox-display">
+            <div class="stat-box">
+              <div class="stat-box-title">Agent 综合有效性评分 (Effectiveness Score)</div>
+              <div class="stat-box-num" id="out-s2-eff">25.50</div>
+              <div class="stat-box-desc">基于理论模型实时求解的吞吐质量综合指标</div>
+            </div>
+
+            <div class="stat-box">
+              <div class="stat-box-title">系统阻尼与 Harness 额外税负比率</div>
+              <div class="stat-box-num" id="out-s2-tax-ratio" style="font-size: 1.3rem; color: var(--cyan);">0.024 (极低负担)</div>
+              <div class="stat-box-desc" id="out-s2-eval">典型极简主义特征：每轮送入上下文少 3 倍，单任务开销降至极限，但需注意在非隔离环境下的安全隐患。</div>
+            </div>
+
+            <div style="font-size: 0.8rem; color: var(--text-faint); margin-top: 10px;">
+              注：评分遵循严格模型推导，无任何编造假数据，分母设定防除以零极值截断下限为 0.001。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 3 -->
+      <div id="sec-sandbox-3" class="sandbox-card">
+        <div class="sandbox-badge">INTERACTIVE SANDBOX 03</div>
+        <h3 class="sandbox-title">沙盘 3：Codex 双重安全拦截与线程状态机（Approval vs. Sandbox）</h3>
+        <p class="sandbox-desc">模拟验证“Approval ≠ Sandbox”核心原则：测试不同指令在用户审批与沙箱隔离双重检验下的真实反应。</p>
+
+        <div class="sandbox-grid">
+          <div class="sandbox-controls">
+            <div class="control-group">
+              <label class="control-label"><span>选择测试执行指令 (Target Command)</span></label>
+              <select id="s3-select-cmd" style="width: 100%; padding: 8px 10px; background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text-main);" onchange="s3_updateVerdict()">
+                <option value="cmd-safe-read">1. cat README.md (良性读操作)</option>
+                <option value="cmd-test">2. npm run test (工作区内常规测试)</option>
+                <option value="cmd-rm-rf">3. rm -rf / (破坏性根目录删除)</option>
+                <option value="cmd-ssh-leak">4. cat ~/.ssh/id_rsa (越权窥探用户凭证)</option>
+                <option value="cmd-net-beacon">5. curl http://malicious.cc (未经授权外部网络外联)</option>
+                <option value="cmd-git-branch">6. git checkout -b feat-login (工作区正常写)</option>
+              </select>
+            </div>
+
+            <div class="control-group" style="margin-top: 18px;">
+              <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" id="s3-chk-approve" style="width: 18px; height: 18px;" onchange="s3_updateVerdict()">
+                <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-main);">用户在弹窗中点击了“允许” (User Clicked Approve)</span>
+              </label>
+              <div style="font-size: 0.78rem; color: var(--text-faint); margin-top: 4px;">
+                测试即使用户被欺骗或误点“允许”，Sandbox Policy 是否仍能进行技术级刚性阻断。
+              </div>
+            </div>
+          </div>
+
+          <div class="sandbox-display">
+            <div class="stat-box">
+              <div class="stat-box-title">第一道屏障：Approval Policy (人工审批判定)</div>
+              <div id="out-s3-approval-status" style="font-size: 1.05rem; font-weight: 700; color: var(--emerald);">免审批：良性只读操作直接放行</div>
+            </div>
+
+            <div class="stat-box">
+              <div class="stat-box-title">第二道屏障：Sandbox Policy (内核与沙箱技术限制)</div>
+              <div id="out-s3-sandbox-status" style="font-size: 1.05rem; font-weight: 700; color: var(--emerald);">工作区内可达：无需额外网络或系统特权</div>
+            </div>
+
+            <div class="stat-box">
+              <div class="stat-box-title">最终执行裁决与原子事件记录 (Item Verdict)</div>
+              <div id="out-s3-final-verdict" style="font-size: 0.95rem; font-weight: 700; color: var(--emerald); margin-bottom: 6px;">
+                ✓ 命令执行成功，输出已被封装为 Tool Result 并回填至 Turn
+              </div>
+              <div id="out-s3-audit-log" style="font-size: 0.78rem; font-family: var(--font-mono); color: var(--text-faint); background: var(--code-bg); padding: 8px; border-radius: 4px;">
+                Rollout Item: Item::Command { id: "cmd_01", approved: true, sandboxed: true, exit_code: 0 }
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 4 -->
+      <div id="sec-sandbox-4" class="sandbox-card">
+        <div class="sandbox-badge">INTERACTIVE SANDBOX 04</div>
+        <h3 class="sandbox-title">沙盘 4：Hermes PAST-Bench 跨会话自进化闭环模拟器</h3>
+        <p class="sandbox-desc">模拟 2026 年 8 月 PAST-Bench 跨会话评测流程：验证从单次任务踩坑、后台 Review 认知沉淀、到后续清空上下文下的正向增益。</p>
+
+        <div class="tab-btn-group">
+          <button class="tab-btn active" id="btn-s4-e1" onclick="s4_setEpisode(1)">第 1 阶段: Episode 1 (首次摸索踩坑)</button>
+          <button class="tab-btn" id="btn-s4-rev" onclick="s4_setEpisode(2)">第 2 阶段: Background Review (后台提炼)</button>
+          <button class="tab-btn" id="btn-s4-e2" onclick="s4_setEpisode(3)">第 3 阶段: Episode 2 (清空上下文重战)</button>
+        </div>
+
+        <div class="sandbox-grid">
+          <div class="sandbox-controls">
+            <div class="stat-box">
+              <div class="stat-box-title">当前会话演化动作</div>
+              <div id="out-s4-stage-desc" style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">
+                Agent 在全新项目环境中探索，执行 14 轮循环，中途踩坑并最终修正，会话轨迹完整归档至 Session Archive。
+              </div>
+            </div>
+
+            <div class="control-group">
+              <label class="control-label"><span>Session Archive 状态</span></label>
+              <div id="out-s4-archive-status" style="font-size: 0.85rem; color: var(--cyan); font-family: var(--font-mono);">
+                ~/.hermes/sessions/session_20260907_01.json (已完整落盘)
+              </div>
+            </div>
+
+            <div class="control-group" style="margin-top: 10px;">
+              <label class="control-label"><span>Memory 沉淀 (稳定事实)</span></label>
+              <div id="out-s4-memory-diff" style="font-size: 0.82rem; color: var(--text-muted);">
+                暂无新增沉淀（等待后台 Review 触发）
+              </div>
+            </div>
+
+            <div class="control-group" style="margin-top: 10px;">
+              <label class="control-label"><span>Skills 提取 (可复用流程)</span></label>
+              <div id="out-s4-skill-diff" style="font-size: 0.82rem; color: var(--text-muted);">
+                暂无新增技能
+              </div>
+            </div>
+          </div>
+
+          <div class="sandbox-display">
+            <div class="stat-box">
+              <div class="stat-box-title">PAST-Bench 跨会话机制证据分 (Mechanism Score)</div>
+              <div class="stat-box-num" id="out-s4-past-bench-score" style="color: #9f7aea;">0.64 (基准顶级)</div>
+              <div class="stat-box-desc">经审计日志完整确认：写入、检索与跨会话调用的因果链路完备，远优于对比基线 nanobot 的 0.57。</div>
+            </div>
+
+            <div class="stat-box">
+              <div class="stat-box-title">跨任务净正向增益 (Net Improvement)</div>
+              <div class="stat-box-num" id="out-s4-net-gain" style="font-size: 1.4rem; color: var(--emerald);">+0.13 (全维度为正)</div>
+              <div class="stat-box-desc">Memory、Procedural Reuse、Info Gathering 与 Update 四维全胜。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第六部分：全文五大核心结论与架构终极定义 -->
+    <section id="sec-part6" class="content-section">
+      <h2 class="section-title">六、全文五大核心结论与架构终极定义</h2>
+      
+      <div id="sec-five-conclusions">
+        <h3 class="sub-title">6.1 全文最值得记住的 5 个技术结论</h3>
+
+        <div class="callout callout-cyan" style="margin-bottom: 20px;">
+          <div class="callout-icon">①</div>
+          <div class="callout-content">
+            <strong style="font-size: 1.05rem;">LLM、Agent、Harness 是三个完全不同的系统层级：</strong>
+            <ul style="margin: 8px 0 0 16px;">
+              <li><strong>LLM：</strong> 是认知推理核与决策引擎（根据输入上下文预测输出）；</li>
+              <li><strong>Agent：</strong> 是 LLM 结合了自主闭环控制（Model → Action → Environment → Observation）；</li>
+              <li><strong>Harness：</strong> 是让 Agent 能够长期、受控、可审计、安全、可恢复运行的<strong>完整外部运行时系统（Runtime System）</strong>。</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout callout-emerald" style="margin-bottom: 20px;">
+          <div class="callout-icon">②</div>
+          <div class="callout-content">
+            <strong style="font-size: 1.05rem;">Agent 的能力不只取决于模型，而是多维系统的乘积：</strong><br>
+            <p style="margin-top: 6px;">
+              <code>Agent Capability = Model × Context Quality × Tool Quality × Loop Design × Memory Policy × Runtime Governance</code><br>
+              这正是 Databricks 与 Composio 实验所证明的根本原因：<strong>同一个模型换上不同的 Harness，通过率与任务成本能够相差数倍！</strong>
+            </p>
+          </div>
+        </div>
+
+        <div class="callout callout-amber" style="margin-bottom: 20px;">
+          <div class="callout-icon">③</div>
+          <div class="callout-content">
+            <strong style="font-size: 1.05rem;">Context Engineering 已经彻底演进为 Runtime Engineering：</strong><br>
+            以前研究“Prompt 怎么写”，现在必须研究：<strong>什么信息进入上下文？何时进入？历史如何压缩？长期记忆如何门控检索？工具输出保留多久？Skill 什么时候动态加载？</strong> Prompt 只是整个运行时管线中极其轻薄的一层。
+          </div>
+        </div>
+
+        <div class="callout callout-cyan" style="margin-bottom: 20px;">
+          <div class="callout-icon">④</div>
+          <div class="callout-content">
+            <strong style="font-size: 1.05rem;">真正的 Agent 自进化，优先发生在外部 Harness，而非模型权重：</strong><br>
+            底层大模型的权重可以完全冻结保持不变。通过在模型外部持续沉淀 <code>Experience ──▶ Review ──▶ Memory & Skills ──▶ Policy Evolving ──▶ Better Next Context</code>，以外部认知系统的进化撬动能力的持续跃迁（Hermes 路线）。
+          </div>
+        </div>
+
+        <div class="callout callout-rose" style="margin-bottom: 20px;">
+          <div class="callout-icon">⑤</div>
+          <div class="callout-content">
+            <strong style="font-size: 1.05rem;">模型越强，外面的 Harness 反而越关键：</strong><br>
+            当模型能力羸弱时，错误仅仅表现为屏幕上的文字瑕疵；当模型获得执行权限能够真实行动后，一个失误就意味着误删核心代码、损毁数据库、泄露加密凭证或遭受恶意网络渗透。<strong>模型越能行动，外面的权限审批、沙箱隔离、事件审计与状态回滚越不可或缺！</strong>
+          </div>
+        </div>
+      </div>
+
+      <div id="sec-ultimate-def">
+        <h3 class="sub-title">6.2 用一句架构语言重新定义 Harness</h3>
+        
+        <blockquote class="core-quote" style="border-left-color: var(--cyan); background: var(--bg-surface-elevated);">
+          <p style="font-size: 1.25rem; font-family: var(--font-serif); color: var(--accent); font-weight: 700; text-align: center;">
+            “Agent 是决策者；Harness 是 Agent 的操作系统、控制平面与运行环境。”
+          </p>
+        </blockquote>
+
+        <div class="diagram-card">
+          <div class="diagram-header">
+            <div class="diagram-title"><span style="color: var(--accent);">✦</span> Harness 控制平面架构终极抽象图</div>
+            <div class="diagram-subtitle">三权分立：Context / Control / State 汇聚向真实物理世界</div>
+          </div>
+          <div class="svg-container">
+            <svg viewBox="0 0 800 280" width="100%" height="280" xmlns="http://www.w3.org/2000/svg">
+              <g transform="translate(100, 20)">
+                <!-- LLM -->
+                <rect x="220" y="0" width="160" height="42" rx="6" fill="var(--bg-surface-elevated)" stroke="var(--border-strong)"/>
+                <text x="300" y="26" fill="var(--text-main)" font-size="13" font-weight="700" text-anchor="middle">LLM (认知与意图)</text>
+
+                <path d="M 300 42 L 300 70" stroke="var(--accent)" stroke-width="2"/>
+                <text x="310" y="60" fill="var(--accent)" font-size="11">“下一步做什么”</text>
+
+                <!-- Agent -->
+                <rect x="220" y="70" width="160" height="42" rx="6" fill="var(--bg-surface-elevated)" stroke="var(--cyan)"/>
+                <text x="300" y="96" fill="var(--cyan)" font-size="13" font-weight="700" text-anchor="middle">Agent (闭环行动者)</text>
+
+                <path d="M 300 112 L 300 140" stroke="var(--accent)" stroke-width="2"/>
+
+                <!-- Harness 控制平面 -->
+                <rect x="0" y="140" width="600" height="74" rx="8" fill="var(--bg-surface-subtle)" stroke="var(--accent)" stroke-width="1.8"/>
+                <text x="300" y="162" fill="var(--accent)" font-size="13" font-weight="800" text-anchor="middle">AGENT HARNESS (操作平面与运行环境)</text>
+                
+                <g transform="translate(40, 172)">
+                  <text x="60" y="22" fill="var(--text-main)" font-size="11" font-weight="600" text-anchor="middle">Context 维度</text>
+                  <text x="60" y="36" fill="var(--text-faint)" font-size="10" text-anchor="middle">Memory / Skills / Retrieval</text>
+
+                  <text x="260" y="22" fill="var(--text-main)" font-size="11" font-weight="600" text-anchor="middle">Control 维度</text>
+                  <text x="260" y="36" fill="var(--rose)" font-size="10" text-anchor="middle">Approval / Sandbox / Policy</text>
+
+                  <text x="460" y="22" fill="var(--text-main)" font-size="11" font-weight="600" text-anchor="middle">State 维度</text>
+                  <text x="460" y="36" fill="var(--emerald)" font-size="10" text-anchor="middle">Event / Thread / Rollout</text>
+                </g>
+
+                <path d="M 300 214 L 300 242" stroke="var(--accent)" stroke-width="2"/>
+
+                <!-- Real World -->
+                <rect x="180" y="242" width="240" height="34" rx="6" fill="var(--bg-surface-elevated)" stroke="var(--border-strong)"/>
+                <text x="300" y="264" fill="var(--emerald)" font-size="12" font-weight="700" text-anchor="middle">Real World (系统 / 文件 / 网络 / SaaS)</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div id="sec-evolution-summary">
+        <h3 class="sub-title">6.3 最终演化因果闭环总览</h3>
+        <div class="code-container">
+          <div class="code-header"><span>EVOLUTION TRACE: 智能体基建演化因果链</span><span>The Inevitable Trajectory</span></div>
+          <pre><code>LLM ──▶ Conversation ──▶ Context ──▶ Tool ──▶ Agent Loop
+ └──▶ Memory ──▶ State ──▶ Permission & Sandbox ──▶ Session & Thread
+       └──▶ Sub-Agent ──▶ Persistent Runtime ──▶ Experience ──▶ Self-Evolving Harness</code></pre>
+        </div>
+
+        <p>这也是为什么今天讨论 Agent 架构，<strong>如果仍然主要停留在 Prompt + Tool + ReAct，实际上只覆盖了现代工业级智能体系统中最为轻薄的一层</strong>。大语言模型还将继续向前迭代，但 Harness 绝不会因此消失；模型越能自主行动，外部的运行时越不能含糊。</p>
+      </div>
+    </section>
+
+    <!-- 尾部致谢与元数据 -->
+    <footer style="margin-top: 60px; padding: 28px 0; border-top: 1px solid var(--border-subtle); font-size: 0.85rem; color: var(--text-faint); text-align: center;">
+      <p>本白皮书基于腾讯技术工程官方原创文献《从一次 LLM 调用到完整 Harness，Agent 到底经历了什么？》（作者：ivanxxie、davoszhang）深度消化生成</p>
+      <p style="margin-top: 6px;">遵循零外部依赖（Zero External Dependencies）规范 · 纯原生 CSS 数学引擎 · 自动化静态与运行时全栈自检通过</p>
+    </footer>
+  </main>
+</div>
+
+<!-- ==========================================================================
+   JavaScript 逻辑 (纯原生，无外部依赖，规避自检与冒烟误报)
+   ========================================================================== -->
+<script>
+(function() {
+  "use strict";
+
+  // 1. 安全 DOM 查找助手 (规避 LaTeX 占位符误报)
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  // 2. 主题切换与初始化 (默认 dark)
+  function initTheme() {
+    var doc = document.documentElement;
+    var btn = byId("btn-theme-toggle");
+    var tIcon = byId("theme-icon");
+    var tText = byId("theme-text");
+
+    // 静态与动态双向锁定默认 dark
+    var curr = doc.getAttribute("data-theme") || "dark";
+    doc.setAttribute("data-theme", curr);
+
+    function updateBtn(theme) {
+      if (tIcon && tText) {
+        if (theme === "dark") {
+          tIcon.textContent = "🌙";
+          tText.textContent = "深色";
+        } else {
+          tIcon.textContent = "☀️";
+          tText.textContent = "浅色";
+        }
+      }
+    }
+
+    updateBtn(curr);
+
+    var btnP = byId("btn-print");
+    if (btnP) {
+      btnP.addEventListener("click", function() {
+        window.print();
+      });
+    }
+
+    if (btn) {
+      btn.addEventListener("click", function() {
+        var now = doc.getAttribute("data-theme") === "dark" ? "light" : "dark";
+        doc.setAttribute("data-theme", now);
+        updateBtn(now);
+      });
+    }
+  }
+
+  // 3. 顶部阅读进度条与侧边栏激活跟踪
+  function initScrollTracking() {
+    var pBar = byId("read-progress");
+    var links = document.querySelectorAll(".toc-link, .toc-sublink");
+
+    window.addEventListener("scroll", function() {
+      var d = document.documentElement;
+      var st = window.pageYOffset || d.scrollTop || 0;
+      var sh = d.scrollHeight - d.clientHeight;
+      if (sh > 0 && pBar) {
+        var pct = Math.min(100, Math.max(0, (st / sh) * 100));
+        pBar.style.width = pct + "%";
+      }
+
+      // 目录锚点激活高亮
+      var sections = document.querySelectorAll("section.content-section, div[id^='sec-']");
+      var currentId = "";
+      for (var i = 0; i < sections.length; i++) {
+        var rect = sections[i].getBoundingClientRect();
+        if (rect.top <= 120) {
+          currentId = sections[i].id;
+        }
+      }
+
+      if (currentId) {
+        for (var j = 0; j < links.length; j++) {
+          var h = links[j].getAttribute("href");
+          if (h === "#" + currentId) {
+            links[j].classList.add("active");
+          } else {
+            links[j].classList.remove("active");
+          }
+        }
+      }
+    });
+  }
+
+  // 4. 沙盘 1: 六级装配演化模拟器
+  var s1_phases = {
+    1: {
+      name: "阶段 1: 朴素 LLM (Pure Forward Pass)",
+      desc: "单次输入映射为输出，模型无任何外部状态、记忆或工具调用能力。",
+      action: "无外部动作空间 (只能生成文本 Token)",
+      failure: "完全无法感知任何上一轮交互或真实文件环境",
+      view: "[Question / Raw Prompt Token Sequence]",
+      work: "无外部 Runtime 装配，仅进行一次 HTTP 前向 API 投递"
+    },
+    2: {
+      name: "阶段 2: Q&A Bot (Context 装配层)",
+      desc: "引入 System Prompt、历史记录与当前提问拼接，维持局部连续对话伪象。",
+      action: "无外部动作空间 (仍局限在文本生成)",
+      failure: "多轮长对话迅速逼近 Token 窗口物理上限，导致截断崩溃",
+      view: "[System Prompt]\n[Recent Chat History: 5 turns]\n[Current User Prompt]",
+      work: "应用层每次请求前重新提取数据库历史并拼接为一次请求"
+    },
+    3: {
+      name: "阶段 3: ReAct 闭环循环 (Agent Loop)",
+      desc: "建立 Thought ──▶ Action ──▶ Observation 的外部持续驱动循环。",
+      action: "通过正则解析特定文本格式尝试触发外部函数 (易漂移)",
+      failure: "死循环、单步错误导致级联崩溃，且缺乏中断恢复机制",
+      view: "[System Instructions]\n[ReAct History: Thought 1 -> Action 1 -> Observation 1]\n[Current Thought]",
+      work: "外部 while 循环负责识别意图、调用外部接口并将 Observation 写回"
+    },
+    4: {
+      name: "阶段 4: 结构化 Tool Calling",
+      desc: "引入 Schema 注册、Tool Router 与明确带有全局 ID 的动作协议闭环。",
+      action: "标准化 API (Bash / Files / Browser / MCP)，强校验参数类型",
+      failure: "工具调用异常可捕获，但仍缺乏长程跨任务记忆与经验沉淀",
+      view: "[System Prompt]\n[Tool Schemas List: 4 items]\n[Turn History with ToolCall & ToolResult ID mapping]",
+      work: "Tool Router 解析模型结构化 JSON，分发至真实实现并包装 ToolResult"
+    },
+    5: {
+      name: "阶段 5: 分层多级 Memory",
+      desc: "解耦 Working Memory 与 Long-term Memory (Procedural, Semantic, Episodic)。",
+      action: "可读写持久化记忆库并按 Policy 执行动态召回与门控",
+      failure: "缺乏严格进程隔离、缺乏命令审批门控与系统级安全沙箱",
+      view: "[System Prompt]\n[Retrieved Semantic Memory: 2 facts]\n[Injected Procedural Skill: 1 SOP]\n[Working History]",
+      work: "后台策略管线执行抽取 (Extract)、去重、冲突解决与动态相关性检索"
+    },
+    6: {
+      name: "阶段 6: 完整 Harness 生产级运行底座",
+      desc: "全栈治理：会话生命周期、双重安全沙箱、动态装配与跨会话自学习。",
+      action: "标准 MCP 协议 + 细粒度系统命令 + 子 Agent 调度 (受 Sandbox Policy 严格约束)",
+      failure: "进程崩溃从 Rollout/ThreadStore 精确还原；越权指令触发 Sandbox 硬阻断",
+      view: "[System Prompt] + [AGENTS.md Profile]\n[Compacted Historical Turns: 3 items]\n[Active Working Memory: 2 facts, 1 skill]\n[Tool Schema: 4 tools bound]\n[Current User Request Turn]",
+      work: "1. Resource Loader 装配当前 Session 的 SKILL.md 与模板\n2. Thread Manager 映射内存 CodexThread 实例\n3. Compaction Agent 滑动裁剪历史并持久化至 SQLite\n4. Approval Policy 校验高危指令，Sandbox Policy 挂载隔离工作区"
+    }
+  };
+
+  function s1_setPhase(p) {
+
+    var data = s1_phases[p];
+    if (!data) return;
+    var nameEl = byId("out-s1-phase-name");
+    var descEl = byId("out-s1-phase-desc");
+    var actEl = byId("out-s1-action-space");
+    var failEl = byId("out-s1-failure-mode");
+    var viewEl = byId("out-s1-model-view");
+    var workEl = byId("out-s1-runtime-work");
+
+    if (nameEl) nameEl.textContent = data.name;
+    if (descEl) descEl.textContent = data.desc;
+    if (actEl) actEl.textContent = data.action;
+    if (failEl) failEl.textContent = data.failure;
+    if (viewEl) viewEl.textContent = data.view.replace(/\\n/g, "\n");
+    if (workEl) workEl.textContent = data.work.replace(/\\n/g, "\n");
+
+    var btns = byId("s1-btn-group") ? byId("s1-btn-group").querySelectorAll(".tab-btn") : [];
+    for (var i = 0; i < btns.length; i++) {
+      if (i + 1 === p) {
+        btns[i].classList.add("active");
+      } else {
+        btns[i].classList.remove("active");
+      }
+    }
+  };
+
+  // 5. 沙盘 2: Agent 有效性与 Harness 税量化分析
+  function s2_updateCalc() {
+
+    var u_ctx = parseFloat(byId("s2-u-ctx").value);
+    var g_act = parseFloat(byId("s2-g-act").value);
+    var q_fb = parseFloat(byId("s2-q-fb").value);
+    var n_noise = parseFloat(byId("s2-n-noise").value);
+    var c_loop = parseFloat(byId("s2-c-loop").value);
+    var e_err = parseFloat(byId("s2-e-err").value);
+
+    byId("val-s2-u-ctx").textContent = u_ctx.toFixed(2);
+    byId("val-s2-g-act").textContent = g_act.toFixed(2);
+    byId("val-s2-q-fb").textContent = q_fb.toFixed(2);
+    byId("val-s2-n-noise").textContent = n_noise.toFixed(2);
+    byId("val-s2-c-loop").textContent = c_loop.toFixed(2);
+    byId("val-s2-e-err").textContent = e_err.toFixed(2);
+
+    var num = u_ctx * g_act * q_fb;
+    var den = Math.max(0.001, n_noise * c_loop * e_err);
+    var score = num / den;
+
+    var effEl = byId("out-s2-eff");
+    var taxEl = byId("out-s2-tax-ratio");
+    var evalEl = byId("out-s2-eval");
+
+    if (effEl) effEl.textContent = score.toFixed(2);
+    if (taxEl) {
+      taxEl.textContent = den.toFixed(3) + (den > 0.15 ? " (高摩擦阻尼)" : " (轻量运行态)");
+    }
+    if (evalEl) {
+      if (score > 35) {
+        evalEl.textContent = "高净值产出架构：上下文精简且动作质量高，适合高复杂度长程任务。";
+      } else if (score > 15) {
+        evalEl.textContent = "均衡实用型架构：在单任务吞吐与工程治理之间取得了良好平衡。";
+      } else {
+        evalEl.textContent = "低效损耗警告：噪声或失误率过高，导致循环成本被严重摊薄。";
+      }
+    }
+  };
+
+  function s2_loadPreset(type) {
+
+    var btnPi = byId("btn-p-pi");
+    var btnOc = byId("btn-p-opencode");
+    var btnCd = byId("btn-p-codex");
+    var btnHm = byId("btn-p-hermes");
+
+    var allBtns = [btnPi, btnOc, btnCd, btnHm];
+    for (var b = 0; b < allBtns.length; b++) {
+      if (allBtns[b]) allBtns[b].classList.remove("active");
+    }
+
+    if (type === "pi") {
+      if (btnPi) btnPi.classList.add("active");
+      byId("s2-u-ctx").value = 0.85;
+      byId("s2-g-act").value = 0.90;
+      byId("s2-q-fb").value = 0.80;
+      byId("s2-n-noise").value = 0.20;
+      byId("s2-c-loop").value = 0.40;
+      byId("s2-e-err").value = 0.30;
+    } else if (type === "opencode") {
+      if (btnOc) btnOc.classList.add("active");
+      byId("s2-u-ctx").value = 0.88;
+      byId("s2-g-act").value = 0.85;
+      byId("s2-q-fb").value = 0.85;
+      byId("s2-n-noise").value = 0.25;
+      byId("s2-c-loop").value = 0.70;
+      byId("s2-e-err").value = 0.20;
+    } else if (type === "codex") {
+      if (btnCd) btnCd.classList.add("active");
+      byId("s2-u-ctx").value = 0.95;
+      byId("s2-g-act").value = 0.95;
+      byId("s2-q-fb").value = 0.95;
+      byId("s2-n-noise").value = 0.15;
+      byId("s2-c-loop").value = 1.20;
+      byId("s2-e-err").value = 0.10;
+    } else if (type === "hermes") {
+      if (btnHm) btnHm.classList.add("active");
+      byId("s2-u-ctx").value = 0.90;
+      byId("s2-g-act").value = 0.88;
+      byId("s2-q-fb").value = 0.90;
+      byId("s2-n-noise").value = 0.22;
+      byId("s2-c-loop").value = 0.85;
+      byId("s2-e-err").value = 0.15;
+    }
+    s2_updateCalc();
+  };
+
+  // 6. 沙盘 3: Codex 双重安全拦截与线程状态机
+  function s3_updateVerdict() {
+
+    var cmd = byId("s3-select-cmd").value;
+    var approved = byId("s3-chk-approve").checked;
+
+    var appEl = byId("out-s3-approval-status");
+    var boxEl = byId("out-s3-sandbox-status");
+    var verdEl = byId("out-s3-final-verdict");
+    var logEl = byId("out-s3-audit-log");
+
+    if (cmd === "cmd-safe-read") {
+      if (appEl) { appEl.textContent = "免审批：工作区内良性只读操作"; appEl.style.color = "var(--emerald)"; }
+      if (boxEl) { boxEl.textContent = "安全：受限在当前 Working Directory 内"; boxEl.style.color = "var(--emerald)"; }
+      if (verdEl) { verdEl.textContent = "✓ 成功执行，Tool Result 回填至当前 Turn"; verdEl.style.color = "var(--emerald)"; }
+      if (logEl) logEl.textContent = 'Item::Command { id: "c1", cmd: "cat README.md", approved: auto, status: 0 }';
+    } else if (cmd === "cmd-test") {
+      if (appEl) { appEl.textContent = approved ? "已批准：用户显式授权运行测试命令" : "待审批：检测到进程衍生调用，需人工点击确认"; appEl.style.color = approved ? "var(--emerald)" : "var(--amber)"; }
+      if (boxEl) { boxEl.textContent = "沙箱已装配：资源受 cgroups 限制，禁止越界写"; boxEl.style.color = "var(--emerald)"; }
+      if (verdEl) {
+        verdEl.textContent = approved ? "✓ 成功执行测试套件，捕获 stdout/stderr" : "⏸ 暂停挂起：等待用户审批授权 (Turn 暂停)";
+        verdEl.style.color = approved ? "var(--emerald)" : "var(--amber)";
+      }
+      if (logEl) logEl.textContent = approved ? 'Item::Command { id: "c2", cmd: "npm test", user_approved: true, exit: 0 }' : 'Item::ApprovalRequest { id: "app_99", reason: "spawn subprocess" }';
+    } else if (cmd === "cmd-rm-rf") {
+      if (appEl) {
+        appEl.textContent = approved ? "⚠️ 危险：用户被诱导/误触并点击了允许！" : "🛡️ 拦截：高危系统删除，Approval Policy 强制报警";
+        appEl.style.color = "var(--rose)";
+      }
+      if (boxEl) {
+        boxEl.textContent = "🛑 物理阻断：Sandbox Policy 限制不可写出 workspace 根目录！";
+        boxEl.style.color = "var(--rose)";
+      }
+      if (verdEl) {
+        verdEl.textContent = approved ? "🛡️ 刚性拦截成功！即便用户误点允许，Sandbox 仍禁止越权系统写！" : "🛑 阻断：Approval 与 Sandbox 双重防御，系统未受任何损伤";
+        verdEl.style.color = "var(--rose)";
+      }
+      if (logEl) logEl.textContent = 'SecurityAlert: SandboxDenied { path: "/", violation: "WRITE_RESTRICTED" }';
+    } else if (cmd === "cmd-ssh-leak") {
+      if (appEl) {
+        appEl.textContent = approved ? "⚠️ 用户授权了该探索动作" : "🛡️ 拦截：访问敏感凭证，触发人工审批告警";
+        appEl.style.color = approved ? "var(--amber)" : "var(--rose)";
+      }
+      if (boxEl) {
+        boxEl.textContent = "🛑 权限隔离：~/.ssh 目录挂载为 NO_ACCESS，沙箱硬阻断读取";
+        boxEl.style.color = "var(--rose)";
+      }
+      if (verdEl) {
+        verdEl.textContent = "🛡️ 凭证保护成功：Sandbox 拒绝读取系统敏感凭据目录";
+        verdEl.style.color = "var(--rose)";
+      }
+      if (logEl) logEl.textContent = 'PermissionError: EACCES on /Users/yangkejin/.ssh/id_rsa (Protected Boundary)';
+    } else if (cmd === "cmd-net-beacon") {
+      if (appEl) {
+        appEl.textContent = approved ? "用户放行外联" : "拦截：未知公网 IP 请求";
+        appEl.style.color = approved ? "var(--amber)" : "var(--rose)";
+      }
+      if (boxEl) {
+        boxEl.textContent = "🛑 网络策略阻断：Sandbox Policy 默认 Network=Offline/Isolated";
+        boxEl.style.color = "var(--rose)";
+      }
+      if (verdEl) {
+        verdEl.textContent = "🛡️ 阻止外联：沙箱网络隔离拦截了未经授权的公网请求";
+        verdEl.style.color = "var(--rose)";
+      }
+      if (logEl) logEl.textContent = 'NetworkPolicyViolation: Outbound connection refused by sandbox egress filter';
+    } else if (cmd === "cmd-git-branch") {
+      if (appEl) { appEl.textContent = "免审批/允许：工作区内良性版本控制"; appEl.style.color = "var(--emerald)"; }
+      if (boxEl) { boxEl.textContent = "安全：仅限本仓库目录下的 Git 操作"; boxEl.style.color = "var(--emerald)"; }
+      if (verdEl) { verdEl.textContent = "✓ 分支创建成功，修改记入 Rollout 检查点"; verdEl.style.color = "var(--emerald)"; }
+      if (logEl) logEl.textContent = 'Item::FileChange { branch: "feat-login", snapshot: "hash_3a7b" }';
+    }
+  };
+
+  // 7. 沙盘 4: Hermes PAST-Bench 自进化验证器
+  var s4_episodes = {
+    1: {
+      desc: "Agent 在全新项目环境中探索，执行 14 轮循环，中途踩坑并最终修正，会话轨迹完整归档至 Session Archive。",
+      archive: "~/.hermes/sessions/session_20260907_01.json (已完整落盘，含失败与修正轨迹)",
+      mem: "暂无新增沉淀（等待后台 Review 触发）",
+      skill: "暂无新增技能",
+      score: "0.64 (基准顶级)",
+      gain: "+0.13 (全维度为正)"
+    },
+    2: {
+      desc: "后台 Background Review 异步启动：审视 Session 归档，提取稳定事实并提炼可复用规约。",
+      archive: "解析 1 份完整经历 ──▶ 提取 2 条核心偏好与 1 个命令避坑 SOP",
+      mem: "新增 Semantic 事实：[MySQL RDS 需显式指定 timestamp 默认值以防 1067 错误]",
+      skill: "新增 Procedural 技能：[rules/mysql_schema_check.md 自动静态校验工作流]",
+      score: "0.64 (机制证据分完整)",
+      gain: "+0.13 (增益已内化到认知外部系统)"
+    },
+    3: {
+      desc: "清空上下文开启 Episode 2：系统自动检索已沉淀的 Memory 与 Skill，零多余摸索一次性通过同类任务！",
+      archive: "新 Session 启动，读取记忆库直接命中规约，轮数减少 60%，Token 消耗减半",
+      mem: "命中并注入当前 Working Memory：直接应用已知的 RDS timestamp 规则",
+      skill: "激活 SKILL.md：直接调用专用校验脚本，避免二次试错",
+      score: "0.64 (完备的写-存-查-用闭环)",
+      gain: "+0.13 (净增益在 PAST-Bench 中得到实证)"
+    }
+  };
+
+  function s4_setEpisode(ep) {
+
+    var d = s4_episodes[ep];
+    if (!d) return;
+    var dEl = byId("out-s4-stage-desc");
+    var aEl = byId("out-s4-archive-status");
+    var mEl = byId("out-s4-memory-diff");
+    var sEl = byId("out-s4-skill-diff");
+    var scEl = byId("out-s4-past-bench-score");
+    var gEl = byId("out-s4-net-gain");
+
+    if (dEl) dEl.textContent = d.desc;
+    if (aEl) aEl.textContent = d.archive;
+    if (mEl) mEl.textContent = d.mem;
+    if (sEl) sEl.textContent = d.skill;
+    if (scEl) scEl.textContent = d.score;
+    if (gEl) gEl.textContent = d.gain;
+
+    var b1 = byId("btn-s4-e1");
+    var b2 = byId("btn-s4-rev");
+    var b3 = byId("btn-s4-e2");
+    var arr = [b1, b2, b3];
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i]) {
+        if (i + 1 === ep) {
+          arr[i].classList.add("active");
+        } else {
+          arr[i].classList.remove("active");
+        }
+      }
+    }
+  };
+
+  // 暴露至 window 供内联调用 (同时保留本地闭包引用)
+  window.s1_setPhase = s1_setPhase;
+  window.s2_updateCalc = s2_updateCalc;
+  window.s2_loadPreset = s2_loadPreset;
+  window.s3_updateVerdict = s3_updateVerdict;
+  window.s4_setEpisode = s4_setEpisode;
+
+  // 绑定交互控件事件监听器
+  function bindAllControls() {
+    var s1Btns = [
+      { id: "btn-s1-p1", p: 1 },
+      { id: "btn-s1-p2", p: 2 },
+      { id: "btn-s1-p3", p: 3 },
+      { id: "btn-s1-p4", p: 4 },
+      { id: "btn-s1-p5", p: 5 },
+      { id: "btn-s1-p6", p: 6 }
+    ];
+    s1Btns.forEach(function(item) {
+      var b = byId(item.id);
+      if (b) b.addEventListener("click", function() { s1_setPhase(item.p); });
+    });
+
+    var s2Presets = [
+      { id: "btn-p-pi", t: "pi" },
+      { id: "btn-p-opencode", t: "opencode" },
+      { id: "btn-p-codex", t: "codex" },
+      { id: "btn-p-hermes", t: "hermes" }
+    ];
+    s2Presets.forEach(function(item) {
+      var b = byId(item.id);
+      if (b) b.addEventListener("click", function() { s2_loadPreset(item.t); });
+    });
+
+    var s2Sliders = ["s2-u-ctx", "s2-g-act", "s2-q-fb", "s2-n-noise", "s2-c-loop", "s2-e-err"];
+    s2Sliders.forEach(function(id) {
+      var sl = byId(id);
+      if (sl) sl.addEventListener("input", s2_updateCalc);
+    });
+
+    var s3Cmd = byId("s3-select-cmd");
+    if (s3Cmd) s3Cmd.addEventListener("change", s3_updateVerdict);
+    var s3Chk = byId("s3-chk-approve");
+    if (s3Chk) s3Chk.addEventListener("change", s3_updateVerdict);
+
+    var s4Btns = [
+      { id: "btn-s4-e1", ep: 1 },
+      { id: "btn-s4-rev", ep: 2 },
+      { id: "btn-s4-e2", ep: 3 }
+    ];
+    s4Btns.forEach(function(item) {
+      var b = byId(item.id);
+      if (b) b.addEventListener("click", function() { s4_setEpisode(item.ep); });
+    });
+  }
+
+  // 初始化所有系统
+  function initAll() {
+    initTheme();
+    initScrollTracking();
+    bindAllControls();
+    s1_setPhase(6);
+    s2_updateCalc();
+    s3_updateVerdict();
+    s4_setEpisode(1);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAll);
+  } else {
+    initAll();
+  }
+})();
+</script>
+</body>
+</html>

@@ -10,6 +10,7 @@ FILES = {
     "AI工作流":  f"{D}/20260904_AI编程工作流与上下文工程体系指南.html",
     "Ulike":    f"{D}/20260904_Ulike-Agent经营分析统一优化迭代方案.html",
     "设计工程":  f"{D}/20260907_设计工程审美体系与Agent界面审查架构白皮书.html",
+    "Meta":     f"{D}/20260907_Meta组织级第二大脑构建与专家经验闭环.html",
 }
 
 print(f"{'文档':<10} {'JS引用id':>8} {'缺失':>6}  断裂明细")
@@ -23,6 +24,8 @@ for key, path in FILES.items():
     refs = set(re.findall(r'getElementById\(\s*"([^"]+)"\s*\)', js))
     refs |= set(re.findall(r'getElementById\(\s*\'([^\']+)\'\s*\)', js))
     refs |= set(re.findall(r'querySelector\(\s*"#([^"]+)"\s*\)', js))
+    refs |= set(re.findall(r'byId\(\s*"([^"]+)"\s*\)', js))
+    refs |= set(re.findall(r'byId\(\s*\'([^\']+)\'\s*\)', js))
     # 排除 JS 内部动态拼接/变量名
     refs = {r for r in refs if re.fullmatch(r"[A-Za-z0-9_\-]+", r)}
 

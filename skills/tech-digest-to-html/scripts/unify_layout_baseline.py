@@ -15,6 +15,7 @@ FILES = {
     "AI工作流":  f"{D}/20260904_AI编程工作流与上下文工程体系指南.html",
     "Ulike":    f"{D}/20260904_Ulike-Agent经营分析统一优化迭代方案.html",
     "设计工程":  f"{D}/20260907_设计工程审美体系与Agent界面审查架构白皮书.html",
+    "Meta":     f"{D}/20260907_Meta组织级第二大脑构建与专家经验闭环.html",
 }
 
 # ---------------------------------------------------------------- 统一基线令牌
@@ -189,6 +190,32 @@ LEGACY = {
   --rose:#F87171; --rose-bg:#450A0A;
   --amber:#FBBF24; --amber-bg:#451A03;
   --cyan:#38BDF8; --cyan-bg:#083344;"""),
+
+    "Meta": ("""
+  --bg-canvas:#FAF7F2; --bg-surface:#FFFFFF; --bg-surface-elevated:#F3EFE8; --bg-surface-highlight:#EAE5DC;
+  --border-soft:rgba(0,0,0,.07); --border-medium:rgba(0,0,0,.14); --border-hard:rgba(0,0,0,.24);
+  --text-primary:#21201D; --text-secondary:#58554E; --text-tertiary:#8C887F; --text-inverse:#FAF7F2;
+  --accent:#D97757; --accent-hover:#E2886A; --accent-subtle:rgba(217,119,87,.12);
+  --emerald:#2E8B57; --emerald-subtle:rgba(46,139,87,.14);
+  --amber:#F59E0B; --amber-subtle:rgba(245,158,11,.14);
+  --rose:#EF4444; --rose-subtle:rgba(239,68,68,.14);
+  --cyan:#31979D; --cyan-subtle:rgba(49,151,157,.14);
+  --code-bg:#F0EAE1;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --font-serif:"Songti SC","SimSun","Newsreader",Georgia,serif;
+  --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+  --radius-sm:6px; --radius-md:10px; --radius-lg:16px;
+  --sidebar-w:280px;""",
+            """
+  --bg-canvas:#141413; --bg-surface:#1E1E1C; --bg-surface-elevated:#282825; --bg-surface-highlight:#32322E;
+  --border-soft:rgba(255,255,255,.08); --border-medium:rgba(255,255,255,.16); --border-hard:rgba(255,255,255,.28);
+  --text-primary:#F4F1EA; --text-secondary:#B0ADA5; --text-tertiary:#7D7A73; --text-inverse:#141413;
+  --accent:#E2886A; --accent-hover:#F0A58C; --accent-subtle:rgba(226,136,106,.18);
+  --emerald:#34D399; --emerald-subtle:rgba(52,211,153,.18);
+  --amber:#FBBF24; --amber-subtle:rgba(251,191,36,.18);
+  --rose:#F87171; --rose-subtle:rgba(248,113,113,.18);
+  --cyan:#38BDF8; --cyan-subtle:rgba(56,189,248,.18);
+  --code-bg:#181816;"""),
 }
 
 SCOPE = ":is(body,main,.content,.page,.article-section,.app-layout,.layout,.doc-hero,.wrap,.container,.content-area)"
@@ -236,11 +263,15 @@ code,kbd,pre,samp,.mono{ font-family:var(--aike-font-mono); }
 """ + SCOPE + """ hr{ border:none; border-top:1px solid var(--aike-border); margin:2.4rem 0; }
 
 /* ----------------------------------------------------------- 5. 统一栅格与容器几何 */
-.sidebar,.side,.sidebar-nav,.sidebar-toc{
+.sidebar,.side,.sidebar-nav,.sidebar-toc,.app-sidebar{
   width:var(--aike-sidebar-w)!important;
   flex-basis:var(--aike-sidebar-w)!important;
 }
-.layout,.app-layout{ max-width:var(--aike-container-max); }
+.layout,.app-layout,.layout-wrapper,.layout-container{
+  max-width:var(--aike-container-max);
+  margin-left:auto;
+  margin-right:auto;
+}
 .content,.page,.wrap,.container,.content-area{ max-width:var(--aike-container-max); }
 section{ scroll-margin-top:24px; }
 
@@ -310,6 +341,47 @@ section{ scroll-margin-top:24px; }
   """ + SCOPE + """ table,""" + SCOPE + """ pre,""" + SCOPE + """ blockquote{ page-break-inside:avoid; }
   """ + SCOPE + """ h1,""" + SCOPE + """ h2,""" + SCOPE + """ h3{ page-break-after:avoid; color:#000000!important; }
   a{ color:#000000!important; text-decoration:none!important; }
+}
+
+/* ---------------------------------------------------------------- 9. 侧栏贴左 · 正文在剩余区域居中
+   适用场景：直接在 body 下带有固定侧栏（fixed sidebar）的文档结构。
+   解决痛点：桌面宽屏下，正文仅凭 margin-left 贴着侧栏展示，导致右侧大片空白。
+   数学模型与盒模型原理：
+     1. body 恢复为标准块级上下文（display:block），消除 flex item 异常拉伸与百分比解析差异；
+     2. 侧栏保持 position:fixed 贴在屏幕最左侧（宽度 S = var(--aike-sidebar-w)）；
+     3. 正文在除去侧栏后的剩余空间 (100% - S) 中居中，两侧平分剩余空白：
+        autoMargin = max(0px, (100% - S - C) / 2)
+        marginLeft = S + autoMargin
+        marginRight = autoMargin
+     实证证明：左空白 (marginLeft - S) 恒等于 右空白 (marginRight)，左右对称度 100%，彻底消除右侧多余留白。 */
+body:has(> .app-sidebar, > aside.app-sidebar, > .sidebar, > aside.sidebar, > .sidebar-nav){
+  display:block!important;
+}
+
+body:has(> .app-sidebar, > aside.app-sidebar, > .sidebar, > aside.sidebar, > .sidebar-nav)
+  > :is(.app-main, main, .main, .content-area, .main-content, .page-wrap, .main-wrapper){
+  display:block!important;
+  max-width:var(--aike-content-max)!important;
+  width:auto!important;
+  flex:none!important;
+  margin-left:calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2))!important;
+  margin-right:max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2))!important;
+  box-sizing:border-box!important;
+}
+
+@media (max-width:1080px){
+  body:has(> .app-sidebar, > aside.app-sidebar, > .sidebar, > aside.sidebar, > .sidebar-nav){
+    display:block!important;
+  }
+  body:has(> .app-sidebar, > aside.app-sidebar, > .sidebar, > aside.sidebar, > .sidebar-nav)
+    > :is(.app-main, main, .main, .content-area, .main-content, .page-wrap, .main-wrapper){
+    margin-left:0!important;
+    margin-right:0!important;
+    max-width:100%!important;
+    width:100%!important;
+    padding-left:20px!important;
+    padding-right:20px!important;
+  }
 }
 """
 
