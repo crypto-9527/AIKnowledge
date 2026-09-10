@@ -259,6 +259,15 @@ HTML 里手写的所有回显槽位初始文本（`<div id="out-x">???</div>`）
 
 垫片必须实现下列成员，否则内联脚本一执行就抛错，测不出真实问题。`data-*` 与控件初始状态一律**从生成好的 HTML 正则抽取**，禁止手工录入（手工录入一旦错位，会把页面正确逻辑误判为错误）：
 
+> **抽取正则的嵌套陷阱（2026-09-10 实证，必看）**：用**全局**元素正则
+> `/<(\w+)[^>]*\bid=["']([^"']+)["'][^>]*>([\s\S]*?)<\/\1>/g` 批量抽静态文本，
+> 外层容器（`<div id="main">`、`<aside id="sidebar">`）会**先命中并吞掉全部子节点**，
+> `lastIndex` 直接跳到容器尾部，导致所有内层槽位的静态初值抽成空串 ——
+> 表现为「36 个槽位 36 处不一致」的**假阳性**，实际页面完全正确。
+> **正确做法：先收集全部 id，再逐个 id 单独构造正则定位**
+> （`new RegExp('<(\\w+)([^>]*)\\bid="' + esc(id) + '"([^>]*)>([\\s\\S]*?)<\\/\\1>')`），
+> 利用 `\bid="<具体id>"` 锚定到最内层元素。
+
 - `document.getElementById` → **自动建桩**（`ensure` 而非 `get`）。只预注册 input/select 的 ID 会导致所有 `out-*` 显示槽位静默返回 null，写入被丢弃，表现为满屏 `missing`。应从 HTML 抽取**全部** `id="..."` 统一注册。
 - `document.documentElement` → 需 `getAttribute` / `setAttribute` / `scrollHeight` / `clientHeight` / `scrollTop`（阅读进度条与主题切换依赖）。
 - `document.querySelectorAll(sel)` → 侧栏高亮用；返回**真数组**（脚本内会 `Array.prototype.slice.call`）。
@@ -267,6 +276,29 @@ HTML 里手写的所有回显槽位初始文本（`<div id="out-x">???</div>`）
 - 元素桩：需 `textContent` 读写、`className` + `classList`（`add/remove/toggle/contains`）、`value`、`checked` getter/setter、`style`、`open`、`getAttribute/setAttribute`、`closest()`、`getBoundingClientRect()`、`addEventListener` 收集 + `fire(type)` 触发。
 
 断言清单模板：① 每个沙盘的初始态；② 每个分支（含边界钳制，如 k > N、改善后 > 改善前）；③ 结果串扫描 `NaN` / `Infinity` / `undefined`；④ 主题切换、目录开关、进度条写入。
+
+**垫片用 `require()` 加载时，必须显式发布全局（2026-09-10 实例）**：
+把垫片写成 `shim.js` 再 `require()`，其中的 `var document = {...}` 是**模块作用域**，
+在另一个文件里 `eval()` 内联脚本会直接抛 `ReferenceError: document is not defined`。
+垫片末尾必须补：
+
+```js
+global.document = document;
+global.window = window;
+global.IntersectionObserver = undefined;
+```
+
+**改 Skill 只能改单一真值源，改运行时的副本会被 `--apply` 反向覆盖（2026-09-10 实例）**：
+三处作用域中，`AIKnowledge/skills/tech-digest-to-html` 是 SOURCE，另外两处是运行时副本。
+直接编辑全局或项目级 SKILL.md 后再跑 `sync_skill.py --apply`，改动会被源版本**静默回滚**
+（只是生成一份 `.bak_<时间戳>`）。正确顺序：先改 SOURCE → 再 `--apply` → 再 `--check`。
+`--apply` 生成的 `.bak_*` 目录位于 `skills/` 同级会被误当作独立 Skill 扫描，须及时清理。
+
+**静态初值与 `toFixed` 位数不一致的真实捕获（2026-09-10 实例）**：
+手写槽位 `<span id="out-rl-sneed">0.9947</span>`，而 JS 侧是 `sNeed.toFixed(5)` → `0.99475`。
+8 项静态自检**全绿**（它不比对静态文本与 JS 重算值），只有冒烟测试阶段 1 的逐槽位比对能抓到。
+防御：凡是写进 HTML 的静态回显初值，一律先在 Python 侧用**完全相同的格式化表达式**（`%.5f` 对应 `toFixed(5)`）算出再粘贴，
+不要靠目测截断小数位。
 
 ---
 
@@ -281,7 +313,16 @@ HTML 里手写的所有回显槽位初始文本（`<div id="out-x">???</div>`）
 | :--- | :--- |
 | `unify_layout_baseline.py` | 在每份文档 `</style>` 前追加「统一排版基线层」，**幂等**（靠首尾注释识别，可重复执行） |
 | `runtime_smoke.js` | Node 最小 DOM 垫片运行时冒烟：扫全量 id 槽位的 NaN/undefined，含主题控件点击分支 |
-| `check_js_dom_bindings.py` | 反向核验 JS 里 `getElementById/querySelector('#id')` 的目标在 HTML 中真实存在（自检第 4 项只验「锚点→DOM」正向，不覆盖此方向） |
+| `check_js_dom_bindings.py` | 反向核验 JS 里 `getElementById/querySelector('#id')` 的目标在 HTML 中真实存在（自检第 4 项只验「锚点→DOM」正向，不覆盖此方向）。**用法**：`python3 check_js_dom_bindings.py <file.html>` 显式指定文件（推荐，单文档交付流程用这个）；无参数时自动扫描唯一存储目录全部 `YYYYMMDD_*.html`。历史上曾硬编码 6 份文档清单导致新文档不被检查、且硬编码路径失效直接崩溃（2026-09-10 已修复），凡内置清单式脚本一律要求支持 argv 参数 |
+
+#### 8.1.1 大媒体资产的内嵌裁决规则（图片/视频混合文档）
+
+「零外部依赖」与「单文件可控体积」冲突时的裁决顺序（2026-09-10 Astra 建筑可视化案例实证）：
+
+1. **先探测体积再定策略**：用 `curl -sI` 读 `Content-Length`，逐资产列出字节量，禁止拍脑袋。
+2. **图片（单张 ≤ 800KB）→ Base64 data URI 全量内嵌**：先 `file` 命令校验 RIFF/WEBP 等文件签名防下载损坏，再注入 `data:image/webp;base64,...`。22 张图（2.82 MB 原始 → 3.83 MB 成品）实测可用。
+3. **视频（单段 > 10MB）→ 严禁内嵌**：4 段 1080p WebM/MP4 合计 53.6 MB，base64 膨胀 1.33x 后 ~71 MB，文件双击打开会卡死浏览器、编辑器无法加载。改用「官方海报帧（内嵌）+ `<a>` 新窗口直链 + 视频未内嵌说明卡（含体积与需联网提示）」承载，语义与信息量不丢失。
+4. **验证闭环追加两步**：① Python 侧 `base64.b64decode` 后校验 `RIFF/WEBP` magic bytes（防 base64 转写损坏）；② 对占位符替换脚本断言「无 leftover `@@IMG:` 残留」，否则静默漏图。
 
 ### 8.2 基线层的四个设计要点（踩过的坑）
 

@@ -1,0 +1,1830 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GrokBot 复盘 · 从聊天框到拥有云端电脑的 AI 同事</title>
+<meta name="description" content="Roman Ugarte 在 Lenny's Podcast 的 GrokBot 产品复盘深度消化：以同事为尺的两个架构决策、离开 Cursor 另起炉灶的理由、四周原型到公开上线的三阶段时间线、内测三周的删产品与可靠性攻坚、五种涌现工作流、时间机器式护城河，附委托减负、电脑操作可靠性、工作流形态与界面克制四组可计算沙盘。">
+<style>
+:root{
+  --sidebar-w:280px;
+  --content-max:1180px;
+  --radius-s:6px; --radius-m:10px; --radius-l:16px;
+  --bg:#FAF7F2; --bg-elev:#FFFFFF; --bg-sunk:#F2EDE4;
+  --text:#2A2724; --text-dim:#6B6560; --text-faint:#928B83;
+  --border:#E5DED4; --border-strong:#D5CBBE;
+  --accent:#D97757; --accent-soft:#F6E7E0;
+  --emerald:#2E8B6F; --emerald-soft:#E3F0EA;
+  --rose:#C9503F; --rose-soft:#F8E5E1;
+  --amber:#B8862F; --amber-soft:#F8EED9;
+  --cyan:#3D7F96; --cyan-soft:#E2EFF3;
+  --shadow:0 1px 2px rgba(42,39,36,.05),0 4px 16px rgba(42,39,36,.05);
+  --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --font-head:"Songti SC","SimSun",Newsreader,Georgia,serif;
+  --font-code:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+}
+html[data-theme="dark"]{
+  --bg:#181715; --bg-elev:#201E1B; --bg-sunk:#141311;
+  --text:#E8E3DC; --text-dim:#A7A099; --text-faint:#7C756E;
+  --border:#35322D; --border-strong:#463F39;
+  --accent:#E2886A; --accent-soft:#33241D;
+  --emerald:#5FB99A; --emerald-soft:#1D2B26;
+  --rose:#E0796A; --rose-soft:#33201D;
+  --amber:#D9A94E; --amber-soft:#2E2718;
+  --cyan:#6FB0C6; --cyan-soft:#1B2A30;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-body); font-size:16px; line-height:1.75;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+/* ---------- 阅读进度 ---------- */
+#progress-track{position:fixed;top:0;left:0;right:0;height:3px;background:transparent;z-index:60}
+#progress-bar{height:3px;width:0;background:var(--accent);transition:width .1s linear}
+/* ---------- 侧栏目录 ---------- */
+#sidebar{
+  position:fixed; top:0; left:0; bottom:0; width:var(--sidebar-w);
+  background:var(--bg-elev); border-right:1px solid var(--border);
+  overflow-y:auto; z-index:50; padding:22px 0 40px;
+}
+#sidebar::-webkit-scrollbar{width:6px}
+#sidebar::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+.sb-head{padding:0 20px 14px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.sb-title{font-family:var(--font-head);font-size:15px;font-weight:700;line-height:1.4;margin:0 0 6px}
+.sb-sub{font-size:11.5px;color:var(--text-faint);letter-spacing:.04em}
+.sb-nav{padding:0 12px}
+.sb-link{
+  display:block; padding:6px 10px; border-radius:var(--radius-s);
+  color:var(--text-dim); text-decoration:none; font-size:13px; line-height:1.5;
+  border-left:2px solid transparent;
+}
+.sb-link:hover{background:var(--bg-sunk);color:var(--text)}
+.sb-link.active{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.sb-link.lv2{padding-left:24px;font-size:12.5px}
+.sb-sep{height:1px;background:var(--border);margin:10px 10px}
+/* ---------- 主体 ---------- */
+#main{
+  display:block; max-width:var(--content-max);
+  margin-left:calc(var(--sidebar-w) + max(0px,(100% - var(--sidebar-w) - var(--content-max))/2));
+  margin-right:max(0px,calc((100% - var(--sidebar-w) - var(--content-max))/2));
+  padding:56px 48px 120px;
+}
+/* ---------- 顶部工具条 ---------- */
+#topbar{position:fixed; top:12px; right:20px; z-index:70; display:flex; gap:8px}
+.tb-btn{
+  background:var(--bg-elev); color:var(--text-dim); border:1px solid var(--border);
+  border-radius:var(--radius-s); padding:6px 12px; font-size:12px; cursor:pointer;
+  font-family:var(--font-body); box-shadow:var(--shadow);
+}
+.tb-btn:hover{color:var(--accent);border-color:var(--accent)}
+#toc-toggle{display:none}
+/* ---------- 标题 ---------- */
+h1,h2,h3,h4{font-family:var(--font-head);line-height:1.35;color:var(--text)}
+h1{font-size:clamp(28px,4vw,42px);margin:0 0 18px;letter-spacing:-.01em}
+h2{font-size:clamp(22px,2.6vw,30px);margin:64px 0 20px;padding-bottom:12px;border-bottom:2px solid var(--border)}
+h3{font-size:clamp(18px,2vw,22px);margin:42px 0 14px}
+h4{font-size:17px;margin:28px 0 10px}
+p{margin:0 0 16px}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
+a:hover{border-bottom-color:var(--accent)}
+strong{font-weight:650;color:var(--text)}
+em{font-style:normal;color:var(--text-dim)}
+code{
+  font-family:var(--font-code); font-size:.88em; background:var(--bg-sunk);
+  border:1px solid var(--border); border-radius:4px; padding:1px 5px; color:var(--accent);
+}
+/* ---------- 首屏 ---------- */
+.hero{
+  border:1px solid var(--border); border-radius:var(--radius-l);
+  background:var(--bg-elev); padding:40px 42px; margin-bottom:8px; box-shadow:var(--shadow);
+}
+.hero-kicker{
+  display:inline-block; font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); border:1px solid var(--accent); border-radius:999px;
+  padding:3px 12px; margin-bottom:18px;
+}
+.hero-lede{font-size:17.5px;line-height:1.8;color:var(--text-dim);margin-bottom:0}
+.hero-meta{
+  display:flex; flex-wrap:wrap; gap:10px; margin-top:24px; padding-top:20px;
+  border-top:1px solid var(--border); font-size:12.5px; color:var(--text-faint);
+}
+.hero-meta span{background:var(--bg-sunk);border-radius:var(--radius-s);padding:4px 10px}
+/* ---------- 摘要卡 ---------- */
+.tldr{
+  border:1px solid var(--border); border-left:3px solid var(--accent);
+  background:var(--bg-elev); border-radius:var(--radius-m);
+  padding:22px 26px; margin:28px 0 8px;
+}
+.tldr h3{margin:0 0 12px;font-size:16px;color:var(--accent);font-family:var(--font-body);letter-spacing:.02em}
+.tldr ul{margin:0;padding-left:20px}
+.tldr li{margin-bottom:9px;font-size:15px}
+.tldr li:last-child{margin-bottom:0}
+/* ---------- 通用区块 ---------- */
+.section-note{font-size:13px;color:var(--text-faint);font-style:italic;margin:-8px 0 18px}
+.lead{font-size:17px;line-height:1.85}
+.divider{height:1px;background:var(--border);margin:44px 0}
+ul.clean,ol.clean{padding-left:22px}
+ul.clean li,ol.clean li{margin-bottom:10px}
+ul.tight li{margin-bottom:6px}
+blockquote{
+  margin:24px 0; padding:16px 22px; border-left:3px solid var(--accent);
+  background:var(--bg-elev); border-radius:0 var(--radius-m) var(--radius-m) 0;
+  font-family:var(--font-head); font-size:17px; line-height:1.8;
+}
+blockquote p:last-child{margin-bottom:0}
+/* ---------- 来源核验表 ---------- */
+.srcbox{
+  border:1px solid var(--border); border-radius:var(--radius-m);
+  background:var(--bg-elev); padding:24px 28px; margin:26px 0; box-shadow:var(--shadow);
+}
+.srcbox h3{margin:0 0 14px;font-size:18px}
+table.grid{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0 4px}
+table.grid th,table.grid td{border:1px solid var(--border);padding:9px 12px;text-align:left;vertical-align:top;line-height:1.6}
+table.grid th{background:var(--bg-sunk);font-weight:650;font-size:13px;color:var(--text)}
+table.grid td.k{white-space:nowrap;font-family:var(--font-code);font-size:12.5px}
+.tag{
+  display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;
+  background:var(--bg-sunk);color:var(--text-dim);border:1px solid var(--border);white-space:nowrap;
+}
+.tag.ok{background:var(--emerald-soft);color:var(--emerald);border-color:transparent}
+.tag.warn{background:var(--amber-soft);color:var(--amber);border-color:transparent}
+.tag.bad{background:var(--rose-soft);color:var(--rose);border-color:transparent}
+.tag.acc{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.tag.cy{background:var(--cyan-soft);color:var(--cyan);border-color:transparent}
+/* ---------- 决策卡 ---------- */
+.dcard{
+  border:1px solid var(--border); border-radius:var(--radius-m);
+  background:var(--bg-elev); padding:22px 26px; margin:20px 0; box-shadow:var(--shadow);
+}
+.dcard h4{margin:0 0 10px;font-size:16.5px;color:var(--accent);font-family:var(--font-body)}
+.dcard p:last-child{margin-bottom:0}
+.callout{
+  border:1px solid var(--border); border-left:3px solid var(--cyan);
+  background:var(--bg-elev); border-radius:0 var(--radius-m) var(--radius-m) 0;
+  padding:16px 22px; margin:22px 0; font-size:14.5px; color:var(--text-dim);
+}
+.callout strong{color:var(--cyan)}
+.callout p:last-child{margin-bottom:0}
+/* ---------- 公式 ---------- */
+.eqbox{
+  border:1px solid var(--border); border-radius:var(--radius-m);
+  background:var(--bg-sunk); padding:18px 24px; margin:20px 0; overflow-x:auto;
+}
+.eqbox .eq-note{font-size:12.5px;color:var(--text-faint);margin-top:10px;line-height:1.7}
+math{color:var(--text);font-family:var(--font-head);font-size:1.05em}
+/* ---------- 沙盘 ---------- */
+.lab{
+  border:1px solid var(--border); border-radius:var(--radius-l);
+  background:var(--bg-elev); padding:26px 30px; margin:28px 0; box-shadow:var(--shadow);
+}
+.lab-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.lab-head h3{margin:0;font-size:19px}
+.lab-kicker{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 10px}
+.lab-desc{font-size:13.5px;color:var(--text-dim);margin:8px 0 20px;line-height:1.7}
+.ctrl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));gap:16px 24px;margin-bottom:20px}
+.ctrl label{display:block;font-size:12.5px;color:var(--text-dim);margin-bottom:6px;line-height:1.5}
+.ctrl label b{color:var(--text);font-weight:650}
+.ctrl input[type=range]{width:100%;accent-color:var(--accent)}
+.ctrl .cv{font-family:var(--font-code);font-size:12px;color:var(--accent)}
+.readout{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;
+  margin:18px 0 6px;
+}
+.ro{border:1px solid var(--border);border-radius:var(--radius-s);background:var(--bg-sunk);padding:12px 14px}
+.ro .k{font-size:11.5px;color:var(--text-faint);letter-spacing:.03em;display:block;margin-bottom:4px}
+.ro .v{font-family:var(--font-code);font-size:19px;color:var(--text);font-weight:600;line-height:1.3}
+.ro.hi .v{color:var(--accent)}
+.ro.good .v{color:var(--emerald)}
+.ro.bad .v{color:var(--rose)}
+.verdict{
+  margin-top:14px;padding:12px 16px;border-radius:var(--radius-s);
+  background:var(--bg-sunk);border:1px dashed var(--border-strong);
+  font-size:14px;color:var(--text-dim);line-height:1.7;
+}
+.verdict b{color:var(--text)}
+.chart{margin-top:18px;border:1px solid var(--border);border-radius:var(--radius-m);background:var(--bg-sunk);padding:10px 6px 4px}
+.chart svg{display:block;width:100%;height:auto}
+.ax-line{stroke:var(--border-strong);stroke-width:1}
+.ax-grid{stroke:var(--border);stroke-width:1;stroke-dasharray:3 4}
+.ax-txt{fill:var(--text-faint);font-size:11px;font-family:var(--font-body)}
+.ax-ttl{fill:var(--text-dim);font-size:11.5px;font-family:var(--font-body)}
+.curve{fill:none;stroke:var(--accent);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+.curve2{fill:none;stroke:var(--cyan);stroke-width:2;stroke-dasharray:5 4}
+.mk{stroke:var(--accent);stroke-width:1.4;stroke-dasharray:4 3}
+.bar{fill:var(--accent);opacity:.82}
+.bar-dim{fill:var(--border-strong);opacity:.5}
+.bar-txt{fill:var(--text-dim);font-size:11px;font-family:var(--font-body);text-anchor:middle}
+.bar-val{fill:var(--text);font-size:11px;font-family:var(--font-code);text-anchor:middle}
+/* ---------- Tab 按钮 ---------- */
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.tab{
+  background:var(--bg-sunk);border:1px solid var(--border);border-radius:999px;
+  padding:6px 14px;font-size:13px;color:var(--text-dim);cursor:pointer;font-family:var(--font-body);
+}
+.tab:hover{color:var(--accent);border-color:var(--accent)}
+.tab.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);font-weight:600}
+.chip{
+  display:inline-block;background:var(--bg-sunk);border:1px solid var(--border);
+  border-radius:999px;padding:2px 10px;font-size:12px;color:var(--text-dim);margin:0 6px 6px 0;
+}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:14px}
+.kv .box{border:1px solid var(--border);border-radius:var(--radius-s);background:var(--bg-sunk);padding:12px 14px}
+.kv .box .t{font-size:11.5px;color:var(--text-faint);letter-spacing:.04em;display:block;margin-bottom:5px}
+.kv .box .c{font-size:14px;line-height:1.7;color:var(--text)}
+/* ---------- 清单 ---------- */
+.checklist{list-style:none;padding:0;margin:14px 0 0}
+.checklist li{
+  border:1px solid var(--border);border-radius:var(--radius-s);background:var(--bg-sunk);
+  padding:10px 14px;margin-bottom:8px;font-size:14.5px;color:var(--text-dim);line-height:1.7;
+  display:flex;gap:10px;align-items:flex-start;
+}
+.checklist li.done{color:var(--text);border-color:var(--emerald);background:var(--emerald-soft)}
+.checklist li input[type=checkbox]{margin-top:5px;accent-color:var(--emerald);flex:0 0 auto}
+.checklist li b{color:var(--text)}
+.pbar{height:8px;background:var(--bg-sunk);border:1px solid var(--border);border-radius:999px;overflow:hidden;margin-top:14px}
+.pbar .fill{height:100%;width:0;background:var(--emerald);transition:width .2s ease}
+/* ---------- 提示词块 ---------- */
+.prompt{
+  border:1px solid var(--border);border-left:3px solid var(--emerald);
+  background:var(--bg-sunk);border-radius:0 var(--radius-m) var(--radius-m) 0;
+  padding:16px 20px;margin:18px 0;font-family:var(--font-head);font-size:15.5px;line-height:1.85;
+}
+/* ---------- 术语 ---------- */
+.gloss{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:12px}
+.gloss .g{border:1px solid var(--border);border-radius:var(--radius-s);background:var(--bg-elev);padding:14px 16px}
+.gloss .g .t{font-weight:650;color:var(--accent);font-size:14.5px;margin-bottom:5px}
+.gloss .g .d{font-size:13.5px;color:var(--text-dim);line-height:1.7}
+.foot{margin-top:70px;padding-top:24px;border-top:1px solid var(--border);font-size:13px;color:var(--text-faint);line-height:1.9}
+/* ---------- 响应式 ---------- */
+@media (max-width:1080px){
+  #main{margin-left:0;margin-right:0;max-width:100%;width:100%;padding:32px 20px 90px}
+  #sidebar{transform:translateX(-100%);transition:transform .22s ease}
+  #sidebar.open{transform:translateX(0)}
+  #toc-toggle{display:inline-block}
+  .hero{padding:28px 24px}
+  .lab{padding:20px 18px}
+}
+@media print{
+  #sidebar,#topbar,#progress-track{display:none}
+  #main{margin:0;max-width:100%;padding:0}
+  body{background:#fff;color:#000;font-size:11.5pt}
+  .lab,.dcard,.srcbox{break-inside:avoid;box-shadow:none}
+  h2{break-after:avoid}
+}
+</style>
+</head>
+<body>
+<div id="progress-track"><div id="progress-bar"></div></div>
+
+<div id="topbar">
+  <button class="tb-btn" id="toc-toggle" type="button">目录</button>
+  <button class="tb-btn" id="theme-toggle" type="button">主题</button>
+</div>
+
+<aside id="sidebar">
+  <div class="sb-head">
+    <p class="sb-title">GrokBot 产品复盘</p>
+    <div class="sb-sub">从聊天框到拥有云端电脑的 AI 同事</div>
+  </div>
+  <nav class="sb-nav" id="sb-nav">
+    <a class="sb-link" href="#top">首屏 · 一句话主旨</a>
+    <a class="sb-link" href="#verify">来源核验与口径标注</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#s1">一 · 以同事为尺的产品锚点</a>
+    <a class="sb-link lv2" href="#s1-1">1.1 彻底全云端化</a>
+    <a class="sb-link lv2" href="#s1-2">1.2 每个 Bot 一台电脑</a>
+    <a class="sb-link lv2" href="#s1-3">沙盘 · 委托减负</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#s2">二 · 为什么离开 Cursor</a>
+    <a class="sb-link lv2" href="#s2-1">2.1 不要 Ship 组织架构图</a>
+    <a class="sb-link lv2" href="#s2-2">2.2 三阶段时间线</a>
+    <a class="sb-link lv2" href="#s2-3">2.3 小团队的速度土壤</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#s3">三 · 内测三周的删产品</a>
+    <a class="sb-link lv2" href="#s3-1">3.1 拿掉透明度工具</a>
+    <a class="sb-link lv2" href="#s3-2">3.2 沙盘 · has 改写 can</a>
+    <a class="sb-link lv2" href="#s3-3">3.3 沙盘 · 可靠性攻坚</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#s4">四 · 扔进真实工作</a>
+    <a class="sb-link lv2" href="#s4-1">4.1 人工一对一引导</a>
+    <a class="sb-link lv2" href="#s4-2">4.2 沙盘 · 工作流形态</a>
+    <a class="sb-link lv2" href="#s4-3">4.3 从个人到企业</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#s5">五 · 护城河与时间机器</a>
+    <a class="sb-link" href="#s6">六 · 起步路径与安全边界</a>
+    <a class="sb-link" href="#s7">七 · 结论与未决问题</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#appendix">附录 · 模型参数与敏感性</a>
+    <a class="sb-link" href="#glossary">附录 · 术语表</a>
+  </nav>
+</aside>
+
+<main id="main">
+
+<header class="hero" id="top">
+  <span class="hero-kicker">Product Retrospective · Lenny&rsquo;s Podcast #713</span>
+  <h1>一个月做出 GrokBot：从聊天框到「拥有自己电脑的 AI 同事」</h1>
+  <p class="hero-lede">
+    Roman Ugarte 讲述 GrokBot 的诞生：为什么离开 Cursor 另起炉灶、为何给 Agent 一台云端电脑，
+    以及一支数人小组怎样用四周做出内部可用原型，再靠人工引导、删功能和可靠性修补走向公开发布。
+    本文在忠实还原访谈内容的基础上，把其中的定性判断转写为四组可计算的交互沙盘，
+    并对所有无法独立核验的数字做出显式标注。
+  </p>
+  <div class="hero-meta">
+    <span>受访者：Roman Ugarte（GrokBot 产品负责人，Cursor 第 15 号员工）</span>
+    <span>节目：Lenny&rsquo;s Podcast #713 · 2026-09-08</span>
+    <span>消化日期：2026-09-10</span>
+    <span>四组可计算沙盘 · 零外部依赖</span>
+  </div>
+</header>
+
+<div class="tldr">
+  <h3>核心要点（TL;DR）</h3>
+  <ul>
+    <li><strong>90% 与 100% 之间是质变，不是量变。</strong>只要你还不敢离开，任务就没有真正交出去——AI 只是换了一种方式把工作还给你。</li>
+    <li><strong>两个底层架构决策</strong>：一切长在云端（状态持久、跨端连续）；每个 Bot 拥有自己的云端电脑（Computer Use），而不是共享屏幕。</li>
+    <li><strong>不把知识工作塞进 Cursor</strong>，是为了避免「把公司内部组织架构当成产品形态交付给用户」（Shipping your org chart）。</li>
+    <li><strong>三阶段时间线</strong>：约 4 周做出内部可用原型 → 约 3 周内测走向公开上线 → 录制时距公开发布又过约 3 周。</li>
+    <li><strong>内测三周主要在「删」</strong>：拿掉思维链与工具调用日志，把「GrokBot now has …」改写成「GrokBot can now …」。</li>
+    <li><strong>护城河是被发现的，不是被规划的</strong>：预判未来 3–6 个月模型能做什么 → 用脚手架提前交付 → 模型原生补齐后果断删掉脚手架。</li>
+  </ul>
+</div>
+
+<h2 id="verify">来源核验与口径标注</h2>
+<p class="section-note">本节为本文消化流程的第一道关卡：先区分一手陈述与二次转述，再决定哪些数字可以进正文、哪些必须降级。</p>
+
+<p>
+  本消化稿的输入材料是一篇 <strong>中文二次转述稿</strong>，其上游为 Lenny&rsquo;s Podcast 第 713 期访谈
+  （<em>How we built Grok Bot in a month | Roman Ugarte (SpaceXAI)</em>）。因此本文对事实采取三级标注：
+</p>
+
+<table class="grid">
+  <thead>
+    <tr><th style="width:26%">事实项</th><th style="width:44%">内容</th><th style="width:16%">核验结论</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="k">受访者身份</td>
+      <td>Roman Ugarte，Cursor 第 15 号员工，曾负责增长，参与公司从约 15 人扩张到 1000 多人</td>
+      <td><span class="tag ok">已交叉核实</span></td>
+      <td>与 Apple Podcasts 节目简介、Podfollow 节目注记一致。</td>
+    </tr>
+    <tr>
+      <td class="k">公司关系</td>
+      <td>Cursor 被 SpaceX 收购并组建 SpaceXAI；Roman 随后孵化 Grok Bot 并任产品负责人</td>
+      <td><span class="tag ok">已交叉核实</span></td>
+      <td>多来源一致。转述稿中「SpaceX 收购」的表述与节目注记一致，非本文推断。</td>
+    </tr>
+    <tr>
+      <td class="k">研发节奏</td>
+      <td>4 周做出内部可用原型；再约 3 周公开上线；录制时距公开发布约 3 周</td>
+      <td><span class="tag ok">已交叉核实</span></td>
+      <td>节目官方注记原文为 “first line of code to a working internal product in four weeks, and to a public launch just three weeks later”。</td>
+    </tr>
+    <tr>
+      <td class="k">引导规模</td>
+      <td>核心团队一对一手动引导约 200–300 名早期用户</td>
+      <td><span class="tag ok">已交叉核实</span></td>
+      <td>节目注记为 “nearly 300 of its first users”；becurious 摘要写 200–300。取区间表述。</td>
+    </tr>
+    <tr>
+      <td class="k">自动化比例</td>
+      <td>平台上 99% 的自动化通过自然语言对话建立</td>
+      <td><span class="tag warn">受访者口述</span></td>
+      <td>仅见于受访者自述，无独立第三方审计。本文按「口述口径」引用，不作为推导输入。</td>
+    </tr>
+    <tr>
+      <td class="k">后端攻坚</td>
+      <td>内测三周集中处理约 5 个最关键的后端问题</td>
+      <td><span class="tag warn">受访者口述</span></td>
+      <td>原文为约数。本文沙盘以此作为「已知缺陷类别数 m = 5」的<em>结构假设</em>，而非精度数据。</td>
+    </tr>
+    <tr>
+      <td class="k">资源拓扑</td>
+      <td>每个 Bot 的云端电脑如何隔离、成本、闲置策略</td>
+      <td><span class="tag bad">未披露</span></td>
+      <td>访谈未公开。本文只承认「Bot 可使用自己的电脑」这一产品抽象，不据此推算基础设施成本。</td>
+    </tr>
+    <tr>
+      <td class="k">OpenClaw 启发</td>
+      <td>OpenClaw 提供了真实系统工具能力与「同事」心智模型两方面的启发</td>
+      <td><span class="tag cy">原文口径保留</span></td>
+      <td>该名称在同期中文资料中亦被提及，属原文叙述，本文原样保留，不做增益。</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <p>
+    <strong>关于本文沙盘的诚实声明。</strong>访谈本身<em>没有</em>提供任何可计算的工程参数（如单步成功率、任务步数、失败率分布）。
+    因此本文四组沙盘全部采用<strong>公式驱动 + 参数可调</strong>的形式：所有回显数值都由页面上明确给出的公式实时算出，
+    默认值是<strong>为演示设定的基线假设</strong>，均已在界面上标注。沙盘的作用是<em>把访谈的定性判断转写成可检验的约束</em>，
+    而不是为访谈补充它从未提供的数据。文中任何「原文无此数据」处均已显式声明。
+  </p>
+</div>
+
+<!-- ============ 第一章 ============ -->
+<h2 id="s1">一 · 以同事为尺：把 Agent 当作拥有电脑的同事</h2>
+
+<p class="lead">
+  Roman 认为，多数人目前仍把 Agent 理解为「聊天机器人 + 若干外部连接（API / MCP）」：你向它发问，
+  它调用搜索或特定的企业软件接口，最后给出一段回答。GrokBot 团队在一开始就确立了一个思考锚点——
+  <strong>以同事为尺（Colleague-pilled）</strong>：如果把 AI 当作真实世界里招募的一位新同事，我们究竟会如何与它协作？
+</p>
+
+<p>
+  这个锚点的价值在于它把产品问题从「我们该接哪些 API」改写成了「一个新人入职需要什么」。
+  顺着后者推导，会得到两个在前一种框架下几乎不会出现的架构决策。
+</p>
+
+<h3 id="s1-1">1.1 决策一：彻底全云端化，状态持久保留</h3>
+
+<p>
+  在早期探索中，OpenClaw 给团队带来了重要启发。Roman 提到它做对了两件关键的事：
+  一是给强模型提供了更真实的系统工具能力，二是率先把 AI 的心智模型从「聊天对话」推向了「协同工作的同事」。
+  GrokBot 从中汲取灵感，并试图把这些原语<strong>产品化</strong>，以降低设置门槛。
+</p>
+
+<p>Roman 所描述的使用摩擦集中在三处：</p>
+<ul class="clean">
+  <li>Agent 究竟运行在本地还是云端——这个选择本身就不该抛给用户；</li>
+  <li>电脑是否需要保持唤醒——手机下发的任务不该依赖家中那台机器的电源状态；</li>
+  <li>从手机发出的任务是否仍依赖家中的电脑——跨端连续性被物理设备绑架。</li>
+</ul>
+
+<p>
+  GrokBot 的回应是让所有 Agent 统一长在云端。每一个 Bot 都是一个<strong>长期存续的实体</strong>，
+  拥有连续的交互记忆，不再是「一开新会话就失忆」的临时会话。用户在手机上发一条消息、
+  在电脑上安排一项长期任务，Bot 都在同一套状态下在后台静默运转。
+</p>
+
+<div class="dcard">
+  <h4>为什么这不是一句口号</h4>
+  <p>
+    「云端运行」在工程上等价于三件事：状态存储与进程解耦、任务可在无人值守下继续推进、
+    以及跨端会话共享同一份长期记忆。这三件事任意一件缺失，用户就会退化回「我得盯着它」的状态——
+    而这恰恰是 GrokBot 想消灭的东西。
+  </p>
+</div>
+
+<h3 id="s1-2">1.2 决策二：让每个 Bot 能使用自己的云端电脑</h3>
+
+<p>
+  这是整个产品最核心、也最具争议的技术决策。很多技术团队倾向于通过 API 或模型上下文协议（MCP）去连接外部工具，
+  但真实工作场景中存在两个现实障碍。
+</p>
+
+<p><strong>障碍一：现实世界中大量关键业务工具没有好用的 API。</strong>
+  Roman 以销售团队使用的工具和 Salesforce 仪表盘为例；即使存在部分接口，也未必足以覆盖真实工作流程。
+  这是一个覆盖面问题，而不是接口质量问题——接口再好，只要<em>不存在</em>，路径就是断的。
+</p>
+
+<p><strong>障碍二：共享屏幕的荒谬性。</strong>Roman 打了一个比方：</p>
+
+<blockquote>
+  <p>如果公司新入职一位人类同事，你绝不可能对他说：「你没有自己的电脑，你就坐我旁边，我们俩共用这台笔记本，共用一套账号密码，屏幕点按互相打架。」</p>
+</blockquote>
+
+<p>
+  团队没有在访谈中公开具体的运行实例拓扑，但 Roman 确认这些长期存续的 Bot 能使用自己的云端电脑。
+  这意味着它能尝试像人类一样通过<strong>像素识别、移动光标与输入字符</strong>，与各种网页和桌面应用交互。
+  当遇到没有 API 的老旧系统或复杂网页时，Bot 因而多了一条通过图形界面推进流程的路径。
+</p>
+
+<div class="callout">
+  <p>
+    <strong>访谈未披露的部分，本文不做增益。</strong>每个 Bot 具体如何做资源隔离、单实例成本是多少、
+    闲置时如何回收——访谈均未公开。因此能够确认的只是「Bot 可使用自己的电脑」这一<em>产品抽象</em>，
+    而不是一套可以据此估算的基础设施拓扑。
+  </p>
+</div>
+
+<p>
+  更重要的是，GrokBot 团队认为这种云端电脑的底层操作在未来应当<strong>对用户彻底无感</strong>。
+  用户不需要像操作远程桌面一样去接管屏幕，AI 只需要汇报工作进度，
+  底层的「电脑操作」只是它干活的实现机制——这一判断直接决定了后文第三节的「删产品」动作。
+</p>
+
+<h3 id="s1-3">1.3 沙盘 · 委托减负：为什么 90% 完成度不等于 90% 减负</h3>
+
+<p>
+  Roman 的核心断言是：<em>「完成 90%」与「完成整项工作」之间存在质变</em>。
+  前者仍需人全程监督，后者才会带来把责任交给一位同事的感觉。这个断言很好，但它是定性的。
+  下面这组沙盘把它转写成一个可计算的约束。
+</p>
+
+<div class="lab">
+  <div class="lab-head">
+    <h3>沙盘 1 · 委托减负计算器</h3>
+    <span class="lab-kicker">Delegation Lab</span>
+  </div>
+  <p class="lab-desc">
+    模型：<strong>端到端成功率</strong> <math><mi>P</mi><mo>=</mo><msup><mi>s</mi><mi>k</mi></msup></math>（单步成功率 s 的 k 次方）；
+    <strong>人类总投入占全量工作的比例</strong>见下方公式。其中核验项
+    <math><mi>θ</mi><msup><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mi>P</mi><mo>)</mo></mrow><mi>η</mi></msup></math>
+    是模型的关键——<em>要判断那 10% 对不对，你必须先理解全部 100%</em>，所以核验成本是完成度的<strong>凹函数</strong>而非线性函数。
+    所有参数均为可拖动假设值，非访谈数据。
+  </p>
+
+  <div class="eqbox">
+    <math display="block"><mfrac><mi>E</mi><mi>C</mi></mfrac><mo>=</mo><mi>d</mi><mo>+</mo><mi>θ</mi><msup><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mi>P</mi><mo>)</mo></mrow><mi>η</mi></msup><mo>+</mo><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mi>P</mi><mo>)</mo></mrow><mi>β</mi></math>
+    <math display="block"><mi>R</mi><mo>=</mo><mn>1</mn><mo>−</mo><mfrac><mi>E</mi><mi>C</mi></mfrac><mo>,</mo><mspace width="1.2em"></mspace><mi>P</mi><mo>=</mo><msup><mi>s</mi><mi>k</mi></msup><mo>,</mo><mspace width="1.2em"></mspace><mi>η</mi><mo>=</mo><mn>0.5</mn></math>
+    <div class="eq-note">
+      E = 人类总投入；C = 人类亲自做完这项工作的成本；d = 委托成本（说清需求 + 最终验收）占比；
+      θ = 核验门槛系数（通读并判断产出是否可信的固定开销）；β = 返工系数（修复未达标部分的开销）；
+      η = 核验凹性指数（0 &lt; η ≤ 1，越小表示核验的固定门槛越硬）。R 为有效减负率。
+      令 <math><mi>x</mi><mo>=</mo><msqrt><mrow><mn>1</mn><mo>−</mo><mi>P</mi></mrow></msqrt></math>，盈亏平衡点由
+      <math><mi>β</mi><msup><mi>x</mi><mn>2</mn></msup><mo>+</mo><mi>θ</mi><mi>x</mi><mo>+</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo>=</mo><mn>0</mn></math>
+      反解得 <math><msup><mi>P</mi><mo>*</mo></msup><mo>=</mo><mn>1</mn><mo>−</mo><msup><mi>x</mi><mn>2</mn></msup></math>。
+    </div>
+  </div>
+
+  <div class="ctrl-grid">
+    <div class="ctrl">
+      <label for="rng-rl-s">单步成功率 <b>s</b> · 当前 <span class="cv" id="cv-rl-s">0.970</span></label>
+      <input type="range" id="rng-rl-s" min="0.900" max="0.999" step="0.001" value="0.970">
+    </div>
+    <div class="ctrl">
+      <label for="rng-rl-k">任务步数 <b>k</b> · 当前 <span class="cv" id="cv-rl-k">20</span></label>
+      <input type="range" id="rng-rl-k" min="5" max="60" step="1" value="20">
+    </div>
+    <div class="ctrl">
+      <label for="rng-rl-th">核验门槛系数 <b>θ</b> · 当前 <span class="cv" id="cv-rl-th">0.60</span></label>
+      <input type="range" id="rng-rl-th" min="0.20" max="1.00" step="0.05" value="0.60">
+    </div>
+    <div class="ctrl">
+      <label for="rng-rl-be">返工系数 <b>β</b> · 当前 <span class="cv" id="cv-rl-be">0.60</span></label>
+      <input type="range" id="rng-rl-be" min="0.20" max="1.50" step="0.05" value="0.60">
+    </div>
+    <div class="ctrl">
+      <label for="rng-rl-d">委托成本占比 <b>d</b> · 当前 <span class="cv" id="cv-rl-d">0.10</span></label>
+      <input type="range" id="rng-rl-d" min="0.02" max="0.30" step="0.01" value="0.10">
+    </div>
+    <div class="ctrl">
+      <label for="rng-rl-eta">核验凹性 <b>η</b> · 当前 <span class="cv" id="cv-rl-eta">0.50</span></label>
+      <input type="range" id="rng-rl-eta" min="0.30" max="1.00" step="0.10" value="0.50">
+    </div>
+  </div>
+
+  <div class="readout">
+    <div class="ro hi"><span class="k">端到端成功率 P = s^k</span><span class="v" id="out-rl-P">54.38%</span></div>
+    <div class="ro"><span class="k">人类投入 E / C</span><span class="v" id="out-rl-eff">0.7790</span></div>
+    <div class="ro bad"><span class="k">有效减负率 R</span><span class="v" id="out-rl-R">22.10%</span></div>
+    <div class="ro"><span class="k">盈亏平衡临界 P*</span><span class="v" id="out-rl-pstar">0.3229</span></div>
+    <div class="ro"><span class="k">达标所需单步 s</span><span class="v" id="out-rl-sneed">0.99475</span></div>
+  </div>
+
+  <div class="verdict" id="out-rl-verdict">
+    <b>判定：尚未真正交出去。</b>端到端成功率 54.38%，有效减负 22.10%——你省下的远少于一半，
+    而核验与返工吞掉了绝大部分收益。这正是「90% 完成度」的真实处境：任务名义上快做完了，责任却还压在你身上。
+  </div>
+
+  <div class="chart">
+    <svg viewBox="0 0 680 320" role="img" aria-label="有效减负率随端到端成功率变化的曲线">
+      <line class="ax-grid" x1="60" y1="40" x2="640" y2="40"></line>
+      <line class="ax-grid" x1="60" y1="86.15" x2="640" y2="86.15"></line>
+      <line class="ax-grid" x1="60" y1="132.31" x2="640" y2="132.31"></line>
+      <line class="ax-grid" x1="60" y1="178.46" x2="640" y2="178.46"></line>
+      <line class="ax-grid" x1="60" y1="224.62" x2="640" y2="224.62"></line>
+      <line class="ax-grid" x1="60" y1="270.77" x2="640" y2="270.77"></line>
+      <text class="ax-txt" x="52" y="44" text-anchor="end">100%</text>
+      <text class="ax-txt" x="52" y="90" text-anchor="end">75%</text>
+      <text class="ax-txt" x="52" y="136" text-anchor="end">50%</text>
+      <text class="ax-txt" x="52" y="182" text-anchor="end">25%</text>
+      <text class="ax-txt" x="52" y="228" text-anchor="end">0%</text>
+      <text class="ax-txt" x="52" y="274" text-anchor="end">-25%</text>
+      <line class="ax-line" x1="60" y1="280" x2="640" y2="280"></line>
+      <line class="ax-line" x1="60" y1="40" x2="60" y2="280"></line>
+      <line class="ax-line" x1="640" y1="280" x2="640" y2="40"></line>
+      <text class="ax-txt" x="60" y="298" text-anchor="middle">P=0</text>
+      <text class="ax-txt" x="176" y="298" text-anchor="middle">0.2</text>
+      <text class="ax-txt" x="292" y="298" text-anchor="middle">0.4</text>
+      <text class="ax-txt" x="408" y="298" text-anchor="middle">0.6</text>
+      <text class="ax-txt" x="524" y="298" text-anchor="middle">0.8</text>
+      <text class="ax-txt" x="640" y="298" text-anchor="middle">1.0</text>
+      <text class="ax-ttl" x="350" y="316" text-anchor="middle">端到端成功率 P（横轴） · 有效减负率 R（纵轴）</text>
+      <line class="ax-grid" id="rl-vline-pstar" x1="247.27" y1="40" x2="247.27" y2="280"></line>
+      <text class="ax-txt" id="rl-txt-pstar" x="253" y="52">P*</text>
+      <polyline class="curve" id="rl-curve" fill="none" points="60.00,280.00 89.00,271.66 118.00,263.24 147.00,254.74 176.00,246.15 205.00,237.47 234.00,228.68 263.00,219.77 292.00,210.72 321.00,201.53 350.00,192.17 379.00,182.61 408.00,172.83 437.00,162.76 466.00,152.36 495.00,141.54 524.00,130.15 553.00,117.98 582.00,104.57 611.00,88.77 640.00,58.46"></polyline>
+      <line class="mk" id="rl-vline" x1="375.40" y1="183.81" x2="375.40" y2="280"></line>
+      <line class="mk" id="rl-hline" x1="60" y1="183.81" x2="375.40" y2="183.81"></line>
+      <circle id="rl-dot" cx="375.40" cy="183.81" r="5" fill="#D97757" stroke="#FAF7F2" stroke-width="1.5"></circle>
+    </svg>
+  </div>
+  <p class="section-note" style="margin-top:12px">
+    曲线在纵轴下界（−30%）处会被坐标区裁剪；精确值请以数值槽位为准。虚线为盈亏平衡临界点 P*，圆点为当前参数组合所处位置。
+  </p>
+</div>
+
+<h4>沙盘 1 读出的三条结论</h4>
+<ol class="clean">
+  <li>
+    <strong>减负率随完成度呈凹形追赶，而不是线性跟随。</strong>在默认参数下（θ=0.60、β=0.60、d=0.10、η=0.5），
+    P=0.95 时有效减负 <strong>73.58%</strong>，P=0.90 时 <strong>65.03%</strong>，P=0.70 时 <strong>39.14%</strong>，
+    P=0.50 时仅 <strong>17.57%</strong>。也就是说，「做对了 90%」换来的只是不到三分之二的减负。
+  </li>
+  <li>
+    <strong>存在硬性的盈亏平衡点。</strong>默认参数下 <math><msup><mi>P</mi><mo>*</mo></msup><mo>=</mo><mn>0.3229</mn></math>：
+    端到端成功率低于 32.29%，委托在数学上反而比自己做更贵（P=0.30 时减负率为 <strong>−2.20%</strong>）。
+    「有点用但不太可靠」的 Agent 是负资产，不是打折的正资产。
+  </li>
+  <li>
+    <strong>长流程是单步可靠性的放大器。</strong>单步 s=0.97 看似优秀，但 20 步任务的端到端成功率只有 <strong>54.38%</strong>；
+    要让 20 步任务达到 P=0.90，单步成功率必须提到 <strong>0.99475</strong>；要达到 P=0.95 则需 <strong>0.99744</strong>。
+    这解释了为什么 GrokBot 内测三周把力气花在「点得准不准、能不能登录」这类基础能力上，而不是堆功能。
+  </li>
+</ol>
+
+<div class="callout">
+  <p>
+    <strong>稳健性检验（结论定稿前必做）。</strong>上述第 1 条对参数敏感吗？把 η 从 0.5 扫到 0.3 与 1.0，
+    P=0.90 对应的减负率区间为 <strong>53.93% ~ 78.00%</strong>；把 θ 从 0.30 扫到 0.90，区间为
+    <strong>55.54% ~ 74.51%</strong>；把 β 从 0.30 扫到 1.20，区间为 <strong>59.03% ~ 68.03%</strong>。
+    <strong>结论方向稳健</strong>：在全域扫描下，90% 完成度的有效减负率始终显著低于 90%，
+    但<em>幅度</em>对核验凹性 η 最敏感（跨约 24 个百分点），不可当作精确值引用。
+    详见<a href="#appendix">附录</a>。
+  </p>
+</div>
+
+<!-- ============ 第二章 ============ -->
+<h2 id="s2">二 · 为什么离开 Cursor 另起炉灶</h2>
+
+<p class="lead">
+  在孵化 GrokBot 之前，团队背后的核心产品是已经在程序员中建立起口碑的 AI 代码编辑器 Cursor。
+  Roman 加入时团队约 15 人，后来扩至 1000 多人。主持人在访谈中把 GrokBot 的选择与另一种产品路径对照：
+  把多种 Agent 形态放进同一个界面，每扩展一种任务形态就增加一个标签页，最终容易显得拥挤。
+</p>
+
+<p>
+  Cursor 团队内部曾有过激烈探讨：程序员也经常在 Cursor 里写非代码的内容，直接在现成产品上迭代岂不是阻力最小？
+  但他们最终选择了完全从零开始做独立产品。
+</p>
+
+<h3 id="s2-1">2.1 避免「把公司的内部组织架构当成产品形态交付给用户」</h3>
+
+<p>
+  这个理由被 Roman 概括为 <strong>Shipping your org chart</strong>——当一家公司有多个团队、
+  多条产品线时，最容易发生的错误是让产品界面去映射内部的汇报关系，而不是映射用户的心智模型。
+  具体到 Cursor 与 GrokBot，这个判断有两条支撑：
+</p>
+
+<div class="dcard">
+  <h4>支撑一：认知门槛与心智包袱</h4>
+  <p>
+    代码工具的界面密布着终端、文件树、调试面板，对非技术人员具有天然的劝退感。
+    如果只是在一个代码工具上硬塞一个「非代码工作区」，不仅界面会变得杂乱臃肿，
+    而且用户能清晰地感觉到这是几个不同产品愿景在强行共用一块屏幕。
+  </p>
+</div>
+
+<div class="dcard">
+  <h4>支撑二：全生命周期的产品控制力</h4>
+  <p>
+    要打造适合通用办公的「同事感」，必须对界面上的每一个像素、每一处交互流向拥有完全从零设计的掌控力。
+    这不是审美偏好问题——后文第三节的「删掉自动化配置页」这类动作，只有在你同时拥有界面与行为的定义权时才做得到。
+  </p>
+</div>
+
+<h3 id="s2-2">2.2 三阶段时间线：一个月做到的是什么，没做到的是什么</h3>
+
+<p>
+  访谈中的数字均为约数，但结构清晰。需要强调的是：<strong>「一个月做出 GrokBot」指的是内部能跑通关键链路的最小可用版本，
+  绝非对外发布的成熟成品</strong>。
+</p>
+
+<div class="chart" style="margin-top:20px">
+  <svg viewBox="0 0 680 200" role="img" aria-label="GrokBot 三阶段研发时间线">
+    <line class="ax-line" x1="60" y1="120" x2="640" y2="120"></line>
+    <line class="ax-grid" x1="60" y1="60" x2="60" y2="120"></line>
+    <line class="ax-grid" x1="176" y1="60" x2="176" y2="120"></line>
+    <line class="ax-grid" x1="292" y1="60" x2="292" y2="120"></line>
+    <line class="ax-grid" x1="408" y1="60" x2="408" y2="120"></line>
+    <line class="ax-grid" x1="524" y1="60" x2="524" y2="120"></line>
+    <line class="ax-grid" x1="640" y1="60" x2="640" y2="120"></line>
+    <text class="ax-txt" x="60" y="138" text-anchor="middle">W0</text>
+    <text class="ax-txt" x="176" y="138" text-anchor="middle">W2</text>
+    <text class="ax-txt" x="292" y="138" text-anchor="middle">W4</text>
+    <text class="ax-txt" x="408" y="138" text-anchor="middle">W6</text>
+    <text class="ax-txt" x="524" y="138" text-anchor="middle">W8</text>
+    <text class="ax-txt" x="640" y="138" text-anchor="middle">W10</text>
+    <rect class="bar" x="60" y="72" width="232" height="34" rx="5"></rect>
+    <rect class="bar" x="292" y="72" width="174" height="34" rx="5" opacity="0.72"></rect>
+    <rect class="bar-dim" x="466" y="72" width="174" height="34" rx="5"></rect>
+    <text class="bar-val" x="176" y="94">阶段一 · 约 4 周</text>
+    <text class="bar-val" x="379" y="94">阶段二 · 约 3 周</text>
+    <text class="bar-val" x="553" y="94" fill="#6B6560">阶段三 · 约 3 周</text>
+    <text class="ax-ttl" x="60" y="166">第一行代码 → 内部可用原型</text>
+    <text class="ax-ttl" x="292" y="166">内测 → 公开上线</text>
+    <text class="ax-ttl" x="466" y="166">公开发布后演进</text>
+    <text class="ax-ttl" x="60" y="48">图：三阶段合计约 10 周（约 70 天）；阶段三为录制访谈时仍在进行中的部分</text>
+  </svg>
+</div>
+
+<ul class="clean" style="margin-top:18px">
+  <li><strong>第一阶段（约 4 周）</strong>：写下第一行代码到拿出首个内部可用的原型（functional, useful prototype）。</li>
+  <li><strong>第二阶段（约 3 周）</strong>：从内部测试（Internal Beta）走向公开上线（Public Launch），集中攻克关键系统问题。</li>
+  <li><strong>第三阶段（约 3 周）</strong>：录制访谈时，距离公开发布又过去了约 3 周，产品仍在极早期演进中。</li>
+</ul>
+
+<p>
+  团队先在全员会上推广 GrokBot，把它当作现实压力测试；第一周，来自意料之外部门的一些同事
+  把原本在 ChatGPT 或其他聊天界面上做的日常 Agent 任务迁到 GrokBot；
+  看到这种跨部门的真实工作迁移后，团队立即转向公开发布准备。
+  <strong>这里的关键信号不是「用得多」，而是「迁移」</strong>——用户把已经在别处跑通的工作搬了过来，
+  说明新产品在那件事上确实更好，而不只是新鲜。
+</p>
+
+<h3 id="s2-3">2.3 小团队为什么能在四周内做出原型</h3>
+
+<p>
+  在 Roman 看来，能在一个月内拿出原型，不仅是研发隔离的结果，更依赖于特定的组织条件。
+  团队组建了一个极小的封闭小组（仅有数人），搬到办公室的独立物理区域，
+  使用独立的私密 Slack 沟通频道，在与外界相对隔离的状态下快速做出海量微观决策（micro decisions）。
+</p>
+
+<table class="grid">
+  <thead><tr><th style="width:24%">条件</th><th>具体做法</th><th style="width:34%">作用机制</th></tr></thead>
+  <tbody>
+    <tr><td class="k">物理与信息隔离</td><td>数人小组、独立办公区域、独立私密频道</td><td>压缩协调面，把决策回路缩短到「看到即改」</td></tr>
+    <tr><td class="k">高度信任与共识</td><td>对前进方向有清晰共识，彼此信任对方能独立交付</td><td>省掉对齐成本，避免共识驱动的漫长规划周期</td></tr>
+    <tr><td class="k">守护初创感</td><td>即使公司整体规模扩大，仍刻意保留「略带混乱但能极速产生实际影响」的氛围</td><td>防止流程化吞噬速度</td></tr>
+    <tr><td class="k">删产品（deleting the product）</td><td>敢于下线甚至砍掉多余功能</td><td>让界面与代码量始终小于问题规模</td></tr>
+    <tr><td class="k">直接把事情办成（just do the thing）</td><td>看到该做或该修的事时，不层层请示，主动认领并拉齐资源</td><td>消灭等待队列，这是速度的直接来源</td></tr>
+  </tbody>
+</table>
+
+<p>
+  Roman 认为，如果当时采用大团队配合 6 到 12 个月的宏大愿景推进，很可能根本走不到最终结果。
+  需要说明的是，他将这些解释为<strong>小团队在早期保持超常敏捷的组织土壤，而非普适的通用管理法则</strong>。
+</p>
+
+<div class="callout">
+  <p>
+    <strong>一个可算的旁证。</strong>沟通通道数随人数按
+    <math><mi>N</mi><mo>(</mo><mi>N</mi><mo>−</mo><mn>1</mn><mo>)</mo><mo>/</mo><mn>2</mn></math> 增长：
+    N=5 时仅 <strong>10</strong> 条，N=15 时 <strong>105</strong> 条，N=1000 时 <strong>499500</strong> 条。
+    这条算术本身不能解释 GrokBot 为什么成功，但它说明了「隔离」这个动作在数学上削减的是什么。
+    本文不引入 USL 之类的并发模型去拟合团队产出——访谈没有提供任何可拟合的数据，那样做只会制造伪精确。
+  </p>
+</div>
+
+<!-- ============ 第三章 ============ -->
+<h2 id="s3">三 · 从内部原型到公开上线：接下来三周主要在「删」</h2>
+
+<p class="lead">
+  当产品在公司内部推开、并逐步启动外部定向测试时，团队面临的最大挑战不是「功能不够用」，而是「功能做多了」。
+  在临近正式发布前的约三周里，产品经历了密集的<strong>下线功能（Unshipping）</strong>过程。
+</p>
+
+<h3 id="s3-1">3.1 拿掉工程师思维的「透明度工具」</h3>
+
+<p>
+  内测初期，为了方便排查问题，界面暴露了模型内部思考、记忆与工具调用等调试信息。
+  这些细节在开发者看来很有掌控感，但在通用办公中却造成了严重的认知过载。
+</p>
+
+<blockquote>
+  <p>你不会要求真实同事每隔三秒向你汇报「我刚才点了哪个按钮、在脑子里想了哪句话」。</p>
+</blockquote>
+
+<p>
+  团队收到过一些反馈，部分用户希望看到 Bot 的待办清单和大致优先级；
+  <strong>但没人要求长串文本流和 chain-of-thought</strong>。
+  最终团队将界面大幅精简：Bot 收到任务后，用户主要看到的是类似 Slack 风格的「正在输入」与绿色在线状态灯；
+  Bot 按需发送阶段性进度，完成后呈现结果。
+</p>
+
+<div class="dcard">
+  <h4>这个动作与第一部分是同一个判断</h4>
+  <p>
+    「云端电脑操作应当对用户彻底无感」这句话，在工程上的落地形态就是<em>删掉所有暴露实现机制的界面</em>。
+    展示工具调用日志，等于强迫用户去理解一台他本不该关心的电脑。
+    反过来说，只要你还觉得这些日志有用，通常意味着端到端成功率还不够高，你得靠读日志来判断它有没有做对——
+    而这正是沙盘 1 中核验成本 θ 居高不下的症状。
+  </p>
+</div>
+
+<h3 id="s3-2">3.2 沙盘 · 从「增加了什么按钮」到「Bot 能完成什么」</h3>
+
+<p>
+  传统 SaaS 软件非常执着于在界面上展示「功能点」（侧边栏设置项、流程图构建器、多选下拉菜单）。
+  但在 Agent 时代，<strong>每增加一个复杂的界面控件，往往意味着把本该由 AI 处理的负担甩给了人类</strong>。
+</p>
+
+<p>
+  典型的例子是<strong>自动化流程（Automation）的配置</strong>：很多工具的做法是在界面左侧提供复杂的流程画布——
+  点击新建、选择触发条件、选择响应动作、配置定时器，交互极其繁琐，导致普通用户极少去配置自动化。
+  GrokBot 选择彻底干掉自动化配置页面，直接支持自然语言定义：「每天早上 8 点提醒我。」
+  所有的调度逻辑全由 Bot 在后台自行管理。据 Roman 称，平台上 99% 的自动化是通过这类自然语言对话建立起来的
+  （<span class="tag warn">受访者口述</span>，非独立第三方审计）。
+</p>
+
+<p>
+  这种对多余控件的克制，逐步沉淀为团队内部<strong>可复用的两道判断题</strong>，下面这组沙盘把它做成了可操作的工具。
+</p>
+
+<div class="lab">
+  <div class="lab-head">
+    <h3>沙盘 2 · has → can 界面克制器</h3>
+    <span class="lab-kicker">Unshipping Lab</span>
+  </div>
+  <p class="lab-desc">
+    第一道题：<strong>这项工作的发布文案是什么？</strong>如果说不出足够有吸引力、用户能直接感受到的价值，这项工作也许不该做。
+    第二道题：<strong>能否把「Grok Bot now has …」改写为「Grok Bot can now …」？</strong>
+    下表前 6 项来自访谈中明确提到的界面元素，改写结果为本文依据访谈逻辑给出的示范；
+    自定义输入只做句式层面的机械替换，不构成产品建议。
+  </p>
+
+  <div class="ctrl-grid">
+    <div class="ctrl" style="grid-column:1 / -1">
+      <label for="sel-can-src">选择一项界面元素（前 6 项源自访谈原文）</label>
+      <select id="sel-can-src">
+        <option value="0">自动化流程配置画布（Automation builder）</option>
+        <option value="1">侧边栏设置项（Sidebar settings）</option>
+        <option value="2">流程图构建器（Flow-chart builder）</option>
+        <option value="3">工具连接多选下拉菜单（Multi-select dropdown）</option>
+        <option value="4">工具调用日志面板（Tool-call log）</option>
+        <option value="5">思维链可视化（Chain-of-thought viewer）</option>
+        <option value="custom">— 自定义输入 —</option>
+      </select>
+    </div>
+    <div class="ctrl" style="grid-column:1 / -1">
+      <label for="txt-can-in">或输入你自己的「has」句式（机械改写示范，非产品建议）</label>
+      <input type="text" id="txt-can-in" value="GrokBot now has a new integration panel" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-sunk);color:var(--text);font-family:var(--font-code);font-size:13px">
+    </div>
+  </div>
+
+  <div class="kv">
+    <div class="box"><span class="t">has 句式（现状）</span><div class="c" id="out-can-has">GrokBot now has an automation builder.</div></div>
+    <div class="box"><span class="t">can 句式（改写后）</span><div class="c" id="out-can-can">GrokBot can now run a recurring job on a schedule you describe in one sentence.</div></div>
+  </div>
+  <div class="verdict" id="out-can-note">
+    <b>依据：</b>访谈原文——团队彻底干掉自动化配置页面，改为自然语言定义「每天早上 8 点提醒我」，调度逻辑全由 Bot 后台管理。
+    改写要点不是换个动词，而是把交付物从「一个配置界面」换成「一件被完成的工作」。
+  </div>
+
+  <h4 style="margin-top:26px">发布前自检清单</h4>
+  <ul class="checklist">
+    <li><input type="checkbox" id="chk-can-1"><div><b>说得出发布文案。</b>能用一句话讲清用户会直接感受到什么，而不是我们改了什么。</div></li>
+    <li><input type="checkbox" id="chk-can-2"><div><b>has 已改写为 can。</b>审视焦点从「界面新增了控件」回到「Bot 新增了哪项可执行的任务能力」。</div></li>
+    <li><input type="checkbox" id="chk-can-3"><div><b>未新增界面像素。</b>能用自然语言或后台逻辑解决的，不落到按钮、下拉框或配置页上。</div></li>
+    <li><input type="checkbox" id="chk-can-4"><div><b>实现机制对用户无感。</b>电脑操作、工具调用与调度细节不进入主界面。</div></li>
+  </ul>
+  <div class="readout" style="margin-top:16px">
+    <div class="ro good"><span class="k">已完成</span><span class="v" id="out-can-done">0 / 4</span></div>
+    <div class="ro"><span class="k">完成度</span><span class="v" id="out-can-pct">0%</span></div>
+  </div>
+  <div class="pbar"><div class="fill" id="out-can-fill"></div></div>
+  <div class="verdict" id="out-can-verdict"><b>尚未启动。</b>建议先从「说得出发布文案」这一项开始——它成本最低，且能立刻证伪一批不该做的工作。</div>
+</div>
+
+<h3 id="s3-3">3.3 沙盘 · 内测三周的真实攻坚：可靠性，而不是功能</h3>
+
+<p>
+  在公开发布前的约三周内测中，团队所做的工作远不仅是做视觉减法。Roman 透露，当时的 Bot 依然存在大量基础失败，
+  例如<strong>经常点不中目标按钮</strong>、或者<strong>卡在系统登录环节无法进入</strong>。
+  团队紧盯真实用户的具体任务，收集任务与失败类型，量化并按周改善。
+  在那三周时间里，工程团队集中处理了大约 <strong>5 个最关键的后端问题</strong>。
+  即便如此，系统也并非已经能稳定接管任何复杂流程。
+</p>
+
+<div class="lab">
+  <div class="lab-head">
+    <h3>沙盘 3 · 电脑操作可靠性攻坚</h3>
+    <span class="lab-kicker">Reliability Lab</span>
+  </div>
+  <p class="lab-desc">
+    模型：初始单步失败率 <math><msub><mi>f</mi><mn>0</mn></msub></math> 由 <em>m = 5</em> 类已知缺陷
+    （此处取访谈中「约 5 个最关键后端问题」作为<strong>结构假设</strong>，非精度数据）
+    与一类<strong>残余未知缺陷</strong>构成，残余权重
+    <math><msub><mi>w</mi><mtext>res</mtext></msub></math>。修复 n 类已知缺陷后：
+  </p>
+  <div class="eqbox">
+    <math display="block"><mi>f</mi><mo>(</mo><mi>n</mi><mo>)</mo><mo>=</mo><msub><mi>f</mi><mn>0</mn></msub><mrow><mo>[</mo><mrow><mo>(</mo><mn>1</mn><mo>−</mo><msub><mi>w</mi><mtext>res</mtext></msub><mo>)</mo></mrow><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mfrac><mi>n</mi><mi>m</mi></mfrac><mo>)</mo></mrow><mo>+</mo><msub><mi>w</mi><mtext>res</mtext></msub><mo>]</mo></mrow><mo>,</mo><mspace width="1.2em"></mspace><mi>s</mi><mo>=</mo><mn>1</mn><mo>−</mo><mi>f</mi><mo>(</mo><mi>n</mi><mo>)</mo><mo>,</mo><mspace width="1.2em"></mspace><mi>P</mi><mo>=</mo><msup><mi>s</mi><mi>k</mi></msup></math>
+    <div class="eq-note">
+      残余项是关键：它意味着<strong>修完 5 个已知问题不等于成功率为 1</strong>。
+      本文初稿曾使用等权模型（修满即 s=1），会显著高估收益；加入残余项后结论被自己的模型修正，见下方读出的第 2 条。
+    </div>
+  </div>
+
+  <div class="ctrl-grid">
+    <div class="ctrl">
+      <label for="rng-hw-f0">初始单步失败率 <b>f₀</b> · 当前 <span class="cv" id="cv-hw-f0">0.10</span></label>
+      <input type="range" id="rng-hw-f0" min="0.02" max="0.30" step="0.01" value="0.10">
+    </div>
+    <div class="ctrl">
+      <label for="rng-hw-n">已修复的关键问题数 <b>n / 5</b> · 当前 <span class="cv" id="cv-hw-n">0</span></label>
+      <input type="range" id="rng-hw-n" min="0" max="5" step="1" value="0">
+    </div>
+    <div class="ctrl">
+      <label for="rng-hw-k">任务步数 <b>k</b> · 当前 <span class="cv" id="cv-hw-k">20</span></label>
+      <input type="range" id="rng-hw-k" min="5" max="50" step="1" value="20">
+    </div>
+    <div class="ctrl">
+      <label for="rng-hw-wr">残余未知缺陷权重 <b>w_res</b> · 当前 <span class="cv" id="cv-hw-wr">0.25</span></label>
+      <input type="range" id="rng-hw-wr" min="0.05" max="0.50" step="0.05" value="0.25">
+    </div>
+  </div>
+
+  <div class="readout">
+    <div class="ro"><span class="k">修复后单步成功率 s</span><span class="v" id="out-hw-s">90.00%</span></div>
+    <div class="ro hi"><span class="k">端到端成功率 P = s^k</span><span class="v" id="out-hw-P">12.16%</span></div>
+    <div class="ro"><span class="k">相对 n=0 的提升倍数</span><span class="v" id="out-hw-gain">1.00×</span></div>
+    <div class="ro"><span class="k">残余失败率 f(n)</span><span class="v" id="out-hw-f">10.00%</span></div>
+  </div>
+
+  <div class="verdict" id="out-hw-verdict">
+    <b>判定：不可委托。</b>端到端成功率 12.16%——在 20 步的任务上，这个 Bot 几乎每次都需要人工接管。
+    此时任何界面优化都是次要的，首要工作是把 s 拉上去。
+  </div>
+
+  <div class="chart">
+    <svg viewBox="0 0 680 260" role="img" aria-label="修复不同数量关键问题后的端到端成功率柱状图">
+      <line class="ax-grid" x1="70" y1="40" x2="650" y2="40"></line>
+      <line class="ax-grid" x1="70" y1="82.5" x2="650" y2="82.5"></line>
+      <line class="ax-grid" x1="70" y1="125" x2="650" y2="125"></line>
+      <line class="ax-grid" x1="70" y1="167.5" x2="650" y2="167.5"></line>
+      <text class="ax-txt" x="62" y="44" text-anchor="end">100%</text>
+      <text class="ax-txt" x="62" y="86" text-anchor="end">75%</text>
+      <text class="ax-txt" x="62" y="129" text-anchor="end">50%</text>
+      <text class="ax-txt" x="62" y="171" text-anchor="end">25%</text>
+      <text class="ax-txt" x="62" y="214" text-anchor="end">0%</text>
+      <line class="ax-line" x1="70" y1="210" x2="650" y2="210"></line>
+      <line class="ax-line" x1="70" y1="40" x2="70" y2="210"></line>
+      <rect class="bar" id="hw-b0" x="88.33" y="189.33" width="60" height="20.67" rx="4"></rect>
+      <rect class="bar" id="hw-b1" x="185.00" y="181.23" width="60" height="28.77" rx="4"></rect>
+      <rect class="bar" id="hw-b2" x="281.67" y="170.18" width="60" height="39.82" rx="4"></rect>
+      <rect class="bar" id="hw-b3" x="378.33" y="155.16" width="60" height="54.84" rx="4"></rect>
+      <rect class="bar" id="hw-b4" x="475.00" y="134.86" width="60" height="75.14" rx="4"></rect>
+      <rect class="bar" id="hw-b5" x="571.67" y="107.54" width="60" height="102.46" rx="4"></rect>
+      <text class="bar-val" id="hw-t0" x="118.33" y="182">12.2%</text>
+      <text class="bar-val" id="hw-t1" x="215.00" y="174">16.9%</text>
+      <text class="bar-val" id="hw-t2" x="311.67" y="163">23.4%</text>
+      <text class="bar-val" id="hw-t3" x="408.33" y="148">32.3%</text>
+      <text class="bar-val" id="hw-t4" x="505.00" y="128">44.2%</text>
+      <text class="bar-val" id="hw-t5" x="601.67" y="100">60.3%</text>
+      <text class="bar-txt" x="118.33" y="228">n=0</text>
+      <text class="bar-txt" x="215.00" y="228">n=1</text>
+      <text class="bar-txt" x="311.67" y="228">n=2</text>
+      <text class="bar-txt" x="408.33" y="228">n=3</text>
+      <text class="bar-txt" x="505.00" y="228">n=4</text>
+      <text class="bar-txt" x="601.67" y="228">n=5</text>
+      <text class="ax-ttl" x="360" y="250" text-anchor="middle">已修复的关键问题数 n（横轴） · 端到端成功率 P（纵轴，20 步任务）</text>
+    </svg>
+  </div>
+</div>
+
+<h4>沙盘 3 读出的三条结论</h4>
+<ol class="clean">
+  <li>
+    <strong>在长流程上，基础可靠性压倒一切。</strong>默认参数（f₀=0.10、w_res=0.25、k=20）下，
+    一个问题都没修时 P 仅 <strong>12.16%</strong>；全部修完后升至 <strong>60.27%</strong>，提升 <strong>4.96 倍</strong>。
+    同一组参数下，任何界面层面的优化都不可能产生这个量级的差距。
+  </li>
+  <li>
+    <strong>收益是加速的，但天花板由残余缺陷决定。</strong>P 的增量序列为
+    12.16% → 16.92% → 23.42% → 32.26% → 44.20% → 60.27%，每修一个问题的边际收益递增。
+    但即便修满 5 个，残余失败率仍停在 <strong>2.50%</strong>，20 步成功率只有 60.27%——
+    距离沙盘 1 给出的 90% 门槛（需单步 s ≥ 0.99475）仍有数量级差距。
+    <em>这也修正了本文初稿的等权假设：把 5 个问题全修完并不能让成功率归 1。</em>
+  </li>
+  <li>
+    <strong>步数是比失败率更强的杠杆。</strong>把 k 从 20 降到 10，P 从 12.16% 升到 34.87%。
+    这提示另一条工程路径：<em>与其无限提高单步可靠性，不如缩短任务链路</em>——
+    例如把长流程拆成可独立验收的段，或对高风险步骤改用 API 直连而非像素操作。
+  </li>
+</ol>
+
+<div class="callout">
+  <p>
+    <strong>与沙盘 1 的联动。</strong>把沙盘 3 的 P 代入沙盘 1：即使修满 5 个问题（P=60.27%），
+    有效减负率也只有约 <strong>28%</strong>——离「闭眼传球」还很远。
+    这正好对应 Roman 在访谈尾声的定性判断：这一波 Agent 仍处于<strong>极其早期的阶段（very early innings）</strong>。
+  </p>
+</div>
+
+<!-- ============ 第四章 ============ -->
+<h2 id="s4">四 · 把产品扔进真实工作：团队究竟验证出了什么</h2>
+
+<h3 id="s4-1">4.1 一对一人工引导：用最笨的方法拿最高密度的反馈</h3>
+
+<p>
+  在产品走向公开发布前的大约两周时间里，团队做了一件极其重度的事：由核心团队亲自下场，
+  <strong>一对一手动为数百名早期用户（主持人估算约 200 到 300 人）完成使用引导（Onboarding）</strong>。
+  这不只是数字展示，更形成了一个紧密的高频反馈闭环：在早期的 20 分钟辅导通话中，
+  经常出现云端电脑起不来、或者用户面对界面完全不知如何开始的窘境。
+</p>
+
+<p>
+  团队确立的原则是<strong>「今天发现的问题，必须在明天引导下一位用户前修掉」</strong>。
+  同时，团队刻意邀请了独立咖啡店老板等完全处于硅谷技术圈之外的非技术用户，
+  核心目的正是借此检验它是否真正算得上一款通用的知识工作产品，而非仅限极客使用的玩具。
+</p>
+
+<div class="dcard">
+  <h4>这个动作的方法论含义</h4>
+  <p>
+    人工引导 200–300 人是不可扩展的，但它在早期提供的是别的方法拿不到的东西：
+    <em>观察用户自己发现了什么用法，而不是教他们该用什么用法</em>。
+    Roman 明确的一条经验是——<strong>不要用预设范式去引导早期用户，要看他们自发走到哪里</strong>。
+    下一节的五种形态，全部是观察出来的，不是设计出来的。
+  </p>
+</div>
+
+<h3 id="s4-2">4.2 沙盘 · 五种自然涌现的工作流形态</h3>
+
+<p>
+  在这场高密度的碰撞中，几种最具生命力的使用形态自然涌现出来。下面这组沙盘把它们的
+  <strong>链路、价值来源、失败模式与成熟度</strong>拆开呈现——其中成熟度是本文依据访谈措辞给出的定性标注，
+  不是量化评分。
+</p>
+
+<div class="lab">
+  <div class="lab-head">
+    <h3>沙盘 4 · 工作流形态浏览器</h3>
+    <span class="lab-kicker">Workflow Explorer</span>
+  </div>
+  <p class="lab-desc">点击标签切换。全部内容来自访谈中 Roman 描述的真实观察，标注为「探索」的项表示访谈明确说明其仍会失败、尚未稳定。</p>
+
+  <div class="tabs">
+    <button class="tab on" type="button" id="btn-wf-0">幕僚长</button>
+    <button class="tab" type="button" id="btn-wf-1">招聘挖掘</button>
+    <button class="tab" type="button" id="btn-wf-2">销售与非标后台</button>
+    <button class="tab" type="button" id="btn-wf-3">递归测试</button>
+    <button class="tab" type="button" id="btn-wf-4">设定边界的主动提醒</button>
+    <button class="tab" type="button" id="btn-wf-5">统一输出与每日摘要</button>
+  </div>
+
+  <div class="readout">
+    <div class="ro hi" style="grid-column:span 2"><span class="k">形态</span><span class="v" id="out-wf-name">幕僚长（Chief of Staff）协同</span></div>
+    <div class="ro"><span class="k">成熟度</span><span class="v" id="out-wf-maturity">观察所得</span></div>
+  </div>
+
+  <div class="kv">
+    <div class="box" style="grid-column:1 / -1"><span class="t">链路</span><div class="c" id="out-wf-chain">每人先建立 5–10 个 Bot，各负责一个工作领域 → 挑出一个表现突出的 Bot 作为「幕僚长」 → 主要与幕僚长对话 → 由幕僚长把任务分派给其他专职 Bot。</div></div>
+    <div class="box"><span class="t">价值来源</span><div class="c" id="out-wf-value">把「我该找哪个 Bot」这个路由问题也一并委托出去，人类只需维护一条对话线程。</div></div>
+    <div class="box"><span class="t">边界与失败模式</span><div class="c" id="out-wf-risk">这是部分用户自发形成的用法，并非多数人的普遍状态，也不是不可逆的固定层级；团队只考虑做轻度引导，不打算把它固化成产品结构。</div></div>
+    <div class="box" style="grid-column:1 / -1"><span class="t">原文依据</span><div class="c" id="out-wf-src">访谈原文：内部推出后最初一两周常见模式是每人建立 5 到 10 个 Bot；到第二周末观察到一些用户会挑一个表现突出的 Bot 作为「幕僚长」。</div></div>
+  </div>
+</div>
+
+<h4>五种形态的要点速览</h4>
+
+<h4>1. 幕僚长（Chief of Staff）协同模式</h4>
+<p>
+  内部推出后的最初一两周，常见模式是每人建立 5 到 10 个 Bot，每个负责不同的工作领域。
+  到第二周末，团队观察到一些用户会挑一个表现突出的 Bot 作为「幕僚长」，主要与它对话，
+  再由它把任务分派给其他 Bot。<strong>这是部分用户自发形成的用法，并非多数人的普遍状态，
+  也不是不可逆的固定层级</strong>；团队只考虑对这种模式作轻度引导。
+</p>
+
+<h4>2. 人才招聘的主动挖掘</h4>
+<p>
+  在人才招聘场景中，该公司的招聘团队认为，顶尖人才往往不是那些正在积极投简历的人，而是需要主动发掘的目标。
+  团队内部配置的招聘 Bot 展现了一种探索流程：
+</p>
+<ul class="clean">
+  <li>访问前沿学术会议的网站，下载那些<strong>尚未被 Google Scholar 收录</strong>的最新 PDF 论文；</li>
+  <li>提取论文中的作者名单，将新名字添加到表格（Spreadsheet）中；</li>
+  <li>随后检查公司内部是否有人与其具备直接联系；</li>
+  <li>如果有，就直接向相关同事发送一条 Slack 消息请求引荐。</li>
+</ul>
+<p>
+  这一链条展示了云端电脑配合长流程 Agent 在<strong>串联非标网页、文档提取与内部协作</strong>上的探索潜力。
+</p>
+
+<h4>3. 销售与非标企业后台的探索</h4>
+<p>
+  销售人员经常需要与缺少好用 API 的工具和企业看板打交道。在内测中，Bot 曾因<strong>鼠标无法精确点击 Salesforce 仪表盘的目标位置</strong>，
+  或<strong>无法登录系统</strong>而失败。团队通过改善浏览器可见性、屏幕像素与鼠标控制等基础能力，
+  尝试让 Bot 逐步具备操作这类界面的能力。但 Roman 同时指出，
+  <strong>这种交互在当时仍会失败，仍需持续优化，并非已经稳定接管任何系统</strong>。
+</p>
+
+<h4>4. 个人探索案例：递归测试（Bot in Bot）</h4>
+<p>
+  在内部测试中，这也催生了一些极客式的个人用法。例如 Roman 个人曾在自己的云端电脑环境中，
+  反向下载并安装了桌面版 GrokBot 自身。他设置了一个 QA tester bot，
+  专门用来测试 10 个需要持续确认其越来越好的关键工作流，并将测试结果写入 Notion 与历史客户端版本进行对比。
+  <strong>需要指出的是，这属于 Roman 个人的使用尝试，并非团队已经全面制度化运行的固定 QA 流程。</strong>
+</p>
+
+<h4>5. 从「被动等待」到设定边界的主动提醒</h4>
+<p>
+  初阶用户通常把 Agent 当作被动的信息整理工具，让它定期通报总结。
+  而更进一步的探索方向是：在让 Bot 接入邮件、即时通讯等信息流后，给它设定明确的<strong>触发边界</strong>——
+  在大多数时候保持静默，只在用户预先定义的极少数紧急情形下触发主动呼叫（Page）或提醒人类。
+  <strong>这种用法成立的前提，是用户足够信任 Bot 不会频繁误报</strong>。
+</p>
+
+<h4>高阶协作：统一输出与每日摘要</h4>
+<p>
+  除了单点任务，Roman 还提到了高阶用户的第二层协作方法：设计多个 Bot 之间的协同，
+  让负责不同垂直领域的 Bot 把各自的产出集中写入一个统一、对人可读的数据库或存储区（如 Notion 或统一表格），
+  人类用户无需逐个检查每个 Bot 的会话，而是通过一份整合后的<strong>每日摘要（Daily Digest）</strong>集中阅读与决策。
+</p>
+
+<h3 id="s4-3">4.3 演进路径：从个人信息闭环到企业渗透的未决挑战</h3>
+
+<p>
+  在信息闭环的探索中，Roman 区分了不同主体的模式：<strong>V1</strong> 是很多用户会采用的常见模式，
+  Bot 覆盖 Slack 和邮件，按优先级即时提醒或放入每日汇总；Roman 说自己的个人配置大约处于 <strong>V3 或 V4</strong>，
+  Bot 摄取 X 上的 GrokBot 提及，结合内部上下文，协同 QA tester 尝试复现 bug，
+  再通过他自己的消息渠道快速响应反馈。这一探索的新增价值集中在
+  <strong>「外部信号 → 内部上下文 → QA 复现 → 响应反馈」</strong>的链路。
+</p>
+
+<p>
+  从个人探索走向企业落地，Roman 回顾了 AI 编程工具的扩散路径：早期 AI 编程工具用户先在晚上和周末的个人项目中体验价值，
+  回到工作场所后要求使用；Roman 预计知识工作 Agent 也会先在个人场景产生 aha moment，再进入团队并贡献有经济价值的工作。
+</p>
+
+<div class="callout">
+  <p>
+    <strong>但 Roman 同时列出了悬而未决的问题（unanswered questions）：</strong>
+    Bot 如何进入复杂公司系统、理解公司上下文和历史；如何在更大团队中工作；
+    以及<strong>组织级记忆</strong>究竟应该是什么样。这些问题至今没有答案——
+    本文不替他给出答案。
+  </p>
+</div>
+
+<!-- ============ 第五章 ============ -->
+<h2 id="s5">五 · 护城河怎么来：先把未来三到六个月的能力做出来</h2>
+
+<p class="lead">
+  在当前的 AI 创业环境中，创始人和投资人最焦虑的问题往往是：
+  「如果底层大模型厂商在下一代底座模型里直接集成了这类能力，上层产品的护城河究竟在哪里？」
+</p>
+
+<p>
+  针对这种战略焦虑，Roman 强调：<strong>不要从 12 到 24 个月后的战略图倒推产品，而要先专注于今天真正有用的东西</strong>。
+  Lenny 随后把这套看法概括为：先做出一款让人着迷（Obsessed）的产品，护城河往往是在这个过程中被发现的，而不是预先规划出来的。
+</p>
+
+<h3>时间机器的三步节奏</h3>
+<ol class="clean">
+  <li><strong>预判趋势</strong>：大致判断未来 3 到 6 个月里，模型能力的提升会让哪些今天做不到的事变为可能。</li>
+  <li><strong>提前拉取未来</strong>：不要只等底座模型成熟，而是在现有模型之上搭建工程脚手架（Scaffolding），尽量把那种未来体验提前交到用户手里。</li>
+  <li><strong>果断删除脚手架</strong>：当底层模型原生补齐能力后，删掉已经不再必要的脚手架，把它变成产品的默认能力；然后继续瞄准下一个仍然困难的边界。</li>
+</ol>
+
+<div class="dcard">
+  <h4>为什么这要求「敢于删代码」的文化</h4>
+  <p>
+    这三步里最反直觉的是第三步。脚手架是团队自己一行行写出来的、正在为用户提供价值的工程资产，
+    把它删掉在组织上极难通过。Roman 认为，团队大约每六个月、近期甚至更短，
+    就需要显著重塑产品优先级与核心形态——<strong>当模型能力和用户行为都在快速变化时，今天成立的产品边界未必能长期保留</strong>。
+  </p>
+</div>
+
+<p>
+  Roman 认为，这种不断「自我颠覆、敢于删代码」的快速循环，其核心逻辑在于不被动等待底座升级，
+  而是通过工程手段把未来的能力提前交付给用户；在此过程中，团队有可能在真实用户的日常使用习惯、
+  数据反馈与分发渠道上建立起先发优势，而不是依赖静态的战略图纸去空谈无法撼动的护城河。
+</p>
+
+<div class="callout">
+  <p>
+    <strong>本文不给这个战略配数学模型。</strong>「脚手架投入—底座追平—删除」的收益曲线需要
+    模型能力增长率、脚手架维护成本与用户迁移黏性三类参数，访谈一项都没有提供。
+    凭空设定这些参数再画出一条漂亮的曲线，属于沙盘造假。这里只保留可核查的部分：
+    三步节奏本身是受访者的明确陈述；「每六个月重塑一次」是他的明确判断；
+    两者都不需要数字包装也已经足够锋利。
+  </p>
+</div>
+
+<!-- ============ 第六章 ============ -->
+<h2 id="s6">六 · 普通人怎么开始：先交出一件边界清楚的工作</h2>
+
+<p>
+  对于初次尝试脱离单次对话模式、尝试构建长效 Agent 助手的读者，访谈中给出了具体的落地切入点。
+</p>
+
+<h3>6.1 像对待新员工一样提供真实上下文，但坚守安全边界</h3>
+<p>
+  不要指望一个漂浮在真空中的模型凭空替你分忧。第一步往往是让 Bot 接入日常工作涉及的关键渠道
+  （如工作邮箱、团队协作即时通讯工具、知识库）。Roman 认为，许多人会要求个人工作与公司工作彼此分离，
+  并承认组织级记忆、多个 Bot 如何在真实复杂团队中协作仍有大量悬而未决的问题；
+  Lenny 随后进一步提出了<strong>个人与工作数据混用（cross-contamination）</strong>及
+  <strong>工作数据外泄（exfiltration）</strong>的风险。
+</p>
+
+<div class="callout">
+  <p>
+    <strong>本文基于上述风险补充的操作底线（非访谈原文，为本文建议）：</strong>
+    实际开放权限时从<strong>最小权限</strong>与<strong>个人/工作数据分离</strong>起步；
+    优先采用<strong>可随时撤销的授权</strong>（OAuth 令牌优于长期密码）；
+    对涉及<strong>对外发送</strong>或<strong>高风险操作</strong>的动作设置人工确认——
+    这与沙盘 1 的结论一致：只要端到端成功率还没跨过临界点，人类确认就不是可选项，而是安全机制的一部分。
+  </p>
+</div>
+
+<h3>6.2 用「反向发问」破局冷启动</h3>
+<p>
+  面对全新的 Agent 界面，很多人的困惑是「我不知道该让它干什么」。
+  Roman 提到他在实际使用中的做法是让 Bot 翻阅自己的邮件与 Slack，并给出提示：
+  <em>建议 5 件可以帮我分担的事情，以及为了做到这些分别需要什么条件</em>
+  （Suggest like five things that you can take off of my plate and what it would take for you to do that）。
+</p>
+
+<p>在实际尝试中，可按这个思路将其改写为更易落地的提示词：</p>
+
+<div class="prompt">
+  请通读我近期的邮件与日常沟通记录，结合我的业务角色，主动列出 5 项你可以直接帮我分担的具体工作块；并告诉我，如果要搞定这几项工作，你分别还需要获得哪些系统权限。
+</div>
+
+<p>
+  Roman 在自己的那次尝试中，<strong>5 项里有 2 项对他确实有用</strong>，于是他为这两项各建了一个 Bot。
+  对读者来说，更稳妥的起点是先选择 <strong>1 到 2 项边界清楚、结果可校验的任务</strong>，
+  而不是立刻把全部工作一次性交出去。
+</p>
+
+<h3>6.3 三条可操作的起步判据</h3>
+<ul class="clean">
+  <li><strong>边界清楚</strong>：能说清输入是什么、交付物长什么样、什么算做完了。</li>
+  <li><strong>结果可校验</strong>：你能用不到几分钟判断它这次做对了没有——否则核验成本 θ 会把减负率吃光。</li>
+  <li><strong>失败可逆</strong>：做错了不会造成外部影响，这样你才敢在端到端成功率还不高的时候放手试。</li>
+</ul>
+
+<!-- ============ 第七章 ============ -->
+<h2 id="s7">七 · 结论与未决问题</h2>
+
+<p class="lead">
+  从聊天框里的文字生成，到云端电脑上长效驻留的数字协作网，AI Agent 正在经历一场由「炫技演示」向「实际可用」的重心迁移。
+  然而必须清醒地看到，正如 Roman 在访谈尾声所强调的，这一波 Agent 的探索仍处于<strong>极其早期的阶段（very early innings）</strong>。
+</p>
+
+<h3>本文确认成立的四条结论</h3>
+<ol class="clean">
+  <li>
+    <strong>委托是二元体验，不是百分比体验。</strong>沙盘 1 显示，在合理的核验成本假设下，
+    90% 完成度只换来 65.03% 的有效减负；70% 只换来 39.14%；低于 32.29% 则转为净负担。
+    Roman 的「90% 与 100% 之间是质变」在数学上成立。
+  </li>
+  <li>
+    <strong>两个架构决策是可复用的，而具体拓扑不可复用。</strong>「全云端 + 每台 Bot 一台电脑」是可迁移的产品抽象；
+    但资源隔离方式、成本与闲置策略访谈均未披露，不可据此推算。
+  </li>
+  <li>
+    <strong>四周原型的真实前提是组织隔离，不是技术奇迹。</strong>数人小组 + 独立物理区域 + 私密频道 +
+    「删产品 / just do the thing」两条原则，才是这套速度的产生条件；Roman 本人也明确说这不是普适管理法则。
+  </li>
+  <li>
+    <strong>内测三周的价值集中在可靠性而非功能。</strong>沙盘 3 显示，在 20 步任务上修完 5 个关键问题能把
+    端到端成功率从 12.16% 拉到 60.27%（4.96 倍），这个量级是任何界面优化都达不到的。
+  </li>
+</ol>
+
+<h3>仍未解决的问题</h3>
+<ul class="clean">
+  <li>Bot 如何进入复杂公司系统、理解公司上下文与历史；</li>
+  <li>多个 Bot 如何在更大的真实团队中协作；</li>
+  <li><strong>组织级记忆</strong>应有的形态；</li>
+  <li>个人数据与工作数据的混用（cross-contamination）与外泄（exfiltration）边界如何工程化；</li>
+  <li>Computer Use 的长期可靠性上限——它能逼近沙盘 1 要求的单步 0.99475 吗？访谈没有回答。</li>
+</ul>
+
+<p>
+  它远没有达到能让人类完全闭眼放权、彻底托付后背的成熟程度；更现实的路径，
+  是在明确边界、保持校验的前提下，将那些重复性高、流程明确的劳动逐步交付，
+  在人机协作的持续磨合中探索新的工作形态。
+</p>
+
+<!-- ============ 附录 ============ -->
+<h2 id="appendix">附录 A · 模型参数、推导与敏感性检验</h2>
+
+<h3>A.1 沙盘 1 的解析解</h3>
+<div class="eqbox">
+  <math display="block"><mfrac><mi>E</mi><mi>C</mi></mfrac><mo>=</mo><mi>d</mi><mo>+</mo><mi>θ</mi><msqrt><mrow><mn>1</mn><mo>−</mo><mi>P</mi></mrow></msqrt><mo>+</mo><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mi>P</mi><mo>)</mo></mrow><mi>β</mi><mspace width="1.6em"></mspace><mo>(</mo><mi>η</mi><mo>=</mo><mn>0.5</mn><mo>)</mo></math>
+  <math display="block"><mi>x</mi><mo>=</mo><msqrt><mrow><mn>1</mn><mo>−</mo><mi>P</mi></mrow></msqrt><mo>,</mo><mspace width="1em"></mspace><mi>β</mi><msup><mi>x</mi><mn>2</mn></msup><mo>+</mo><mi>θ</mi><mi>x</mi><mo>+</mo><mi>d</mi><mo>−</mo><mn>1</mn><mo>=</mo><mn>0</mn></math>
+  <math display="block"><mi>x</mi><mo>=</mo><mfrac><mrow><mo>−</mo><mi>θ</mi><mo>+</mo><msqrt><mrow><msup><mi>θ</mi><mn>2</mn></msup><mo>+</mo><mn>4</mn><mi>β</mi><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mi>d</mi><mo>)</mo></mrow></mrow></msqrt></mrow><mrow><mn>2</mn><mi>β</mi></mrow></mfrac><mo>,</mo><mspace width="1em"></mspace><msup><mi>P</mi><mo>*</mo></msup><mo>=</mo><mn>1</mn><mo>−</mo><msup><mi>x</mi><mn>2</mn></msup></math>
+  <div class="eq-note">
+    默认参数（d=0.10, θ=0.60, β=0.60, η=0.5）代入：
+    <math><msqrt><mrow><mn>0.36</mn><mo>+</mo><mn>2.16</mn></mrow></msqrt><mo>=</mo><mn>1.58745</mn></math>；
+    <math><mi>x</mi><mo>=</mo><mo>(</mo><mn>1.58745</mn><mo>−</mo><mn>0.60</mn><mo>)</mo><mo>/</mo><mn>1.2</mn><mo>=</mo><mn>0.82288</mn></math>；
+    <math><msup><mi>P</mi><mo>*</mo></msup><mo>=</mo><mn>1</mn><mo>−</mo><mn>0.67713</mn><mo>=</mo><mn>0.32288</mn></math>。
+    达标单步成功率反解：<math><mi>s</mi><mo>=</mo><msup><mi>P</mi><mrow><mn>1</mn><mo>/</mo><mi>k</mi></mrow></msup></math>，
+    k=20 时 P=0.90 需 s ≥ 0.99475，P=0.95 需 s ≥ 0.99744。
+  </div>
+</div>
+
+<h3>A.2 敏感性检验：结论稳健吗</h3>
+<p>
+  在正文写下「90% 完成度 ≠ 90% 减负」之前，先做全域扫描，而不是拿到一组参数就定稿。
+  下表为单参数扫描结果（其余参数保持默认）。
+</p>
+<table class="grid">
+  <thead><tr><th style="width:20%">扫描参数</th><th style="width:26%">取值区间</th><th style="width:26%">relief(P=0.90) 区间</th><th>结论</th></tr></thead>
+  <tbody>
+    <tr><td class="k">核验凹性 η</td><td>0.30 → 1.00</td><td>53.93% → 78.00%</td><td>幅度对 η 最敏感，跨约 24 个百分点；<strong>方向稳健</strong>，全域均显著低于 90%</td></tr>
+    <tr><td class="k">核验门槛 θ</td><td>0.30 → 0.90</td><td>74.51% → 55.54%</td><td>单调下降，符合直觉；方向稳健</td></tr>
+    <tr><td class="k">返工系数 β</td><td>0.30 → 1.20</td><td>68.03% → 59.03%</td><td>影响最小；方向稳健</td></tr>
+    <tr><td class="k">临界点 P*</td><td>θ=0.30→0.90</td><td>0.0000 → 0.5292</td><td>θ 极小时 P* 退化为 0（任何成功率都不亏），这是模型的边界情形，不构成普适结论</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <p>
+    <strong>被自己的模型修正过的一处假设。</strong>沙盘 3 初稿采用等权缺陷模型
+    （<math><mi>f</mi><mo>(</mo><mi>n</mi><mo>)</mo><mo>=</mo><msub><mi>f</mi><mn>0</mn></msub><mo>(</mo><mn>1</mn><mo>−</mo><mi>n</mi><mo>/</mo><mi>m</mi><mo>)</mo></math>），
+    推出「修满 5 个问题即 s=1、20 步成功率 100%、提升 8.23 倍」。这个结论显然过强。
+    加入残余未知缺陷项后修正为 <strong>4.96 倍、上限 60.27%</strong>。
+    修正后的数字已替换正文，此处保留原始错误以说明：<em>当模型给出一个过于漂亮的结论时，优先怀疑漏了一项约束，而不是去调参数凑数字。</em>
+  </p>
+</div>
+
+<h3>A.3 沙盘参数默认值一览</h3>
+<table class="grid">
+  <thead><tr><th style="width:14%">沙盘</th><th style="width:22%">参数</th><th style="width:14%">默认值</th><th>性质</th></tr></thead>
+  <tbody>
+    <tr><td class="k">1</td><td>s / k / θ / β / d / η</td><td>0.970 / 20 / 0.60 / 0.60 / 0.10 / 0.50</td><td><span class="tag warn">演示基线假设</span> 访谈未提供，全部可调</td></tr>
+    <tr><td class="k">3</td><td>f₀ / n / k / w_res</td><td>0.10 / 0 / 20 / 0.25</td><td><span class="tag warn">演示基线假设</span> 仅 m=5 取自访谈约数</td></tr>
+    <tr><td class="k">2</td><td>has → can 改写</td><td>—</td><td><span class="tag cy">文本工具</span> 前 6 项源自访谈，自定义项仅做机械句式替换</td></tr>
+    <tr><td class="k">4</td><td>工作流形态</td><td>—</td><td><span class="tag ok">原文转写</span> 无参数，纯观察性内容</td></tr>
+  </tbody>
+</table>
+
+<h2 id="glossary">附录 B · 术语表</h2>
+<div class="gloss">
+  <div class="g"><div class="t">以同事为尺（Colleague-pilled）</div><div class="d">GrokBot 团队的产品思考锚点：把 AI 当作真实世界里新招募的一位同事，据此推导协作方式，而不是从「聊天机器人 + 工具」出发。</div></div>
+  <div class="g"><div class="t">Computer Use（云端电脑操作）</div><div class="d">让 Bot 通过像素识别、移动光标与输入字符来操作网页与桌面应用，用于覆盖没有好用 API 的系统。Roman 认为其底层机制应对用户彻底无感。</div></div>
+  <div class="g"><div class="t">Shipping your org chart</div><div class="d">把公司内部组织架构映射成产品形态——每多一个团队就多一个标签页。GrokBot 选择从零开始以避免这一点。</div></div>
+  <div class="g"><div class="t">Unshipping（下线功能）</div><div class="d">公开发布前约三周的主要工作：主动删除已建成的功能与界面，尤其是暴露实现机制的「透明度工具」。</div></div>
+  <div class="g"><div class="t">has → can</div><div class="d">团队内部的界面克制判据：把「GrokBot 现在有了 X（某个按钮/面板）」改写为「GrokBot 现在能做 Y（某件完整工作）」，改写不了的大概率不该做。</div></div>
+  <div class="g"><div class="t">脚手架（Scaffolding）</div><div class="d">为提前交付未来体验而在现有模型之上搭建的工程层。当底座模型原生补齐能力后应果断删除。</div></div>
+  <div class="g"><div class="t">端到端成功率 P</div><div class="d">本文引入的分析量：单步成功率 s 的 k 次方。用于把「90% 完成度」转写为可计算的委托判据。</div></div>
+  <div class="g"><div class="t">核验凹性 η</div><div class="d">核验投入随 (1−P) 变化的指数。η 越小，表示「要判断产出对不对必须先理解全部」这一固定门槛越硬。</div></div>
+</div>
+
+<div class="foot">
+  <p>
+    <strong>来源：</strong>Lenny&rsquo;s Podcast 第 713 期《How we built Grok Bot in a month | Roman Ugarte (SpaceXAI)》（2026-09-08），
+    经中文二次转述稿消化。节目时间戳要点：00:53 GrokBot 为何引发关注 · 02:58 一个月做出知识工作产品 ·
+    06:09 为何从 Cursor 独立出来 · 15:46 从内测到顺畅上线 · 30:32 每个 Bot 拥有云端电脑 · 52:44 让 AI 真正完成工作。
+  </p>
+  <p>
+    <strong>消化说明：</strong>本文保留原访谈的全部论点、案例与限定条件；四组交互沙盘为本文新增的分析工具，
+    其参数均为可调的演示基线假设，已在界面与附录中显式标注，不代表受访者提供的任何数据。
+    受访者口述数据（如 99% 自动化比例、约 5 个后端问题）已在正文按「口述口径」标注，不作为推导输入。
+  </p>
+  <p><strong>文档属性：</strong>单文件 · 零外部依赖 · 断网可用 · 2026-09-10 消化</p>
+</div>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  function byId(id){ return document.getElementById(id); }
+  function num(v, d){ var n = parseFloat(v); return (typeof n === "number" && isFinite(n)) ? n : d; }
+  function pct(x, digits){ return (x * 100).toFixed(digits === undefined ? 2 : digits) + "%"; }
+
+  /* ============ 主题切换（默认深色） ============ */
+  (function(){
+    var UKEY = "aike-grokbot-theme";
+    var root = document.documentElement;
+    var uBtn = byId("theme-toggle");
+    var uSaved = null;
+    try { uSaved = window.localStorage ? window.localStorage.getItem(UKEY) : null; } catch (e) { uSaved = null; }
+    if (uSaved !== "light" && uSaved !== "dark") { uSaved = "dark"; }
+    root.setAttribute("data-theme", uSaved);
+    if (uBtn){
+      uBtn.addEventListener("click", function(){
+        var uCur = root.getAttribute("data-theme");
+        var uNext = uCur === "dark" ? "light" : "dark";
+        root.setAttribute("data-theme", uNext);
+        try { if (window.localStorage) { window.localStorage.setItem(UKEY, uNext); } } catch (e2) {}
+      });
+    }
+  })();
+
+  /* ============ 移动端目录抽屉 ============ */
+  (function(){
+    var mSide = byId("sidebar");
+    var mBtn = byId("toc-toggle");
+    if (mBtn && mSide){
+      mBtn.addEventListener("click", function(){ mSide.classList.toggle("open"); });
+    }
+  })();
+
+  /* ============ 阅读进度条 ============ */
+  (function(){
+    var rBar = byId("progress-bar");
+    var rDoc = document.documentElement;
+    function rUpdate(){
+      var rH = rDoc.scrollHeight - rDoc.clientHeight;
+      var rTop = rDoc.scrollTop;
+      if (typeof rTop !== "number") { rTop = document.body && document.body.scrollTop ? document.body.scrollTop : 0; }
+      var rP = rH > 0 ? rTop / rH : 0;
+      if (rP < 0) { rP = 0; }
+      if (rP > 1) { rP = 1; }
+      if (rBar) { rBar.style.width = (rP * 100).toFixed(2) + "%"; }
+    }
+    window.addEventListener("scroll", rUpdate);
+    rUpdate();
+  })();
+
+  /* ============ 沙盘 1 · 委托减负 ============ */
+  (function(){
+    var sS = byId("rng-rl-s"), sK = byId("rng-rl-k");
+    var sTh = byId("rng-rl-th"), sBe = byId("rng-rl-be");
+    var sD = byId("rng-rl-d"), sEta = byId("rng-rl-eta");
+    var cvS = byId("cv-rl-s"), cvK = byId("cv-rl-k"), cvTh = byId("cv-rl-th");
+    var cvBe = byId("cv-rl-be"), cvD = byId("cv-rl-d"), cvEta = byId("cv-rl-eta");
+    var oP = byId("out-rl-P"), oEff = byId("out-rl-eff"), oR = byId("out-rl-R");
+    var oPs = byId("out-rl-pstar"), oSn = byId("out-rl-sneed"), oVd = byId("out-rl-verdict");
+    var gCurve = byId("rl-curve"), gDot = byId("rl-dot"), gVL = byId("rl-vline"), gHL = byId("rl-hline");
+    var gPsL = byId("rl-vline-pstar"), gPsT = byId("rl-txt-pstar");
+
+    var X0 = 60, Y0 = 40, GW = 580, GH = 240, RMIN = -0.30, RMAX = 1.0;
+
+    function ymap(r){
+      var rr = r;
+      if (rr < RMIN) { rr = RMIN; }
+      if (rr > RMAX) { rr = RMAX; }
+      return Y0 + (RMAX - rr) / (RMAX - RMIN) * GH;
+    }
+    function effort(P, d, th, be, eta){
+      return d + th * Math.pow(Math.max(0, 1 - P), eta) + (1 - P) * be;
+    }
+    function pstar(d, th, be, eta){
+      if (Math.abs(eta - 0.5) > 1e-9){
+        var lo = 0, hi = 1, mid = 0;
+        for (var i = 0; i < 60; i++){
+          mid = (lo + hi) / 2;
+          if (1 - effort(mid, d, th, be, eta) > 0) { hi = mid; } else { lo = mid; }
+        }
+        return (lo + hi) / 2;
+      }
+      var disc = th * th + 4 * be * (1 - d);
+      if (disc < 0) { disc = 0; }
+      var x = (-th + Math.sqrt(disc)) / (2 * be);
+      if (x < 0) { x = 0; }
+      if (x > 1) { x = 1; }
+      return 1 - x * x;
+    }
+    function verdictOf(rel, P){
+      if (rel < 0){
+        return "<b>判定：净负担。</b>端到端成功率 " + pct(P) + "，有效减负 " + pct(rel) +
+               "——委托在数学上比你自己做更贵。此时正确的动作不是优化界面，而是缩短链路或提高单步可靠性。";
+      }
+      if (rel < 0.30){
+        return "<b>判定：尚未真正交出去。</b>端到端成功率 " + pct(P) + "，有效减负 " + pct(rel) +
+               "——你省下的远少于一半，核验与返工吞掉了绝大部分收益。这正是「90% 完成度」的真实处境：任务名义上快做完了，责任却还压在你身上。";
+      }
+      if (rel < 0.60){
+        return "<b>判定：部分减负。</b>端到端成功率 " + pct(P) + "，有效减负 " + pct(rel) +
+               "——值得委托，但你仍需保留抽查与兜底。适合边界清楚、失败可逆的任务。";
+      }
+      if (rel < 0.85){
+        return "<b>判定：基本可委托。</b>端到端成功率 " + pct(P) + "，有效减负 " + pct(rel) +
+               "——可以默认由 Bot 完成，人类只在例外情况介入。";
+      }
+      return "<b>判定：可闭眼传球。</b>端到端成功率 " + pct(P) + "，有效减负 " + pct(rel) +
+             "——这正是 Roman 描述的「no-look pass」状态：把上下文交出去就不再惦记。";
+    }
+
+    function drawCurve(d, th, be, eta){
+      var pts = [];
+      var N = 20;
+      for (var i = 0; i <= N; i++){
+        var P = i / N;
+        pts.push((X0 + P * GW).toFixed(2) + "," + ymap(1 - effort(P, d, th, be, eta)).toFixed(2));
+      }
+      if (gCurve) { gCurve.setAttribute("points", pts.join(" ")); }
+    }
+
+    function render(){
+      var s = num(sS && sS.value, 0.970);
+      var k = num(sK && sK.value, 20);
+      var th = num(sTh && sTh.value, 0.60);
+      var be = num(sBe && sBe.value, 0.60);
+      var d = num(sD && sD.value, 0.10);
+      var eta = num(sEta && sEta.value, 0.50);
+
+      if (cvS) { cvS.textContent = s.toFixed(3); }
+      if (cvK) { cvK.textContent = String(Math.round(k)); }
+      if (cvTh) { cvTh.textContent = th.toFixed(2); }
+      if (cvBe) { cvBe.textContent = be.toFixed(2); }
+      if (cvD) { cvD.textContent = d.toFixed(2); }
+      if (cvEta) { cvEta.textContent = eta.toFixed(2); }
+
+      var P = Math.pow(s, k);
+      var ec = effort(P, d, th, be, eta);
+      var rel = 1 - ec;
+      var ps = pstar(d, th, be, eta);
+      var sNeed = Math.pow(0.90, 1 / k);
+
+      if (oP) { oP.textContent = pct(P); }
+      if (oEff) { oEff.textContent = ec.toFixed(4); }
+      if (oR) { oR.textContent = pct(rel); }
+      if (oPs) { oPs.textContent = ps.toFixed(4); }
+      if (oSn) { oSn.textContent = sNeed.toFixed(5); }
+      if (oVd) { oVd.innerHTML = verdictOf(rel, P); }
+
+      var mx = X0 + Math.min(1, Math.max(0, P)) * GW;
+      var my = ymap(rel);
+      if (gDot){ gDot.setAttribute("cx", mx.toFixed(2)); gDot.setAttribute("cy", my.toFixed(2)); }
+      if (gVL){ gVL.setAttribute("x1", mx.toFixed(2)); gVL.setAttribute("x2", mx.toFixed(2)); gVL.setAttribute("y1", my.toFixed(2)); }
+      if (gHL){ gHL.setAttribute("x1", String(X0)); gHL.setAttribute("x2", mx.toFixed(2)); gHL.setAttribute("y1", my.toFixed(2)); gHL.setAttribute("y2", my.toFixed(2)); }
+
+      var px = X0 + Math.min(1, Math.max(0, ps)) * GW;
+      if (gPsL){ gPsL.setAttribute("x1", px.toFixed(2)); gPsL.setAttribute("x2", px.toFixed(2)); }
+      if (gPsT){ gPsT.setAttribute("x", (px + 6).toFixed(2)); gPsT.textContent = "P*=" + ps.toFixed(3); }
+
+      drawCurve(d, th, be, eta);
+    }
+
+    var ids = ["rng-rl-s","rng-rl-k","rng-rl-th","rng-rl-be","rng-rl-d","rng-rl-eta"];
+    for (var i = 0; i < ids.length; i++){
+      var el = byId(ids[i]);
+      if (el) { el.addEventListener("input", render); }
+    }
+    render();
+  })();
+
+  /* ============ 沙盘 3 · 可靠性攻坚 ============ */
+  (function(){
+    var hF = byId("rng-hw-f0"), hN = byId("rng-hw-n"), hK = byId("rng-hw-k"), hW = byId("rng-hw-wr");
+    var cvF = byId("cv-hw-f0"), cvN = byId("cv-hw-n"), cvK = byId("cv-hw-k"), cvW = byId("cv-hw-wr");
+    var oS = byId("out-hw-s"), oP = byId("out-hw-P"), oG = byId("out-hw-gain");
+    var oF = byId("out-hw-f"), oV = byId("out-hw-verdict");
+    var BARS = ["hw-b0","hw-b1","hw-b2","hw-b3","hw-b4","hw-b5"];
+    var TXTS = ["hw-t0","hw-t1","hw-t2","hw-t3","hw-t4","hw-t5"];
+    var M = 5, BASE = 210, BH = 170;
+
+    function fail(f0, n, wres){ return f0 * ((1 - wres) * (1 - n / M) + wres); }
+
+    function verdictOf(P){
+      if (P < 0.30){ return "<b>判定：不可委托。</b>端到端成功率 " + pct(P) + "——在这个步数上，Bot 几乎每次都需要人工接管。此时任何界面优化都是次要的，首要工作是把 s 拉上去。"; }
+      if (P < 0.60){ return "<b>判定：需要人工兜底。</b>端到端成功率 " + pct(P) + "——可以作为「草稿生成器」使用，但必须由人完成最后一段。"; }
+      if (P < 0.85){ return "<b>判定：基本可用。</b>端到端成功率 " + pct(P) + "——多数情况能跑完，仍需保留失败重试与人工确认通道。"; }
+      return "<b>判定：可闭眼传球。</b>端到端成功率 " + pct(P) + "——已越过沙盘 1 的实用区间，可以默认由 Bot 完成。";
+    }
+
+    function render(){
+      var f0 = num(hF && hF.value, 0.10);
+      var n = Math.round(num(hN && hN.value, 0));
+      var k = Math.round(num(hK && hK.value, 20));
+      var wr = num(hW && hW.value, 0.25);
+      if (n < 0) { n = 0; }
+      if (n > M) { n = M; }
+
+      if (cvF) { cvF.textContent = f0.toFixed(2); }
+      if (cvN) { cvN.textContent = String(n); }
+      if (cvK) { cvK.textContent = String(k); }
+      if (cvW) { cvW.textContent = wr.toFixed(2); }
+
+      var fn = fail(f0, n, wr);
+      var s = 1 - fn;
+      var P = Math.pow(s, k);
+      var P0 = Math.pow(1 - fail(f0, 0, wr), k);
+      var gain = P0 > 0 ? P / P0 : 1;
+
+      if (oS) { oS.textContent = pct(s); }
+      if (oP) { oP.textContent = pct(P); }
+      if (oF) { oF.textContent = pct(fn); }
+      if (oG) { oG.textContent = gain.toFixed(2) + "×"; }
+      if (oV) { oV.innerHTML = verdictOf(P); }
+
+      for (var j = 0; j <= M; j++){
+        var pj = Math.pow(1 - fail(f0, j, wr), k);
+        var h = Math.min(BH, Math.max(0, pj * BH));
+        var bar = byId(BARS[j]);
+        var txt = byId(TXTS[j]);
+        if (bar){ bar.setAttribute("height", h.toFixed(2)); bar.setAttribute("y", (BASE - h).toFixed(2)); }
+        if (txt){ txt.textContent = (pj * 100).toFixed(1) + "%"; txt.setAttribute("y", (BASE - h - 7).toFixed(2)); }
+      }
+    }
+
+    var ids2 = ["rng-hw-f0","rng-hw-n","rng-hw-k","rng-hw-wr"];
+    for (var q = 0; q < ids2.length; q++){
+      var e2 = byId(ids2[q]);
+      if (e2) { e2.addEventListener("input", render); }
+    }
+    render();
+  })();
+
+  /* ============ 沙盘 4 · 工作流形态浏览器 ============ */
+  (function(){
+    var WF = [
+      {
+        name: "幕僚长（Chief of Staff）协同",
+        maturity: "观察所得",
+        chain: "每人先建立 5–10 个 Bot，各负责一个工作领域 → 挑出一个表现突出的 Bot 作为「幕僚长」 → 主要与幕僚长对话 → 由幕僚长把任务分派给其他专职 Bot。",
+        value: "把「我该找哪个 Bot」这个路由问题也一并委托出去，人类只需维护一条对话线程。",
+        risk: "这是部分用户自发形成的用法，并非多数人的普遍状态，也不是不可逆的固定层级；团队只考虑做轻度引导，不打算把它固化成产品结构。",
+        src: "访谈原文：内部推出后最初一两周常见模式是每人建立 5 到 10 个 Bot；到第二周末观察到一些用户会挑一个表现突出的 Bot 作为「幕僚长」。"
+      },
+      {
+        name: "人才招聘的主动挖掘",
+        maturity: "探索",
+        chain: "访问前沿学术会议网站 → 下载尚未被 Google Scholar 收录的最新 PDF 论文 → 提取作者名单并写入表格 → 检查公司内部是否有人与其有直接联系 → 有则向相关同事发 Slack 消息请求引荐。",
+        value: "覆盖「尚未进入公开人才库」的人群，这类目标靠关键词检索找不到；整条链路串联了非标网页、文档提取与内部协作三类异质系统。",
+        risk: "依赖 Bot 能稳定完成网页下载、PDF 解析与跨系统写入；任一环节失败都会中断整条链，且中间产物（名单）需要人工复核。",
+        src: "访谈原文：招聘团队认为顶尖人才往往不是正在积极投简历的人；Roman 将其列为「云端电脑 + 长流程 Agent」的代表性探索。"
+      },
+      {
+        name: "销售与非标企业后台",
+        maturity: "探索 · 仍会失败",
+        chain: "登录企业后台（如 Salesforce 仪表盘） → 用像素与鼠标操作目标位置 → 提取或写入数据 → 串接到后续销售动作。",
+        value: "直击「没有好用 API」这一真实缺口，是 Computer Use 决策成立的最主要现实依据。",
+        risk: "访谈明确指出：Bot 曾因鼠标无法精确点击目标位置或无法登录系统而失败；Roman 说这种交互在当时仍会失败，并非已经稳定接管任何系统。",
+        src: "访谈原文：团队通过改善浏览器可见性、屏幕像素与鼠标控制等基础能力来推进；但仍需持续优化。"
+      },
+      {
+        name: "递归测试（Bot in Bot）",
+        maturity: "个人探索",
+        chain: "在自己的云端电脑环境中反向安装桌面版 GrokBot → 设置 QA tester bot → 让它测试 10 个关键工作流 → 将结果写入 Notion 并与历史客户端版本对比。",
+        value: "用 Agent 持续回归测试 Agent，把「越来越好」从主观感受变成可比对的历史序列。",
+        risk: "属于 Roman 个人的使用尝试，并非团队已全面制度化运行的固定 QA 流程；测试环境本身也是被测对象，存在自证风险。",
+        src: "访谈原文：Roman 个人曾在自己云端电脑里反向下载并安装桌面版 GrokBot 自身，并设置了 QA tester bot。"
+      },
+      {
+        name: "设定边界的主动提醒",
+        maturity: "探索",
+        chain: "接入邮件与即时通讯信息流 → 预先定义极少数紧急情形 → 大多数时候保持静默 → 仅在边界内触发主动呼叫（Page）或提醒。",
+        value: "把 Agent 从「定期通报」升级为「按需打断」，注意力成本从固定开销变为事件驱动。",
+        risk: "成立的前提是用户足够信任 Bot 不会频繁误报；一旦误报率升高，主动提醒会迅速退化为噪音并被彻底关闭。",
+        src: "访谈原文：初阶用户通常把 Agent 当作被动的信息整理工具；更进一步的探索方向是给它设定明确的触发边界。"
+      },
+      {
+        name: "统一输出与每日摘要",
+        maturity: "高阶用法",
+        chain: "多个负责不同垂直领域的 Bot 协同 → 各自把产出集中写入一个统一、对人可读的存储区（Notion 或统一表格） → 人类只读一份整合后的每日摘要（Daily Digest）并做决策。",
+        value: "把「逐个检查每个 Bot 的会话」替换为「读一份整合摘要」，人类审查成本与 Bot 数量解耦。",
+        risk: "对写入格式与一致性要求高；若各 Bot 产出结构不统一，摘要本身会变成新的整理负担。",
+        src: "访谈原文：Roman 提到高阶用户的第二层协作方法，是让不同垂直领域的 Bot 把产出集中写入统一存储区。"
+      }
+    ];
+    var BTN = ["btn-wf-0","btn-wf-1","btn-wf-2","btn-wf-3","btn-wf-4","btn-wf-5"];
+    var oN = byId("out-wf-name"), oM = byId("out-wf-maturity");
+    var oC = byId("out-wf-chain"), oVl = byId("out-wf-value");
+    var oRk = byId("out-wf-risk"), oSc = byId("out-wf-src");
+
+    function renderWf(idx){
+      var d = WF[idx];
+      if (!d) { return; }
+      if (oN) { oN.textContent = d.name; }
+      if (oM) { oM.textContent = d.maturity; }
+      if (oC) { oC.textContent = d.chain; }
+      if (oVl) { oVl.textContent = d.value; }
+      if (oRk) { oRk.textContent = d.risk; }
+      if (oSc) { oSc.textContent = d.src; }
+      for (var b = 0; b < BTN.length; b++){
+        var btn = byId(BTN[b]);
+        if (btn) { btn.classList.toggle("on", b === idx); }
+      }
+    }
+    for (var w = 0; w < BTN.length; w++){
+      (function(idx){
+        var el = byId(BTN[idx]);
+        if (el) { el.addEventListener("click", function(){ renderWf(idx); }); }
+      })(w);
+    }
+    renderWf(0);
+  })();
+
+  /* ============ 沙盘 2 · has → can 克制器 ============ */
+  (function(){
+    var PRESETS = [
+      {
+        has: "GrokBot now has an automation builder.",
+        can: "GrokBot can now run a recurring job on a schedule you describe in one sentence.",
+        note: "<b>依据：</b>访谈原文——团队彻底干掉自动化配置页面，改为自然语言定义「每天早上 8 点提醒我」，调度逻辑全由 Bot 后台管理。改写要点不是换个动词，而是把交付物从「一个配置界面」换成「一件被完成的工作」。"
+      },
+      {
+        has: "GrokBot now has a sidebar settings panel.",
+        can: "GrokBot can now adjust how it works for you from what you tell it, without you opening a settings page.",
+        note: "<b>依据：</b>传统 SaaS 执着于在侧边栏展示功能点；Roman 的判断是每增加一个复杂控件，就是把本该由 AI 处理的负担甩回给人类。"
+      },
+      {
+        has: "GrokBot now has a flow-chart builder.",
+        can: "GrokBot can now carry a multi-step job from trigger to finished artefact.",
+        note: "<b>依据：</b>访谈原文提到流程图构建器这类控件交互极其繁琐，导致普通用户极少去配置自动化。"
+      },
+      {
+        has: "GrokBot now has a multi-select dropdown for tool connections.",
+        can: "GrokBot can now sign in to and operate the tools you already use.",
+        note: "<b>依据：</b>大量关键业务工具没有好用的 API（Roman 以 Salesforce 仪表盘为例）；Computer Use 让连接这件事从「配置」变成「能力」。"
+      },
+      {
+        has: "GrokBot now has a tool-call log panel.",
+        can: "GrokBot can now tell you what it finished, not what it clicked.",
+        note: "<b>依据：</b>访谈原文——部分用户希望看到待办清单和大致优先级，但没人要求长串文本流；界面最终精简为「正在输入」+ 在线状态灯 + 阶段性进度。"
+      },
+      {
+        has: "GrokBot now has a chain-of-thought viewer.",
+        can: "GrokBot can now be trusted to work while you are not watching.",
+        note: "<b>依据：</b>你不会要求真实同事每隔三秒汇报他刚点了哪个按钮、脑子里想了哪句话。展示思维链是把实现机制强加给用户，也反映出端到端成功率还不够高。"
+      }
+    ];
+    var cSel = byId("sel-can-src");
+    var cTxt = byId("txt-can-in");
+    var oHas = byId("out-can-has"), oCan = byId("out-can-can"), oNote = byId("out-can-note");
+
+    function mechanical(raw){
+      var t = String(raw || "").trim();
+      if (!t) { return "（请先输入一句 has 句式）"; }
+      var out = t.replace(/\bnow\s+has\b/i, "can now【补动词】").replace(/\bhas\b/i, "can【补动词】");
+      return out;
+    }
+    function noteCustom(){
+      return "<b>提示：</b>以上仅为句式层面的机械替换（now has → can now），<b>不构成产品建议</b>。" +
+             "一次合格的 can 改写必须同时写明三件事：Bot 完成了什么工作、交付物是什么、以及什么算做完。" +
+             "改写不出来，通常说明这项工作的价值还没想清楚。";
+    }
+
+    function renderCan(){
+      if (!cSel) { return; }
+      var v = cSel.value;
+      if (v === "custom"){
+        var raw = cTxt ? cTxt.value : "";
+        if (oHas) { oHas.textContent = raw ? String(raw).trim() : "（空）"; }
+        if (oCan) { oCan.textContent = mechanical(raw); }
+        if (oNote) { oNote.innerHTML = noteCustom(); }
+      } else {
+        var idx = parseInt(v, 10);
+        var d = PRESETS[idx];
+        if (!d) { return; }
+        if (oHas) { oHas.textContent = d.has; }
+        if (oCan) { oCan.textContent = d.can; }
+        if (oNote) { oNote.innerHTML = d.note; }
+      }
+    }
+
+    if (cSel) { cSel.addEventListener("change", renderCan); }
+    if (cTxt) { cTxt.addEventListener("input", renderCan); }
+    renderCan();
+
+    /* ---- 发布前自检清单 ---- */
+    var CHK = ["chk-can-1","chk-can-2","chk-can-3","chk-can-4"];
+    var cDone = byId("out-can-done"), cPct = byId("out-can-pct");
+    var cFill = byId("out-can-fill"), cVd = byId("out-can-verdict");
+
+    function cVerdict(n){
+      if (n <= 0) { return "<b>尚未启动。</b>建议先从「说得出发布文案」这一项开始——它成本最低，且能立刻证伪一批不该做的工作。"; }
+      if (n <= 2) { return "<b>起步期。</b>已有意识，但实现机制仍可能泄漏到界面上。优先检查：是否有任何控件在要求用户理解 Bot 的干活方式。"; }
+      if (n <= 3) { return "<b>基本成型。</b>补齐剩余项即可形成闭环；注意 can 句式里必须写明交付物与验收口径。"; }
+      return "<b>四项齐备。</b>发布文案、can 改写、零新增像素、机制无感四道关全部通过，可以进入发布评审。";
+    }
+    function renderChk(){
+      var n = 0;
+      for (var i = 0; i < CHK.length; i++){
+        var el = byId(CHK[i]);
+        var on = !!(el && el.checked);
+        if (on) { n++; }
+        var li = el && el.parentElement ? el.parentElement : null;
+        if (li && li.classList) { li.classList.toggle("done", on); }
+      }
+      var p = n / CHK.length * 100;
+      if (cDone) { cDone.textContent = n + " / " + CHK.length; }
+      if (cPct) { cPct.textContent = p.toFixed(0) + "%"; }
+      if (cFill) { cFill.style.width = p.toFixed(0) + "%"; }
+      if (cVd) { cVd.innerHTML = cVerdict(n); }
+    }
+    for (var j = 0; j < CHK.length; j++){
+      var box = byId(CHK[j]);
+      if (box) { box.addEventListener("change", renderChk); }
+    }
+    renderChk();
+  })();
+
+  /* ============ 侧栏当前位置高亮 ============ */
+  (function(){
+    var links = document.querySelectorAll("#sb-nav .sb-link");
+    if (!links || !links.length) { return; }
+    var items = [];
+    for (var i = 0; i < links.length; i++){
+      var href = links[i].getAttribute("href") || "";
+      if (href.charAt(0) === "#") { items.push({ link: links[i], id: href.substring(1) }); }
+    }
+    function highlight(){
+      var best = null;
+      var bestTop = -Infinity;
+      for (var t = 0; t < items.length; t++){
+        var el = byId(items[t].id);
+        if (!el || !el.getBoundingClientRect) { continue; }
+        var box = el.getBoundingClientRect();
+        var top = box.top;
+        if (typeof top !== "number") { continue; }
+        if (top <= 140 && top > bestTop) { bestTop = top; best = items[t]; }
+      }
+      for (var u = 0; u < items.length; u++){
+        if (items[u].link && items[u].link.classList) {
+          items[u].link.classList.toggle("active", items[u] === best);
+        }
+      }
+    }
+    window.addEventListener("scroll", highlight);
+    highlight();
+  })();
+
+})();
+</script>
+</body>
+</html>
