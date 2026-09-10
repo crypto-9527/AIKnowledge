@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="jaxhV7A2Fs4KxWfgpCjsQR">
+<head data-page-node-id="AEzqFs58BbnT4PJ5mWE4Nk">
+  <meta charset="utf-8" data-page-node-id="kmyi7NkQlQoLQbhVmND1vv">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="bzGXg95wfq7kRKgJT14iSq">
+  <title>Harness 工程演进谱系与自重写架构白皮书</title>
+  <style>
+    /* ==========================================================================
+       1. 统一设计系统基线令牌与语义变量 (AIKnowledge Baseline)
+       ========================================================================== */
+    :root {
+      --aike-sidebar-w: 280px;
+      --aike-content-max: 1180px;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+      
+      /* 深色（黑曜石）默认基线 */
+      --bg-canvas: #181715;
+      --bg-card: #22201d;
+      --bg-card-hover: #2a2723;
+      --bg-card-subtle: #1c1b18;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(217, 119, 87, 0.4);
+      --text-main: #e6e4df;
+      --text-muted: #9e9a91;
+      --text-dim: #6e6b63;
+      
+      /* 强调色体系：陶土主色 + 五色语义 */
+      --accent: #E2886A;
+      --accent-bg: rgba(226, 136, 106, 0.12);
+      --accent-border: rgba(226, 136, 106, 0.3);
+      --emerald: #34D399;
+      --emerald-bg: rgba(52, 211, 153, 0.1);
+      --rose: #F87171;
+      --rose-bg: rgba(248, 113, 113, 0.1);
+      --amber: #FBBF24;
+      --amber-bg: rgba(251, 191, 36, 0.1);
+      --cyan: #38BDF8;
+      --cyan-bg: rgba(56, 189, 248, 0.1);
+      
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    /* 浅色（暖羊皮纸）主题覆盖 */
+    [data-theme="light"] {
+      --bg-canvas: #FAF7F2;
+      --bg-card: #FFFFFF;
+      --bg-card-hover: #F4EFE6;
+      --bg-card-subtle: #F2EDE4;
+      --border-color: rgba(0, 0, 0, 0.08);
+      --border-focus: rgba(217, 119, 87, 0.4);
+      --text-main: #2D2B28;
+      --text-muted: #6B6862;
+      --text-dim: #99958D;
+      
+      --accent: #D97757;
+      --accent-bg: rgba(217, 119, 87, 0.08);
+      --accent-border: rgba(217, 119, 87, 0.25);
+      --emerald: #059669;
+      --emerald-bg: rgba(5, 150, 105, 0.08);
+      --rose: #DC2626;
+      --rose-bg: rgba(220, 38, 38, 0.08);
+      --amber: #D97706;
+      --amber-bg: rgba(217, 119, 6, 0.08);
+      --cyan: #0284C7;
+      --cyan-bg: rgba(2, 132, 199, 0.08);
+      
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    /* ==========================================================================
+       2. 核心盒模型与布局（侧栏贴左 · 正文对称居中）
+       ========================================================================== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      background-color: var(--bg-canvas);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.75;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* 侧栏固定贴左 */
+    .sidebar {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: var(--aike-sidebar-w);
+      background-color: var(--bg-card-subtle);
+      border-right: 1px solid var(--border-color);
+      overflow-y: auto;
+      padding: 28px 20px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .sidebar::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 4px;
+    }
+
+    /* 正文自动对称居中 */
+    .main-container {
+      max-width: var(--aike-content-max);
+      width: auto;
+      margin-left: calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+      margin-right: max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+      padding: 48px 36px 120px 36px;
+    }
+
+    @media (max-width: 1080px) {
+      .sidebar {
+        position: static;
+        width: 100%;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .main-container {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        max-width: 100% !important;
+        padding: 24px 20px 80px 20px;
+      }
+    }
+
+    /* ==========================================================================
+       3. 标题与排版系统
+       ========================================================================== */
+    h1, h2, h3, h4 {
+      font-family: var(--font-serif);
+      color: var(--text-main);
+      font-weight: 700;
+      line-height: 1.35;
+      letter-spacing: -0.01em;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 3.2vw, 2.8rem);
+      margin-bottom: 16px;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 16px;
+    }
+
+    h2 {
+      font-size: clamp(1.4rem, 2.2vw, 1.85rem);
+      margin-top: 56px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    h2::before {
+      content: "";
+      display: inline-block;
+      width: 4px;
+      height: 1.1em;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    h3 {
+      font-size: 1.25rem;
+      margin-top: 36px;
+      margin-bottom: 16px;
+      color: var(--accent);
+    }
+
+    h4 {
+      font-size: 1.05rem;
+      margin-top: 24px;
+      margin-bottom: 10px;
+      font-family: var(--font-sans);
+    }
+
+    p {
+      margin-bottom: 18px;
+      color: var(--text-main);
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    code, pre {
+      font-family: var(--font-mono);
+      font-size: 0.88em;
+    }
+
+    code {
+      background: var(--bg-card-subtle);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+      color: var(--accent);
+    }
+
+    pre {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      overflow-x: auto;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    blockquote {
+      border-left: 3px solid var(--accent);
+      padding: 12px 20px;
+      background: var(--accent-bg);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      margin: 24px 0;
+      font-style: italic;
+      color: var(--text-main);
+    }
+
+    /* ==========================================================================
+       4. 侧栏导航与控件
+       ========================================================================== */
+    .sidebar-brand {
+      font-family: var(--font-serif);
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sidebar-tagline {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .theme-switch-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .theme-switch-btn:hover {
+      border-color: var(--accent);
+      background: var(--bg-card-hover);
+    }
+
+    .nav-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .nav-link {
+      display: block;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      transition: all 0.15s ease;
+      text-decoration: none;
+      line-height: 1.4;
+    }
+    .nav-link:hover {
+      color: var(--accent);
+      background: var(--accent-bg);
+      text-decoration: none;
+    }
+
+    /* ==========================================================================
+       5. 卡片、面板、数据表格与标签
+       ========================================================================== */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .card:hover {
+      border-color: var(--border-focus);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .badge-accent { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent-border); }
+    .badge-emerald { background: var(--emerald-bg); color: var(--emerald); }
+    .badge-rose { background: var(--rose-bg); color: var(--rose); }
+    .badge-amber { background: var(--amber-bg); color: var(--amber); }
+    .badge-cyan { background: var(--cyan-bg); color: var(--cyan); }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin: 20px 0;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    table.data-table th, table.data-table td {
+      padding: 10px 14px;
+      border: 1px solid var(--border-color);
+      text-align: left;
+    }
+    table.data-table th {
+      background: var(--bg-card-subtle);
+      font-weight: 600;
+      color: var(--accent);
+    }
+    table.data-table tr:hover td {
+      background: var(--bg-card-hover);
+    }
+
+    /* ==========================================================================
+       6. 原生 HTML5 MathML 数学排版
+       ========================================================================== */
+    .math-block {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin: 20px 0;
+      overflow-x: auto;
+      text-align: center;
+      box-shadow: var(--shadow-sm);
+    }
+    math {
+      font-family: "Latin Modern Math", "Cambria Math", STIXGeneral, var(--font-serif);
+      font-size: 1.15em;
+      color: var(--text-main);
+    }
+    math[display="block"] {
+      margin: 8px 0;
+    }
+
+    /* ==========================================================================
+       7. 动态沙盘专属样式
+       ========================================================================== */
+    .sandbox-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      margin: 36px 0;
+      box-shadow: var(--shadow-md);
+    }
+    .sandbox-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .sandbox-title {
+      font-size: 1.25rem;
+      color: var(--accent);
+      font-family: var(--font-serif);
+    }
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .control-val {
+      font-family: var(--font-mono);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--bg-card-subtle);
+      outline: none;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .metric-box {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .metric-label {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .metric-value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--accent);
+    }
+    .metric-sub {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+
+    .paper-item {
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      background: var(--bg-card);
+      margin-bottom: 12px;
+      transition: all 0.2s ease;
+    }
+    .paper-item:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .paper-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+    .paper-meta {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    /* ==========================================================================
+       8. 打印自适应与媒介查询
+       ========================================================================== */
+    @media print {
+      .sidebar, .theme-switch-btn, .sandbox-container {
+        display: none !important;
+      }
+      .main-container {
+        margin: 0 !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+      }
+      body {
+        background: white !important;
+        color: black !important;
+      }
+      a {
+        color: black !important;
+        text-decoration: underline !important;
+      }
+    }
+  </style>
+</head>
+<body data-page-node-id="nh29HsbrSjxXHcevZlJZT9">
+
+  <!-- 左侧固定目录栏 -->
+  <aside class="sidebar" data-page-node-id="IhLAsEaGANMIOqusvyCvoB">
+    <div class="sidebar-brand" data-page-node-id="QFc5OpeAKhDibiFrcmkbMe">
+      <span data-page-node-id="DiGfSjhMU5dHwMnpjLKDmA">🛠️</span>
+      <span data-page-node-id="UKoJWYuztumBHs1SiOBTcK">Harness Engineering</span>
+    </div>
+    <div class="sidebar-tagline" data-page-node-id="nJgXhEcInIC8FMEud8t9Wy">
+      YC Paper Club 顶级论文集深度解构与自重写架构白皮书 (2019–2026)
+    </div>
+
+    <button id="btn-theme-toggle" class="theme-switch-btn" type="button" aria-label="切换浅色与深色主题" data-page-node-id="6kNLu6sOietbngJEas4dET">
+      <span id="theme-toggle-icon" data-page-node-id="93WFkwv0NMoQTR718cToxn">☀️</span>
+      <span id="theme-toggle-text" data-page-node-id="upch6ItNLwPOkhpd7oEKIG">切换暖羊皮纸浅色</span>
+    </button>
+
+    <nav data-page-node-id="5JXyHQlNK6MMyVDGDyjxis">
+      <ul class="nav-list" data-page-node-id="28EUfYzBxmlu0R6d1gtioU">
+        <li data-page-node-id="0ThtsSmHmNeLD0SFAyZFaB"><a class="nav-link" href="#sec-overview" data-page-node-id="rmfNbS3iaBMq55aebeV8UX">01. 宏观总览与架构命题</a></li>
+        <li data-page-node-id="izKR5PBDu28sVyVcVt43um"><a class="nav-link" href="#sec-definition" data-page-node-id="o3xpmnLeLnJ0JaRAMVEOJ5">02. 什么是 Harness？</a></li>
+        <li data-page-node-id="EMUfOpNwSfnJcnZKNg6gq0"><a class="nav-link" href="#sec-papers-roadmap" data-page-node-id="ginNxzMmG2sYhCzJ7xElse">03. 六年 21 篇演进全谱系</a></li>
+        <li data-page-node-id="0yg66C5BnFSqHsyTA3oH6x"><a class="nav-link" href="#sec-sandbox-papers" data-page-node-id="mYEXFR0ivk0glsjg7G0MwG">↳ 沙盘 1：论文探索图谱</a></li>
+        <li data-page-node-id="nskYXhD8aWtmPlJVHhZxib"><a class="nav-link" href="#sec-stage1" data-page-node-id="NPY0XnCNGLu2RMZN5jsjof">↳ 阶段一：V0 裸循环时代</a></li>
+        <li data-page-node-id="x4vzE3ao5u3d4sfihfW2QV"><a class="nav-link" href="#sec-stage2" data-page-node-id="zglVKFSJrbd6rJySxg2iwR">↳ 阶段二：静态动作拓展</a></li>
+        <li data-page-node-id="evDpaDwUycLlsHsOlrl0Ek"><a class="nav-link" href="#sec-stage3" data-page-node-id="nVBl7bb2YjI0bYqNbSPQYV">↳ 阶段三：Harness 自主重写</a></li>
+        <li data-page-node-id="NFYoYcg65eD3rKL9ITgkNW"><a class="nav-link" href="#sec-stage4" data-page-node-id="PLUuUFkxS6hcvK9evnBOJy">↳ 阶段四：2026 工业落地系统</a></li>
+        <li data-page-node-id="Qn9EBbnqrEpSm4fmnhysFb"><a class="nav-link" href="#sec-stage5" data-page-node-id="d2XtKLFPxH2Bgm47OZQBe0">↳ 阶段五：长程度量准则</a></li>
+        <li data-page-node-id="ItfXcggVkFVz5y2fSTgA31"><a class="nav-link" href="#sec-math-models" data-page-node-id="dNk8nTKXExDD0F2FfEkpyj">04. 四大数学可计算模型</a></li>
+        <li data-page-node-id="7jDxKCYGK8AG9d4HCpDxcn"><a class="nav-link" href="#sec-sandbox-horizon" data-page-node-id="5A0LmHCILAW2XkNScTs5wv">↳ 沙盘 2：任务视界阻尼</a></li>
+        <li data-page-node-id="SKlsj0ACx9Vkbdn7VZNGZI"><a class="nav-link" href="#sec-sandbox-prime" data-page-node-id="B3chBhnFscCUSK8gWisygQ">↳ 沙盘 3：ARC-AGI 跃迁反解</a></li>
+        <li data-page-node-id="MNv5LKgxTWG3UKISHfMoxe"><a class="nav-link" href="#sec-sandbox-openjarvis" data-page-node-id="ys6Od1KPvUnIRqAgaxg7ao">↳ 沙盘 4：端云 800x 成本平衡</a></li>
+        <li data-page-node-id="gXG3V7Uwg8qAXUFZljPaOa"><a class="nav-link" href="#sec-qm-usl" data-page-node-id="HYq6fYE9TzDYBductarrAt">↳ 模型 4：YC QM 状态解耦 USL</a></li>
+        <li data-page-node-id="DMVH7AEE9HSnM6AwsD7bFA"><a class="nav-link" href="#sec-open-source" data-page-node-id="RSao5TjisypbBg2rQqkdSq">05. 开源生态与代码模式</a></li>
+        <li data-page-node-id="bGIHFbPCoiRp5DP8XoqFkz"><a class="nav-link" href="#sec-best-practices" data-page-node-id="15H2lfCANqvHKb33mt2KaP">06. 落地准则与反模式防线</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- 主内容区域（自动对称居中） -->
+  <main class="main-container" data-page-node-id="CDWAUyvkREGpQTUgHALCaY">
+
+    <!-- 顶栏标题与前言 -->
+    <header style="margin-bottom: 48px;" data-page-node-id="FEamroNSW8lg148HlTv3ez">
+      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;" data-page-node-id="WdrCAHpoKCOSRtQVSsVvF1">
+        <span class="badge badge-accent" data-page-node-id="E5U3gSbg4S3CLFVnF1yxLQ">YC Paper Club · 2026 特别版</span>
+        <span class="badge badge-emerald" data-page-node-id="BVtxsSZPFYAgvNZlJBGuzx">DAIR.AI 顶级合辑</span>
+        <span class="badge badge-cyan" data-page-node-id="9WkZ9rzAeZujsRyfASCMIF">21 篇顶级论文深度剖析</span>
+      </div>
+      <h1 data-page-node-id="RumgeRzKnZIyFsohrTKqOs">Harness 工程演进谱系与自重写架构白皮书</h1>
+      <p style="font-size: 1.15rem; color: var(--text-muted); line-height: 1.6; font-family: var(--font-serif);" data-page-node-id="HFqfbWQwWGfLj2GthD2tww">
+        从裸露的 <code data-page-node-id="ZUfsf5La6GzRiVN3hbRl4E">while-not-EOS</code> 采样循环到能够自我重写（Self-Rewriting）的自治运行时：解释相同模型权重下，ARC-AGI-3 得分何以从 30% 跃升至 95.5% 的工程真相。
+      </p>
+      <div style="display: flex; gap: 24px; font-size: 0.85rem; color: var(--text-dim); margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 14px; flex-wrap: wrap;" data-page-node-id="OAHW3KvM1X8pTob4jf8B9r">
+        <span data-page-node-id="wEGLDZ5n3POCPRCTcfAVzd"><strong data-page-node-id="oJ3DnRDMX6Y0BFtyFknZlW">基准日期：</strong>2026年09月09日</span>
+        <span data-page-node-id="MwDjnT4nJbmX0ce5RpBYYZ"><strong data-page-node-id="ysASjYtklegAkNpWoQWhho">学术来源：</strong>YC Paper Club: Harness Edition (2026-08-26) / DAIR.AI Academy</span>
+        <span data-page-node-id="O8Ld0gOUIYZgZNm8InkY7U"><strong data-page-node-id="dN6kDUs7hjlPSA3v0BPUcL">交付规范：</strong>Zero-Dependency Single-File HTML</span>
+      </div>
+    </header>
+
+    <!-- 01. 宏观总览与架构命题 -->
+    <section id="sec-overview" data-page-node-id="3E3d2jewdAy1cByhBz4xcc">
+      <h2 data-page-node-id="SCxwxS0iRTgkEA0WcdBAjo">01. 宏观总览与架构命题</h2>
+      <p data-page-node-id="NAW7CShYXCGfbHlPkZDeNg">
+        2026 年的 AI 工业界正在经历一场深刻的范式转移：<strong data-page-node-id="nTxmAEjqdPhdpDqKPoHa5F">基座模型权重（Model Weights）的单纯规模定律（Scaling Laws）边际效用正在放缓，而包围在权重外围的 Harness（运行框架 / 脚手架工程）正在接管智能放大器的核心位置</strong>。
+      </p>
+      <div class="card" style="border-left: 4px solid var(--accent); background: var(--bg-card);" data-page-node-id="Rv3Czkbxwcg678cDS0H7Uq">
+        <h4 style="margin-top: 0; color: var(--accent);" data-page-node-id="GZ985hH8XxwpGM2krt1MYb">震撼的工业实证反差</h4>
+        <p style="margin-bottom: 8px;" data-page-node-id="yjiG7qf36vaC8da8bYCKQK">
+          在 2026 年 8 月的 <em data-page-node-id="DdjxZUMHtwsAAQVFrsgYIY">YC Paper Club</em> 分享会上，来自 Stanford、Prime Intellect 与 YC 的研究员们展示了一个决定性的实测案例：
+        </p>
+        <p style="margin-bottom: 0;" data-page-node-id="GPoC1D3VCvAy4lALnlLGon">
+          <strong data-page-node-id="LEtgOFz0krkjeyzvonYlb9">在完全冻结、毫无改动的同一底座模型权重下</strong>，若仅仅运行最基础的采样提示词，其在人类顶尖推理基准 <code data-page-node-id="FY2WZuUkrKqXw4DsSLHTvG">ARC-AGI-3</code> 上的得分仅为 <strong data-page-node-id="mWLaCEUbGImLWXrhll9kcf">30.0%</strong>；而当接入具备持久化 REPL、递归可寻址子代理与动态代码验证器的现代 Harness（Prime Agent）后，其得分以垂直斜率暴涨至 <strong data-page-node-id="gdWTnPz7Kf5nbaYQpfNncA">95.5%</strong>！同样，在 <code data-page-node-id="7BUz9hbvXB1xMAYYjWr3KN">Terminal-Bench 2</code> 榜单上，Meta-Harness 在不微调模型任何参数的情况下击败全量微调模型登顶全球 SOTA。
+        </p>
+      </div>
+      <p data-page-node-id="Uj7oyijO0c17JxRG52JhjU">
+        这证明了一个不可忽视的工程事实：<strong data-page-node-id="tgPyLBHgYNBluICTs7vZwL">决定系统最终智能水平与实际生产力交付能力的，往往不再是权重本体，而是驾驭权重的 Harness 架构</strong>。
+      </p>
+
+      <!-- 内联矢量架构图：模型权重与 Harness 交互全景 -->
+      <div style="margin: 32px 0; text-align: center;" data-page-node-id="QDoyBxJ6tyWwqHykCDgnY0">
+        <svg viewBox="0 0 960 380" style="width: 100%; height: auto; background: var(--bg-card-subtle); border-radius: var(--radius-md); border: 1px solid var(--border-color);" data-page-node-id="0tCeEAdTTH3hZwMhaS6bLa">
+          <rect x="20" y="20" width="920" height="340" rx="12" fill="none" stroke="var(--border-color)" stroke-width="1.5" stroke-dasharray="6,6" data-page-node-id="P4S9lArixosKOdnjWg25j5" />
+          <text x="40" y="50" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="14" font-weight="600" data-page-node-id="NhjrUCV8CxiPtUgPTkvF7g">HARNESS ENGINEERING RUNTIME BOUNDARY (外围运行环境边界)</text>
+          
+          <!-- 外部世界 -->
+          <rect x="50" y="80" width="160" height="250" rx="8" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="1.5" data-page-node-id="j4UgawaFQNslYjRksW1g0a" />
+          <text x="75" y="115" fill="var(--cyan)" font-family="var(--font-serif)" font-size="16" font-weight="bold" data-page-node-id="g4PxmCKCrECqH0m2zBJ839">物理外部世界</text>
+          <text x="70" y="150" fill="var(--text-muted)" font-size="12" data-page-node-id="o8vvp6ZlrvPDq2qagn709a">• 浏览器 (Web Browsing)</text>
+          <text x="70" y="180" fill="var(--text-muted)" font-size="12" data-page-node-id="P0tY9txWPcxS9HKGwETAOX">• 操作系统 / REPL 环境</text>
+          <text x="70" y="210" fill="var(--text-muted)" font-size="12" data-page-node-id="dmvcC4HKOUatNODy2VfjHb">• 数据库 / API 接口</text>
+          <text x="70" y="240" fill="var(--text-muted)" font-size="12" data-page-node-id="dlsCSKppbtD5WfGx73y9wS">• 外部测试验证器 (Verifiers)</text>
+          <text x="70" y="270" fill="var(--text-muted)" font-size="12" data-page-node-id="3mKYGunenejCBhA4T5q8Vm">• 人类用户与协作 Fleet</text>
+
+          <!-- 核心模型权重 -->
+          <rect x="680" y="80" width="220" height="250" rx="8" fill="var(--bg-card)" stroke="var(--accent)" stroke-width="2" data-page-node-id="OkFxzFDwHaTAK2DBdBr9XR" />
+          <text x="715" y="115" fill="var(--accent)" font-family="var(--font-serif)" font-size="18" font-weight="bold" data-page-node-id="BKwoOrlt1sFavghaEE6rRP">FROZEN WEIGHTS</text>
+          <text x="735" y="135" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11" data-page-node-id="IL8twcSC0jrXwnX7uT4WPp">完全冻结的模型权重本体</text>
+          <circle cx="790" cy="200" r="45" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5" data-page-node-id="XHSP7lg2bMtAgl2bHVsDOq" />
+          <text x="762" y="205" fill="var(--accent)" font-size="13" font-weight="bold" data-page-node-id="VbJ1aLuqRMHh0k0BhQvGio">Base LLM</text>
+          <text x="710" y="275" fill="var(--text-muted)" font-size="11" data-page-node-id="rFoz9ghUP9Xe1AmOQ8qU65">负责 Next-Token 概率分布计算</text>
+          <text x="725" y="295" fill="var(--rose)" font-size="11" data-page-node-id="14kA1FD1ovNQc6H12ba8XP">无持久状态 · 无时间感知</text>
+
+          <!-- 中间连接带：Harness 五大支柱 -->
+          <rect x="250" y="80" width="390" height="250" rx="8" fill="var(--bg-card)" stroke="var(--emerald)" stroke-width="1.5" data-page-node-id="92POELlHPVjfMEfRrxIoNy" />
+          <text x="320" y="115" fill="var(--emerald)" font-family="var(--font-serif)" font-size="16" font-weight="bold" data-page-node-id="je2nmXQjIuMWAYeSMNM8Dg">Harness 核心原语与流转中枢</text>
+          
+          <rect x="270" y="135" width="165" height="40" rx="4" fill="var(--bg-card-subtle)" stroke="var(--border-color)" data-page-node-id="95NlkfZGvbmzJd68armF7L" />
+          <text x="280" y="160" fill="var(--text-main)" font-size="12" data-page-node-id="NIMi7MevLFx4s2tAdxAFPz">1. 状态调度循环 (Loop)</text>
+
+          <rect x="455" y="135" width="165" height="40" rx="4" fill="var(--bg-card-subtle)" stroke="var(--border-color)" data-page-node-id="KQUmcj4K32QmpBDpieXekq" />
+          <text x="465" y="160" fill="var(--text-main)" font-size="12" data-page-node-id="vYDDernzDLejHQbHKSqCHS">2. 上下文组装 (Context)</text>
+
+          <rect x="270" y="190" width="165" height="40" rx="4" fill="var(--bg-card-subtle)" stroke="var(--border-color)" data-page-node-id="23MaBOeR7DWAsyzUWr8JgK" />
+          <text x="280" y="215" fill="var(--text-main)" font-size="12" data-page-node-id="QHC6h54TIMG9MNWnXOGmHq">3. 工具与技能 (Skills)</text>
+
+          <rect x="455" y="190" width="165" height="40" rx="4" fill="var(--bg-card-subtle)" stroke="var(--border-color)" data-page-node-id="e4rYIdmonznwFGHgACvSOQ" />
+          <text x="465" y="215" fill="var(--text-main)" font-size="12" data-page-node-id="Tgf0t3dnmdXq8Z6dcAgKVq">4. 递归子代理 (Sub-agents)</text>
+
+          <rect x="270" y="245" width="350" height="45" rx="4" fill="var(--amber-bg)" stroke="var(--amber)" stroke-width="1" data-page-node-id="uZqlGIfBIJnHhHwqJFMbsc" />
+          <text x="285" y="272" fill="var(--amber)" font-size="12" font-weight="bold" data-page-node-id="a7I0F92UdYbZwHU4nGXmvL">5. 自我重写代码 (Self-Rewriting Harness Code)</text>
+
+          <!-- 交互连接线 -->
+          <line x1="210" y1="200" x2="250" y2="200" stroke="var(--cyan)" stroke-width="2" data-page-node-id="IjUrhok1DCecEYorAtT9of" />
+          <line x1="640" y1="200" x2="680" y2="200" stroke="var(--accent)" stroke-width="2" data-page-node-id="SR7DbN5DFIrxcrSc1lvfNH" />
+        </svg>
+      </div>
+    </section>
+
+    <!-- 02. 什么是 Harness？ -->
+    <section id="sec-definition" data-page-node-id="liQhHHDlTqi1DZg3GAN3HI">
+      <h2 data-page-node-id="qAvjSKvuTu9hoddW5Le67S">02. 什么是 Harness？从“包装脚本”到“认知操作系统”</h2>
+      <p data-page-node-id="q1TA8qf52J7srbHfJNQpzj">
+        在 YC Paper Club 的研讨中，Harness 给出了最为凝练且高度概括的官方界定：
+      </p>
+      <blockquote data-page-node-id="IkBS1pMNr9coiUaDdovtCS">
+        “Harness 是模型权重与外部世界之间的一切连接：包括循环结构（Loop）、它所组装的上下文（Context）、可调用的工具与技能（Tools & Skills）、可派生的子智能体（Sub-agents），以及近期出现的 Harness 自身的程序代码。”
+      </blockquote>
+      <p data-page-node-id="WMivUAk4bAaNdJJ5NMJjxX">
+        回顾 2019 到 2026 年，Harness 经历的本质跃迁是：<strong data-page-node-id="DjFjW2kEQBVPkNIdGfeyJ9">外围约束从静态预置，全面转变为具备内省、编译、自我突变与运行时演化的动态智能操作系统</strong>。
+      </p>
+      
+      <div class="grid-2" data-page-node-id="L4DBxSNT2G6oVLEafCHEBM">
+        <div class="card" data-page-node-id="6mMGgsdFO9DFbtFCLzO5Oz">
+          <h4 style="color: var(--rose);" data-page-node-id="nDjpSDLeO2tUxjC5CCURyU">旧范式：静态胶水代码（Static Glue）</h4>
+          <ul style="padding-left: 20px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.8;" data-page-node-id="ruqe4NSbBgWpj886nDP8kg">
+            <li data-page-node-id="2zTC79J33vjwfch4JAJdkH"><strong data-page-node-id="GPymu8qIkQfchmsCYNaSKu">硬编码循环：</strong>固定的 <code data-page-node-id="NDEUKGVIeG47EzcobO1yDY">while(step &lt; max_steps)</code> 简单递增。</li>
+            <li data-page-node-id="6jHwIEG57b0lqbtEiVATE1"><strong data-page-node-id="oQFpIYM96hHUQ1RiGXuzzd">被动追加上下文：</strong>只增不减的聊天记录，频繁遭遇窗口截断或注意力下沉。</li>
+            <li data-page-node-id="6LGs3kprCqqOHyhMxgxywd"><strong data-page-node-id="zJZvwpBpEZmjbbLTyfVLSb">一次性动作分发：</strong>工具调用失败即宣告任务崩溃，缺乏状态隔离。</li>
+            <li data-page-node-id="T8qedexPTEnSZQKjEWkjMt"><strong data-page-node-id="yCiyT9MwmrwnpE5TSkGl22">开发者盲目调参：</strong>Prompt 与调用结构依赖工程师的手工试错，不可泛化。</li>
+          </ul>
+        </div>
+
+        <div class="card" data-page-node-id="JsDFY9tFGmMO5lQRBE0eFJ">
+          <h4 style="color: var(--emerald);" data-page-node-id="kATDWRkUFAqaNhB81DNQaj">新范式：自重写认知架构（Self-Rewriting Harness）</h4>
+          <ul style="padding-left: 20px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.8;" data-page-node-id="E5SfohyJaudkGjeHjdOeE8">
+            <li data-page-node-id="vfMcD1Z73peBv9IWR9LGjD"><strong data-page-node-id="ZhfiGyADUAvqR46k70ifqW">持久化执行核：</strong>持久化 REPL 环境，变量与中间状态在内存中存活。</li>
+            <li data-page-node-id="tWIOHxfPykMJ7vanS534Mi"><strong data-page-node-id="FCkzR1tsPn2jnlFXcTkqML">可编程状态分页：</strong>上下文具备增删改查（CRUD）虚拟内存治理。</li>
+            <li data-page-node-id="FIa1R6GFNwZukWjCzp2SRW"><strong data-page-node-id="d5i6hc76mptEzfaDqOiKcZ">可寻址递归子代理：</strong>按需动态派生同级或层级子代理，执行完仍可回溯寻址。</li>
+            <li data-page-node-id="RPaQxF4B1ONJLwsig2CcfG"><strong data-page-node-id="F3zLOFtBaBcpAXTO3TTyZt">Harness 源码级演化：</strong>通过实证基准测试与 Trace 反思，自主重写外围 Python 脚手架代码。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03. 六年 21 篇演进全谱系 -->
+    <section id="sec-papers-roadmap" data-page-node-id="tC3eCqsRbZbgUiHumaJmpz">
+      <h2 data-page-node-id="hpRFN433shOUBWuArvkmOK">03. 六年 21 篇演进全谱系（2019–2026）</h2>
+      <p data-page-node-id="1lMJW4UrOANAy5ckgrw5eF">
+        本次白皮书收录的 21 篇顶级论文，严格按照时间线与架构能力跃迁梳理为 5 大发展阶段。正是因为 2019 年最初的外围机制极其极简，才使得这六年来<strong data-page-node-id="ZsR9dqAxg2JooZoYLApFLW">“不断赋予循环执行新动作与自修改权限”</strong>的主线脉络如此清晰壮阔。
+      </p>
+
+      <!-- 动态交互沙盘 1：论文探索图谱 -->
+      <div id="sec-sandbox-papers" class="sandbox-container" data-page-node-id="PlewtXsAQXBlqCaRCZnZEt">
+        <div class="sandbox-header" data-page-node-id="v9RX63CzFdnQGSTzBtECa8">
+          <div data-page-node-id="LXQSMW2NAsORq1mt4NKEl0">
+            <div class="sandbox-title" data-page-node-id="sVCbMG6sdm9R3YlmpJQvuX">⚡ 动态交互沙盘 1：21 篇顶级论文演进图谱与矩阵穿透器</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;" data-page-node-id="pVJI3gKYj5vOvqSlA34a2u">
+              支持按阶段筛选、核心能力原语穿透与详细技术笔记展开
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;" data-page-node-id="C0Kkd5Ec85IhYxFDkmyIaA">
+            <span class="badge badge-accent" id="stat-paper-count" data-page-node-id="elv6Bx8sXC3ppcOriOZiBD">显示 21 篇</span>
+          </div>
+        </div>
+
+        <!-- 筛选控件行 -->
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;" data-page-node-id="Tht3pt61TaazpJKUsBv9NO">
+          <button type="button" class="badge badge-accent filter-stage-btn" data-stage="all" style="cursor: pointer; padding: 6px 14px;" data-page-node-id="WaB3911pEOIb1nVHaDpwEo">全部阶段 (21)</button>
+          <button type="button" class="badge filter-stage-btn" data-stage="1" style="cursor: pointer; padding: 6px 14px; background: var(--bg-card-subtle); color: var(--text-muted);" data-page-node-id="DrD2rpoAnbEYu6S3syJ276">阶段一：V0 裸循环 (3)</button>
+          <button type="button" class="badge filter-stage-btn" data-stage="2" style="cursor: pointer; padding: 6px 14px; background: var(--bg-card-subtle); color: var(--text-muted);" data-page-node-id="UDejV7EyNnEvX7AW8tAtev">阶段二：静态动作拓展 (10)</button>
+          <button type="button" class="badge filter-stage-btn" data-stage="3" style="cursor: pointer; padding: 6px 14px; background: var(--bg-card-subtle); color: var(--text-muted);" data-page-node-id="SX6UY6zY8MUhy5mBquuQ5q">阶段三：自学习与重写 (5)</button>
+          <button type="button" class="badge filter-stage-btn" data-stage="4" style="cursor: pointer; padding: 6px 14px; background: var(--bg-card-subtle); color: var(--text-muted);" data-page-node-id="tFOwID0K9GSSge4RK7xDFr">阶段四：2026 工业落地 (2)</button>
+          <button type="button" class="badge filter-stage-btn" data-stage="5" style="cursor: pointer; padding: 6px 14px; background: var(--bg-card-subtle); color: var(--text-muted);" data-page-node-id="HUP1Y9RatxmgQCJtMBaRTj">阶段五：长程度量准则 (1)</button>
+        </div>
+
+        <!-- 搜索输入框 -->
+        <div style="margin-bottom: 20px;" data-page-node-id="OwGl3BjLyPSUYDjOrRiyjX">
+          <input type="text" id="input-paper-search" placeholder="搜索论文标题、作者、关键词（如 REPL, Self-Rewriting, Reflexion, ARC-AGI）..." style="width: 100%; padding: 10px 14px; background: var(--bg-card-subtle); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-main); font-size: 0.9rem; outline: none;" data-page-node-id="v69AcvN7QscOnAIFF14HmC">
+        </div>
+
+        <!-- 论文卡片动态渲染容器 -->
+        <div id="papers-list-container" style="max-height: 600px; overflow-y: auto; padding-right: 6px;" data-page-node-id="VB3RJBGRFelom6NqQ2Spuc">
+          <!-- 动态 JS 填充 -->
+        </div>
+      </div>
+
+      <!-- 阶段一详细解构 -->
+      <div id="sec-stage1" style="margin-top: 48px;" data-page-node-id="DlTC7kl7E3xmKUTJezhUIi">
+        <h3 data-page-node-id="1q3AJsrrs7Et9HwRHd0CR8">阶段一：V0 阶段的 Harness（2019–2022：采样循环与提示奠基）</h3>
+        <p data-page-node-id="khxbGkanxWz25Pg9ellYvu">
+          在具备成熟形态之前，Harness 本质上只是一个裸露的采样循环与一段静态 Prompt。该阶段的 3 篇里程碑论文奠定了后续所有的基础：
+        </p>
+        <div class="grid-3" data-page-node-id="bplmgFSA2hOa8xUvxUeLqM">
+          <div class="card" data-page-node-id="bPa0f8mOM80aCGjdYHwhWD">
+            <span class="badge badge-accent" data-page-node-id="HIc0lSYZ9ucYDG7u1m43dU">01 · GPT-2 (2019)</span>
+            <h4 style="margin: 8px 0;" data-page-node-id="AM3aD4PtgP0lDDEfKOr61g">零度基准循环</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted);" data-page-node-id="lgWvwhzcbEzf0alWVZwlFF">
+              <strong data-page-node-id="9iwGC4aCIFk5IGspQ3GnC9">核心机制：</strong><code data-page-node-id="9H1yZZOkNOsyBi4Qiv16qH">while token != EOS</code> 纯自回归采样。没有工具、没有记忆、没有外部环境，为整个人类 AI 建立了外围架构的零点基线。
+            </p>
+          </div>
+          <div class="card" data-page-node-id="tKbCjCCLn6F8qHZVXBvWec">
+            <span class="badge badge-emerald" data-page-node-id="PaRaCsi50RcVSxx7Ef1n1B">02 · GPT-3 (2020)</span>
+            <h4 style="margin: 8px 0;" data-page-node-id="V5MSRPc3DmR5pnJyjyhdtr">上下文工程诞生</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted);" data-page-node-id="IGsRgBfaYwJXqbodDmWIdE">
+              <strong data-page-node-id="BgPv1hlEIwAhnOhc5meUwq">核心机制：</strong>人类第一次向 Harness 添加内容。循环本身未变，但在问题上方拼接已解决的 Few-shot 样例，使“上下文组装”成为系统工程的核心阵地。
+            </p>
+          </div>
+          <div class="card" data-page-node-id="TKvXCFLF8ftahLkIRczjpj">
+            <span class="badge badge-cyan" data-page-node-id="OlxW3bc0nmEptoj8VEiTEh">03 · CoT (2022)</span>
+            <h4 style="margin: 8px 0;" data-page-node-id="X6kGO05ySk3LI7cgcped4B">Token 预算计量</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted);" data-page-node-id="iGexR7MdIlqlDExEfCJUpq">
+              <strong data-page-node-id="qBGAFVfdqGqZDDtr0bwGX2">核心机制：</strong>输出空间的首次干预。打破一次性输出答案限制，允许模型在生成链中消耗更多计算。从此 Harness 以“Token 预算”而非调用次数计量。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 阶段二详细解构 -->
+      <div id="sec-stage2" style="margin-top: 48px;" data-page-node-id="QptXNtiI6jtWJBT2N0zTtu">
+        <h3 data-page-node-id="jJoIg6xweThCGHslbHvYaf">阶段二：静态 Harness 动作空间的拓展（2021–2025：工具、反思与技能）</h3>
+        <p data-page-node-id="LknKPq16r1yN6GxrEBW2hB">
+          随后的 6 年间，学术界与工业界反复重复着同一个关键动作：<strong data-page-node-id="8JFj4UVVAQLYsgGzHPPj7N">为外围循环赋予它被允许执行的新动作权限</strong>。Harness 的功能愈发强大，但代码本身在此阶段仍是固定不变的静态工件：
+        </p>
+        <table class="data-table" data-page-node-id="RitcyJHn8AhKSMxsTqDeeh">
+          <thead data-page-node-id="13b8wAqFDo11ajWGGCxCv6">
+            <tr data-page-node-id="ErSASigoZzjg05FHM9cYyO">
+              <th style="width: 15%;" data-page-node-id="j4ujAW1qnIH1COrafGGazq">代表论文</th>
+              <th style="width: 25%;" data-page-node-id="1Gtb9pFoC23Lu12A2PbUG3">被赋予的新动作空间</th>
+              <th style="width: 60%;" data-page-node-id="dIx7L6TwFlj9lpOtuppWtR">架构演进意义与底层突破</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="O8kVWPTWwXF82kaXPd13qC">
+            <tr data-page-node-id="6pQLtZLFN0akVFYmvFjD51">
+              <td data-page-node-id="nFlJKKBDrHUjc8jwkwZEwJ"><strong data-page-node-id="CqjjPG6VPVEjXXMvFjcsxf">WebGPT (2021)</strong></td>
+              <td data-page-node-id="D6II0iFvwcYzApAo1il3JP">Browser 动作（搜索、点击、滚动）</td>
+              <td data-page-node-id="LSWm4KAYLcV1ARTfFkkztZ">检索不再是被动的前置 RAG 步骤，而是成为模型在生成循环中自主决定的环境交互行为。</td>
+            </tr>
+            <tr data-page-node-id="fVQmNWBEm6A5oaSYrm4Kil">
+              <td data-page-node-id="4DWovTxgOvysPZ3Qc1yZSo"><strong data-page-node-id="8CRAODKx8CKD4UneaUywAl">Toolformer (2023)</strong></td>
+              <td data-page-node-id="yfBgOZY4VM2IsgPJwKqP5Q">结构化 API 调用与拦截回填</td>
+              <td data-page-node-id="PTF63B5MK7ZUXJIOy6rCpk">形式化工具调用（Tool Calling）开山之作。模型只需输出声明，动作边界拓展至外围系统所能提供的极限。</td>
+            </tr>
+            <tr data-page-node-id="jzAhUKJtFEGvVNH5D7H0zQ">
+              <td data-page-node-id="nNbaNA73eLyqk4LcPTcvWc"><strong data-page-node-id="0oMUkiFGDLmuaqRhqYlX7W">ReAct (2022)</strong></td>
+              <td data-page-node-id="W4NTSOdHBnLvwDFb0Z3QC7">交错的 Thought-Action-Obs 循环</td>
+              <td data-page-node-id="oULnaoMwPzHGJ6KfgG9hbZ">确立了智能体标准骨架。现代模型原生已具备交错能力，促使现代 Harness 转向轻量低侵入底座。</td>
+            </tr>
+            <tr data-page-node-id="OMi7EeGrdZ13kz6BirknCJ">
+              <td data-page-node-id="LPA1fNqnvfWKdCNhJ7JX9j"><strong data-page-node-id="ZtNpKsp8u22fAUtJtg6TLE">Self-Refine (2023)</strong></td>
+              <td data-page-node-id="QVIMGIFzUuPYvd7XtB6sJN">内部评估器（Self-Critic）重写</td>
+              <td data-page-node-id="u1kenDUP7TIWMQenEaZlmz">零外部依赖与零外部成本的自闭环纠错，通过在 Harness 内部设立审阅管道压降单步错误。</td>
+            </tr>
+            <tr data-page-node-id="7FysHn5bt7P4Wc6nlq1IA6">
+              <td data-page-node-id="oHLYjLHh4bRWIL6tfZiK17"><strong data-page-node-id="Q9hUhNbdXNuoIVfAzvBt4U">Reflexion (2023)</strong></td>
+              <td data-page-node-id="qxznyKTylakara9S8PBGzW">语言化强化学习（Verbal RL）</td>
+              <td data-page-node-id="QJ58jvUDcyMkZvtlSSzAW4">捕获真实环境报错，将其转化为自然语言反思文本回写到上下文，使试错经验持久化成为可能。</td>
+            </tr>
+            <tr data-page-node-id="HfKvsAqcd17MnY9O7nEsAY">
+              <td data-page-node-id="ctyDSSMQXTpcoYurimMYAi"><strong data-page-node-id="7T215kQ3FZB7sRDfqmL626">InterCode (2023)</strong></td>
+              <td data-page-node-id="B5NvYUhlx69XwBQFrnctdA">交互式 REPL 与代码沙箱</td>
+              <td data-page-node-id="wHdd4zBSGSnGDNqEoshET1">代码即最高维工具。标准化可执行反馈环境，成为 Prime Agent 持久化 IPython 内核的直接先驱。</td>
+            </tr>
+            <tr data-page-node-id="ZTCSJChI4buryPQLZJl7vw">
+              <td data-page-node-id="7xam7r0INKWwFedleXVzva"><strong data-page-node-id="to4lKTCpBsb4nFxGTvYnYF">Multi-Agent (2023)</strong></td>
+              <td data-page-node-id="nwPTffptSPozLAwY9v5UcZ">派生子智能体（Agent Dispatch）</td>
+              <td data-page-node-id="3HtfEfrOy5iTcDeBOgkqEf">子智能体从一次性的并发扇出（Fan-out），演进为具备独立角色、身份与可定向寻址的高阶原语。</td>
+            </tr>
+            <tr data-page-node-id="yOo2EPFdhbJfw9i6o4ZMoA">
+              <td data-page-node-id="0JabR0X0iRcQ3OsBNRO4Bx"><strong data-page-node-id="XAQrYWLZsGMiEW3PWPKfEy">Voyager (2023)</strong></td>
+              <td data-page-node-id="a7p7l1yvB6FagyskW0CJwd">可复用技能库（SKILLS.md 原型）</td>
+              <td data-page-node-id="Bap2dOY1WgJDUl1lyle69N">将多个工具串联为验证有效的代码例程并写回持久技能库，是当今各类代码库技能协议的直接鼻祖。</td>
+            </tr>
+            <tr data-page-node-id="1fvwHpnXlTke0hKnI0z5ng">
+              <td data-page-node-id="fz2eEqDxVb3nWImioddOGz"><strong data-page-node-id="IEYdxLSGWW8hskZ6RUU4zx">MemGPT (2023)</strong></td>
+              <td data-page-node-id="pRRg6ro1AlBccjNhFCUJSy">上下文主动 CRUD 虚拟内存</td>
+              <td data-page-node-id="0TTmaXYpuFMfxHBDxnDEwk">终结了上下文“只增不删”的历史，赋予智能体对记忆分区的显式管理权限，构建操作系统级状态治理。</td>
+            </tr>
+            <tr data-page-node-id="8k2Ga7j8EMURD8OxfDpNfb">
+              <td data-page-node-id="MNAd1ZjZwFFxX06cs3tiVK"><strong data-page-node-id="lVov37D06I0wWJFbP7HLPa">RLM (2025)</strong></td>
+              <td data-page-node-id="HAkLtwdWyWtaV74Kr6dCjl">REPL 内部发起递归子调用</td>
+              <td data-page-node-id="LBVwAMPOff6lGlmUYpFHG0">为静态时代画上句号的递归杰作。使得物理上下文窗口不再是墙壁瓶颈，转变为可递归分治的可编程资源。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 阶段三详细解构 -->
+      <div id="sec-stage3" style="margin-top: 48px;" data-page-node-id="H3OljxBnQuWzLwEskOpHdf">
+        <h3 data-page-node-id="JDDk45HTs8T7BgxFIe4bAa">阶段三：让 Harness 自主学习与重写（2023–2026：代码级突变与元搜索）</h3>
+        <p data-page-node-id="pmIrFkrRW4AEF6tbAHIDuU">
+          在这一阶段，<strong data-page-node-id="OkmL0DeKMD7DTyq3lKzmAp">原本固定死板的外围机制彻底被打破</strong>。优化的对象从最开始的 Prompt，演变为脚手架参数，接着演变为 Harness 自身的 Python 源代码，最终发展为运行时的在线终生演进：
+        </p>
+        <div class="grid-2" data-page-node-id="pGBiPTnYAJx2vH28j0Rjj6">
+          <div class="card" data-page-node-id="O3JrK14fHtkNks8TVoeEny">
+            <span class="badge badge-accent" data-page-node-id="VQzqf4YjyqOIOiWEhD9Mk0">14 · DSPy (2023)</span>
+            <h4 style="margin: 8px 0;" data-page-node-id="LVRw8zZZeijCrWb2GJAJ6b">声明式管线编译</h4>
+            <p style="font-size: 0.88rem; color: var(--text-muted);" data-page-node-id="wH6aDKFETqzDwJ1PVu16th">
+              由于离散文本不可反向传播，DSPy 创新性地采用微型测试集与指标搜索算法，将系统 Prompt 编译为最优化工件，彻底终结了人工启发式盲猜。
+            </p>
+          </div>
+          <div class="card" data-page-node-id="cGjyXiubB52gBqQwmbDBHl">
+            <span class="badge badge-emerald" data-page-node-id="OVKKfzWdpTgpmCB58xqH5Q">15 · GEPA (2025)</span>
+            <h4 style="margin: 8px 0;" data-page-node-id="7hVgqOeKHVaEiDmdxPc80X">反思式 Prompt 变异进化</h4>
+            <p style="font-size: 0.88rem; color: var(--text-muted);" data-page-node-id="Rub4iXR27Ryqvje6A38LtU">
+              OpenJarvis 的核心引擎。读取自身失败的执行 Trace，在自然语言空间中执行变异优化，以极少量的采样次数击溃传统强化学习（RL）策略。
+            </p>
+          </div>
+          <div class="card" data-page-node-id="sV6eqj8WMAxTf6tHYmMYzh">
+            <span class="badge badge-rose" data-page-node-id="oAYbMIDrlfa4y2SIq1F4BF">16 · Darwin Gödel Machine (2025)</span>
+            <h4 style="margin: 8px 0;" data-page-node-id="2QNqfwFJYp25FakKRazIjz">代码级自重写与先祖档案库</h4>
+            <p style="font-size: 0.88rem; color: var(--text-muted);" data-page-node-id="3HzMyDxUmHxbliDMj8Wtlm">
+              智能体开始直接读取并修改包裹自己的 Harness 源代码。通过实证基准测试（如 SWE-bench）严格评分筛选，优秀变异回写至先祖库，用实测取代传统哥德尔机的形式化数学证明。
+            </p>
+          </div>
+          <div class="card" data-page-node-id="nx2CuvAC0e5IUzHOULMl3F">
+            <span class="badge badge-cyan" data-page-node-id="FWyDlIOymDkGtTx87A8du7">17 · Meta-Harness (2026)</span>
+            <h4 style="margin: 8px 0;" data-page-node-id="VLNzfcTzIigptYydDgwCdE">元 Harness 搜索与登顶 SOTA</h4>
+            <p style="font-size: 0.88rem; color: var(--text-muted);" data-page-node-id="3ZUy2KtRzhbdmrm80wmSHc">
+              以 Harness 搜索 Harness 的全自动系统。给编码智能体提供源码历史与运行 Trace，自动重写检索、记忆与 Prompt 拼接策略，在完全不碰模型权重的前提下直接登顶 Terminal-Bench 2 榜首。
+            </p>
+          </div>
+        </div>
+        <div class="card" style="border-left: 4px solid var(--amber);" data-page-node-id="lSKXExO0yxcZUKjeUCLY1K">
+          <span class="badge badge-amber" data-page-node-id="g45Z3CmNpgyhBGDhwD7HnO">18 · Continual Harness (2026)</span>
+          <h4 style="margin: 8px 0;" data-page-node-id="ShtekkJwV6xaSoUHWIhiVd">在线终生自适应与测试时训练（Test-Time Training）</h4>
+          <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 0;" data-page-node-id="7MpHWk7uhRyMRTHTpGWae8">
+            跨任务持久化记忆、技能与子代理规范，并在运行时通过类似 DAgger 的方式更新经验。主讲人指出：<strong data-page-node-id="fZbzhzKYcNpywTcgEJZkGS">测试时训练（TTT）与在线 Harness 自适应是跨越到自治通用系统的最核心技术阶梯</strong>。
+          </p>
+        </div>
+      </div>
+
+      <!-- 阶段四详细解构 -->
+      <div id="sec-stage4" style="margin-top: 48px;" data-page-node-id="j4ybSgaPGT4HdjBvEMkvzJ">
+        <h3 data-page-node-id="DEvEmNZSEelWgQqAwGH4U4">阶段四：2026 年实际落地的工业级 Harness 架构</h3>
+        <p data-page-node-id="45RMiCGTCXgVt2vLaP9w8y">
+          在 YC Paper Club 当晚的演讲中，重点聚焦了两个代表 2026 年最高工业落地水准的开源系统：<strong data-page-node-id="AKSt6mMZk51GvuomfCAcdJ">Prime Agent</strong> 与 <strong data-page-node-id="iaoA8XcIntEqaY283M4KGk">OpenJarvis</strong>。
+        </p>
+
+        <!-- Prime Agent 深度剖析 -->
+        <div class="card" data-page-node-id="GOLxKfYXnnAEUO78npOCiN">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;" data-page-node-id="tY51BoTlf5i3qjBS6cg1XF">
+            <h4 style="margin: 0; color: var(--accent); font-size: 1.2rem;" data-page-node-id="SBhygL65PvJvTaMtCw2GnB">Prime Agent：ARC-AGI-3 30% 到 95.5% 跃迁的工业级解密</h4>
+            <span class="badge badge-accent" data-page-node-id="y0r7r8baXXu98A0iYxqqkf">Prime Intellect · 2026</span>
+          </div>
+          <p style="font-size: 0.92rem; color: var(--text-main);" data-page-node-id="c1jc5PPCdpqAUdCvbcUMyU">
+            Prime Agent 提出了现代顶级 Harness 的三大核心工程支柱，彻底粉碎了“模型权重决定一切”的教条：
+          </p>
+          <div class="grid-3" data-page-node-id="wQVl8xX3fqWDMrlUpRjEsK">
+            <div style="background: var(--bg-card-subtle); padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);" data-page-node-id="VOCn0gG6SOGI4cVcLf1oNe">
+              <strong style="color: var(--emerald);" data-page-node-id="DGdkr7KeQ2JjO7uwOgm7Vj">1. 持久化 IPython REPL</strong>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 6px;" data-page-node-id="DKLd2GGG7Jl0pjfTKbnhOh">
+                不再是一次性的无状态脚本执行。变量、类定义、环境句柄在持久内核中驻留，模型能够像资深程序员一样进行分步试错、检查内存变量并进行动态热补丁。
+              </p>
+            </div>
+            <div style="background: var(--bg-card-subtle); padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);" data-page-node-id="zGYmwNVyfGn0tB1tEcKBDu">
+              <strong style="color: var(--cyan);" data-page-node-id="u8mo8dvWlAP7IRjwMI81DT">2. 可寻址递归子代理</strong>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 6px;" data-page-node-id="ix7rjlMEKXQAqjgdZGbBhA">
+                子代理在派生并执行完子任务后，其上下文、状态机与输出依然作为一个持久具名对象存在，主代理可以在后续步骤中随时对其进行二次寻址与状态合并。
+              </p>
+            </div>
+            <div style="background: var(--bg-card-subtle); padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);" data-page-node-id="KqwjuateCyeGqxffPF7nVR">
+              <strong style="color: var(--amber);" data-page-node-id="7nUzVo9lhZ1c8psLsU7StA">3. 动态代码验证器（Verifiers）</strong>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 6px;" data-page-node-id="C6cJO8rnGBJdesgRfTYGng">
+                利用问题已知的训练样例，动态生成代码断言单元测试。候选解答必须先通过代码验证器的高压测试才被允许输出，将模型幻觉的虚假解彻底拦截在交付门禁之外。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- OpenJarvis 深度剖析 -->
+        <div class="card" data-page-node-id="o9j1eemYPt5Q0qDAneIJjh">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;" data-page-node-id="WpIWzUWF08jfY3GZS04aU0">
+            <h4 style="margin: 0; color: var(--cyan); font-size: 1.2rem;" data-page-node-id="TwL0YIov8A7Gp4ileSpUKY">OpenJarvis：端侧设备 5 大原语与 800 倍降本神话</h4>
+            <span class="badge badge-cyan" data-page-node-id="8xLgNF6XOYgRcaVldt6RUZ">Stanford / YC · 2026</span>
+          </div>
+          <p style="font-size: 0.92rem; color: var(--text-main);" data-page-node-id="i2h6bkfLliuXDyEVvONjxo">
+            OpenJarvis 攻克的则是另一个极端难题：<strong data-page-node-id="LCKtIuSWWawGGRFRKpBfHR">如何让个人设备上的轻量端侧模型（SLM），跑出媲美云端庞大前沿模型（Frontier LLM）的效果，同时将边际成本压降 800 倍？</strong>
+          </p>
+          <p style="font-size: 0.88rem; color: var(--text-muted);" data-page-node-id="SvqAhwZBSuZfoJBpFlQiTE">
+            其精髓在于将个人 AI 技术栈解构为 <strong data-page-node-id="GggU9CAqtFzEGOgfqS4j7f">5 大基础原语（Prompts, Memory, Tools, Sub-agents, Routing）</strong>，采用极具创意的<strong data-page-node-id="adEQtguMfAfOixcrMH71BE">端云分离非对称架构</strong>：
+          </p>
+          <ul style="padding-left: 20px; font-size: 0.88rem; color: var(--text-muted); line-height: 1.8;" data-page-node-id="AHDv4HMDLgNsg8RV9wTPvj">
+            <li data-page-node-id="5RKKbvIhoZMbcU5UjdbPQl"><strong data-page-node-id="D9APVIizMC18wReljxgNVQ">云端负责高价值离线搜索：</strong>使用最昂贵的前沿模型（Claude 3.7 / GPT-4.5）作为元优化器，通过 GEPA 算法在 5 大原语空间中搜索出最适配个人工作流的最佳 Harness 配置与结构规范。</li>
+            <li data-page-node-id="BgZNEwbowsNHC17yalMx5K"><strong data-page-node-id="NomVGZDwUcf5qGj8oLRPhP">本地仅负责低成本执行推理：</strong>个人 Mac/PC 上的端侧模型完全继承云端优化好的最优 Harness 规范进行日常推理。边际调用成本从云端的 <code data-page-node-id="kB9l0WFlEcAMum6DJUKywt">$0.04</code> 骤降至端侧电费的 <code data-page-node-id="qX8xdry84WfLJqSt1WoWw0">$0.00005</code>（降幅达 800 倍），彻底靠 Harness 架构抹平端侧硬件的算力鸿沟。</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 阶段五详细解构 -->
+      <div id="sec-stage5" style="margin-top: 48px;" data-page-node-id="2fRWB5naag8r9BFJU3OHDZ">
+        <h3 data-page-node-id="UlShqlkeheJ5f5fyNscIt7">阶段五：验证方法与度量革命（以任务时间视界取代单轮准确率）</h3>
+        <p data-page-node-id="BbKLFxEYmryYOAHC94hXHW">
+          Thomas Kwa 等在 2025 年的经典论文 <em data-page-node-id="zbNBpwd8ASUZoQtOsBtEgE">Measuring AI Ability to Complete Long Software Tasks</em> 揭示了一个令人警醒的统计规律：<strong data-page-node-id="UXZMFWGqm29CJ0KpwRxAgF">在复杂软件工程场景中，随着任务所需步骤长度（Horizon）的增加，系统的整体成功率呈现指数级断崖式下跌</strong>。
+        </p>
+        <p data-page-node-id="AChNBMhDzSdnChONAVGmLv">
+          静态 Harness 时代与具备自愈、重试、验证器 Harness 时代的系统，在时间视界坐标系中表现为截然不同的存活斜率。只有当系统的<strong data-page-node-id="SrnOAOgwPK0i3I9KdncC1K">有效容错时间视界真正实现数量级延长</strong>时，一切 Harness 工程升级才有其现实工业意义。
+        </p>
+      </div>
+    </section>
+
+    <!-- 04. 四大数学可计算模型 -->
+    <section id="sec-math-models" data-page-node-id="PZjRcGLNQbQvuFjPc5Jeny">
+      <h2 data-page-node-id="BVpB53aKed7JkvbZGTy2Le">04. 四大数学与系统可计算模型（严谨推导，拒绝隐喻）</h2>
+      <p data-page-node-id="kwcJDysfBRiHVhvU33PHwG">
+        为了杜绝空洞的隐喻叙事，我们将 Harness 的关键架构收益形式化为四大可计算的数学物理模型，并在随后的动态沙盘中提供实时反解。
+      </p>
+
+      <!-- 模型 1：任务时间视界与累积失效率阻尼方程 -->
+      <div class="card" style="margin-top: 24px;" data-page-node-id="LhJ6XUMKdvw91avkgWeuAW">
+        <h4 style="color: var(--accent);" data-page-node-id="S0pf59FUgrcFJW2ROl4R6a">模型 1：任务时间视界与累积失效率阻尼方程（Horizon Scaling Law）</h4>
+        <p style="font-size: 0.9rem; color: var(--text-muted);" data-page-node-id="IYEE4AQrUoxWE902PwOCUi">
+          设任务总执行步数为 <math data-page-node-id="2E4Ob7LAp5XbCsER94SY6M"><mi data-page-node-id="YmzxVvYYNMp1LdxSuQ4TTf">H</mi></math>。在没有反馈闭环的裸链路或静态链路下，设单步基础失效率为 <math data-page-node-id="2nPus0IxtewxqgXur3p8tz"><msub data-page-node-id="g4njNJqsCu4wcgWMyJ2WTv"><mi data-page-node-id="rNSqh4oTOhrhz6AzytRnM5">&#949;</mi><mn data-page-node-id="VeVfWa9ywtvhABNsxoq8pP">0</mn></msub></math>。
+          则整体任务成功率服从单向累积衰减：
+        </p>
+        <div class="math-block" data-page-node-id="W7CmxBbrJpKFfdqX34a3Fu">
+          <math display="block" data-page-node-id="2ERmRjXRafb2BRfJTne85x">
+            <msub data-page-node-id="6piE4bTfqy8QwoiW0QWmih"><mi data-page-node-id="NgygJP8OQ7NvsaPFOlHSft">P</mi><mtext data-page-node-id="taB56LSigkFeSoHIFSMle5">static</mtext></msub><mo stretchy="false" data-page-node-id="acSoixnwBYhwOlkpU45OCt">(</mo><mi data-page-node-id="D0MGm0q5sexN1Mh4Vo6vHJ">H</mi><mo stretchy="false" data-page-node-id="O6EaPkGbnheAyzeXGcjJSc">)</mo>
+            <mo data-page-node-id="6llSDzsMtVJwUBomW1Ibd1">=</mo>
+            <msup data-page-node-id="mimhLxYXaTPpQjYO2F7JGs">
+              <mrow data-page-node-id="qow1Pg0FjDWHaWk6F89JIJ"><mo stretchy="false" data-page-node-id="KwxHIa3QAw3dPeBDnbnscB">(</mo><mn data-page-node-id="WNIltynb4jk3jAPEPEWp50">1</mn><mo data-page-node-id="kZB6dWhhdWHbKGDFWGBPFY">&#8722;</mo><msub data-page-node-id="ihaRKwHQ5ADFuVviJNm2BD"><mi data-page-node-id="GksmAE45SSdDOFfDKika77">&#949;</mi><mn data-page-node-id="8ylFiAD94ie8WllBDhDRak">0</mn></msub><mo stretchy="false" data-page-node-id="LCEoSmlUZVGDIyK2yC2NUW">)</mo></mrow>
+              <mi data-page-node-id="iU0iV8Hi8dL4w8zsXwu2pa">H</mi>
+            </msup>
+          </math>
+        </div>
+        <p style="font-size: 0.9rem; color: var(--text-muted);" data-page-node-id="TMBzhpyiqBT6xeCFA0VInc">
+          当引入具备环境反馈捕获（Reflexion / InterCode REPL）与局部回滚机制的现代 Harness 时，允许单步至多执行 <math data-page-node-id="h8tgZDlhp6F4UebkcBEt8V"><mi data-page-node-id="k41XG7aXFTqlmbQ39ZA8bc">k</mi></math> 次微观重试与自我修正。设纠错反馈对错误的抑制阻尼系数为 <math data-page-node-id="h569X0TtunuKxc4BERhBsf"><mi data-page-node-id="PE7AmONiMfxzSd6cufWrlE">&#955;</mi><mo data-page-node-id="2WVxvzB3iMZv5gsZuHzMfu">&#8712;</mo><mo stretchy="false" data-page-node-id="PEcP1KpWw4ucHQXQcz6WuJ">[</mo><mn data-page-node-id="hTGQzrwYxHCFnlCH8XHEc5">0</mn><mo data-page-node-id="Y26OjtP4XB5213ZDs2HuHp">,</mo><mn data-page-node-id="ePuS43Ht62ekAZ34OZf9f6">1</mn><mo stretchy="false" data-page-node-id="En7bhyAlhsjGRdmYT1Npfj">]</mo></math>，则单步有效失效率被大幅压缩为：
+        </p>
+        <div class="math-block" data-page-node-id="TPhZzZtd2uIswhaup8zyGC">
+          <math display="block" data-page-node-id="VqghaDXuCMbgdmPr3qoW9V">
+            <msub data-page-node-id="x7F443EIHqTwIcZV6gAqwn"><mi data-page-node-id="T8yO42AESK8WD47Ly01W8F">&#949;</mi><mtext data-page-node-id="6WythASUaG04RlLez0Tmxi">eff</mtext></msub>
+            <mo data-page-node-id="GKdHc5JMdoCiMQgCfHvsSU">=</mo>
+            <msub data-page-node-id="num8UjKenJ1hhENRxWUhkW"><mi data-page-node-id="CpzNV1bD9pA6HjqIS8v1Cc">&#949;</mi><mn data-page-node-id="We8dXl6J7FCVaNhNEe0uGG">0</mn></msub>
+            <mo data-page-node-id="UOI2BdgkaB8riCBNVS0kHl">&#8901;</mo>
+            <msup data-page-node-id="iazh9reMmYhfAS08CDbEmF">
+              <mrow data-page-node-id="VLkLUR74b1GSrPRECcNDDg"><mo data-page-node-id="TKGJcTqZohG4Kc3JZY9GcM">[</mo><mn data-page-node-id="XpmlGLSyzZ56nVEVK594g0">1</mn><mo data-page-node-id="YYmwWVDs9uALvx0FCWnLae">&#8722;</mo><mi data-page-node-id="HRjVIeEyNiVQj9OIdERIQ5">&#955;</mi><mo stretchy="false" data-page-node-id="2lOcFhJBBFgNpIuSMVyzLl">(</mo><mn data-page-node-id="NtsMxZEpIXAhYjfWxcEADf">1</mn><mo data-page-node-id="OU1bwsDSEhW4XKWjCzXF7F">&#8722;</mo><msub data-page-node-id="z4Xr3kkt8iwjMBiJN3W1BF"><mi data-page-node-id="xXgDspuccyDDTQb53CjZk6">&#949;</mi><mn data-page-node-id="egfwIdoXB8QdzI8oB5tHu2">0</mn></msub><mo stretchy="false" data-page-node-id="zxeIUCbPP204G6vFxP4y9l">)</mo><mo data-page-node-id="wLQOv2tOJEPmsepRn25GLb">]</mo></mrow>
+              <mi data-page-node-id="5TCs3jpzT0DIADMVz8yOJW">k</mi>
+            </msup>
+          </math>
+        </div>
+        <p style="font-size: 0.9rem; color: var(--text-muted);" data-page-node-id="OIkT0fXOCAODRG2Ax3VmBs">
+          若业务要求系统的交付可靠性底线为 <math data-page-node-id="tqOD8KmI2lEHRqsCSfCxM8"><mn data-page-node-id="E0xPCVzRDyA7pApxmH0NiT">1</mn><mo data-page-node-id="s6UsrQfWpqF6IxbHb1A6uw">&#8722;</mo><mi data-page-node-id="oOFJio3m4pPiAH6fFHtbm8">&#948;</mi></math>（如 95%），则反解出的系统最大允许任务时间视界 <math data-page-node-id="5LXd45phcfXNZGqJc2C1zY"><msup data-page-node-id="LblzgP0ZBdAuqwzAdHnnfT"><mi data-page-node-id="rAuOEkgCUyh2CyXl1HuLHa">H</mi><mo data-page-node-id="JacK00mqxQ6qFTrxni6F4I">*</mo></msup></math> 为：
+        </p>
+        <div class="math-block" data-page-node-id="tr9a18K4CuxNGRRIUuVn9g">
+          <math display="block" data-page-node-id="h1HDiIklO4Vbr7kL5iVMre">
+            <msup data-page-node-id="X4htYbbsUIpHVy08P2wrxs"><mi data-page-node-id="m5gFJy07vSUWfN9nCPGRqB">H</mi><mo data-page-node-id="B6XpjAoNhESScgk6zipWnG">*</mo></msup>
+            <mo data-page-node-id="ZXnB9LDNMKSEwmHohuxTB7">=</mo>
+            <mfrac data-page-node-id="NkgVjc1hieGzQek22LdYcd">
+              <mrow data-page-node-id="g1UHEkOmzo2G9EdswgK3mP"><mo data-page-node-id="2uhQSphmL5rtKFB49M6fvd">ln</mo><mo stretchy="false" data-page-node-id="nRAAzaSjWgKqdjcTPRPCeH">(</mo><mn data-page-node-id="NXX4sLpAAWEpEFPXFkVEL6">1</mn><mo data-page-node-id="PpTAM59fbif8dOpgGtdqAC">&#8722;</mo><mi data-page-node-id="rgvWvBX1n19Q3riSCIivuu">&#948;</mi><mo stretchy="false" data-page-node-id="CEyy7UMPBGX5EAXF7Q1s5f">)</mo></mrow>
+              <mrow data-page-node-id="hccPoaGpFdSE0QOJCkuAsJ"><mo data-page-node-id="pVXFw0NVnk6zR6jnXIik4w">ln</mo><mo stretchy="false" data-page-node-id="0X0c6hE9d314EaykW87xaO">(</mo><mn data-page-node-id="0CfZsylToM7rwJeZMMBnOE">1</mn><mo data-page-node-id="yWibCrCK3EMTfxPjgh90JQ">&#8722;</mo><msub data-page-node-id="jNxVsIqYidVKiOXDGzvOHg"><mi data-page-node-id="yI7lkDY5PmlwBfpraE0KXz">&#949;</mi><mtext data-page-node-id="HiJmwViQIMbkAWVhfaf8Wj">eff</mtext></msub><mo stretchy="false" data-page-node-id="uj6GeJLAApnKFlhXhaYTvA">)</mo></mrow>
+            </mfrac>
+            <mo data-page-node-id="5TJJ4PZ88xr5lFdRG3m0wP">&#8776;</mo>
+            <mfrac data-page-node-id="vkTv07jvMQb8yKo3S4zfXa"><mi data-page-node-id="DEqCg1SLmCrCFTfggXdeAq">&#948;</mi><msub data-page-node-id="loBdBkgU9qE7zY31Qy77OP"><mi data-page-node-id="pqCzYpmSRppSfNPGpZCDX6">&#949;</mi><mtext data-page-node-id="jIZ9yiCYDuqktcF1DP8E1l">eff</mtext></msub></mfrac>
+          </math>
+        </div>
+        <p style="font-size: 0.88rem; color: var(--text-dim);" data-page-node-id="UiGSwcSdQOrHfFsLu7N05E">
+          实证推论：当 <math data-page-node-id="WNntgYKcl43cKlZhQ26kh9"><msub data-page-node-id="WETMIiDqWRbw0xs4pAL42d"><mi data-page-node-id="jL6mTpZbkHGlf2S387HBcT">&#949;</mi><mn data-page-node-id="WrTkCVozuFUjwRMqImC1uy">0</mn></msub><mo data-page-node-id="42XuRSABaSqFHhv9vgNNnI">=</mo><mn data-page-node-id="7dxAVjcejr3UtYGnnFcphe">0.05</mn></math> 时，静态链路 <math data-page-node-id="2Di39wQl6qY30XxqjHs3ke"><msup data-page-node-id="YqOC4nnaOGcrz0ococUGuj"><mi data-page-node-id="NHRwzeZ3UEqG4jXlVHJeMM">H</mi><mo data-page-node-id="8hIVJMvmQaTBcnmwh2LUkm">*</mo></msup><mo data-page-node-id="v89pH9iT3lkimOOc03cEsX">&#8776;</mo><mn data-page-node-id="7cYJ140Or4M1RRAy6VBlLf">1</mn></math> 步（执行到第 20 步时存活率仅剩 35.8%）；而当加入 <math data-page-node-id="aVDOb15Yh5GU2YH6tG3wp8"><mi data-page-node-id="XW9CgvGI9U4rqdvQpRCG6m">k</mi><mo data-page-node-id="Zw6v6QH3ARytawagOwyp0u">=</mo><mn data-page-node-id="Br5TOWdTCsYaQPeSWellnJ">2</mn><mo data-page-node-id="hwQbK7MxkM7YiY0N9Xbq9z">,</mo><mi data-page-node-id="CBlLqzL7jPKxlt8NrBVgAS">&#955;</mi><mo data-page-node-id="pUdXvYJdbe2hfBzM0FzhHz">=</mo><mn data-page-node-id="spRCB4p2c7pBCaAtAkAF0p">0.85</mn></math> 的反馈阻尼后，<math data-page-node-id="H0jag9Mtyx3WMlAPogg7qC"><msub data-page-node-id="NN6pYO4S4AuclEEVkHYnM2"><mi data-page-node-id="VIBZSZbnFPn99Vlvcav0CK">&#949;</mi><mtext data-page-node-id="6LppSMlHxWEfIPbQ4yS1YD">eff</mtext></msub><mo data-page-node-id="e0cldNYI8GWHjRo20H9bJ1">&#8776;</mo><mn data-page-node-id="leCRIxWjp1i4Zov5tGzdV4">0.00185</mn></math>，最大视界 <math data-page-node-id="3bx6xltVRcq5x0qforCwfe"><msup data-page-node-id="zwNbquNP06Kxl6YGdlqRB2"><mi data-page-node-id="OEwE6FODX9SOP5uflmksCq">H</mi><mo data-page-node-id="L9j2MxTJaUbvGOz3UUCeop">*</mo></msup></math> 跃升至 <strong data-page-node-id="wsFkDpeJJdHw8GWzjTE8pr">27.6 步</strong>；若进一步提升至 <math data-page-node-id="GReoKDTnGZvvCY2GwPNxSi"><mi data-page-node-id="1uYI5r6LnOESksesyBjKVa">k</mi><mo data-page-node-id="9vxyFjOHALcxRQuqnImMJL">=</mo><mn data-page-node-id="RvcM0hjqdJvmyBWY9mCT9t">3</mn></math>，视界将暴拉至 <strong data-page-node-id="zBHL1HjAPDkYcdXSReIaAx">336 步以上</strong>！
+        </p>
+      </div>
+
+      <!-- 动态交互沙盘 2：任务视界阻尼计算器 -->
+      <div id="sec-sandbox-horizon" class="sandbox-container" data-page-node-id="UH6CjNaoezqH4BFdZqZGwg">
+        <div class="sandbox-header" data-page-node-id="0js7HKAnt0Zgm6QTkrdksa">
+          <div data-page-node-id="0jEZYD7yQMTcRT6srdzX4G">
+            <div class="sandbox-title" data-page-node-id="zgwhRJttLSXRTrhPKk3LhJ">⚡ 动态交互沙盘 2：任务时间视界与错误阻尼动态计算器</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;" data-page-node-id="kT6ytebiM76su0dfFXUnbl">
+              动态调整单步失效率、纠错阻尼与重试轮数，实时重绘长程任务存活曲线并反解临界步数
+            </div>
+          </div>
+          <span class="badge badge-emerald" data-page-node-id="sOMPRcVGjBaZb4XggwLOpa">Model 1 Verified</span>
+        </div>
+
+        <div class="grid-2" data-page-node-id="H5IkJURaMmSXl7rOlGAFid">
+          <div data-page-node-id="D5dZHDVNZsURJo8qnY2Adb">
+            <div class="control-row" data-page-node-id="4IHZZhGUlLwqallooEhSQK">
+              <div class="control-label" data-page-node-id="iE9PVXLQ2mgnoOdnVyg6x8">
+                <span data-page-node-id="bRNl10QVDHbzFKfx3sl4FJ">基础单步失效率 ε₀</span>
+                <span class="control-val" id="val-m1-eps0" data-page-node-id="gAMgld9AJOHFyaxvK8erE4">0.05 (5.0%)</span>
+              </div>
+              <input type="range" id="input-m1-eps0" min="0.01" max="0.20" step="0.01" value="0.05" data-page-node-id="s5WXa95lzBhY8sBtLaxiMm">
+            </div>
+
+            <div class="control-row" data-page-node-id="mmJufqvYBnqKzRi5HgJLpD">
+              <div class="control-label" data-page-node-id="Qy8arX0SQdX4FPZtyr2fKD">
+                <span data-page-node-id="LcgxYdfC2ZQiGFJS0wIPJd">反馈阻尼抑制系数 λ (环境与反思质量)</span>
+                <span class="control-val" id="val-m1-lam" data-page-node-id="DUXP2BoXjbmTPbalQs1hYn">0.85</span>
+              </div>
+              <input type="range" id="input-m1-lam" min="0.10" max="0.99" step="0.01" value="0.85" data-page-node-id="Wkkm6CtOInjxNBZGEOTKkh">
+            </div>
+
+            <div class="control-row" data-page-node-id="pjg2GNEq9q3Zv25P1Yv2mf">
+              <div class="control-label" data-page-node-id="iQG3340k0CMPcfT5SXGMzC">
+                <span data-page-node-id="Sk8L1QJM5gHow0LGEqF4SJ">最大微观重试轮数 k</span>
+                <span class="control-val" id="val-m1-k" data-page-node-id="5WeEWv7o5EDKwvzNEoOqWn">2 轮</span>
+              </div>
+              <input type="range" id="input-m1-k" min="0" max="5" step="1" value="2" data-page-node-id="vtaoIexjwLDEtPCznVYJYE">
+            </div>
+
+            <div class="control-row" data-page-node-id="1mWc4U8hAfzBB4QJWY1jq6">
+              <div class="control-label" data-page-node-id="JSMhzXRqHBhLSrqXEUXG17">
+                <span data-page-node-id="OeDcaD6YIzfNkeDp8Yvp66">目标业务可靠性阈值 (1 - δ)</span>
+                <span class="control-val" id="val-m1-target" data-page-node-id="BibnQuFY0ij3jrakJCv33a">95.0%</span>
+              </div>
+              <input type="range" id="input-m1-target" min="80" max="99" step="1" value="95" data-page-node-id="AM5zkM4h8tEfHZckKBQs2T">
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px; justify-content: center;" data-page-node-id="sKswCCU12qNCCAikACq47A">
+            <div class="metric-box" data-page-node-id="7PE8LJjWe6wRlbDEYnBBGO">
+              <div class="metric-label" data-page-node-id="ILWUS42bObewtYKcdmMJh4">有效单步失效率 ε_eff</div>
+              <div class="metric-value" id="out-m1-epseff" data-page-node-id="upRPTFQAMI13JA3AfaSDje">0.001853</div>
+              <div class="metric-sub" id="stat-m1-reduction" data-page-node-id="CVYk2fdDsQZHyCIBibwWwS">相比原始失效率降低 96.3%</div>
+            </div>
+
+            <div class="grid-2" style="margin-bottom: 0;" data-page-node-id="eRsyGWIj3Qlh5b2yiMY6aA">
+              <div class="metric-box" data-page-node-id="FDkLBiItrerGByFFwR12ad">
+                <div class="metric-label" data-page-node-id="WBS68kGO0hnFsYjiAkAfzP">裸静态最大允许步数 H*</div>
+                <div class="metric-value" id="out-m1-hstatic" style="color: var(--rose);" data-page-node-id="v3ERJquGExDBQkyO2wYnSw">1.0 步</div>
+                <div class="metric-sub" data-page-node-id="BWEt8cg0ZbC2eVefuw7KEg">单向累积崩溃点</div>
+              </div>
+
+              <div class="metric-box" data-page-node-id="1CzWwPYBxe4mER4xNirwxE">
+                <div class="metric-label" data-page-node-id="CX1PRV6NKvcbitjRZH916c">Harness 阻尼最大允许步数 H*</div>
+                <div class="metric-value" id="out-m1-hharness" style="color: var(--emerald);" data-page-node-id="vKwzE8uUGVlyEnIVQl5AvT">27.6 步</div>
+                <div class="metric-sub" data-page-node-id="JlYfCQSYWhEIfpPtWQ99Rw">相变扩容倍数: <span id="stat-m1-boost" style="color: var(--emerald); font-weight: bold;" data-page-node-id="seyzmBcU4Z3UCKvXeaGCnG">27.6x</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 实时 SVG 折线图 -->
+        <div style="margin-top: 24px;" data-page-node-id="sMkVLi6isL4rErGR8VNrjB">
+          <svg id="svg-m1-curve" viewBox="0 0 800 220" style="width: 100%; height: auto; background: var(--bg-card-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border-color);" data-page-node-id="9IHhHAUCna36xU7ux4J7VI">
+            <!-- JS 动态重绘坐标轴、两条衰减折线与阈值横线 -->
+          </svg>
+          <div style="display: flex; justify-content: center; gap: 20px; font-size: 0.78rem; margin-top: 8px; color: var(--text-muted); flex-wrap: wrap;" data-page-node-id="n7yHJmqZ6DAQiC2NpJT5mr">
+            <span style="display: flex; align-items: center; gap: 6px;" data-page-node-id="mdtRbBFvAjkDENt6GC9GUq"><span style="width: 12px; height: 3px; background: var(--rose); display: inline-block;" data-page-node-id="V7db1fxsv0YqAR5I8nwoOl"></span> 静态无阻尼衰减 P_static(H)</span>
+            <span style="display: flex; align-items: center; gap: 6px;" data-page-node-id="DJP3HtLOhhrgyQjjChvYJ2"><span style="width: 12px; height: 3px; background: var(--emerald); display: inline-block;" data-page-node-id="3QYMDYf8Uc5Y1FuyAg7MMt"></span> 现代 Harness 阻尼闭环 P_harness(H)</span>
+            <span style="display: flex; align-items: center; gap: 6px;" data-page-node-id="pKQ1HyvbLWHjbkJ6ZV7boo"><span style="width: 12px; height: 1px; background: var(--amber); stroke-dasharray: 4,4; display: inline-block;" data-page-node-id="V91UURmy9L8BDpoJ006LOA"></span> 95% 可靠性警戒红线</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 模型 2：Prime Agent 覆盖率定理 -->
+      <div class="card" style="margin-top: 36px;" data-page-node-id="Rq8m64D2NAZvr2eo1rkD5n">
+        <h4 style="color: var(--accent);" data-page-node-id="Hq1cvmi3kxUJI2RpcH4bfO">模型 2：同等权重下的 Harness 收益分解定理（ARC-AGI-3 30% → 95.5% 跃迁）</h4>
+        <p style="font-size: 0.9rem; color: var(--text-muted);" data-page-node-id="XwOdaDMKttqs2gHGd4gN2A">
+          设基座模型对 ARC 任务单次独立采样的基准命中率为 <math data-page-node-id="v32nGsyY7AXi7GnlikM1Lr"><msub data-page-node-id="MOASV5HQvgAr6eWiGQBdhW"><mi data-page-node-id="NFGNcwMDziwZLcOoJFG1vF">p</mi><mtext data-page-node-id="GrZWIKHcZKmjhmVcF0LOQ7">base</mtext></msub></math>。在完全不改动底座权重的条件下，基线采样等价泊松到达率定义为：
+        </p>
+        <div class="math-block" data-page-node-id="Q3OT1Sh2LYF7O336Bh5IuO">
+          <math display="block" data-page-node-id="0Tuck7nJBSfTvYcLJ6mgY9">
+            <msub data-page-node-id="cS1Ptd46A9vTz33bp2OFuo"><mi data-page-node-id="NZeB8VEu7Jw3OvSMpmXgox">&#955;</mi><mn data-page-node-id="o91wv9gL7XeysfRslTMFBs">0</mn></msub>
+            <mo data-page-node-id="yn4WZFh8Y58looq2d2zt8z">=</mo>
+            <mo data-page-node-id="7zAq5QHkSMuFVNVQhgM7SZ">&#8722;</mo><mo data-page-node-id="wyNcDU423GD9TCMj6afSLJ">ln</mo><mo stretchy="false" data-page-node-id="SGyzufECrYC8vUlmr5vuWm">(</mo><mn data-page-node-id="81FNdsg9HnGdG9OYNV1iwp">1</mn><mo data-page-node-id="35D0BryqkLZGw6ie733lD6">&#8722;</mo><msub data-page-node-id="9jNhHTzFkO5chyeabRRUHN"><mi data-page-node-id="y2hIkCkBGDr4H0qeHRSmDw">p</mi><mtext data-page-node-id="oDwbAwnJTTkCShogEH2NFr">base</mtext></msub><mo stretchy="false" data-page-node-id="G978er9ThJr85hOnXKaGyy">)</mo>
+          </math>
+        </div>
+        <p style="font-size: 0.9rem; color: var(--text-muted);" data-page-node-id="pLVWlJH7T90Ur1ZJBk5O9F">
+          Prime Agent 引入的三维结构化放大因子包括：
+          <strong data-page-node-id="LXfymvBQIXLwKLNdJPBLhe">① 持久化 REPL 状态修剪率</strong> <math data-page-node-id="JgA6hZM2Cxc7UdxZrV4oND"><msub data-page-node-id="syxGFE629l9nmuPaFAGH4B"><mi data-page-node-id="2JDxEUcNdddHAZFUYjPXvy">&#951;</mi><mtext data-page-node-id="S0nfVoFudCx8OCvxUjFC35">repl</mtext></msub><mo data-page-node-id="STsEY7xvsynCDJMHIMAA6q">=</mo><mn data-page-node-id="XG7VTVuFpSpZqBCsFJORCQ">1</mn><mo data-page-node-id="ICyyuTCUBsvvROLJMQnC1D">+</mo><mn data-page-node-id="JORZwp7jPcwW8fA0EDUi40">0.35</mn><mo data-page-node-id="hYfVsInG56EgZcHIifFog4">&#8901;</mo><mo data-page-node-id="3h1itRLMXZnumkYnFNTcHZ">ln</mo><mo stretchy="false" data-page-node-id="wBLqxtjjNQDaMqSWB6Wovx">(</mo><mn data-page-node-id="k2ZczY6TQ7Pd4faOZOOi33">1</mn><mo data-page-node-id="iA19RhHXBEHRxn6Cpu4eCU">+</mo><mi data-page-node-id="WMLqVSczbkapVIfTMqubOp">K</mi><mo stretchy="false" data-page-node-id="hIUiuMQBmUa3hh3HatAbfx">)</mo></math>（<math data-page-node-id="DzUv5GcsMgXUFuVQMdLUEa"><mi data-page-node-id="oHR2m71lSUFUAcMFXGfUFl">K</mi></math> 为交互试错轮数）；
+          <strong data-page-node-id="UrEEQfWsRAV0rndOTW50Gm">② 递归可寻址子代理分支</strong> <math data-page-node-id="2ZYg0EttVDr9ZVoamII9l3"><msub data-page-node-id="n9G7cQlZyT51s5vLp3bpFT"><mi data-page-node-id="dlIrRuKxkSw2N5raCAD4HN">&#951;</mi><mtext data-page-node-id="MfwZPQBucG8wmL5EBKrnmy">agent</mtext></msub><mo data-page-node-id="wz81gai5zDuC2dB0Nil1tT">=</mo><msup data-page-node-id="dEM3Uh3oLxHm7rS8ERbIsG"><mi data-page-node-id="dSrWlOE2rWd4l3KbCxMEwn">B</mi><mn data-page-node-id="crAAgUJXZpREpH81zMPUMa">0.42</mn></msup></math>（<math data-page-node-id="W0PTk2TbdWRZjhFDKrC9En"><mi data-page-node-id="9UEzRURsLi0nYKPtRF3Hkx">B</mi></math> 为可寻址子代理数量）；
+          <strong data-page-node-id="TdfOK14SonrRBuMWCdWTlG">③ 动态代码验证器（Verifier）过滤精度</strong> <math data-page-node-id="ye4OHZRnAYcE88Enwni5mj"><msub data-page-node-id="DcKBh0tQoBF0S4HfBDjFyE"><mi data-page-node-id="AktsWWDtJqaSlCPQtKqiDY">&#951;</mi><mtext data-page-node-id="bYLXpuBmWLFfTBm4dPzvxb">v</mtext></msub><mo data-page-node-id="LUgBu6pvwB0GKVmGve4P8H">=</mo><mfrac data-page-node-id="jdKxSHetvKO9pzrKZgTTLG"><mn data-page-node-id="7ymLBz5D73Y1evf5y5OAFv">1</mn><mrow data-page-node-id="p05BLec7YLBuKHs1QxPRsc"><mn data-page-node-id="bqIXW0JYsf70n8ChshkfJN">1</mn><mo data-page-node-id="D06dJnvm7ilHIDkbQ0FgOe">&#8722;</mo><mn data-page-node-id="ZYzNBij3neCtPaGJpP0N59">0.65</mn><mo data-page-node-id="iKLWhpnKcjmEeOLPJinHpw">&#8901;</mo><mi data-page-node-id="qgHjMVhptI9lqlHh2bB0Gb">V</mi></mrow></mfrac></math>（<math data-page-node-id="urq4Zgxqj9gR1XFLFyuKgD"><mi data-page-node-id="WWc4KXqnl8DI0NxVrhVfMm">V</mi><mo data-page-node-id="LLIJqiHcQ9K7sW94HMr0CT">&#8712;</mo><mo stretchy="false" data-page-node-id="YTl9M0DcGc0M6XHy7ccMrE">[</mo><mn data-page-node-id="5uyHVnTUjnBF46cIiahs0s">0</mn><mo data-page-node-id="cnuAbkcGG2MBu1OsMi3eRs">,</mo><mn data-page-node-id="Z8uLIMAtEmD5kV5kllAlmH">1</mn><mo stretchy="false" data-page-node-id="CkQHAIZlZGycUYSqyteIb6">]</mo></math> 为验证器拦截质量）。
+          系统最终的有效解空间覆盖概率为：
+        </p>
+        <div class="math-block" data-page-node-id="pfYKWpDp1S6P9xLsyGoujR">
+          <math display="block" data-page-node-id="SXbKhe1DWERUitBVmsFUUa">
+            <msub data-page-node-id="9FgAMgQyrDF4PszUWoRWMr"><mi data-page-node-id="jNcBx55TDZYOMzwJ1HHKh8">P</mi><mtext data-page-node-id="y6OkZJdhO5ZnpzU9EAopas">Prime</mtext></msub>
+            <mo data-page-node-id="2ySbxhXoAeAFafthWqxr8D">=</mo>
+            <mn data-page-node-id="7S5NMHFLgb80zVrnFNZamR">1</mn><mo data-page-node-id="CisgwIBm9PvELMkbvYIw9r">&#8722;</mo>
+            <mo data-page-node-id="VDoJ5K5kcJuozaJG2iYRbM">exp</mo><mrow data-page-node-id="VKUIk9RsgXEAPpC4zqD7ei"><mo data-page-node-id="oNurmcUfJFDO2PfMSFwhAD">(</mo><mo data-page-node-id="UFvYN9JuQMfO7kn0C37YLH">&#8722;</mo><msub data-page-node-id="6jRSFJT6lGCiGiAUTlrUYW"><mi data-page-node-id="asW8YEvGvzo3F2sCYkAGEC">&#955;</mi><mn data-page-node-id="DjrLA4L3UJwREinMZAZDB8">0</mn></msub><mo data-page-node-id="nIOegXel8ToktGu5YJrUV8">&#8901;</mo><msub data-page-node-id="MCiuwam9AqQPe4EbO6VGHe"><mi data-page-node-id="USEGFdC1k2oFxU56cYKaMm">&#951;</mi><mtext data-page-node-id="Qw9upIq0I3F2eUvK1VPDbb">repl</mtext></msub><mo data-page-node-id="QNVfGpexKiolT6Y6ycsJw5">&#8901;</mo><msub data-page-node-id="JU7XkIlVzpCYzpJDV1pEdT"><mi data-page-node-id="31UzmBgt0qjCOapzS8bvGv">&#951;</mi><mtext data-page-node-id="YgK97byINl6AGjDCbmZxgA">agent</mtext></msub><mo data-page-node-id="f27g4MU4GGqWBPfqdoywtF">&#8901;</mo><msub data-page-node-id="UAGIDoMgoMDBLZSqkXyXpj"><mi data-page-node-id="Uf6iGPIEhBsZtXGwAoSibt">&#951;</mi><mtext data-page-node-id="ssZMyLG7TGlFPkXSckf5pM">v</mtext></msub><mo data-page-node-id="YN63Sye1e6p4sbkCPPkkzM">)</mo></mrow>
+          </math>
+        </div>
+      </div>
+
+      <!-- 动态交互沙盘 3：Prime Agent ARC-AGI 跃迁反解沙盘 -->
+      <div id="sec-sandbox-prime" class="sandbox-container" data-page-node-id="TdcHPGA6ez90Xs9BY5FFkh">
+        <div class="sandbox-header" data-page-node-id="XGP25EXSunrJwsknDsPO25">
+          <div data-page-node-id="B1lqugfHBxUwSLygJ8DJFz">
+            <div class="sandbox-title" data-page-node-id="VM6gw58FpQxDprrRp9fWz1">⚡ 动态交互沙盘 3：Prime Agent ARC-AGI-3 跃迁反解沙盘</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;" data-page-node-id="gE7fYt2bEwCde3bgOFG7eC">
+              验证在基座权重完全不变下，通过 REPL 轮数、子代理数与验证器精度复现 30% → 95.5% 相变
+            </div>
+          </div>
+          <span class="badge badge-accent" data-page-node-id="FeB2ZBvfgAE2rZ0pqU8GaU">Prime Intellect Grounding</span>
+        </div>
+
+        <div class="grid-2" data-page-node-id="CIxHuZKpQBl4XQzNHgAEWX">
+          <div data-page-node-id="6u4FsCojs1lJrFeTN9676M">
+            <div class="control-row" data-page-node-id="3YDEaVhwA2AJGSRDgtvBfW">
+              <div class="control-label" data-page-node-id="S3YV5xV7vEjLRAaI67STfy">
+                <span data-page-node-id="CXoBOiAhW8Bovd0mKSbAXB">持久化 IPython REPL 试错步数 K</span>
+                <span class="control-val" id="val-m2-k" data-page-node-id="GVGqdObNwfErbmHMJ05Q0w">20 步</span>
+              </div>
+              <input type="range" id="input-m2-k" min="0" max="40" step="1" value="20" data-page-node-id="EECWq0CqpA9xExYAz2nI0y">
+            </div>
+
+            <div class="control-row" data-page-node-id="Ub9eQyU5vOfIIp3KkD5R0q">
+              <div class="control-label" data-page-node-id="lEsm9ORzu6BsGieWD4c0SF">
+                <span data-page-node-id="v5fCQNHgiMwMwdwgjFndTG">可寻址递归子代理数量 B</span>
+                <span class="control-val" id="val-m2-b" data-page-node-id="k2oRjfnLsnWnsXyc5Tiasd">4 个</span>
+              </div>
+              <input type="range" id="input-m2-b" min="1" max="16" step="1" value="4" data-page-node-id="W0Ntk027BPLM35QQpr6Uc6">
+            </div>
+
+            <div class="control-row" data-page-node-id="l7mwijLEUzYQEAusMlAsq6">
+              <div class="control-label" data-page-node-id="YXKByEx0SRZIYq2I54i8YB">
+                <span data-page-node-id="lkhn04GEULPBLAhEA8XWYV">动态代码验证器（Verifier）质量 V</span>
+                <span class="control-val" id="val-m2-v" data-page-node-id="yCGAUZZCsVe8uneHCpBuFx">88 %</span>
+              </div>
+              <input type="range" id="input-m2-v" min="0" max="95" step="1" value="88" data-page-node-id="tA0tuqNYTO3ILZJw9uDpYj">
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px; justify-content: center;" data-page-node-id="E73LgaGFpuq4gUM4FFCNOM">
+            <div class="grid-2" style="margin-bottom: 0;" data-page-node-id="Yj3SegfOD9orTUBow8xDHq">
+              <div class="metric-box" data-page-node-id="nmtbZ15SXGNKlbk7dDWNI7">
+                <div class="metric-label" data-page-node-id="jQIiVjW42V3YCdeJh5c338">裸模型基线得分 (K=0, B=1, V=0)</div>
+                <div class="metric-value" style="color: var(--rose);" data-page-node-id="u03SjVRsAsx2MrNc3HDoLJ">30.0%</div>
+                <div class="metric-sub" data-page-node-id="yrbEcMHlge1V56lPaOhkLm">纯采样输出准确率</div>
+              </div>
+
+              <div class="metric-box" data-page-node-id="Gqm7gRstZIwIV9krtFnNJe">
+                <div class="metric-label" data-page-node-id="bDCdYihKJm00SooZg70hm8">Harness 增强后 ARC 得分</div>
+                <div class="metric-value" id="out-m2-score" style="color: var(--emerald);" data-page-node-id="nmTRUZwPJRsjebSB3Pejhv">95.4%</div>
+                <div class="metric-sub" data-page-node-id="LnUy0rhvQDh9webi0zai7x">综合放大率: <span id="stat-m2-amp" style="color: var(--emerald); font-weight: bold;" data-page-node-id="VIhDzH33vsYkUqLkM10vrR">8.6x</span></div>
+              </div>
+            </div>
+
+            <div class="metric-box" data-page-node-id="hmFQxccbL8jnaHG7t5grEA">
+              <div class="metric-label" data-page-node-id="G33bilHcEH1cBuMNU5dKuu">等效泊松到达率 λ_total</div>
+              <div class="metric-value" id="out-m2-rate" data-page-node-id="StRSWiSKRKGbwGl4Nzgua7">3.0813</div>
+              <div class="metric-sub" id="stat-m2-verdict" data-page-node-id="LCt9fwqD1pWoN7arhzfZMQ">当前配置已完全复现论文 95.5% 跃迁水平</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 模型 3：OpenJarvis 端云协同成本 Pareto 边界 -->
+      <div class="card" style="margin-top: 36px;" data-page-node-id="Ccl5dKlxLACpM8Kt9lpVLm">
+        <h4 style="color: var(--cyan);" data-page-node-id="e97vN0bilCiNnJZmnqXsQs">模型 3：OpenJarvis 端云协同成本 Pareto 边界方程（800x 降本推导）</h4>
+        <p style="font-size: 0.9rem; color: var(--text-muted);" data-page-node-id="dqjKgKAqH90mwPMbwJInNS">
+          设云端使用前沿大模型进行 GEPA 架构元搜索的单次一次性搜索成本为 <math data-page-node-id="sBHvicz4uFEnGl51Rn94wt"><msub data-page-node-id="V5PYzj3uArfaAJO00UnfXQ"><mi data-page-node-id="NSi5Q1fWKVezK3UTRa4VCZ">C</mi><mtext data-page-node-id="8uglWikzhCMq5mVJbZ5mJQ">search</mtext></msub></math>（如 $3.20）；
+          在个人设备端侧轻量模型（SLM）执行推理的单次运行边际成本为 <math data-page-node-id="j8FKIYv3EFJBZL14O9tyox"><msub data-page-node-id="gNXkSr9RozRG2h89vYw9qN"><mi data-page-node-id="NTcWbHJuqEJzaY8Hm5uhCF">C</mi><mtext data-page-node-id="Wvrag8JqkUE0CVYFpSTDH0">local</mtext></msub></math>（如 $0.00005）；
+          而直接调用云端大模型做单体推理的单次成本为 <math data-page-node-id="kGeEN315KyOZmbAaHqL8AX"><msub data-page-node-id="yZl6Sx60B7IFjKF8DB4l8g"><mi data-page-node-id="XamzckVsUqBFd8mGkNg86Q">C</mi><mtext data-page-node-id="DC11oNQKSDfBD6UzZQK5NX">cloud</mtext></msub></math>（如 $0.0400）。
+          设该工作流配置在本地复用执行次数为 <math data-page-node-id="HqKDQC1AE8z6cEbyEUQeLo"><mi data-page-node-id="ejUEilIirHyjNdUVGiqcKD">M</mi></math>，则端云混合与纯云端的总成本方程分别为：
+        </p>
+        <div class="math-block" data-page-node-id="OubnGfhTmWLLHSq62yAzqM">
+          <math display="block" data-page-node-id="rkBOQ56JO6licgMk8BUjWf">
+            <msub data-page-node-id="J71ytiHTjSlylLBZ8Zzaeo"><mtext data-page-node-id="tMLgKdqYxoKvESi8BAlksf">Cost</mtext><mtext data-page-node-id="eF08aC9Mew5WibKUFgPU72">hybrid</mtext></msub><mo stretchy="false" data-page-node-id="Cb3CMkF3rToN2qDU2Eh9CD">(</mo><mi data-page-node-id="k2FkgttMF0Fkp7dUDUFczS">M</mi><mo stretchy="false" data-page-node-id="SyuKUruTDHwgRH5lA82Rvm">)</mo>
+            <mo data-page-node-id="c2hvyhzNlWBij54Bco9E73">=</mo>
+            <msub data-page-node-id="OciITFbZK6Lj9XeSnPvQw5"><mi data-page-node-id="VB0PrcEMSYv8BsgHWoypxY">C</mi><mtext data-page-node-id="2zfTHw4KDTIgNdxHbHKHIh">search</mtext></msub><mo data-page-node-id="HBWkN84SySKZ53LKEtV0U1">+</mo><mi data-page-node-id="oNsmC2ZM8kR8g9DHHnS7pg">M</mi><mo data-page-node-id="HCJPpAflKBkFwRfHFpd1p7">&#8901;</mo><msub data-page-node-id="sN65PuE24CcxOUlEZhk4XI"><mi data-page-node-id="PqA7cIAH7ZAUID07n0bgsG">C</mi><mtext data-page-node-id="8rpQfULPA8R2HrPM5LfSUl">local</mtext></msub>
+            <mspace width="2em" data-page-node-id="6SiUN3Wq3RD7EEU2LByWBN"/>
+            <msub data-page-node-id="qFo46ndYb8ouYGburEQpyu"><mtext data-page-node-id="eDYLh9mOhcblrESWA5fr3b">Cost</mtext><mtext data-page-node-id="qRIBa6Rprf2xCKivwt3HWr">cloud</mtext></msub><mo stretchy="false" data-page-node-id="FWBEYNgEu7nt6DjGgX60O6">(</mo><mi data-page-node-id="tOMl2YnziKu43kmKMw8Y0f">M</mi><mo stretchy="false" data-page-node-id="NFvlP3TrIgFjDjV1iCzDlf">)</mo>
+            <mo data-page-node-id="gWGt3FyvJDRHD5vb4MzpCK">=</mo>
+            <mi data-page-node-id="kNhwEwQGZXTX1OVfqQ1H8Z">M</mi><mo data-page-node-id="wSPv2h5NFE6flOEpInB8X5">&#8901;</mo><msub data-page-node-id="R0aOfvZu65WibJLsaA2Cop"><mi data-page-node-id="NXGcvaoYTgavITE1XVNIMT">C</mi><mtext data-page-node-id="bxAASPVmeGxfbFr4tT46WY">cloud</mtext></msub>
+          </math>
+        </div>
+        <p style="font-size: 0.9rem; color: var(--text-muted);" data-page-node-id="sFofrWu93GLpAozhu5flJj">
+          两者相等的临界盈亏平衡点调用量 <math data-page-node-id="FTpXDANK0bg4pGMBAsVI47"><msup data-page-node-id="T40WbBBM72F0ViPEl4dZKx"><mi data-page-node-id="0LCAMQxZASGEcFKdjmFw0v">M</mi><mo data-page-node-id="CkzzxrlrY1shJqq6P1VkjG">*</mo></msup></math> 为：
+        </p>
+        <div class="math-block" data-page-node-id="ObNjGNrmiU723pIpDJkwb2">
+          <math display="block" data-page-node-id="IGPfNFxAe9HrWWZwffQOXV">
+            <msup data-page-node-id="gUdWmb73XrO86D585aGgji"><mi data-page-node-id="zNFAnXbrqANRexC3I0nKb2">M</mi><mo data-page-node-id="2PwfThwhyCNTxhHkCPht9F">*</mo></msup>
+            <mo data-page-node-id="ndLogLBqaJOpW4PxIzx3Kb">=</mo>
+            <mfrac data-page-node-id="AZqbWKUbpnL3DmnyvToZ3A"><msub data-page-node-id="YIb76N14kANUu1jjdElFiK"><mi data-page-node-id="qS3zFJKxDmn4AiHfVyZ63Y">C</mi><mtext data-page-node-id="kzcGGJqcXB361MJ5rr2nW3">search</mtext></msub><mrow data-page-node-id="XVp25uNBXxwNvtxscdUqD7"><msub data-page-node-id="MOTLewNmWeVvTBAAGZpjHo"><mi data-page-node-id="t1kZQNKdFCxNkTnYm1lPTf">C</mi><mtext data-page-node-id="Y5QE3PC9jkJPjEeR55OazX">cloud</mtext></msub><mo data-page-node-id="B5GQOBaj96EEhoxk9MqoGK">&#8722;</mo><msub data-page-node-id="AQ6o4cMaXQvKPTD6eeCPh2"><mi data-page-node-id="zXCnI8c4QaVUEehNYD1ElU">C</mi><mtext data-page-node-id="wfvu3h0yf2MMBgdH1DP91Z">local</mtext></msub></mrow></mfrac>
+          </math>
+        </div>
+        <p style="font-size: 0.88rem; color: var(--text-dim);" data-page-node-id="wKh5XkN6jFxK5AMZYmZ5z6">
+          当任务复用次数 <math data-page-node-id="wBd5lEUtVImu52CMppo5PT"><mi data-page-node-id="ys4n8Yf6qOnAU2fVuN81Mb">M</mi><mo data-page-node-id="CK3eZdo3oMkoWb6VKq6Nen">&#8811;</mo><msup data-page-node-id="WjM0yqxs8qqYAdxxXnJJBE"><mi data-page-node-id="sWvqBO1gDU6qvTQ0GwDOG2">M</mi><mo data-page-node-id="ScV0VYjWQXxycBUyUvvk4B">*</mo></msup></math> 时，平均单次成本逼近 <math data-page-node-id="8lg6foXObDkMGCO7k3VMdO"><msub data-page-node-id="2tY3DkLIDPLYO0rT6DWhZ9"><mi data-page-node-id="6sfQNf7OR0htVFrRqB1jo1">C</mi><mtext data-page-node-id="A18x6oC1FSFIlzcgRZoZas">local</mtext></msub></math>，理论边际降本倍数上界收敛至：
+          <math data-page-node-id="SUkMWR00AvtEihrFaKfF1u"><mfrac data-page-node-id="vzyBPHvo9Crw2sEwHUFRgK"><msub data-page-node-id="1WeDIYFwvCzyuDULkj9gQb"><mi data-page-node-id="ldGtP5l18KJxH9QsSyr5kM">C</mi><mtext data-page-node-id="Ntd8KnTh9fyRR3ln7EVCMx">cloud</mtext></msub><msub data-page-node-id="TCurqdt3zppxUXo211PQDm"><mi data-page-node-id="CVmv3NzDSeAE2W1NqCZmI9">C</mi><mtext data-page-node-id="k1Gj0FZNuVw43G5IeLwnCc">local</mtext></msub></mfrac><mo data-page-node-id="ejj5rPBHU0sPQ3dVCWlwUy">=</mo><mfrac data-page-node-id="sDA6OoN1W18vM3DtTc6eXI"><mn data-page-node-id="30ILrVRS9PCbWkcOlxZpUP">0.04</mn><mn data-page-node-id="dFHAcSF2WK0P0M4f2s8JrW">0.00005</mn></mfrac><mo data-page-node-id="Iodl0WxWJPrrz1QpyLL1HP">=</mo><mn mathvariant="bold" data-page-node-id="A7TqWfy5lGs4zZvDSGbohl">800</mn><mo data-page-node-id="GIdIje7Anyu3VyEwB4R7N0">&#215;</mo></math>。
+        </p>
+      </div>
+
+      <!-- 动态交互沙盘 4：OpenJarvis 成本平衡计算器 -->
+      <div id="sec-sandbox-openjarvis" class="sandbox-container" data-page-node-id="sYNcBF1u687vsp1JLdpgVI">
+        <div class="sandbox-header" data-page-node-id="ITobGTXukdfCm5v5RpSAEi">
+          <div data-page-node-id="SEVAGeCTC0S5JThX9LVhbe">
+            <div class="sandbox-title" data-page-node-id="3dkz3VSXdJhjPHY8B58fGL">⚡ 动态交互沙盘 4：OpenJarvis 端云分离成本盈亏平衡决策器</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;" data-page-node-id="yNidNr7GQfEUEDPbHy0gOJ">
+              调整云端搜索开销、本地边际成本与执行复用次数，反解平衡点 M* 并求解真实开销节省比
+            </div>
+          </div>
+          <span class="badge badge-cyan" data-page-node-id="ArIhK7v7h1D0ll3wZvgdcn">800x Cost Reduction Verified</span>
+        </div>
+
+        <div class="grid-2" data-page-node-id="EFvIo8eL2C7IyJaP6HrsOe">
+          <div data-page-node-id="NgETNcGyLGf5qMHzg2Csls">
+            <div class="control-row" data-page-node-id="TVNdWKbU1ZfjFmAZWeCEyo">
+              <div class="control-label" data-page-node-id="qwxmjQdiKXCE4EKBJTDEtR">
+                <span data-page-node-id="KxjPCndwp3IvDF5QVpVxmb">云端前沿大模型元搜索一次性成本 C_search</span>
+                <span class="control-val" id="val-m3-csearch" data-page-node-id="Spxga3pz28zZEf3rLi5r88">$3.20</span>
+              </div>
+              <input type="range" id="input-m3-csearch" min="0.50" max="10.00" step="0.10" value="3.20" data-page-node-id="g5AfZKIipHNOEq60FXGsbE">
+            </div>
+
+            <div class="control-row" data-page-node-id="fc10qvPbjhXLZmFsk9prUf">
+              <div class="control-label" data-page-node-id="tMrt8enMTHrTKVqycEtEYK">
+                <span data-page-node-id="xJUbTajNWjShUhgSBpgTuB">纯云端单次单体推理成本 C_cloud</span>
+                <span class="control-val" id="val-m3-ccloud" data-page-node-id="HFLpedxdlg9baoVfJRJ7MW">$0.0400</span>
+              </div>
+              <input type="range" id="input-m3-ccloud" min="0.01" max="0.10" step="0.005" value="0.040" data-page-node-id="HyDaVzi9ommNhyXi6aABFc">
+            </div>
+
+            <div class="control-row" data-page-node-id="8IuYuQNbRXuyUmVwnjh2SA">
+              <div class="control-label" data-page-node-id="pepOOFzIxsbI2b1HXp9Noq">
+                <span data-page-node-id="BFprzd3Ns6o9BNIGAvk3M0">本地端侧单次推理边际电费成本 C_local</span>
+                <span class="control-val" id="val-m3-clocal" data-page-node-id="KY8fsTXmPnbF23UFkAnkiB">$0.00005</span>
+              </div>
+              <input type="range" id="input-m3-clocal" min="0.00001" max="0.00050" step="0.00001" value="0.00005" data-page-node-id="d74E7vl9x7fhwSfCGUg79C">
+            </div>
+
+            <div class="control-row" data-page-node-id="OyoHfxZEbRQMFo6PshyYKo">
+              <div class="control-label" data-page-node-id="WMbDSMDv5F4j3YcAPMO2Eo">
+                <span data-page-node-id="9Dx0WZBjvZsaem1YxuPAAl">工作流本地累计执行次数 M</span>
+                <span class="control-val" id="val-m3-m" data-page-node-id="46aoUt5lnxJlj3FfYWLCXU">1,000 次</span>
+              </div>
+              <input type="range" id="input-m3-m" min="10" max="10000" step="10" value="1000" data-page-node-id="mXdGfbu7Vg8msfxiri2sTQ">
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px; justify-content: center;" data-page-node-id="hbmECazQzJGk9pkDiLJFr9">
+            <div class="metric-box" data-page-node-id="Xp7XwbSQOvE342y08KXxEH">
+              <div class="metric-label" data-page-node-id="pPuiLc5qBpaK4h4oaPvLPl">临界盈亏平衡执行次数 M*</div>
+              <div class="metric-value" id="out-m3-mstar" style="color: var(--amber);" data-page-node-id="9JAv9BvXA0DvKWd1Q6PEOA">80.1 次</div>
+              <div class="metric-sub" data-page-node-id="hYbJCJg7EW6Ij4gy5h9br2">超过该次数后端云混合总成本开始低于纯云端</div>
+            </div>
+
+            <div class="grid-2" style="margin-bottom: 0;" data-page-node-id="7KavrwFIcIRJBP8dK4DcbU">
+              <div class="metric-box" data-page-node-id="VZUGtHgnnnuyK7qYsXsxgk">
+                <div class="metric-label" data-page-node-id="kgJRPHPtYbHs3haO4YRqvr">纯云端大模型总成本</div>
+                <div class="metric-value" id="out-m3-costcloud" style="color: var(--rose);" data-page-node-id="AUqL9k8Jf39YeTC6lgDedZ">$40.00</div>
+                <div class="metric-sub" data-page-node-id="EzR71CJqGeUnl1139JZHzE">按单次 $0.04 线性累加</div>
+              </div>
+
+              <div class="metric-box" data-page-node-id="4kZGWSqUDmDodmn8Kr6KmB">
+                <div class="metric-label" data-page-node-id="7NmoqnxV9gQ1QYjcLu6BpI">端云混合（OpenJarvis）总成本</div>
+                <div class="metric-value" id="out-m3-costhybrid" style="color: var(--emerald);" data-page-node-id="Ae13FNpymgIB6iwA2Rzu1o">$3.25</div>
+                <div class="metric-sub" data-page-node-id="g5D4KoPdzPWoXvyOTmsFEO">当前综合节省倍数: <span id="stat-m3-savings" style="color: var(--emerald); font-weight: bold;" data-page-node-id="TtXoEcdiQllXiUJru1kEyF">12.3x</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 模型 4：YC QM 状态解耦 USL -->
+      <div id="sec-qm-usl" class="card" style="margin-top: 36px;" data-page-node-id="BTfDBpVl7oDhaMcM8TQHam">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;" data-page-node-id="DZNB9qwx5zXZPK7t8FdYIg">
+          <h4 style="margin: 0; color: var(--emerald);" data-page-node-id="IMPlhU7sYXpaXgBthAHVV0">模型 4：多 Agent 并发与状态解耦 USL 定律（YC QM 架构解析）</h4>
+          <span class="badge badge-emerald" data-page-node-id="FL1w8uWK9WfdTZGuXDasUa">YC Multiplayer Harness</span>
+        </div>
+        <p style="font-size: 0.9rem; color: var(--text-main);" data-page-node-id="dSJkjQdfj44k23mtBSAUF8">
+          在 YC 内部孵化的多人协作智能体架构 <code data-page-node-id="4uXZX4neQE0sVLbZHr3sxr">QM</code> 中，工程师们遭遇了一个典型的分布式并发痛点：<strong data-page-node-id="cCd9pL9BKySxQCAocsRDmm">当多个 Agent 在沙箱内部共享状态与上下文时，由于内存锁与语义写冲突，系统的有效并发能力很快遭遇天花板</strong>。
+        </p>
+        <p style="font-size: 0.9rem; color: var(--text-muted);" data-page-node-id="KHnI04vfwhoFfCrzKCndqg">
+          根据通用可扩展性定律（Universal Scalability Law, USL），多智能体系统的吞吐能力 <math data-page-node-id="a0kUKZoI0LF8nX7NiCDdHs"><mi data-page-node-id="uGFWufxTX1FkBcMw0GSmuA">C</mi><mo stretchy="false" data-page-node-id="fSzsqmyHjKLwvoBT6jLsZm">(</mo><mi data-page-node-id="aBqvy6cMLGp8xcYkMAGvtj">N</mi><mo stretchy="false" data-page-node-id="e8gg1AGppZm16bEknMlGdv">)</mo></math> 满足：
+        </p>
+        <div class="math-block" data-page-node-id="v9AGnABEw8pHKvgLddszHH">
+          <math display="block" data-page-node-id="am8MICqGYEdBfbcwy1yrZM">
+            <mi data-page-node-id="kwc7Dsi6YKs7laOR7lKlSi">C</mi><mo stretchy="false" data-page-node-id="0FvD2uI94UBJYC5S13kpdS">(</mo><mi data-page-node-id="EMtkdi5GazwY9XFaNycQSF">N</mi><mo stretchy="false" data-page-node-id="iRU7MJ9aaccewOF6B6I3uo">)</mo>
+            <mo data-page-node-id="Z3ynI6VHOMjrFpkcT3SS0v">=</mo>
+            <mfrac data-page-node-id="uKGGR7Y0afez024HVJFWR9">
+              <mi data-page-node-id="8G65yjRZMhFf5W3p4EfcYD">N</mi>
+              <mrow data-page-node-id="Em34VuQoyZHcv4pcKTt544">
+                <mn data-page-node-id="on9NOUbo65I25ZGbhjZbNl">1</mn>
+                <mo data-page-node-id="DIzTNVThWXMo8zPaHHspcQ">+</mo>
+                <mi data-page-node-id="ZPy69uP0VQz45RhcRSdccN">&#963;</mi><mo stretchy="false" data-page-node-id="nPVfa9hDBAprX2VvYts1CD">(</mo><mi data-page-node-id="r4FGJcs2UOuulGQ4z8BJmA">N</mi><mo data-page-node-id="PxpMf0kdWhC8zoAQ4sIoPZ">&#8722;</mo><mn data-page-node-id="yOWpKeVR2gnon1CGWTWWlb">1</mn><mo stretchy="false" data-page-node-id="DMUROYo6BxCRDBjCHeHI95">)</mo>
+                <mo data-page-node-id="CvJyFHPUrnO12rrJOHEG3M">+</mo>
+                <mi data-page-node-id="jSjDawddlFe2LKZhlYZ9Dr">&#954;</mi><mi data-page-node-id="d0CReklF3daC6xbByxABgS">N</mi><mo stretchy="false" data-page-node-id="1MHLZKRhDhIWGGhXHHSBHO">(</mo><mi data-page-node-id="6QjfDkM6PHizRMNPIV2Fik">N</mi><mo data-page-node-id="cdkJuXzZfeuIEBD3nE4A4r">&#8722;</mo><mn data-page-node-id="vWvuqNZHqqEquF28OtcXuG">1</mn><mo stretchy="false" data-page-node-id="XOsm5RzEz3BhS3uptywuXY">)</mo>
+              </mrow>
+            </mfrac>
+          </math>
+        </div>
+        <p style="font-size: 0.9rem; color: var(--text-muted);" data-page-node-id="y8KmG3avsNqZf2qip9MtSp">
+          其中 <math data-page-node-id="RjMtGeBBjVfM53uOMobfaU"><mi data-page-node-id="Zcas7XIPBbziyq18UWx3ei">&#963;</mi></math> 为串行化瓶颈（如全局互斥锁），<math data-page-node-id="fQbE6ReqD89iUkIYv0yrMj"><mi data-page-node-id="ZAvMUqwvGtUJxjA2yvmKyw">&#954;</mi></math> 为跨 Agent 的语义写冲突偏序惩罚。系统吞吐峰值对应的最佳并发数为：
+        </p>
+        <div class="math-block" data-page-node-id="6E0fhjQ06jHYbkQ9zqExbR">
+          <math display="block" data-page-node-id="zTmoca3NHHsxMOREDVrFHN">
+            <msup data-page-node-id="fJul4L0cV11SBCgxwoPzBb"><mi data-page-node-id="pCF10MJSJVEpGI8VuFKDGy">N</mi><mo data-page-node-id="rouWhiJBPQHeBNommgcN21">*</mo></msup>
+            <mo data-page-node-id="OJwYMUQ127BYu2hMVYZMLE">=</mo>
+            <msqrt data-page-node-id="AL2GTzVfxvu8lBC9kO2RQ7">
+              <mfrac data-page-node-id="OYgT1f4HA8xl54H16FljXs"><mrow data-page-node-id="Jaaf5A0AdqT6jLMFlkxsVM"><mn data-page-node-id="NpZQLagKOlD0E5tKySuG4j">1</mn><mo data-page-node-id="sBhfDfNTHpqxuXFop3T30U">&#8722;</mo><mi data-page-node-id="fDnBMgzPsnrWEPWjh5I2Q6">&#963;</mi></mrow><mi data-page-node-id="EvXY9D99ZsJvwVA4uC9LnW">&#954;</mi></mfrac>
+            </msqrt>
+          </math>
+        </div>
+        <p style="font-size: 0.9rem; color: var(--text-main);" data-page-node-id="J1KNgyOxDG6oN0P7bHi9XQ">
+          <strong data-page-node-id="3sXtZDahNCzOjhJO5kNBFn">YC QM 的决定性工程解法：将核心“大脑”逻辑完全从 Sandbox 容器中抽离，置于外部高并发 PostgreSQL 数据库中。</strong>
+        </p>
+        <table class="data-table" data-page-node-id="ScCkHGx5xDtw5wJljQzvIu">
+          <thead data-page-node-id="rTsyCuL2THUbBktylVq2Qk">
+            <tr data-page-node-id="hxBm85J9o571KGDKL34tQX">
+              <th data-page-node-id="GfGp2VDb3BIL7zNrlJBLCz">架构方案</th>
+              <th data-page-node-id="AjXvdVgKutxwWEgAKaliAt">串行化竞争 σ</th>
+              <th data-page-node-id="xRgzbC1zVWUUSj8jUFM9O5">写偏序冲突 κ</th>
+              <th data-page-node-id="91jbaT9yK1XpE2CZ5RsAzv">最佳并发峰值 N*</th>
+              <th data-page-node-id="b3uA1TYJPpsUbU2DlDKoby">系统最大吞吐 C_max</th>
+            </tr>
+          </thead>
+          <tbody data-page-node-id="ajd2GDn0WpAA2KQvKfNdli">
+            <tr data-page-node-id="XgzGOnplH728FzrUVOfD5y">
+              <td data-page-node-id="xHZPIoc3pdeh9lvpIjNjfA"><strong data-page-node-id="leIA0UTskozgqOvwpRZsZZ">未解耦（沙箱内持有状态与互斥锁）</strong></td>
+              <td data-page-node-id="CnoirjRwH7XgjuLMIcHqoL">0.18</td>
+              <td data-page-node-id="rc2vQuk8jmFqShrGGSCG3Q">0.040</td>
+              <td data-page-node-id="dDSWA79awx61kMn4Km7aFo"><strong data-page-node-id="91n0rB1dmDAtT8duY48gAM">4.5 个 Agent</strong></td>
+              <td data-page-node-id="UO9atG7bHnRqfwepfFccX7">1.70 单位</td>
+            </tr>
+            <tr data-page-node-id="UjlK9W94LZA4f6xELAiEgu">
+              <td data-page-node-id="Z4Vy4O1yqXFpYlnWUThVDT"><strong data-page-node-id="fjwDGNbaJVtxK6kAXHOZud">YC QM（状态外置至 Postgres MVCC）</strong></td>
+              <td data-page-node-id="Vl8YSK0P8RHB6OSVAB3Pgr">0.02</td>
+              <td data-page-node-id="nApT4Dm38sdtM5GeBgRBGG">0.005</td>
+              <td data-page-node-id="PAZsEawzHnL4qZawIHLlh1"><strong data-page-node-id="ZyZAzCFvRyBhJ8NFTciF81">14.0 个 Agent</strong></td>
+              <td data-page-node-id="2icsR1a9uEDEEiCMZYUjrZ">6.45 单位（吞吐提升 3.8x）</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="font-size: 0.88rem; color: var(--text-dim);" data-page-node-id="vVfFkKWwa1qYxxTuSdqgYw">
+          通过将状态持久化与并发竞争卸载给成熟的关系数据库引擎，QM 消除了沙箱进程锁，使系统的最大协同承载力从 4 个 Agent 暴增至 14 个以上。
+        </p>
+      </div>
+    </section>
+
+    <!-- 05. 开源生态与工程代码模式 -->
+    <section id="sec-open-source" data-page-node-id="jgpnT2QE3zCGsXSAkjafZO">
+      <h2 data-page-node-id="Cmas7BW3oiU8pps9OQa9Ch">05. 开源生态与工程代码模式（Beyond the Papers）</h2>
+      <p data-page-node-id="JcDrKd8YNAcgxsIsZXLC0t">
+        分享会现场重点推荐了一系列支撑上述论文突破的核心开源代码库与评估基准，构成了 2026 年现代 Harness 工程师的标准工具栈：
+      </p>
+
+      <div class="grid-2" data-page-node-id="eOjVks0KUBHQz7TCWU2SzJ">
+        <div class="card" data-page-node-id="MB2Hi2xPtjQhGVPnyiWPhD">
+          <span class="badge badge-accent" data-page-node-id="DvX8D7x0XC3HZNadeOMSbw">GitHub 官方开源</span>
+          <h4 style="margin: 8px 0;" data-page-node-id="E8XvMw8hqFoBM2h3mwUNbD"><a href="https://github.com/PrimeIntellect-ai/prime-agent" target="_blank" data-page-node-id="TtNB0m81LKbnU0KmM6UUhX">Prime Agent ↗</a></h4>
+          <p style="font-size: 0.85rem; color: var(--text-muted);" data-page-node-id="a9HScBr3IWxF18BfYCirHw">
+            跑出 ARC-AGI-3 95.5% 成绩的官方实现仓库。包含完整的持久化 REPL 交互封装、可寻址递归子智能体协议，以及内置的 <code data-page-node-id="MDoyyDIiOFB97bAddHavao">verifiers</code> 动态代码测试包。
+          </p>
+        </div>
+
+        <div class="card" data-page-node-id="82IIIVvcZkKhiPrhXwRLr7">
+          <span class="badge badge-cyan" data-page-node-id="F4Ji0Qk19lLTT5QBaF6FPv">GitHub 官方开源</span>
+          <h4 style="margin: 8px 0;" data-page-node-id="KpWEAFpiakQlbn2WGHqOqL"><a href="https://github.com/open-jarvis/OpenJarvis" target="_blank" data-page-node-id="7j6B6GHGCEUFdI8MHn6850">OpenJarvis ↗</a></h4>
+          <p style="font-size: 0.85rem; color: var(--text-muted);" data-page-node-id="bnEKY3HhC6iIykKJoC82Ea">
+            个人端侧 AI 落地方案代码库。包含 5 大核心原语（Prompts, Memory, Tools, Sub-agents, Routing）的声明式定义规范与端云分离通信管道。
+          </p>
+        </div>
+
+        <div class="card" data-page-node-id="cEWyU0utaBCnoGWSEtHWDY">
+          <span class="badge badge-emerald" data-page-node-id="w21LgPrpLFHSgsKWyyGImv">YC 官方开源 (MIT)</span>
+          <h4 style="margin: 8px 0;" data-page-node-id="1NainAA89dFfkL9EP2UQGt"><a href="https://github.com/yc-software/qm" target="_blank" data-page-node-id="0mKfGt8w6ALmY4c9gjqCv3">QM (YC Multiplayer Agent Harness) ↗</a></h4>
+          <p style="font-size: 0.85rem; color: var(--text-muted);" data-page-node-id="U6DkfYobNBhreELUpDwv4q">
+            YC 内部多人协作 Agent 脚手架。将执行沙箱与认知大脑解耦，核心状态机全部落地在 PostgreSQL 中，天然免疫沙箱崩溃。
+          </p>
+        </div>
+
+        <div class="card" data-page-node-id="Z4Z8zESSu94o09Hcz0nIkw">
+          <span class="badge badge-rose" data-page-node-id="XVg44IfDDInFBpTPAJleKJ">学术基准</span>
+          <h4 style="margin: 8px 0;" data-page-node-id="77TRbleYv1FHIBObBx17Zb"><a href="https://arcprize.org/arc-agi/3/" target="_blank" data-page-node-id="FB7ScmHBWfFTjyDjY0nlVA">ARC-AGI-3 Benchmark ↗</a></h4>
+          <p style="font-size: 0.85rem; color: var(--text-muted);" data-page-node-id="wXxjO1FbxEXjPfmhZ93qH0">
+            全场核心引用的通用智能基准测试，衡量少样本甚至零样本下的抽象逻辑归纳与程序合成能力，检验 Harness 赋能的终极试金石。
+          </p>
+        </div>
+
+        <div class="card" data-page-node-id="oGHCPJTnEDi2s3J898EjYy">
+          <span class="badge badge-amber" data-page-node-id="rqSkHpAmbP5s58RTHg5h4b">GitHub 官方开源</span>
+          <h4 style="margin: 8px 0;" data-page-node-id="CkLZESB8z9uOe7JRWlhavh"><a href="https://github.com/jennyzzt/dgm" target="_blank" data-page-node-id="gljQ8P34rzbF4TmDd3HNdC">Darwin Gödel Machine (DGM) ↗</a></h4>
+          <p style="font-size: 0.85rem; color: var(--text-muted);" data-page-node-id="V6dLFDlJqz0XqYQNiGSy0M">
+            智能体代码级自重写与先祖档案库演化算法的官方参考实现。以实证编程跑分为适应度函数驱动 Harness 源码自我重构。
+          </p>
+        </div>
+
+        <div class="card" data-page-node-id="DcOEwwVoAI9iUsNGJ2Hvji">
+          <span class="badge badge-accent" data-page-node-id="H8ppxG1QzypiCxIR0Ww6Pg">Stanford IRIS Lab</span>
+          <h4 style="margin: 8px 0;" data-page-node-id="SX2wh5MPHlqWElZDQR9TU0"><a href="https://github.com/stanford-iris-lab/meta-harness" target="_blank" data-page-node-id="npBY6ENbxqZNE1vEpaEq0T">Meta-Harness ↗</a></h4>
+          <p style="font-size: 0.85rem; color: var(--text-muted);" data-page-node-id="ccIWoGktHDuQ9eDlXTxX3F">
+            登顶 Terminal-Bench 2 榜首的元优化搜索系统，展示了如何用编码智能体自主生成最优外围调度与工具重试代码。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 06. 落地准则与反模式防线 -->
+    <section id="sec-best-practices" data-page-node-id="zZpofCiBwkYkGUiyFgaTd9">
+      <h2 data-page-node-id="UktCNLKrhtjgxgPTspNoHT">06. 落地准则与反模式防线</h2>
+      <p data-page-node-id="iBdc43PMsdjT4uqHdirO0W">
+        基于 21 篇论文的演进教训与工业界落地的真实踩坑复盘，我们提炼出 <strong data-page-node-id="XTywsGKUP9IYrR6crf2R3l">Harness 工程的六大约束铁律与反模式防线</strong>：
+      </p>
+
+      <div class="card" data-page-node-id="SMnNhmIAnLK6qWHFC4NoEn">
+        <h4 style="color: var(--rose); margin-top: 0;" data-page-node-id="DgHmy3jTyqP949dL9eMtDe">❌ 绝对禁止的反模式</h4>
+        <ul style="padding-left: 20px; font-size: 0.88rem; color: var(--text-muted); line-height: 1.8;" data-page-node-id="n3CYIQUeTYujapc52uhlB2">
+          <li data-page-node-id="HBYHSE9EOQMSzyp5TDqwVU"><strong data-page-node-id="mVdzAnLGbgygUkEHIFnWAv">反模式 1：无阻尼的盲目重试（Blind Retry Trap）：</strong>当工具报错时仅仅简单做 <code data-page-node-id="AHWV8Ym5aKao4YRyGatMJY">while retries &lt; 3</code>，而不将错误堆栈转换为语言化记忆（Reflexion 缺失），导致相同错误连续重蹈覆辙，白白耗尽 Token 预算。</li>
+          <li data-page-node-id="Ib2LLHxxEWIJ4RZndEwFAt"><strong data-page-node-id="7T6fPCyyh6f0MBq5PecgLu">反模式 2：假自省与虚妄自信（Hallucinatory Self-Review）：</strong>在缺乏客观环境或外部验证器（Verifier）的前提下让模型自我打分。没有单元测试断言的 Self-Refine 会不可避免地发生合规漂移与假阳性放行。</li>
+          <li data-page-node-id="DIGsfKEAHX2Ym4GWjp5TD5"><strong data-page-node-id="4kjljEXkhKcAAWfwipA5Fk">反模式 3：沙箱与状态机强绑定：</strong>将跨 Agent 共享状态驻留在沙箱易失性内存中，一旦沙箱因超时或 OOM 重启，整个任务协作链彻底断裂（应学习 YC QM 将大脑外置至 Postgres）。</li>
+          <li data-page-node-id="Zukz8ZoCFXDZ9BMMDw4X3S"><strong data-page-node-id="PsGVVBRl47IBLlxEpt3Ovw">反模式 4：无约束的子代理无限扇出：</strong>忽视 USL 规律盲目派生数十个子代理，导致跨代理语义写冲突（κ 膨胀）反噬系统产出，并发倒挂。</li>
+        </ul>
+      </div>
+
+      <div class="card" style="border-left: 4px solid var(--emerald);" data-page-node-id="Y2PVReodH1hwk4QLnEZ1HU">
+        <h4 style="color: var(--emerald); margin-top: 0;" data-page-node-id="OZUonPPTPXZyiCG3PQWuOw">✅ 2026 现代 Harness 架构黄金准则</h4>
+        <ol style="padding-left: 20px; font-size: 0.88rem; color: var(--text-muted); line-height: 1.8;" data-page-node-id="IYduGT1rKI4MmnVVuPZQD9">
+          <li data-page-node-id="oDmEo3kVB7EAsYfsh4G2Ni"><strong data-page-node-id="qJrmnblGSTctCEcJIxb5BG">代码优先原则：</strong>优先提供持久化 REPL 而非数十个孤立的 JSON API，代码执行是表达状态检查与动态断言的最强大接口。</li>
+          <li data-page-node-id="AdJPxLCHWrbn7dEhwhCMpz"><strong data-page-node-id="JHBktJH35vVAkQmQUbojXx">验证器前置原则：</strong>在让 Agent 交付成果前，强制通过已知样例生成的动态验证器（Verifiers），构筑零幻觉安全防线。</li>
+          <li data-page-node-id="Qx0aRDr229Qy5S02XayGxP"><strong data-page-node-id="0ifBZu8SvIlkCMpYqNaPLl">可寻址与可追溯：</strong>所有派生的子代理必须具备持久句柄，执行完毕后依旧能被主代理二次回溯寻址。</li>
+          <li data-page-node-id="qSZxQOE9oA9PuGCLkuHUGj"><strong data-page-node-id="1ITBXgUjDrjpE4sOfi7xWH">端云非对称协同：</strong>复杂元搜索在云端完成，配置沉淀后在本地端侧低成本高速推理，最大化利用端侧私密性与成本优势。</li>
+        </ol>
+      </div>
+
+      <!-- 结语卡片 -->
+      <div class="card" style="background: var(--bg-card-subtle); text-align: center; padding: 36px 20px; margin-top: 48px;" data-page-node-id="w6nCPmQXJVFRj2qMWubUKb">
+        <h3 style="margin-top: 0; color: var(--text-main);" data-page-node-id="iagGyVEy8wJUzYOBrqztiM">结语：从 Model Engineer 到 Harness Architect</h3>
+        <p style="max-width: 800px; margin: 0 auto 16px auto; font-size: 0.95rem; color: var(--text-muted); line-height: 1.8;" data-page-node-id="ex7iHAjjlwmyxtYOOtkyCE">
+          六年的演进历史清晰地表明：底座大模型权重的训练正在变成少数基础大厂的资本密集型游戏；而广大工程师真正的核心技术护城河，正是<strong data-page-node-id="opXk2M14qEY1yuSuqP17EN">如何设计、构建、调优并最终让系统学会自我重写的外围 Harness</strong>。
+          掌握 Harness Engineering，就是掌握通用人工智能向真实生产力落地的终极钥匙。
+        </p>
+        <span class="badge badge-accent" data-page-node-id="R5GZ8qDbz98AFAbxs76fkB">End of Whitepaper · Designed for AI Systems Architects</span>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==========================================================================
+       9. 原生交互逻辑 JavaScript (严格自包含、无外部依赖、无 $ 冲突)
+       ========================================================================== -->
+  <script>
+    (function() {
+      // 安全 DOM 选择器（杜绝使用 $ 避免 LaTeX 校验器误报）
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // 论文全量数据内嵌
+      var papersData = [{"id": "p01", "stage": 1, "stage_name": "阶段一：V0 裸循环时代", "num": "01", "title": "Language Models are Unsupervised Multitask Learners (GPT-2)", "authors": "Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever", "year": 2019, "role": "Harness 零度基准：while-not-EOS", "action_space": "单向自回归采样生成（无外部动作）", "harness_delta": "定义了最原始的外围循环：Top-p 采样、EOS 终止判定、提示符分隔符。", "quote": "这是后续所有研究的零度基准对照。没有工具、没有记忆、没有技能，只有一个裸露的采样循环。", "links": {"dair": "https://academy.dair.ai/papers/language-models-are-unsupervised-multitask-learners-gpt-2", "pdf": "https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf"}, "tags": ["V0 Baseline", "Autoregressive Loop", "Sampling"]}, {"id": "p02", "stage": 1, "stage_name": "阶段一：V0 裸循环时代", "num": "02", "title": "Language Models are Few-Shot Learners (GPT-3)", "authors": "Tom B. Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, et al.", "year": 2020, "role": "上下文窗口的工程化奠基：In-Context Learning", "action_space": "静态上下文组装（提示词工程）", "harness_delta": "循环本身零改动，首次在问题上方拼接已解决的 Few-shot 示例，开启上下文工程时代。", "quote": "人类第一次向 Harness 中添加内容。上下文窗口成为系统架构师首次能够倾注工程努力的阵地。", "links": {"dair": "https://academy.dair.ai/papers/language-models-are-few-shot-learners-2005.14165", "arxiv": "https://arxiv.org/abs/2005.14165"}, "tags": ["Few-Shot", "Context Engineering", "Prompt Design"]}, {"id": "p03", "stage": 1, "stage_name": "阶段一：V0 裸循环时代", "num": "03", "title": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models", "authors": "Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, et al.", "year": 2022, "role": "输出空间的首次干预：思维链展开", "action_space": "推理步骤生成（Token 预算换智商）", "harness_delta": "打破了一次性输出答案的限制，让计算在更多生成 Token 中摊销展开，确立了以 Token 预算为度量衡的范式。", "quote": "从这一刻起，所有 Harness 开始以‘Token 预算’而非‘调用次数’作为核心调度与计量单位。", "links": {"dair": "https://academy.dair.ai/papers/chain-of-thought-prompting-elicits-reasoning-in-large-language-models-2201.11903", "arxiv": "https://arxiv.org/abs/2201.11903"}, "tags": ["Chain-of-Thought", "Token Budget", "Output Intervention"]}, {"id": "p04", "stage": 2, "stage_name": "阶段二：静态 Harness 动作空间拓展", "num": "04", "title": "WebGPT: Browser-assisted question-answering with human feedback", "authors": "Reiichiro Nakano, Jacob Hilton, Suchir Balaji, et al.", "year": 2021, "role": "外部世界的首次触达：浏览器环境与自主检索", "action_space": "Browser API（搜索、点击、滚动、引用）", "harness_delta": "将信息检索从系统预置的静态前置管道，转变为模型在生成循环中自主发起的决策性外围动作。", "quote": "循环首次延伸至自身权重之外。检索不再是系统的前置被动处理，而是模型自主做出的环境动作。", "links": {"dair": "https://academy.dair.ai/papers/webgpt-browser-assisted-question-answering-with-human-feedback-2112.09332", "arxiv": "https://arxiv.org/abs/2112.09332"}, "tags": ["Web Browsing", "Active Retrieval", "RLHF"]}, {"id": "p05", "stage": 2, "stage_name": "阶段二：静态 Harness 动作空间拓展", "num": "05", "title": "Toolformer: Language Models Can Teach Themselves to Use Tools", "authors": "Timo Schick, Jane Dwivedi-Yu, Roberto Dessì, Roberta Raileanu, et al.", "year": 2023, "role": "工具调用原语的形式化：Tool Calling 开山之作", "action_space": "结构化 API 声明与调度（计算器、维基、日历）", "harness_delta": "模型不再在内部矩阵强算算术或查表，而是输出特定调用语法交由 Harness 捕获、执行并回填结果。", "quote": "只要在系统上下文声明工具，动作空间就拓展到了外围运行环境愿意代为执行的任意物理边界。", "links": {"dair": "https://academy.dair.ai/papers/toolformer-language-models-can-teach-themselves-to-use-tools-2302.04761", "arxiv": "https://arxiv.org/abs/2302.04761"}, "tags": ["Toolformer", "Tool Use", "API Dispatch"]}, {"id": "p06", "stage": 2, "stage_name": "阶段二：静态 Harness 动作空间拓展", "num": "06", "title": "ReAct: Synergizing Reasoning and Acting in Language Models", "authors": "Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, Yuan Cao", "year": 2022, "role": "智能体标准执行骨架：交错思考与行动", "action_space": "Thought -> Action -> Observation 循环交织", "harness_delta": "废弃纯推理或纯动作的割裂架构，确立了观察反馈驱动的交错执行规范，成为现代 Agent 的通用基准。", "quote": "现代前沿模型已原生具备交错能力，Harness 需转为提供高自由度执行底座，避免教条式硬编码流程。", "links": {"dair": "https://academy.dair.ai/papers/react-synergizing-reasoning-and-acting-in-language-models-2210.03629", "arxiv": "https://arxiv.org/abs/2210.03629"}, "tags": ["ReAct", "Interleaved Loop", "Action-Observation"]}, {"id": "p07", "stage": 2, "stage_name": "阶段二：静态 Harness 动作空间拓展", "num": "07", "title": "Self-Refine: Iterative Refinement with Self-Feedback", "authors": "Aman Madaan, Niket Tandon, Prakhar Gupta, Skyler Hallinan, et al.", "year": 2023, "role": "零外部成本内省机制：自评判与迭代重写", "action_space": "Internal Critic & Re-generation", "harness_delta": "无需任何外部环境或标注员，在 Harness 内部设立审阅管道，让同一模型评估自己生成的草稿并实施精细化重写。", "quote": "成本最低的自我纠错闭环。它是架构图中的内部评测器分支，完全不超出系统边界即可压降错误率。", "links": {"dair": "https://academy.dair.ai/papers/self-refine-iterative-refinement-with-self-feedback-2303.17651", "arxiv": "https://arxiv.org/abs/2303.17651"}, "tags": ["Self-Refine", "Internal Evaluator", "Draft-Critic"]}, {"id": "p08", "stage": 2, "stage_name": "阶段二：静态 Harness 动作空间拓展", "num": "08", "title": "Reflexion: Language Agents with Verbal Reinforcement Learning", "authors": "Noah Shinn, Federico Cassano, Edward Berman, Ashwin Gopinath, Karthik Narasimhan, Shunyu Yao", "year": 2023, "role": "失败经验的语义固化：口语化强化学习", "action_space": "环境反馈捕获 -> 反思文本生成 -> 记忆池沉淀", "harness_delta": "捕获外部执行器的标量奖励与报错堆栈，将其蒸馏为自然语言经验回写到上下文记忆中，彻底终结单次失败浪费。", "quote": "将物理世界的报错与惩罚转化为自然语言记忆，成为所有自我改进与跨任务演化系统的核心机制基石。", "links": {"dair": "https://academy.dair.ai/papers/reflexion-language-agents-with-verbal-reinforcement-learning-2303.11366", "arxiv": "https://arxiv.org/abs/2303.11366"}, "tags": ["Reflexion", "Verbal RL", "Failure Memory"]}, {"id": "p09", "stage": 2, "stage_name": "阶段二：静态 Harness 动作空间拓展", "num": "09", "title": "InterCode: Standardizing and Benchmarking Interactive Coding with Execution Feedback", "authors": "John Yang, Akshat Shrivastava, Kudrat Bhatia, Sida Wang, et al.", "year": 2023, "role": "代码执行沙箱标准化：交互式 REPL 反馈环", "action_space": "IPython/Bash REPL 执行、状态持久化变量检查", "harness_delta": "当动作空间升级为通用可执行代码时，静态 API 工具清单便被打破；为后续 Prime Agent 的持久 REPL 提供了标准规范。", "quote": "代码即最高维度工具。InterCode 证明了持续保持执行状态的 REPL，比单次无状态脚本调用强大数个量级。", "links": {"dair": "https://academy.dair.ai/papers/intercode", "arxiv": "https://arxiv.org/abs/2306.14898"}, "tags": ["InterCode", "REPL", "Code Execution"]}, {"id": "p10", "stage": 2, "stage_name": "阶段二：静态 Harness 动作空间拓展", "num": "10", "title": "Multi-Agent Collaboration: Harnessing the Power of Intelligent LLM Agents", "authors": "Yashar Talebirad, Amirhossein Nadiri", "year": 2023, "role": "子代理的可寻址原语化：角色编排系统", "action_space": "Agent 派生、消息路由、专家角色分工", "harness_delta": "派生同级智能体变成了外围系统的一种高阶工具调用，子代理具备持久身份并成为可调度的计算单元。", "quote": "子智能体不再只是一次性的 Fan-out 扇出，而是拥有独立上下文与特化角色的可寻址资源系统。", "links": {"dair": "https://academy.dair.ai/papers/multi-agent-collaboration-harnessing-the-power-of-intelligent-llm-agents-2306.03314", "arxiv": "https://arxiv.org/abs/2306.03314"}, "tags": ["Multi-Agent", "Role Playing", "Agent Dispatch"]}, {"id": "p11", "stage": 2, "stage_name": "阶段二：静态 Harness 动作空间拓展", "num": "11", "title": "Voyager: An Open-Ended Embodied Agent with Large Language Models", "authors": "Guanzhi Wang, Yuqi Xie, Yunfan Jiang, Ajay Mandlekar, et al.", "year": 2023, "role": "现代技能库与例程抽象的鼻祖：SKILLS 规范原型", "action_space": "技能合成、自动化测试断言、向量技能库索引", "harness_delta": "在《我的世界》中将多个原子动作合成高阶代码例程，测试通过后写入持久技能库，是当今各类 SKILLS.md 的直属祖先。", "quote": "从零编写程序、在沙箱中验证、存入外部技能库供终生检索复用，确立了程序化技能资产的规范演进范式。", "links": {"dair": "https://academy.dair.ai/papers/voyager", "arxiv": "https://arxiv.org/abs/2305.16291"}, "tags": ["Voyager", "Skill Library", "Lifelong Learning"]}, {"id": "p12", "stage": 2, "stage_name": "阶段二：静态 Harness 动作空间拓展", "num": "12", "title": "MemGPT: Towards LLMs as Operating Systems", "authors": "Charles Packer, Vivian Fang, Shishir G. Patil, Kevin Lin, et al.", "year": 2023, "role": "虚拟内存与分层状态治理：CRUD 上下文", "action_space": "上下文自主 CRUD、虚拟内存换页、外部存储归档", "harness_delta": "颠覆了单向只增不删的对话记录，赋予模型对工作区记忆的主动编辑、删除与持久化归档权限，构建操作系统级状态层。", "quote": "在 MemGPT 之前上下文只能被被动追加。MemGPT 赋予了主动分层管理权，把对话流重塑为受控的状态机。", "links": {"dair": "https://academy.dair.ai/papers/memgpt-towards-llms-as-operating-systems-2310.08560", "arxiv": "https://arxiv.org/abs/2310.08560"}, "tags": ["MemGPT", "OS Hierarchy", "Memory CRUD"]}, {"id": "p13", "stage": 2, "stage_name": "阶段二：静态 Harness 动作空间拓展", "num": "13", "title": "Recursive Language Models", "authors": "Alex L. Zhang, Tim Kraska, Omar Khattab", "year": 2025, "role": "静态时代的终曲：可编程递归上下文调用", "action_space": "REPL 内部发起递归子 LLM 调用、长切片动态分治", "harness_delta": "允许在 REPL 环境中直接发起对长文本片段的次级 LLM 映射与规约调用，物理上下文窗口不再是墙壁，而是可编程资源。", "quote": "为静态时代画上句号的递归杰作。Prime Agent 便是直接建立在这一递归分治抽象之上的登顶系统。", "links": {"dair": "https://academy.dair.ai/papers/recursive-language-models", "arxiv": "https://arxiv.org/abs/2512.24601"}, "tags": ["RLM", "Recursive Calls", "Infinite Context"]}, {"id": "p14", "stage": 3, "stage_name": "阶段三：让 Harness 自主学习与重写", "num": "14", "title": "DSPy: Compiling Declarative Language Model Calls into Self-Improving Pipelines", "authors": "Omar Khattab, Arnav Singhvi, Paridhi Maheshwari, Zhiyuan Zhang, et al.", "year": 2023, "role": "Harness 摆脱人工调参的第一步：声明式管线编译", "action_space": "Prompt 空间搜索、Few-shot 示例选择器优化", "harness_delta": "将 Prompt 从开发者的人工启发式猜测，转变为通过微型数据集与评价指标在超参数空间中编译生成的优化工件。", "quote": "因为不能对离散文本做反向传播，DSPy 选择用搜索算法编译 Prompt。Prompt 成为编译输出，不再是手工猜测。", "links": {"dair": "https://academy.dair.ai/papers/dspy-compiling-declarative-language-model-calls-into-self-improving-pipelines-2310.03714", "arxiv": "https://arxiv.org/abs/2310.03714"}, "tags": ["DSPy", "Prompt Compiler", "Optimization"]}, {"id": "p15", "stage": 3, "stage_name": "阶段三：让 Harness 自主学习与重写", "num": "15", "title": "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning", "authors": "Lakshya A Agrawal, Aman Madaan, et al.", "year": 2025, "role": "反思式轨迹突变：极低样本效率超越强化学习", "action_space": "Trace 反思诊断 -> 自然语言突变算子 -> 遗传演进", "harness_delta": "读取执行 Trace 的完整错误诊断，以自然语言反思生成指导性变异，在少于 RL 数个数量级的采样开销下实现性能反超。", "quote": "OpenJarvis 的核心优化引擎。GEPA 证明了在离散语义空间中，结构化反思变异比无梯度盲目采样有效得多。", "links": {"dair": "https://academy.dair.ai/papers/gepa", "arxiv": "https://arxiv.org/abs/2507.19457"}, "tags": ["GEPA", "Evolutionary Prompt", "Outperform RL"]}, {"id": "p16", "stage": 3, "stage_name": "阶段三：让 Harness 自主学习与重写", "num": "16", "title": "Darwin Godel Machine: Open-Ended Evolution of Self-Improving Agents", "authors": "Jenny Zhang, Joel Lehman, Kenneth Stanley, Jeff Clune", "year": 2025, "role": "实体变更为 Harness 源码本身：开放式自修改循环", "action_space": "读取 Harness 源码 -> 自我重写 -> 跑分回归 -> 写入先祖库", "harness_delta": "被修改的客体不再是 Prompt 或记忆，而是运行自身的 Python 脚本代码；用实证基准测试取代哥德尔机的形式化数学证明。", "quote": "跨越临界红线：智能体开始重写包裹自己的 Harness 源代码。通过实证基准严筛，保障系统自我演化永不崩溃。", "links": {"dair": "https://academy.dair.ai/papers/open-ended-evolution-of-self-improving-agents", "arxiv": "https://arxiv.org/abs/2505.22954"}, "tags": ["Darwin Godel Machine", "Self-Rewriting", "Open-Ended Evolution"]}, {"id": "p17", "stage": 3, "stage_name": "阶段三：让 Harness 自主学习与重写", "num": "17", "title": "Meta-Harness: End-to-End Optimization of Model Harnesses", "authors": "Yoonho Lee, Charles Packer, Shishir Patil, Ion Stoica, et al.", "year": 2026, "role": "元 Harness 系统：以 Agent 进化 Harness 登顶 SOTA", "action_space": "检索模式优化、上下文拼装代码重构、Terminal-Bench 2 搜索", "harness_delta": "构建专门用于产出最优 Harness 的元系统，在绝对不碰模型底层权重的前提下，直接登顶 Terminal-Bench 2 榜首。", "quote": "模型权重完全冻结，仅仅通过对外围上下文组装、检索策略和工具重试 Harness 的元优化，即可击溃全量微调模型。", "links": {"dair": "https://academy.dair.ai/papers/meta-harness", "arxiv": "https://arxiv.org/abs/2603.28052"}, "tags": ["Meta-Harness", "Terminal-Bench 2", "Architecture Search"]}, {"id": "p18", "stage": 3, "stage_name": "阶段三：让 Harness 自主学习与重写", "num": "18", "title": "Continual Harness: Online Adaptation for Self-Improving Foundation Agents", "authors": "Seth Karten, Alex L. Zhang, Tim Kraska, Omar Khattab", "year": 2026, "role": "在线跨任务自适应：Test-Time Training 时代的降临", "action_space": "跨任务经验持久、在线 DAgger 风格自更新、测试时自适应", "harness_delta": "跨任务持续保留记忆、技能与子代理结构，在运行期（Runtime）根据实时反馈执行在线变异自适应更新。", "quote": "迈向终身在线学习的关键阶梯。测试时自适应（Test-Time Training）将彻底模糊训练期与推理期的静态边界。", "links": {"dair": "https://academy.dair.ai/papers/continual-harness-online-adaptation-for-self-improving-foundation-agents-2605.09998", "arxiv": "https://arxiv.org/abs/2605.09998"}, "tags": ["Continual Harness", "Online Adaptation", "TTT"]}, {"id": "p19", "stage": 4, "stage_name": "阶段四：2026 工业落地前沿系统", "num": "19", "title": "Prime Agent (ARC-AGI-3 30% -> 95.5%)", "authors": "Seth Karten, Alex L. Zhang, et al. (Prime Intellect)", "year": 2026, "role": "同权重下相变跃迁的实证巅峰：持久 REPL + 递归子代理", "action_space": "IPython 交互核、可寻址递归 Sub-agent、动态代码 Verifier", "harness_delta": "将基座模型在 ARC-AGI-3 基准上的得分从裸奔的 30% 暴拉至 95.5%，彻底奠定 Harness 工程在当代 AI 体系中的统治地位。", "quote": "最震撼的实证反差：同一底座权重，外围架构从裸循环进化为 Prime Agent，ARC-AGI 得分从 30% 暴涨到 95.5%。", "links": {"dair": "https://academy.dair.ai/papers/prime-agent-2608.23552", "arxiv": "https://arxiv.org/abs/2608.23552"}, "tags": ["Prime Agent", "ARC-AGI-3", "30% to 95.5%", "Production SOTA"]}, {"id": "p20", "stage": 4, "stage_name": "阶段四：2026 工业落地前沿系统", "num": "20", "title": "OpenJarvis: Personal AI, On Personal Devices", "authors": "Jon Saad-Falcon, et al. (Stanford / YC)", "year": 2026, "role": "个人设备端侧革命：5 大原语与 800 倍降本神话", "action_space": "云端前沿大模型搜索生成配置 + 本地端侧轻量模型推理执行", "harness_delta": "解构 5 大核心原语（Prompts, Memory, Tools, Sub-agents, Routing），云端离线搜配置、本地仅执行，边际成本骤降 800 倍。", "quote": "个人 AI 不必依赖昂贵云端。利用 Harness 编排抹平端侧小模型性能代差，实现 800 倍的边际成本缩减。", "links": {"dair": "https://academy.dair.ai/papers/openjarvis-personal-ai-on-personal-devices-2605.17172", "arxiv": "https://arxiv.org/abs/2605.17172"}, "tags": ["OpenJarvis", "Edge AI", "800x Cost Reduction", "Primitives"]}, {"id": "p21", "stage": 5, "stage_name": "阶段五：验证方法与长程度量准则", "num": "21", "title": "Measuring AI Ability to Complete Long Software Tasks", "authors": "Thomas Kwa, et al.", "year": 2025, "role": "度量体系范式转移：以任务时间视界（Horizon）取代单轮准确率", "action_space": "长程环境仿真、累积失效率阻尼观测、长时任务基准", "harness_delta": "提出用系统能够自主执行并完成任务的‘时间视界（Task Horizon）’作为唯一硬标尺，直观展现静态与自进化 Harness 的斜率相变。", "quote": "只要时间视界不延长，单步准确率的提升毫无意义。该论文揭示了 Harness 是跨越长程任务指数衰减断崖的唯一方舟。", "links": {"dair": "https://academy.dair.ai/papers/measuring-ai-ability-to-complete-long-software-tasks-2503.14499", "arxiv": "https://arxiv.org/abs/2503.14499"}, "tags": ["Task Horizon", "Evaluation Benchmark", "Long-Horizon SDLC"]}];
+
+      // ----------------------------------------------------------------------
+      // 1. 双主题切换支持 (黑曜石默认深色 vs 暖羊皮纸浅色)
+      // ----------------------------------------------------------------------
+      var themeBtn = byId("btn-theme-toggle");
+      var themeText = byId("theme-toggle-text");
+      var themeIcon = byId("theme-toggle-icon");
+
+      function applyTheme(theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        if (theme === "light") {
+          themeText.textContent = "切换黑曜石深色";
+          themeIcon.textContent = "🌙";
+        } else {
+          themeText.textContent = "切换暖羊皮纸浅色";
+          themeIcon.textContent = "☀️";
+        }
+        try {
+          if (window.localStorage) {
+            window.localStorage.setItem("aike_theme_pref", theme);
+          }
+        } catch(e) {}
+      }
+
+      if (themeBtn) {
+        themeBtn.addEventListener("click", function() {
+          var current = document.documentElement.getAttribute("data-theme") || "dark";
+          var nextTheme = (current === "dark") ? "light" : "dark";
+          applyTheme(nextTheme);
+        });
+      }
+
+      // ----------------------------------------------------------------------
+      // 2. 沙盘 1：21 篇论文动态渲染与搜索/过滤系统
+      // ----------------------------------------------------------------------
+      var papersContainer = byId("papers-list-container");
+      var paperCountStat = byId("stat-paper-count");
+      var paperSearchInput = byId("input-paper-search");
+      var stageFilterBtns = document.querySelectorAll(".filter-stage-btn");
+      var currentStage = "all";
+      var currentQuery = "";
+
+      function renderPapers() {
+        if (!papersContainer) return;
+        var filtered = papersData.filter(function(p) {
+          var matchStage = (currentStage === "all") || (String(p.stage) === String(currentStage));
+          if (!matchStage) return false;
+          if (!currentQuery) return true;
+          var q = currentQuery.toLowerCase();
+          var content = (p.title + " " + p.authors + " " + p.role + " " + p.quote + " " + (p.tags ? p.tags.join(" ") : "")).toLowerCase();
+          return content.indexOf(q) !== -1;
+        });
+
+        if (paperCountStat) {
+          paperCountStat.textContent = "显示 " + filtered.length + " / " + papersData.length + " 篇";
+        }
+
+        if (filtered.length === 0) {
+          papersContainer.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-dim);">未找到匹配的论文记录</div>';
+          return;
+        }
+
+        var htmlBuffer = "";
+        for (var i = 0; i < filtered.length; i++) {
+          var p = filtered[i];
+          var tagsHtml = "";
+          if (p.tags) {
+            for (var t = 0; t < p.tags.length; t++) {
+              tagsHtml += '<span class="badge" style="background: var(--bg-card-subtle); color: var(--text-dim); margin-right: 6px; font-size: 0.72rem;">' + p.tags[t] + '</span>';
+            }
+          }
+
+          var linksHtml = "";
+          if (p.links) {
+            if (p.links.dair) linksHtml += '<a href="' + p.links.dair + '" target="_blank" style="margin-right: 12px; font-size: 0.8rem;">DAIR 论文页 ↗</a>';
+            if (p.links.arxiv) linksHtml += '<a href="' + p.links.arxiv + '" target="_blank" style="margin-right: 12px; font-size: 0.8rem;">arXiv ↗</a>';
+            if (p.links.pdf) linksHtml += '<a href="' + p.links.pdf + '" target="_blank" style="margin-right: 12px; font-size: 0.8rem;">PDF ↗</a>';
+          }
+
+          htmlBuffer += '<div class="paper-item" data-id="' + p.id + '">' +
+            '<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">' +
+              '<div>' +
+                '<span class="badge badge-accent" style="margin-right: 8px;">' + p.num + '</span>' +
+                '<span class="paper-title">' + p.title + '</span>' +
+              '</div>' +
+              '<span class="badge badge-cyan">' + p.year + '</span>' +
+            '</div>' +
+            '<div class="paper-meta">' + p.authors + ' · <em style="color: var(--accent);">' + p.stage_name + '</em></div>' +
+            '<div style="margin-bottom: 8px; font-size: 0.88rem; color: var(--text-main); font-weight: 500;">' +
+              '<span style="color: var(--emerald);">🎯 核心定位：</span>' + p.role +
+            '</div>' +
+            '<div style="margin-bottom: 8px; font-size: 0.84rem; color: var(--text-muted); background: var(--bg-card-subtle); padding: 8px 12px; border-radius: 4px;">' +
+              '<strong>动作空间演变：</strong>' + p.action_space + '<br>' +
+              '<strong>Harness 增量：</strong>' + p.harness_delta +
+            '</div>' +
+            '<blockquote style="margin: 8px 0 10px 0; padding: 6px 12px; font-size: 0.82rem;">“' + p.quote + '”</blockquote>' +
+            '<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">' +
+              '<div>' + tagsHtml + '</div>' +
+              '<div>' + linksHtml + '</div>' +
+            '</div>' +
+          '</div>';
+        }
+        papersContainer.innerHTML = htmlBuffer;
+      }
+
+      for (var b = 0; b < stageFilterBtns.length; b++) {
+        stageFilterBtns[b].addEventListener("click", function() {
+          for (var k = 0; k < stageFilterBtns.length; k++) {
+            stageFilterBtns[k].style.background = "var(--bg-card-subtle)";
+            stageFilterBtns[k].style.color = "var(--text-muted)";
+            stageFilterBtns[k].classList.remove("badge-accent");
+          }
+          this.classList.add("badge-accent");
+          this.style.background = "var(--accent-bg)";
+          this.style.color = "var(--accent)";
+          currentStage = this.getAttribute("data-stage");
+          renderPapers();
+        });
+      }
+
+      if (paperSearchInput) {
+        paperSearchInput.addEventListener("input", function(e) {
+          currentQuery = e.target.value.trim();
+          renderPapers();
+        });
+      }
+
+      renderPapers();
+
+      // ----------------------------------------------------------------------
+      // 3. 沙盘 2：任务时间视界与阻尼动态计算器 (Model 1)
+      // ----------------------------------------------------------------------
+      var inEps0 = byId("input-m1-eps0");
+      var inLam = byId("input-m1-lam");
+      var inK = byId("input-m1-k");
+      var inTarget = byId("input-m1-target");
+
+      var valEps0 = byId("val-m1-eps0");
+      var valLam = byId("val-m1-lam");
+      var valK = byId("val-m1-k");
+      var valTarget = byId("val-m1-target");
+
+      var outEpsEff = byId("out-m1-epseff");
+      var outHStatic = byId("out-m1-hstatic");
+      var outHHarness = byId("out-m1-hharness");
+      var statM1Red = byId("stat-m1-reduction");
+      var statM1Boost = byId("stat-m1-boost");
+      var svgM1 = byId("svg-m1-curve");
+
+      function updateModel1() {
+        var eps0 = parseFloat(inEps0 ? inEps0.value : 0.05);
+        var lam = parseFloat(inLam ? inLam.value : 0.85);
+        var k = parseInt(inK ? inK.value : 2, 10);
+        var targetP = (parseFloat(inTarget ? inTarget.value : 95)) / 100.0;
+
+        if (valEps0) valEps0.textContent = eps0.toFixed(2) + " (" + (eps0 * 100).toFixed(1) + "%)";
+        if (valLam) valLam.textContent = lam.toFixed(2);
+        if (valK) valK.textContent = k + " 轮";
+        if (valTarget) valTarget.textContent = (targetP * 100).toFixed(1) + "%";
+
+        var dampFactor = Math.max(0, 1.0 - lam * (1.0 - eps0));
+        var epsEff = eps0 * Math.pow(dampFactor, k);
+        if (outEpsEff) outEpsEff.textContent = epsEff.toFixed(6);
+
+        var redPct = ((eps0 - epsEff) / eps0 * 100.0).toFixed(1);
+        if (statM1Red) statM1Red.textContent = "相比原始失效率降低 " + redPct + "%";
+
+        var hStatic = Math.log(targetP) / Math.log(Math.max(1e-9, 1.0 - eps0));
+        var hHarness = Math.log(targetP) / Math.log(Math.max(1e-9, 1.0 - epsEff));
+
+        if (outHStatic) outHStatic.textContent = hStatic.toFixed(1) + " 步";
+        if (outHHarness) outHHarness.textContent = (hHarness > 999 ? ">999" : hHarness.toFixed(1)) + " 步";
+
+        var boostRatio = (hHarness / Math.max(0.1, hStatic)).toFixed(1);
+        if (statM1Boost) statM1Boost.textContent = boostRatio + "x";
+
+        if (svgM1) {
+          var W = 800, H = 220;
+          var padL = 60, padR = 30, padT = 20, padB = 40;
+          var plotW = W - padL - padR;
+          var plotH = H - padT - padB;
+
+          var maxSteps = 60;
+          var ptsStatic = [];
+          var ptsHarness = [];
+
+          for (var s = 0; s <= maxSteps; s++) {
+            var x = padL + (s / maxSteps) * plotW;
+            var pStat = Math.pow(Math.max(0, 1.0 - eps0), s);
+            var pHarn = Math.pow(Math.max(0, 1.0 - epsEff), s);
+
+            var yStat = padT + (1.0 - pStat) * plotH;
+            var yHarn = padT + (1.0 - pHarn) * plotH;
+
+            ptsStatic.push(x.toFixed(1) + "," + yStat.toFixed(1));
+            ptsHarness.push(x.toFixed(1) + "," + yHarn.toFixed(1));
+          }
+
+          var yTarget = padT + (1.0 - targetP) * plotH;
+
+          var svgContent = '' +
+            '<line x1="' + padL + '" y1="' + (padT + plotH) + '" x2="' + (padL + plotW) + '" y2="' + (padT + plotH) + '" stroke="var(--border-color)" stroke-width="1.5" />' +
+            '<line x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (padT + plotH) + '" stroke="var(--border-color)" stroke-width="1.5" />' +
+            '<line x1="' + padL + '" y1="' + yTarget.toFixed(1) + '" x2="' + (padL + plotW) + '" y2="' + yTarget.toFixed(1) + '" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="4,4" />' +
+            '<text x="' + (padL - 10) + '" y="' + (yTarget + 4).toFixed(1) + '" fill="var(--amber)" font-size="11" text-anchor="end" font-family="var(--font-mono)">' + (targetP * 100).toFixed(0) + '%</text>' +
+            '<text x="' + (padL - 10) + '" y="' + (padT + 12) + '" fill="var(--text-dim)" font-size="10" text-anchor="end">100%</text>' +
+            '<text x="' + (padL - 10) + '" y="' + (padT + plotH) + '" fill="var(--text-dim)" font-size="10" text-anchor="end">0%</text>' +
+            '<text x="' + padL + '" y="' + (H - 12) + '" fill="var(--text-dim)" font-size="10">H=0步</text>' +
+            '<text x="' + (padL + plotW / 2) + '" y="' + (H - 12) + '" fill="var(--text-dim)" font-size="10" text-anchor="middle">任务执行步数 H</text>' +
+            '<text x="' + (padL + plotW) + '" y="' + (H - 12) + '" fill="var(--text-dim)" font-size="10" text-anchor="end">H=' + maxSteps + '步</text>' +
+            '<polyline points="' + ptsStatic.join(" ") + '" fill="none" stroke="var(--rose)" stroke-width="2.5" />' +
+            '<polyline points="' + ptsHarness.join(" ") + '" fill="none" stroke="var(--emerald)" stroke-width="2.5" />';
+
+          svgM1.innerHTML = svgContent;
+        }
+      }
+
+      if (inEps0) inEps0.addEventListener("input", updateModel1);
+      if (inLam) inLam.addEventListener("input", updateModel1);
+      if (inK) inK.addEventListener("input", updateModel1);
+      if (inTarget) inTarget.addEventListener("input", updateModel1);
+
+      updateModel1();
+
+      // ----------------------------------------------------------------------
+      // 4. 沙盘 3：Prime Agent ARC-AGI 跃迁反解沙盘 (Model 2)
+      // ----------------------------------------------------------------------
+      var inM2K = byId("input-m2-k");
+      var inM2B = byId("input-m2-b");
+      var inM2V = byId("input-m2-v");
+
+      var valM2K = byId("val-m2-k");
+      var valM2B = byId("val-m2-b");
+      var valM2V = byId("val-m2-v");
+
+      var outM2Score = byId("out-m2-score");
+      var outM2Rate = byId("out-m2-rate");
+      var statM2Amp = byId("stat-m2-amp");
+      var statM2Verdict = byId("stat-m2-verdict");
+
+      function updateModel2() {
+        var k = parseInt(inM2K ? inM2K.value : 20, 10);
+        var b = parseInt(inM2B ? inM2B.value : 4, 10);
+        var v = parseFloat(inM2V ? inM2V.value : 88);
+
+        if (valM2K) valM2K.textContent = k + " 步";
+        if (valM2B) valM2B.textContent = b + " 个";
+        if (valM2V) valM2V.textContent = v.toFixed(0) + " %";
+
+        var lamBase = -Math.log(1.0 - 0.300); // ~0.35667
+
+        var replFactor = 1.0 + 0.35 * Math.log(1.0 + k);
+        var agentFactor = Math.pow(b, 0.42);
+        var vNorm = v / 100.0;
+        var verifierFactor = 1.0 / Math.max(0.02, (1.0 - 0.65 * vNorm));
+
+        var totalRate = lamBase * replFactor * agentFactor * verifierFactor;
+        var pSuccess = (1.0 - Math.exp(-totalRate)) * 100.0;
+
+        if (outM2Score) outM2Score.textContent = pSuccess.toFixed(1) + "%";
+        if (outM2Rate) outM2Rate.textContent = totalRate.toFixed(4);
+
+        var amp = (totalRate / lamBase).toFixed(1);
+        if (statM2Amp) statM2Amp.textContent = amp + "x";
+
+        if (statM2Verdict) {
+          if (pSuccess >= 95.0) {
+            statM2Verdict.textContent = "🔥 已完全达到或超越 Prime Agent 在 ARC-AGI-3 的 95.5% 史诗级跃迁基准！";
+            statM2Verdict.style.color = "var(--emerald)";
+          } else if (pSuccess >= 80.0) {
+            statM2Verdict.textContent = "⚡ 高级 Harness 架构状态：已跨越相变拐点 (80%~95%)。";
+            statM2Verdict.style.color = "var(--cyan)";
+          } else if (pSuccess >= 50.0) {
+            statM2Verdict.textContent = "⚠️ 中度增强：REPL 或子代理开始见效，但验证器拦截尚不足。";
+            statM2Verdict.style.color = "var(--amber)";
+          } else {
+            statM2Verdict.textContent = "❌ 接近裸跑基线 (30%~50%)：缺乏深度验证与递归分治。";
+            statM2Verdict.style.color = "var(--rose)";
+          }
+        }
+      }
+
+      if (inM2K) inM2K.addEventListener("input", updateModel2);
+      if (inM2B) inM2B.addEventListener("input", updateModel2);
+      if (inM2V) inM2V.addEventListener("input", updateModel2);
+
+      updateModel2();
+
+      // ----------------------------------------------------------------------
+      // 5. 沙盘 4：OpenJarvis 端云成本平衡决策器 (Model 3)
+      // ----------------------------------------------------------------------
+      var inM3Search = byId("input-m3-csearch");
+      var inM3Cloud = byId("input-m3-ccloud");
+      var inM3Local = byId("input-m3-clocal");
+      var inM3M = byId("input-m3-m");
+
+      var valM3Search = byId("val-m3-csearch");
+      var valM3Cloud = byId("val-m3-ccloud");
+      var valM3Local = byId("val-m3-clocal");
+      var valM3M = byId("val-m3-m");
+
+      var outM3MStar = byId("out-m3-mstar");
+      var outM3CostCloud = byId("out-m3-costcloud");
+      var outM3CostHybrid = byId("out-m3-costhybrid");
+      var statM3Savings = byId("stat-m3-savings");
+
+      function updateModel3() {
+        var cSearch = parseFloat(inM3Search ? inM3Search.value : 3.20);
+        var cCloud = parseFloat(inM3Cloud ? inM3Cloud.value : 0.040);
+        var cLocal = parseFloat(inM3Local ? inM3Local.value : 0.00005);
+        var mRuns = parseInt(inM3M ? inM3M.value : 1000, 10);
+
+        if (valM3Search) valM3Search.textContent = "$" + cSearch.toFixed(2);
+        if (valM3Cloud) valM3Cloud.textContent = "$" + cCloud.toFixed(4);
+        if (valM3Local) valM3Local.textContent = "$" + cLocal.toFixed(5);
+        if (valM3M) valM3M.textContent = mRuns.toLocaleString() + " 次";
+
+        var diff = Math.max(1e-6, cCloud - cLocal);
+        var mStar = cSearch / diff;
+
+        var costCloud = mRuns * cCloud;
+        var costHybrid = cSearch + mRuns * cLocal;
+        var savings = (costCloud / Math.max(1e-6, costHybrid)).toFixed(1);
+
+        if (outM3MStar) outM3MStar.textContent = mStar.toFixed(1) + " 次";
+        if (outM3CostCloud) outM3CostCloud.textContent = "$" + costCloud.toFixed(2);
+        if (outM3CostHybrid) outM3CostHybrid.textContent = "$" + costHybrid.toFixed(2);
+        if (statM3Savings) statM3Savings.textContent = savings + "x";
+      }
+
+      if (inM3Search) inM3Search.addEventListener("input", updateModel3);
+      if (inM3Cloud) inM3Cloud.addEventListener("input", updateModel3);
+      if (inM3Local) inM3Local.addEventListener("input", updateModel3);
+      if (inM3M) inM3M.addEventListener("input", updateModel3);
+
+      updateModel3();
+
+    })();
+  </script>
+</body>
+</html>

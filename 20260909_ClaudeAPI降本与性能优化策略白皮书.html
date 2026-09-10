@@ -1,0 +1,1829 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude API 降本与性能优化策略白皮书：缓存、提示词与 Effort 的三类系统优化工程</title>
+  <style>
+
+    :root {
+      --aike-sidebar-w: 280px;
+      --aike-container-max: 1360px;
+      --aike-content-max: 1180px;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+      /* 深色（黑曜石）默认基线 */
+      --bg-canvas: #181715;
+      --bg-card: #22201D;
+      --bg-card-hover: #2A2723;
+      --bg-card-subtle: #1C1B18;
+      --border-color: #36332E;
+      --border-soft: #2F2C28;
+      --border-focus: rgba(226, 136, 106, 0.4);
+      --text-main: #EDEAE5;
+      --text-muted: #A6A096;
+      --text-dim: #706B63;
+
+      /* 语义色体系：陶土主色 + 五色 */
+      --accent: #E2886A;
+      --accent-hover: #F0A58C;
+      --accent-bg: rgba(226, 136, 106, 0.14);
+      --accent-border: rgba(226, 136, 106, 0.35);
+      --emerald: #34D399;
+      --emerald-bg: rgba(52, 211, 153, 0.12);
+      --rose: #F87171;
+      --rose-bg: rgba(248, 113, 113, 0.12);
+      --amber: #FBBF24;
+      --amber-bg: rgba(251, 191, 36, 0.12);
+      --cyan: #38BDF8;
+      --cyan-bg: rgba(56, 189, 248, 0.12);
+      --code-bg: #14120F;
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.30);
+      --shadow-md: 0 4px 12px rgba(0,0,0,.40);
+      --shadow-lg: 0 12px 32px rgba(0,0,0,.50);
+    }
+
+    /* 浅色（暖羊皮纸）主题覆盖 */
+    [data-theme="light"] {
+      --bg-canvas: #FAF7F2;
+      --bg-card: #FFFFFF;
+      --bg-card-hover: #F3EFEA;
+      --bg-card-subtle: #F3EFEA;
+      --border-color: #E5DFD5;
+      --border-soft: #EFEBE4;
+      --border-focus: rgba(217, 119, 87, 0.4);
+      --text-main: #2D2A26;
+      --text-muted: #6B655E;
+      --text-dim: #968F85;
+
+      --accent: #D97757;
+      --accent-hover: #B55A3C;
+      --accent-bg: rgba(217, 119, 87, 0.10);
+      --accent-border: rgba(217, 119, 87, 0.28);
+      --emerald: #10B981;
+      --emerald-bg: rgba(16, 185, 129, 0.10);
+      --rose: #EF4444;
+      --rose-bg: rgba(239, 68, 68, 0.10);
+      --amber: #F59E0B;
+      --amber-bg: rgba(245, 158, 11, 0.10);
+      --cyan: #06B6D4;
+      --cyan-bg: rgba(6, 182, 212, 0.10);
+      --code-bg: #F2ECE2;
+
+      --shadow-sm: 0 1px 3px rgba(90,70,50,.06);
+      --shadow-md: 0 4px 12px rgba(90,70,50,.08);
+      --shadow-lg: 0 12px 32px rgba(90,70,50,.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      background-color: var(--bg-canvas);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.75;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* 侧栏固定贴左 280px */
+    .sidebar {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: var(--aike-sidebar-w);
+      background-color: var(--bg-card-subtle);
+      border-right: 1px solid var(--border-color);
+      overflow-y: auto;
+      padding: 24px 16px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .sidebar::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 4px;
+    }
+
+    .sidebar-header {
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .sidebar-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 3px 8px;
+      background: var(--accent-bg);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+    }
+
+    .sidebar-title {
+      font-family: var(--font-serif);
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.4;
+      color: var(--text-main);
+    }
+
+    .theme-toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .theme-toggle-btn:hover {
+      border-color: var(--accent);
+      color: var(--text-main);
+    }
+
+    .nav-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .nav-item a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-size: 13px;
+      text-decoration: none;
+      line-height: 1.4;
+      transition: all 0.15s ease;
+      border-left: 2px solid transparent;
+    }
+
+    .nav-item a:hover {
+      background: var(--bg-card);
+      color: var(--accent);
+    }
+
+    .nav-item a.active {
+      background: var(--accent-bg);
+      color: var(--accent);
+      border-left-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .reading-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: var(--accent);
+      z-index: 1000;
+      transition: width 0.1s ease;
+    }
+
+    /* 正文对称居中布局 */
+    .main-container {
+      max-width: var(--aike-content-max);
+      width: auto;
+      margin-left: calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+      margin-right: max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+      padding: 48px 36px 120px 36px;
+    }
+
+    @media (max-width: 1080px) {
+      .sidebar {
+        position: static;
+        width: 100%;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .main-container {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        max-width: 100% !important;
+        padding: 24px 20px 80px 20px;
+      }
+    }
+
+    /* 标题系统 */
+    h1, h2, h3, h4 {
+      font-family: var(--font-serif);
+      color: var(--text-main);
+      font-weight: 700;
+      line-height: 1.35;
+      letter-spacing: -0.01em;
+    }
+
+    h1 {
+      font-size: clamp(1.85rem, 2.8vw, 2.5rem);
+      margin-bottom: 16px;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 16px;
+    }
+
+    h2 {
+      font-size: clamp(1.35rem, 2.0vw, 1.75rem);
+      margin-top: 56px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      scroll-margin-top: 24px;
+    }
+    h2::before {
+      content: "";
+      display: inline-block;
+      width: 4px;
+      height: 1.1em;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    h3 {
+      font-size: 1.2rem;
+      margin-top: 36px;
+      margin-bottom: 16px;
+      color: var(--accent);
+      scroll-margin-top: 24px;
+    }
+
+    h4 {
+      font-size: 1.05rem;
+      margin-top: 24px;
+      margin-bottom: 10px;
+      font-family: var(--font-sans);
+    }
+
+    p {
+      margin-bottom: 18px;
+      color: var(--text-main);
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    ul, ol {
+      margin-bottom: 20px;
+      padding-left: 24px;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--border-color);
+      margin: 48px 0;
+    }
+
+    blockquote {
+      margin: 24px 0;
+      padding: 16px 20px;
+      background: var(--accent-bg);
+      border-left: 4px solid var(--accent);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      color: var(--text-main);
+      font-size: 15px;
+    }
+    blockquote p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* 代码与行内格式 */
+    code, pre {
+      font-family: var(--font-mono);
+      font-size: 0.88em;
+    }
+
+    code {
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+      color: var(--accent);
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 18px 20px;
+      overflow-x: auto;
+      margin: 20px 0;
+      line-height: 1.6;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      border: none;
+      color: inherit;
+    }
+
+    /* 表格 */
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      margin: 24px 0;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      background: var(--bg-card);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--bg-card-subtle);
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr:hover td {
+      background: var(--bg-card-hover);
+    }
+
+    /* 视觉卡片与图表容器 */
+    .figure-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      margin: 28px 0;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .figure-caption {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+    .figure-caption strong {
+      color: var(--accent);
+    }
+
+    .svg-container {
+      width: 100%;
+      overflow-x: auto;
+      display: flex;
+      justify-content: center;
+    }
+    .svg-container svg {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* 交互沙盘面板 */
+    .sandbox-panel {
+      background: var(--bg-card);
+      border: 2px solid var(--accent-border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin: 32px 0;
+      box-shadow: var(--shadow-md);
+    }
+
+    .sandbox-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .sandbox-title {
+      font-family: var(--font-serif);
+      font-size: 1.18rem;
+      font-weight: 700;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sandbox-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--accent-bg);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+      font-weight: 600;
+    }
+
+    .sandbox-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .control-group {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+    }
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 8px;
+    }
+    .control-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    select, input[type="text"] {
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+    }
+    select:focus, input[type="text"]:focus {
+      border-color: var(--accent);
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+      font-size: 13px;
+      color: var(--text-main);
+      cursor: pointer;
+    }
+    .checkbox-item input[type="checkbox"] {
+      margin-top: 4px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .stat-cards-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .stat-card {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      text-align: center;
+    }
+    .stat-card-title {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    .stat-card-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--accent);
+    }
+
+    .verdict-box {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: var(--accent-bg);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-main);
+    }
+
+    /* 打印适配 */
+    @media print {
+      .sidebar, .reading-progress, .theme-toggle-btn {
+        display: none !important;
+      }
+      .main-container {
+        margin: 0 !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+      }
+      body {
+        background: #FFFFFF !important;
+        color: #000000 !important;
+      }
+      a {
+        color: #000000 !important;
+        text-decoration: underline !important;
+      }
+      .figure-card, .sandbox-panel {
+        border: 1px solid #CCC !important;
+        box-shadow: none !important;
+      }
+    }
+
+  </style>
+</head>
+<body>
+  <!-- 阅读进度条 -->
+  <div class="reading-progress" id="read-progress"></div>
+
+  <!-- 固定左侧侧边栏 (280px) -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-badge">Anthropic Official Engineering</div>
+      <div class="sidebar-title">Claude API 降本与性能优化白皮书</div>
+    </div>
+    
+    <button type="button" class="theme-toggle-btn" id="btn-theme-toggle">
+      <span id="theme-label">🌓 切换主题 (黑曜石/暖羊皮纸)</span>
+      <span id="theme-indicator" style="font-family:var(--font-mono);font-size:11px;color:var(--accent);">DARK</span>
+    </button>
+
+    <nav>
+      <ul class="nav-list">
+        <li class="nav-item"><a href="#sec-overview" class="nav-link active">01. 核心综述：降本三层架构</a></li>
+        <li class="nav-item"><a href="#sec-cache" class="nav-link">02. 输入层：提示词缓存优化</a></li>
+        <li class="nav-item"><a href="#sec-prompt" class="nav-link">03. 指令层：六类反模式审计</a></li>
+        <li class="nav-item"><a href="#sec-effort" class="nav-link">04. 推理层：Effort 校准与搜索</a></li>
+        <li class="nav-item"><a href="#sec-bill" class="nav-link">05. 全局审计：cost-optimize 体系</a></li>
+        <li class="nav-item"><a href="#sec-matrix" class="nav-link">06. 策略矩阵：三大工具选型</a></li>
+        <li class="nav-item"><a href="#sec-sandbox" class="nav-link">07. 实操沙盘：成本与反模式推演</a></li>
+        <li class="nav-item"><a href="#sec-appendix" class="nav-link">08. 官方资源与作者团队</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- 主正文容器 (自动对称居中) -->
+  <main class="main-container">
+    <header style="margin-bottom: 40px;">
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px;">
+        <span class="sidebar-badge">官方技术博客深度工程化交付</span>
+        <span style="font-family:var(--font-mono); font-size:12px; color:var(--text-muted);">发布基准：2026-09-09 ｜ Lance Martin et al.</span>
+      </div>
+      <h1>Anthropic 官方开发团队分享如何让 Claude API 降本不降质：缓存、提示词与 Effort 的三类优化策略</h1>
+      <p style="font-size:1.15rem; color:var(--text-muted); line-height:1.7;">
+        降本与性能并非只能二选一：先排除重复计算、无效指令和不匹配的思考投入，再决定是否更换模型。
+      </p>
+    </header>
+
+    <!-- 核心摘要要点 -->
+    <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:20px 24px; margin-bottom:32px;">
+      <div style="font-family:var(--font-serif); font-size:1.1rem; font-weight:700; color:var(--accent); margin-bottom:12px;">核心要点概览</div>
+      <ul style="margin-bottom:0;">
+        <li><strong>前缀按字节一致</strong>：缓存读取要求请求前缀按字节一致，并受模型绑定与有限生命周期（TTL）限制。</li>
+        <li><strong>破除旧模型补丁</strong>：旧模型时代的核验仪式、强制步骤和矛盾规则，可能让原生高推理能力的前沿模型多做无用工作。</li>
+        <li><strong>校准思考投入</strong>：Effort 应通过自己的评测集逐档校准，盲目拉满或一刀切拉低均会落入工程陷阱。</li>
+        <li><strong>三大内置工具</strong>：<code>prompt-audit</code>、<code>cost-optimize</code> 与 <code>hillclimb</code> 分别覆盖提示词、全局成本与配置空间搜索。</li>
+      </ul>
+    </div>
+
+    <blockquote>
+      <p><strong>Anthropic 官方开发团队给出的核心判断是：</strong>Claude API 的降本，不必先从牺牲模型能力开始；先找出缓存重算、提示词遗留规则和 Effort 失配，往往更划算。</p>
+    </blockquote>
+
+    <hr>
+
+    <!-- 第一章 -->
+    <section id="sec-overview">
+      <h2>为什么账单变贵了，效果却没有同步变好？</h2>
+      <p>很多团队看到 Claude API 账单上涨，第一反应是换更便宜的模型、缩短输入，或者让模型少思考。但这些做法都可能直接伤到结果质量，于是降本与性能看起来像一道单选题。</p>
+      <p>Anthropic 官方开发团队提醒：在做这道选择题之前，应该先排除另一种情况——系统正在为没有产生额外价值的工作付费。</p>
+      
+      <p>这篇文章重点检查一次请求中的三个层面：</p>
+      <ul>
+        <li><strong>输入层：重复内容被重新 Prefill</strong>。检查缓存前缀、模型绑定和 TTL。</li>
+        <li><strong>指令层：旧规则与新模型能力不再匹配</strong>。检查核验仪式、强制步骤、陈旧样例和冲突规则。</li>
+        <li><strong>推理层：思考投入与任务难度不匹配</strong>。用自己的评测扫过多个 Effort 和模型组合；过高可能浪费，过低则可能损害表现。</li>
+      </ul>
+
+      <p>后文的缓存优化、提示词清理和 Effort 校准正对应这三层。它们没有固定顺序：缓存命中异常就从输入层查，刚升级模型就先审提示词，已有评测集则直接比较模型与 Effort；需要系统降本时，再把缓存、批处理、输出长度和模型选择放进同一张账单里审计。</p>
+    </section>
+
+    <hr>
+
+    <!-- 第二章 -->
+    <section id="sec-cache">
+      <h2>缓存开了，为什么还是在重复付费？</h2>
+      <p>在大语言模型的交互中，生成回复之前必须经历一个“预填充（Prefill）”阶段。模型需要将你输入的所有文字、历史对话和工具定义转化成内部的工作状态，即键值缓存（KV Cache）。Prefill 是处理输入时成本较高的步骤。</p>
+      <p>提示词缓存（Prompt Caching）的核心逻辑非常朴素：如果当前请求的前半部分与之前某次请求的前缀完全一致，Claude 就可以直接把内存中保存的 KV 状态读取出来，而无需重新计算一遍。<a href="https://platform.claude.com/docs/en/about-claude/pricing" target="_blank" rel="noopener">缓存读取的费用</a>仅为完整输入价格的一小部分。</p>
+      <p>但接入缓存并不等于一定命中。要看清成本为何没有下降，先要理解三个约束。</p>
+
+      <h3>先弄清缓存为什么会失效：三个硬约束</h3>
+      <ol>
+        <li><strong>缓存绑定具体模型</strong>：同一份提示词缓存不能跨模型读取。</li>
+        <li><strong>前缀按字节一致（Byte-exact）</strong>：缓存读取要求对应的请求前缀按字节一致；前缀发生微小变化，相关部分就可能无法命中。</li>
+        <li><strong>有限的生命周期（TTL）</strong>：默认缓存生命周期只有 5 分钟（从请求开始计时）。如果一个智能体（Agent）中途执行复杂工具调用或等待子智能体返回超过 5 分钟，父级上下文的缓存就会<a href="https://platform.claude.com/docs/en/build-with-claude/prompt-caching#ttl-support" target="_blank" rel="noopener">超时失效</a>。</li>
+      </ol>
+
+      <h3>再排查是谁破坏了前缀：四个常见来源</h3>
+      <ul>
+        <li><strong>对话途中变更 Effort 设置</strong>：Effort 设置会被渲染在具体内容之前，属于缓存前缀的一部分。中途修改会改变前缀；目前只有包括 Opus 5、Fable 5.1 在内的部分模型支持<a href="https://platform.claude.com/docs/en/build-with-claude/effort#changing-effort-mid-conversation" target="_blank" rel="noopener">对话中途更新 Effort</a>而不破坏缓存。</li>
+        <li><strong>在前缀中放入动态变量</strong>：系统提示词里的时间戳或请求 ID 每次变化，前缀也随之变化，可能导致缓存未命中。</li>
+        <li><strong>工具定义发生变化</strong>：Claude Messages API 按固定顺序组装提示词，并把工具定义放在前面。工具顺序、描述或定义变化，会改变后续可复用的前缀。</li>
+        <li><strong>子任务分支（Forking）未对齐环境</strong>：创建分支对话或调度 Subagent 时，只有在模型型号、Effort 强度、历史前缀字节完全一致的情况下，分支才能复用主进程的缓存。</li>
+      </ul>
+
+      <h3>最后修请求结构与运行时机：六种做法</h3>
+      <p>针对上述问题，可以从请求结构和运行时机入手调整。</p>
+
+      <p><strong>做法 1：静态内容前置，动态内容后移</strong></p>
+      <p>组装 Prompt 时，把最稳定的静态上下文（工具定义、系统全局规则）放在前面，再接逐步增长的多轮对话和动态输入。</p>
+
+      <!-- 嵌入图 2 -->
+      
+<div class="figure-card">
+  <div class="svg-container">
+    <svg viewBox="0 0 860 300" width="860" height="300" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="10" width="840" height="280" rx="10" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1" />
+      
+      <!-- 管道层次结构 -->
+      <!-- 层 1: 工具定义 -->
+      <rect x="30" y="35" width="150" height="190" rx="6" fill="var(--bg-card)" stroke="var(--accent)" stroke-width="1.5" />
+      <rect x="30" y="35" width="150" height="28" rx="6" fill="var(--accent-bg)" />
+      <text x="45" y="54" fill="var(--accent)" font-family="var(--font-sans)" font-size="12" font-weight="bold">① 工具定义层</text>
+      <text x="40" y="85" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">API Schemas</text>
+      <text x="40" y="105" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Tool Specs</text>
+      <text x="40" y="130" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11" font-weight="bold">~4,500 Tokens</text>
+      <text x="40" y="155" fill="var(--text-dim)" font-family="var(--font-sans)" font-size="11">低频标记 defer</text>
+      <rect x="40" y="180" width="130" height="30" rx="4" fill="var(--accent)" />
+      <text x="50" y="200" fill="#FFFFFF" font-family="var(--font-mono)" font-size="10" font-weight="bold">⚡ Breakpoint 1</text>
+
+      <!-- 连接箭头 1 -->
+      <path d="M 180 130 L 195 130" stroke="var(--border-color)" stroke-width="2" marker-end="url(#arrow)" />
+
+      <!-- 层 2: 全局系统提示词 -->
+      <rect x="195" y="35" width="150" height="190" rx="6" fill="var(--bg-card)" stroke="var(--accent)" stroke-width="1.5" />
+      <rect x="195" y="35" width="150" height="28" rx="6" fill="var(--accent-bg)" />
+      <text x="210" y="54" fill="var(--accent)" font-family="var(--font-sans)" font-size="12" font-weight="bold">② 系统规则层</text>
+      <text x="205" y="85" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Core Principles</text>
+      <text x="205" y="105" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Safety Boundaries</text>
+      <text x="205" y="130" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11" font-weight="bold">~3,200 Tokens</text>
+      <text x="205" y="155" fill="var(--text-dim)" font-family="var(--font-sans)" font-size="11">静态不变前缀</text>
+      <rect x="205" y="180" width="130" height="30" rx="4" fill="var(--accent)" />
+      <text x="215" y="200" fill="#FFFFFF" font-family="var(--font-mono)" font-size="10" font-weight="bold">⚡ Breakpoint 2</text>
+
+      <!-- 连接箭头 2 -->
+      <path d="M 345 130 L 360 130" stroke="var(--border-color)" stroke-width="2" />
+
+      <!-- 层 3: 参考资料/样例 -->
+      <rect x="360" y="35" width="150" height="190" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1" />
+      <rect x="360" y="35" width="150" height="28" rx="6" fill="var(--bg-card-subtle)" />
+      <text x="375" y="54" fill="var(--text-main)" font-family="var(--font-sans)" font-size="12" font-weight="bold">③ 知识资料层</text>
+      <text x="370" y="85" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Documents</text>
+      <text x="370" y="105" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Few-shot Demos</text>
+      <text x="370" y="130" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11" font-weight="bold">~8,000 Tokens</text>
+      <text x="370" y="155" fill="var(--text-dim)" font-family="var(--font-sans)" font-size="11">会话间长期复用</text>
+      <rect x="370" y="180" width="130" height="30" rx="4" fill="var(--accent)" />
+      <text x="380" y="200" fill="#FFFFFF" font-family="var(--font-mono)" font-size="10" font-weight="bold">⚡ Breakpoint 3</text>
+
+      <!-- 连接箭头 3 -->
+      <path d="M 510 130 L 525 130" stroke="var(--border-color)" stroke-width="2" />
+
+      <!-- 层 4: 历史对话 -->
+      <rect x="525" y="35" width="150" height="190" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1" />
+      <rect x="525" y="35" width="150" height="28" rx="6" fill="var(--bg-card-subtle)" />
+      <text x="540" y="54" fill="var(--text-main)" font-family="var(--font-sans)" font-size="12" font-weight="bold">④ 会话历史层</text>
+      <text x="535" y="85" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Turn 1..N-1</text>
+      <text x="535" y="105" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Tool Results</text>
+      <text x="535" y="130" fill="var(--cyan)" font-family="var(--font-mono)" font-size="11" font-weight="bold">动态递增缓存</text>
+      <text x="535" y="155" fill="var(--text-dim)" font-family="var(--font-sans)" font-size="11">自动推进断点</text>
+      <rect x="535" y="180" width="130" height="30" rx="4" fill="var(--cyan)" />
+      <text x="545" y="200" fill="#FFFFFF" font-family="var(--font-mono)" font-size="10" font-weight="bold">⚡ Auto-Cache</text>
+
+      <!-- 连接箭头 4 -->
+      <path d="M 675 130 L 690 130" stroke="var(--border-color)" stroke-width="2" />
+
+      <!-- 层 5: 当前请求 -->
+      <rect x="690" y="35" width="140" height="190" rx="6" fill="var(--bg-card)" stroke="var(--rose)" stroke-width="1.5" />
+      <rect x="690" y="35" width="140" height="28" rx="6" fill="var(--rose-bg)" />
+      <text x="702" y="54" fill="var(--rose)" font-family="var(--font-sans)" font-size="12" font-weight="bold">⑤ 当前用户输入</text>
+      <text x="700" y="85" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Latest Message</text>
+      <text x="700" y="105" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Dynamic Input</text>
+      <text x="700" y="130" fill="var(--amber)" font-family="var(--font-mono)" font-size="11" font-weight="bold">~150 Tokens</text>
+      <text x="700" y="155" fill="var(--text-dim)" font-family="var(--font-sans)" font-size="11">仅在此产生计算</text>
+      <rect x="700" y="180" width="120" height="30" rx="4" fill="var(--rose-bg)" stroke="var(--rose)" stroke-width="1" />
+      <text x="712" y="200" fill="var(--rose)" font-family="var(--font-mono)" font-size="10" font-weight="bold">Prefill Compute</text>
+
+      <!-- 底部总结提示 -->
+      <rect x="30" y="240" width="800" height="36" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1" />
+      <text x="45" y="263" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12" font-weight="bold">KV-Cache Preservation Rate: 98.9%</text>
+      <text x="320" y="263" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="12">静态骨架永久命中，长阻塞场景下启用 1 小时 TTL 保障父子任务连续复用。</text>
+    </svg>
+  </div>
+  <div class="figure-caption"><strong>原文图 2 ｜ 面向缓存的 Prompt 组织结构</strong>：工具与系统提示词等静态骨架固定在前，动态增长的会话内容依序追加。</div>
+</div>
+
+
+      <p><strong>做法 2：低频工具延迟加载（<code>defer_loading</code>）</strong></p>
+      <p>可以预先声明所有工具，同时把低频工具标记为 <a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-use-with-prompt-caching#defer-loading-and-cache-preservation" target="_blank" rel="noopener"><code>defer_loading</code></a>。这些工具定义不进入缓存前缀，只有 Claude 通过 Tool Search 找到它们时才追加到对话中，从而保留已有缓存。</p>
+
+      <p><strong>做法 3：把系统提示词变更转成追加消息</strong></p>
+      <p>对话中途需要补充全局指示时，直接修改最前面的 System Prompt 会改变前缀。<a href="https://platform.claude.com/docs/en/build-with-claude/mid-conversation-system-messages#when-to-use-a-mid-conversation-system-message" target="_blank" rel="noopener">部分 Claude 模型</a>支持把系统指令作为消息追加，而不是编辑原 System Prompt，从而保留前面的缓存。</p>
+
+      <p><strong>做法 4：在上下文压缩（Compaction）时切换配置</strong></p>
+      <p>当长会话触发<a href="https://platform.claude.com/docs/en/build-with-claude/compaction" target="_blank" rel="noopener">上下文压缩归纳（Compaction）</a>时，对话历史会被大范围重写，缓存本就会发生未命中。如果需要切换模型或调整 Effort，这是一个合适的时机，因为无论如何都要承担这次缓存未命中。</p>
+
+      <p><strong>做法 5：推进缓存断点，并提前预热</strong></p>
+      <ul>
+        <li><strong>动态推进断点</strong>：缓存断点决定前缀写入缓存到哪里。随着对话增长，使用<a href="https://platform.claude.com/docs/en/build-with-claude/prompt-caching#automatic-caching" target="_blank" rel="noopener">自动缓存（Automatic Caching）</a>，让断点跟随最后一个可缓存的数据块，新增消息就能接在已缓存前缀之后，而不是让越来越长的历史重新计算。</li>
+        <li><strong>预热缓存</strong>：在用户刚建立会话或正在前端打字时，后台可以先行发出一条显式指定断点、设置 <code>max_tokens: 0</code> 的空请求，并使用与真实流量相同的 Effort。该请求只做 Prefill 写入缓存而不生成回答。当用户真正按下发送键时，首个真实请求可命中同一份预热缓存，从而降低延迟。</li>
+        <li><strong>针对长阻塞考虑 1 小时 TTL</strong>：如果工具或子代理耗时超过默认 5 分钟，父级缓存可能在结果回来前过期。此时可考虑为前缀<a href="https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence" target="_blank" rel="noopener">设置 1 小时 TTL</a>。</li>
+      </ul>
+
+      <p><strong>做法 6：用控制台与 API 找到具体分歧点</strong></p>
+      <p>开发者无需只靠代码猜测缓存是否生效。先持续观察缓存命中率；出现异常后，再用 <a href="https://platform.claude.com/docs/en/build-with-claude/cache-diagnostics" target="_blank" rel="noopener">Claude Console 和 Cache Diagnostics API</a> 查看未命中原因，并定位两个请求从哪里开始分歧。</p>
+
+      <!-- 嵌入图 1 -->
+      
+<div class="figure-card">
+  <div class="svg-container">
+    <svg viewBox="0 0 860 360" width="860" height="360" xmlns="http://www.w3.org/2000/svg">
+      <!-- 窗口顶栏 -->
+      <rect x="10" y="10" width="840" height="340" rx="10" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1.5" />
+      <rect x="10" y="10" width="840" height="36" rx="10" fill="var(--bg-card)" />
+      <circle cx="32" cy="28" r="5" fill="#EF4444" />
+      <circle cx="48" cy="28" r="5" fill="#F59E0B" />
+      <circle cx="64" cy="28" r="5" fill="#10B981" />
+      <text x="86" y="32" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="12">Claude Console ｜ Cache Diagnostics API Inspector (Prefix Alignment Diff)</text>
+      
+      <!-- 左栏：Request A -->
+      <rect x="25" y="60" width="395" height="210" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1" />
+      <text x="40" y="85" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12" font-weight="bold">● Request #1 (Cached Baseline · 14:32:05)</text>
+      <text x="40" y="112" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">01: [tools] 12 definitions (Hash: e8a91c) <tspan fill="var(--emerald)">[MATCH]</tspan></text>
+      <text x="40" y="134" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">02: [system] You are an enterprise tier-2 agent <tspan fill="var(--emerald)">[MATCH]</tspan></text>
+      <text x="40" y="156" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">03: [system] Return policy: 30-day window <tspan fill="var(--emerald)">[MATCH]</tspan></text>
+      <text x="40" y="178" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">04: [system] Refund cap: $50 without approval <tspan fill="var(--emerald)">[MATCH]</tspan></text>
+      <text x="40" y="200" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">05: [message] User: "Status of order #1082?" <tspan fill="var(--emerald)">[MATCH]</tspan></text>
+      <rect x="35" y="222" width="375" height="34" rx="4" fill="var(--emerald-bg)" stroke="var(--emerald)" stroke-width="1" />
+      <text x="48" y="244" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11">KV-Cache Hit: 3,420 tokens (Read Price: 10% base)</text>
+
+      <!-- 右栏：Request B -->
+      <rect x="440" y="60" width="395" height="210" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1" />
+      <text x="455" y="85" fill="var(--rose)" font-family="var(--font-mono)" font-size="12" font-weight="bold">● Request #2 (Subsequent Call · 14:32:48)</text>
+      <text x="455" y="112" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">01: [tools] 12 definitions (Hash: e8a91c) <tspan fill="var(--emerald)">[MATCH]</tspan></text>
+      <text x="455" y="134" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">02: [system] You are an enterprise tier-2 agent <tspan fill="var(--emerald)">[MATCH]</tspan></text>
+      <rect x="448" y="143" width="378" height="20" fill="var(--rose-bg)" />
+      <text x="455" y="156" fill="var(--rose)" font-family="var(--font-mono)" font-size="11" font-weight="bold">03: [system] timestamp="2026-09-09T14:32:48Z" [DIVERGED]</text>
+      <text x="455" y="178" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">04: [system] Refund cap: $50 without approval [INVALIDATED]</text>
+      <text x="455" y="200" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">05: [message] User: "Can I get a refund?" [INVALIDATED]</text>
+      <rect x="450" y="222" width="375" height="34" rx="4" fill="var(--rose-bg)" stroke="var(--rose)" stroke-width="1" />
+      <text x="463" y="244" fill="var(--rose)" font-family="var(--font-mono)" font-size="11">Cache Miss: Prefix Divergence at Byte 1,421 (100% Prefill)</text>
+
+      <!-- 底部诊断结果栏 -->
+      <rect x="25" y="285" width="810" height="50" rx="6" fill="var(--accent-bg)" stroke="var(--accent-border)" stroke-width="1" />
+      <text x="45" y="315" fill="var(--accent)" font-family="var(--font-mono)" font-size="12" font-weight="bold">CACHE DIAGNOSTICS VERDICT:</text>
+      <text x="260" y="315" fill="var(--text-main)" font-family="var(--font-sans)" font-size="12">第 3 行动态变量（时间戳）破坏了 Byte-exact 字节一致性，导致后续 2,000+ tokens 全部重算 Prefill。</text>
+    </svg>
+  </div>
+  <div class="figure-caption"><strong>原文图 1 ｜ Claude 控制台缓存诊断界面</strong>：Claude Console 比较请求并指出提示词前缀从哪里开始分歧。</div>
+</div>
+
+    </section>
+
+    <hr>
+
+    <!-- 第三章 -->
+    <section id="sec-prompt">
+      <h2>模型升级了，为什么旧提示词可能反而拖后腿？</h2>
+      <p>当应用从上一代模型（如 Opus 4.8 或更早版本）迁移到前沿模型（如 Opus 5、Fable 系列）时，很多开发者会直接保留旧项目的 Prompt。然而，这些经过反复修补、堆叠的提示词，往往充斥着针对旧模型缺陷所打的“补丁”。</p>
+      <p>前沿模型更擅长遵循指令，也有原生推理能力。过去用于修补旧模型弱点的规则，可能与这些能力叠加，造成额外 token、工具调用或性能下降，这就是这里所说的提示词“反模式（Anti-patterns）”。</p>
+
+      <h3>先找出六类与新模型能力不再匹配的规则</h3>
+      <ol>
+        <li><strong>核验仪式（Verification rituals）</strong>：“请在回答前仔细核对两遍”、“回答前务必再次验证”。前沿模型可能按字面执行；在材料中的退款实验里，这导致每次退款都重复查询订单。</li>
+        <li><strong>强调与详尽催化剂（Thoroughness & emphasis boosters）</strong>：“务必竭尽全力”、“CRITICAL: YOU MUST ALWAYS…”。这类大写加粗的催促词，会导致前沿模型产生极端的啰嗦倾向，在原本只需简单回答的场景下，触发几十次不必要的知识库搜索。</li>
+        <li><strong>强制解题步骤与外挂草稿本（Mandatory procedures & scratchpads）</strong>：“请在 <code>&lt;scratchpad&gt;</code> 标签里严格按 6 步思考”。这类脚手架会叠加在模型的原生推理之上，增加 token；在实验的 3 张工单中，模型把工具调用写进推理而没有真正执行。</li>
+        <li><strong>陈旧的 Few-shot 样例（Stale examples）</strong>：针对旧模型失败模式调出来的样例，可能已经不适合前沿模型；新模型模仿其中的冗长推导后，会在简单问题上生成不必要的长篇推理。</li>
+        <li><strong>互相冲突的规则条目（Contradictory rules）</strong>：例如系统提示词同时要求“按政策退款”与“未经升级处理不得退款”。在实验中，这类冲突让 Opus 5 扣留了 4 笔本应发放的退款，并要求客户确认。</li>
+        <li><strong>过时的 API 配置参数</strong>：例如上一代遗留的手动思考预算（Manual Thinking Budget）参数，在新一代 API 接口中可能会被直接拒收报错。</li>
+      </ol>
+
+      <h3>再看一次迁移实验：清理后为何更省也更准</h3>
+      <p>为了验证这些反模式的具体危害，官方在客服基准测试（Customer Support Benchmark）中做了一组对照实验。研究团队从干净的基准提示词出发，每次只植入一种典型的历史反模式，构建出 6 组遗留 Prompt。</p>
+      
+      <p>对比三组运行结果：</p>
+      <ul>
+        <li><strong>基线组</strong>：运行在老模型 Opus 4.8 上；</li>
+        <li><strong>裸迁组</strong>：直接将模型 ID 换成 Opus 5，提示词原封不动；</li>
+        <li><strong>优化组</strong>：在 Opus 5 上运行 <code>/claude-api prompt-audit</code>，清除反模式后再跑。</li>
+      </ul>
+
+      <!-- 嵌入图 3 -->
+      
+<div class="figure-card">
+  <div class="svg-container">
+    <svg viewBox="0 0 860 360" width="860" height="360" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="10" width="840" height="340" rx="10" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1" />
+      
+      <!-- 坐标轴与背景网格 -->
+      <line x1="80" y1="280" x2="800" y2="280" stroke="var(--border-color)" stroke-width="1.5" />
+      <line x1="80" y1="50" x2="80" y2="280" stroke="var(--border-color)" stroke-width="1.5" />
+      <line x1="800" y1="50" x2="800" y2="280" stroke="var(--border-color)" stroke-width="1.5" />
+      
+      <!-- 刻度与网格线 -->
+      <line x1="80" y1="220" x2="800" y2="220" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="4,4" />
+      <line x1="80" y1="160" x2="800" y2="160" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="4,4" />
+      <line x1="80" y1="100" x2="800" y2="100" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="4,4" />
+      
+      <!-- 左轴刻度：成本 ($) -->
+      <text x="35" y="284" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$0.00</text>
+      <text x="35" y="224" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$0.03</text>
+      <text x="35" y="164" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$0.06</text>
+      <text x="35" y="104" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$0.09</text>
+      <text x="75" y="40" fill="var(--accent)" font-family="var(--font-sans)" font-size="12" font-weight="bold">单工单成本 ($)</text>
+
+      <!-- 右轴刻度：准确率 (%) -->
+      <text x="810" y="284" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">80%</text>
+      <text x="810" y="224" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">85%</text>
+      <text x="810" y="164" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">90%</text>
+      <text x="810" y="104" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">95%</text>
+      <text x="730" y="40" fill="var(--emerald)" font-family="var(--font-sans)" font-size="12" font-weight="bold">业务准确率 (%)</text>
+
+      <!-- 组 1：基线组 (Opus 4.8) -->
+      <rect x="150" y="130" width="55" height="150" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5" />
+      <text x="156" y="122" fill="var(--accent)" font-family="var(--font-mono)" font-size="12" font-weight="bold">$0.075</text>
+      <rect x="215" y="170" width="55" height="110" rx="4" fill="var(--emerald-bg)" stroke="var(--emerald)" stroke-width="1.5" />
+      <text x="224" y="162" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12" font-weight="bold">89.2%</text>
+      <text x="165" y="305" fill="var(--text-main)" font-family="var(--font-sans)" font-size="13" font-weight="bold">① 基线组</text>
+      <text x="160" y="325" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Opus 4.8 (旧提示词)</text>
+
+      <!-- 组 2：裸迁组 (Opus 5 未改) -->
+      <rect x="360" y="140" width="55" height="140" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5" />
+      <text x="366" y="132" fill="var(--accent)" font-family="var(--font-mono)" font-size="12" font-weight="bold">$0.070</text>
+      <rect x="425" y="148" width="55" height="132" rx="4" fill="var(--emerald-bg)" stroke="var(--emerald)" stroke-width="1.5" />
+      <text x="434" y="140" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12" font-weight="bold">91.0%</text>
+      <text x="375" y="305" fill="var(--text-main)" font-family="var(--font-sans)" font-size="13" font-weight="bold">② 裸迁组</text>
+      <text x="362" y="325" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Opus 5 (原封不动)</text>
+
+      <!-- 组 3：优化组 (Opus 5 + prompt-audit) -->
+      <rect x="570" y="174" width="55" height="106" rx="4" fill="var(--accent)" />
+      <text x="576" y="166" fill="var(--accent)" font-family="var(--font-mono)" font-size="12" font-weight="bold">$0.064</text>
+      <rect x="635" y="90" width="55" height="190" rx="4" fill="var(--emerald)" />
+      <text x="644" y="82" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12" font-weight="bold">96.3%</text>
+      <text x="585" y="305" fill="var(--text-main)" font-family="var(--font-sans)" font-size="13" font-weight="bold">③ 优化组</text>
+      <text x="565" y="325" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Opus 5 + prompt-audit</text>
+
+      <!-- 关键变化标记 -->
+      <path d="M 400 130 Q 500 110 580 160" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="3,3" />
+      <text x="450" y="105" fill="var(--accent)" font-family="var(--font-sans)" font-size="12" font-weight="bold">成本 -14.6% ⬇</text>
+      <path d="M 460 135 Q 550 70 640 85" fill="none" stroke="var(--emerald)" stroke-width="2" stroke-dasharray="3,3" />
+      <text x="530" y="65" fill="var(--emerald)" font-family="var(--font-sans)" font-size="12" font-weight="bold">准确率 +5.3% ⬆</text>
+    </svg>
+  </div>
+  <div class="figure-caption"><strong>原文图 3 ｜ Opus 4.8 迁移至 Opus 5 时提示词反模式的影响</strong>：六类遗留提示词分别迁移到 Opus 5 并经 prompt-audit 修正后的平均成本与准确率变化。</div>
+</div>
+
+
+      <p>实验数据显示，通过 <code>/claude-api prompt-audit</code> 清理反模式后，<strong>平均运行成本下降 14.6%，业务准确率提高 5.3%</strong>。</p>
+
+      <p><strong>为什么成本下降？</strong> 因为移除了“再三检查”和“绝对穷尽”等要求，减少了重复工具查询与冗余推理。</p>
+
+      <p><strong>为什么准确率反而上升？</strong></p>
+      <ul>
+        <li>移除了废弃的思考配置后，API 不再拒绝实验中的每一个路由请求；</li>
+        <li>清理了矛盾的退款规则后，Opus 5 不再扣留本应发放的退款；</li>
+        <li>移除了 <code>&lt;scratchpad&gt;</code> 草稿本约束后，不再出现实验中 3 张工单把工具调用写入 reasoning、却没有真正执行的问题。</li>
+      </ul>
+    </section>
+
+    <hr>
+
+    <!-- 第四章 -->
+    <section id="sec-effort">
+      <h2>Effort 拉满，为什么不一定换来更好结果？</h2>
+      <p>在 Claude 平台中，<a href="https://platform.claude.com/docs/en/build-with-claude/effort" target="_blank" rel="noopener"><code>effort</code></a> 用来告诉模型“这项任务要投入多少工作”：</p>
+      <ul>
+        <li><strong>低 Effort（Low）</strong>：模型通常更快得出结论；</li>
+        <li><strong>高 Effort（High / Max）</strong>：模型更倾向于在回答前推演、验证并探索替代方案。</li>
+      </ul>
+      <p>算力、准确率与成本之间的关系并非单调线性上升。盲目把 Effort 拉到满格，或者为了省钱一律调到最低，都会落入工程陷阱。</p>
+
+      <h3>先看任务曲线：更多思考何时有用，何时浪费</h3>
+      <p>在不同模型和不同任务难度下，Effort 的投资回报率截然不同：</p>
+      
+      <ol>
+        <li><strong>高难任务的算力表现</strong>：在包含 50 道极难代码任务的 FrontierCode Diamond 基准测试中，Claude Fable 5 在 Low Effort 下得分仅为 11.5%，单个任务成本 5.35 美元；调至 Max Effort 时，得分提升至 30.9%（提升约 2.7 倍，+19.4 个百分点），单任务成本达 19.00 美元（约 3.55 倍）。</li>
+      </ol>
+
+      <!-- 嵌入图 4 -->
+      
+<div class="figure-card">
+  <div class="svg-container">
+    <svg viewBox="0 0 860 360" width="860" height="360" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="10" width="840" height="340" rx="10" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1" />
+      
+      <!-- 坐标系 -->
+      <line x1="90" y1="280" x2="780" y2="280" stroke="var(--border-color)" stroke-width="1.5" />
+      <line x1="90" y1="50" x2="90" y2="280" stroke="var(--border-color)" stroke-width="1.5" />
+      <line x1="780" y1="50" x2="780" y2="280" stroke="var(--border-color)" stroke-width="1.5" />
+      
+      <!-- 背景刻度线 -->
+      <line x1="90" y1="225" x2="780" y2="225" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="4,4" />
+      <line x1="90" y1="170" x2="780" y2="170" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="4,4" />
+      <line x1="90" y1="115" x2="780" y2="115" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="4,4" />
+      <line x1="90" y1="60" x2="780" y2="60" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="4,4" />
+      
+      <!-- 左轴刻度：准确率 (0% ~ 40%) -->
+      <text x="45" y="284" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">0%</text>
+      <text x="45" y="229" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">10%</text>
+      <text x="45" y="174" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">20%</text>
+      <text x="45" y="119" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">30%</text>
+      <text x="45" y="64" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">40%</text>
+      <text x="90" y="38" fill="var(--emerald)" font-family="var(--font-sans)" font-size="12" font-weight="bold">基准测试得分 / 准确率 (%)</text>
+
+      <!-- 右轴刻度：单任务成本 ($0 ~ $25) -->
+      <text x="790" y="284" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$0</text>
+      <text x="790" y="229" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$6</text>
+      <text x="790" y="174" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$12</text>
+      <text x="790" y="119" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$18</text>
+      <text x="790" y="64" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$24</text>
+      <text x="690" y="38" fill="var(--accent)" font-family="var(--font-sans)" font-size="12" font-weight="bold">单任务成本 ($)</text>
+
+      <!-- X轴 Effort 档位 (间距等距: 160, 340, 520, 700) -->
+      <text x="145" y="305" fill="var(--text-main)" font-family="var(--font-mono)" font-size="13" font-weight="bold">Low Effort</text>
+      <text x="315" y="305" fill="var(--text-main)" font-family="var(--font-mono)" font-size="13" font-weight="bold">Medium Effort</text>
+      <text x="500" y="305" fill="var(--text-main)" font-family="var(--font-mono)" font-size="13" font-weight="bold">High Effort</text>
+      <text x="680" y="305" fill="var(--text-main)" font-family="var(--font-mono)" font-size="13" font-weight="bold">Max Effort</text>
+
+      <!-- 折线 1: 准确率 (实线 绿色) -->
+      <!-- Low: 11.5% -> y = 280 - (11.5/40)*220 = 216.75 -->
+      <!-- Med: 18.2% -> y = 280 - (18.2/40)*220 = 179.9 -->
+      <!-- High: 25.4% -> y = 280 - (25.4/40)*220 = 140.3 -->
+      <!-- Max: 30.9% -> y = 280 - (30.9/40)*220 = 110.05 -->
+      <polyline points="180,217 350,180 530,140 710,110" fill="none" stroke="var(--emerald)" stroke-width="3" />
+      <circle cx="180" cy="217" r="5" fill="var(--emerald)" />
+      <text x="180" y="205" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12" font-weight="bold" text-anchor="middle">11.5%</text>
+      <circle cx="350" cy="180" r="5" fill="var(--emerald)" />
+      <text x="350" y="168" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12" font-weight="bold" text-anchor="middle">18.2%</text>
+      <circle cx="530" cy="140" r="5" fill="var(--emerald)" />
+      <text x="530" y="128" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12" font-weight="bold" text-anchor="middle">25.4%</text>
+      <circle cx="710" cy="110" r="6" fill="var(--emerald)" stroke="#FFF" stroke-width="2" />
+      <text x="710" y="98" fill="var(--emerald)" font-family="var(--font-mono)" font-size="13" font-weight="bold" text-anchor="middle">30.9% (+2.7x)</text>
+
+      <!-- 折线 2: 成本 (虚线 陶土色) -->
+      <!-- Low: $5.35 -> y = 280 - (5.35/24)*220 = 230.96 -->
+      <!-- Med: $9.10 -> y = 280 - (9.10/24)*220 = 196.58 -->
+      <!-- High: $14.20 -> y = 280 - (14.20/24)*220 = 149.83 -->
+      <!-- Max: $19.00 -> y = 280 - (19.00/24)*220 = 105.83 -->
+      <polyline points="180,231 350,197 530,150 710,106" fill="none" stroke="var(--accent)" stroke-width="3" stroke-dasharray="6,4" />
+      <circle cx="180" cy="231" r="5" fill="var(--accent)" />
+      <text x="180" y="250" fill="var(--accent)" font-family="var(--font-mono)" font-size="12" font-weight="bold" text-anchor="middle">$5.35</text>
+      <circle cx="350" cy="197" r="5" fill="var(--accent)" />
+      <text x="350" y="218" fill="var(--accent)" font-family="var(--font-mono)" font-size="12" font-weight="bold" text-anchor="middle">$9.10</text>
+      <circle cx="530" cy="150" r="5" fill="var(--accent)" />
+      <text x="530" y="172" fill="var(--accent)" font-family="var(--font-mono)" font-size="12" font-weight="bold" text-anchor="middle">$14.20</text>
+      <circle cx="710" cy="106" r="6" fill="var(--accent)" stroke="#FFF" stroke-width="2" />
+      <text x="710" y="128" fill="var(--accent)" font-family="var(--font-mono)" font-size="13" font-weight="bold" text-anchor="middle">$19.00 (3.5x)</text>
+
+      <!-- 底部图例 -->
+      <rect x="250" y="325" width="16" height="4" fill="var(--emerald)" />
+      <text x="272" y="330" fill="var(--text-main)" font-family="var(--font-sans)" font-size="12">准确率 (Accuracy)</text>
+      <line x1="430" y1="327" x2="448" y2="327" stroke="var(--accent)" stroke-width="3" stroke-dasharray="4,2" />
+      <text x="455" y="330" fill="var(--text-main)" font-family="var(--font-sans)" font-size="12">单任务成本 (Cost per Task)</text>
+    </svg>
+  </div>
+  <div class="figure-caption"><strong>原文图 4 ｜ Fable 5 在 FrontierCode Diamond 上的性能与成本曲线</strong>：跨 Effort 档位的性能与成本表现，在极高难代码任务上，算力投入呈现显著性能正反馈。</div>
+</div>
+
+
+      <ol start="2">
+        <li><strong>边际回报陷阱</strong>：在无工具参与的 Humanity's Last Exam 测试中，更先进的 Claude Fable 5.1 展现出了一条陡峭后迅速走平的曲线：
+          <ul>
+            <li>Low Effort 阶段：耗费约 0.30 美元，准确率约 53%；</li>
+            <li>Max Effort 阶段：耗费约 2.23 美元，准确率约 61%；</li>
+            <li><strong>边际回报最低的一段跃迁</strong>：从 High 迈向 Max，成本增加了 46%，但准确率仅微增 0.5 个百分点；这半个百分点落在测试的随机波动范围内，也就是没有测出稳定收益。</li>
+          </ul>
+        </li>
+      </ol>
+
+      <h3>两个方向都可能配错：过度思考与过早停止</h3>
+      <ul>
+        <li><strong>误区一：认为越高越好（过度深思 / Over-thinking）</strong>：高 Effort 会导致过度深思。Claude 会花费超过任务所需的时间进行推演，增加成本与延迟，并可能降低答案质量。推演仅在仍有证据可供寻找时才有帮助。</li>
+        <li><strong>误区二：偏向极低 Effort</strong>：Effort 设得过低时，Claude 会在掌握充足证据前停止。它会减少工具调用，可能依据第一条搜索结果而非第三条直接作答；在困难步骤上思考减少，并跳过通常会自行运行的检查。答案表面上看已完成，却建立在不完整的信息之上。</li>
+      </ul>
+
+      <h3>不只调档位：比较“新模型低 Effort”与“旧模型高 Effort”</h3>
+      <p>一个值得实测的组合是：<strong>更强的模型搭配较低 Effort，可能比弱模型搭配高 Effort 更便宜，同时保持相近表现。</strong></p>
+      <p>以 CursorBench 3.2 编程基准测试为例，Claude Fable 5.1 在 low effort 下<a href="https://www-cdn.anthropic.com/0339e6a7c5c7b87f5c07798616dc32c215d14235/Claude%20Fable%205.1%20&%20Claude%20Mythos%205.1%20System%20Card.pdf" target="_blank" rel="noopener">表现相当</a>于上一代 Fable 5 在 high effort 下的水平，而成本约为后者的三分之一（图 5）。</p>
+
+      <p>新模型更便宜的原因主要有两点：</p>
+      <ol>
+        <li><strong>Low Effort 下任务工作量更少</strong>：模型在 low effort 下每个任务做的工作更少；</li>
+        <li><strong>提示词缓存定价差异</strong>：Fable 5.1 的提示词缓存读取价格为每百万 token $0.25，而 Fable 5 为 $1.00。即使按 Fable 5 的价格计算，Fable 5.1 在 low effort 下的成本仍约低 40%。</li>
+      </ol>
+
+      <!-- 嵌入图 5 -->
+      
+<div class="figure-card">
+  <div class="svg-container">
+    <svg viewBox="0 0 860 360" width="860" height="360" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="10" width="840" height="340" rx="10" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1" />
+      
+      <!-- 坐标系 -->
+      <line x1="80" y1="280" x2="790" y2="280" stroke="var(--border-color)" stroke-width="1.5" />
+      <line x1="80" y1="50" x2="80" y2="280" stroke="var(--border-color)" stroke-width="1.5" />
+      
+      <!-- 背景刻度线 (Y轴: 成本 $0 ~ $1.50) -->
+      <line x1="80" y1="230" x2="790" y2="230" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="4,4" />
+      <line x1="80" y1="180" x2="790" y2="180" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="4,4" />
+      <line x1="80" y1="130" x2="790" y2="130" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="4,4" />
+      <line x1="80" y1="80" x2="790" y2="80" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="4,4" />
+      
+      <text x="35" y="284" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$0.00</text>
+      <text x="35" y="234" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$0.35</text>
+      <text x="35" y="184" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$0.70</text>
+      <text x="35" y="134" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$1.05</text>
+      <text x="35" y="84" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$1.40</text>
+      <text x="80" y="38" fill="var(--accent)" font-family="var(--font-sans)" font-size="12" font-weight="bold">单任务成本 ($) ｜ CursorBench 3.2 编程基准</text>
+
+      <!-- X轴 Effort 档位 (160, 340, 520, 700) -->
+      <text x="145" y="305" fill="var(--text-main)" font-family="var(--font-mono)" font-size="13" font-weight="bold">Low Effort</text>
+      <text x="315" y="305" fill="var(--text-main)" font-family="var(--font-mono)" font-size="13" font-weight="bold">Medium Effort</text>
+      <text x="500" y="305" fill="var(--text-main)" font-family="var(--font-mono)" font-size="13" font-weight="bold">High Effort</text>
+      <text x="680" y="305" fill="var(--text-main)" font-family="var(--font-mono)" font-size="13" font-weight="bold">Max Effort</text>
+
+      <!-- 曲线 1: Fable 5 (上一代，虚线 陶土色) -->
+      <!-- Low: $0.38 (226), Med: $0.65 (187), High: $0.98 (140), Max: $1.42 (77) -->
+      <polyline points="180,226 350,187 530,140 710,77" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-dasharray="5,4" />
+      <circle cx="180" cy="226" r="5" fill="var(--accent)" />
+      <circle cx="350" cy="187" r="5" fill="var(--accent)" />
+      <circle cx="530" cy="140" r="7" fill="var(--accent)" stroke="#FFF" stroke-width="2" />
+      <text x="530" y="125" fill="var(--accent)" font-family="var(--font-mono)" font-size="12" font-weight="bold" text-anchor="middle">Fable 5 (High) · $0.98</text>
+      <circle cx="710" cy="77" r="5" fill="var(--accent)" />
+
+      <!-- 曲线 2: Fable 5.1 (新一代，实线 绿色) -->
+      <!-- Low: $0.32 (234), Med: $0.52 (206), High: $0.75 (173), Max: $1.08 (126) -->
+      <polyline points="180,234 350,206 530,173 710,126" fill="none" stroke="var(--emerald)" stroke-width="3" />
+      <circle cx="180" cy="234" r="7" fill="var(--emerald)" stroke="#FFF" stroke-width="2" />
+      <text x="180" y="258" fill="var(--emerald)" font-family="var(--font-mono)" font-size="12" font-weight="bold" text-anchor="middle">Fable 5.1 (Low) · $0.32</text>
+      <circle cx="350" cy="206" r="5" fill="var(--emerald)" />
+      <circle cx="530" cy="173" r="5" fill="var(--emerald)" />
+      <circle cx="710" cy="126" r="5" fill="var(--emerald)" />
+
+      <!-- 高亮关键发现：跨代降维打击 (等效表现，成本 1/3) -->
+      <path d="M 515 140 Q 320 120 195 225" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-dasharray="3,3" />
+      <rect x="230" y="110" width="220" height="42" rx="4" fill="var(--cyan-bg)" stroke="var(--cyan)" stroke-width="1" />
+      <text x="240" y="127" fill="var(--cyan)" font-family="var(--font-sans)" font-size="11" font-weight="bold">新模型 Low ≈ 老模型 High 表现</text>
+      <text x="240" y="143" fill="var(--text-main)" font-family="var(--font-sans)" font-size="11">单任务成本直降 ~67%（仅需约 1/3 支出）</text>
+
+      <!-- 底部图例与根因说明 -->
+      <line x1="160" y1="330" x2="180" y2="330" stroke="var(--accent)" stroke-width="2.5" stroke-dasharray="4,2" />
+      <text x="188" y="334" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="12">Fable 5 (上一代，Prompt Cache: $1.00/M)</text>
+      <line x1="470" y1="330" x2="490" y2="330" stroke="var(--emerald)" stroke-width="3" />
+      <text x="498" y="334" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="12">Fable 5.1 (前沿代，Prompt Cache: $0.25/M · 降价75%)</text>
+    </svg>
+  </div>
+  <div class="figure-caption"><strong>原文图 5 ｜ Fable 5 与 Fable 5.1 在 CursorBench 3.2 上的算力与成本对比</strong>：新模型低 Effort 搭配更便宜的缓存定价，达成等效性能的同时实现 3 倍成本节约。</div>
+</div>
+
+
+      <p><strong>理解任务形态（Effort sweep）</strong>：测量应用在<a href="https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence#tune-effort" target="_blank" rel="noopener">多个 Effort 档位扫描（sweep of effort levels）</a>下的表现，是理解特定任务成本—性能权衡的有效方法。这里有一个重要前提：评测必须尚未“触顶”，仍能区分不同配置的好坏。此时如果跨 Effort 档位的曲线近乎平坦，才说明任务不受 thinking compute 限制；如果评测本身已经饱和，平坦曲线不能支持这个结论。</p>
+
+      <h3>有了评测集，再用 hillclimb 搜索配置</h3>
+      <p>这种校准通常需要在不同模型与 Effort 档位间运行评测。在 Claude Code 中，<code>/claude-api hillclimb</code> 可以代为执行这种评测驱动的配置搜索：它将评测集划分为训练集与测试集，提出配置变更，并读取失败的训练样例来针对性修复发现的问题。需要注意的是，这是一种配置搜索策略，并非模型训练、自愈机制，也不保证必然追平基准。</p>
+
+      <p>在客服基准上的实验过程如下：</p>
+      <ol>
+        <li><strong>基线状态</strong>：从 Opus 4.8 及其默认（高）Effort 开始；</li>
+        <li><strong>第一步尝试</strong>：尝试 Low Effort 下的 Opus 5，并应用 <code>prompt-audit</code> 去除强制工具调用仪式、草稿暂存（scratchpad）步骤与相互矛盾的规则。这以 98.9% 的训练集准确率超过了 Opus 4.8 基线，且每张工单成本降至 2.6 美分（图 6）；</li>
+        <li><strong>第二步降级</strong>：进一步降至 Low Effort 下的 Sonnet 5，工单成本进一步降至 1 美分，但准确率下滑至 88.9%；</li>
+        <li><strong>针对性修复</strong>：读取失败的训练工单后，在 Prompt 中补充了路由规则（routing rules）与退款上限交叉引用（refund-cap cross-reference），在维持单工单 1 美分成本的同时，将 Sonnet 5 的训练集准确率恢复至 98.9%；</li>
+        <li><strong>留出集验证</strong>：在搜索过程从未见过的 14 张留出工单（held-out tickets）上，最终配置取得了 90.5% 的得分，而最初配置仅为 78.6%，且成本约为原本的五分之一（~1/5）。</li>
+      </ol>
+
+      <!-- 嵌入图 6 -->
+      
+<div class="figure-card">
+  <div class="svg-container">
+    <svg viewBox="0 0 860 340" width="860" height="340" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="10" width="840" height="320" rx="10" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1" />
+      
+      <!-- 5 阶段演进流水线 -->
+      <!-- 步骤 1: 基线 -->
+      <rect x="25" y="45" width="145" height="210" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1" />
+      <rect x="25" y="45" width="145" height="26" rx="6" fill="var(--bg-card-subtle)" />
+      <text x="35" y="63" fill="var(--text-main)" font-family="var(--font-sans)" font-size="12" font-weight="bold">Step 0: 起始基线</text>
+      <text x="35" y="95" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Opus 4.8</text>
+      <text x="35" y="115" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">High Effort</text>
+      <text x="35" y="145" fill="var(--text-dim)" font-family="var(--font-sans)" font-size="11">历史冗长提示词</text>
+      <rect x="35" y="170" width="125" height="30" rx="4" fill="var(--bg-card-subtle)" />
+      <text x="45" y="190" fill="var(--rose)" font-family="var(--font-mono)" font-size="11" font-weight="bold">成本高昂基线</text>
+      <text x="35" y="235" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">训练集: 基线</text>
+
+      <!-- 箭头 1 -->
+      <path d="M 170 150 L 188 150" stroke="var(--border-color)" stroke-width="2" />
+
+      <!-- 步骤 2: Opus 5 + Audit -->
+      <rect x="188" y="45" width="150" height="210" rx="6" fill="var(--bg-card)" stroke="var(--accent-border)" stroke-width="1.5" />
+      <rect x="188" y="45" width="150" height="26" rx="6" fill="var(--accent-bg)" />
+      <text x="198" y="63" fill="var(--accent)" font-family="var(--font-sans)" font-size="12" font-weight="bold">Step 1: 升级+审计</text>
+      <text x="198" y="95" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Opus 5 (Low)</text>
+      <text x="198" y="115" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">+ prompt-audit</text>
+      <text x="198" y="145" fill="var(--emerald)" font-family="var(--font-sans)" font-size="11">清除核验与草稿</text>
+      <rect x="198" y="170" width="130" height="30" rx="4" fill="var(--accent-bg)" />
+      <text x="210" y="190" fill="var(--accent)" font-family="var(--font-mono)" font-size="11" font-weight="bold">单工单 2.6 美分</text>
+      <text x="198" y="235" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11" font-weight="bold">训练集: 98.9%</text>
+
+      <!-- 箭头 2 -->
+      <path d="M 338 150 L 356 150" stroke="var(--border-color)" stroke-width="2" />
+
+      <!-- 步骤 3: Sonnet 5 降级 -->
+      <rect x="356" y="45" width="150" height="210" rx="6" fill="var(--bg-card)" stroke="var(--rose)" stroke-width="1.5" />
+      <rect x="356" y="45" width="150" height="26" rx="6" fill="var(--rose-bg)" />
+      <text x="366" y="63" fill="var(--rose)" font-family="var(--font-sans)" font-size="12" font-weight="bold">Step 2: 模型降级</text>
+      <text x="366" y="95" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Sonnet 5 (Low)</text>
+      <text x="366" y="115" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">极致成本压缩</text>
+      <text x="366" y="145" fill="var(--rose)" font-family="var(--font-sans)" font-size="11">出现部分漏单退款</text>
+      <rect x="366" y="170" width="130" height="30" rx="4" fill="var(--rose-bg)" />
+      <text x="378" y="190" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11" font-weight="bold">单工单 1.0 美分</text>
+      <text x="366" y="235" fill="var(--rose)" font-family="var(--font-mono)" font-size="11" font-weight="bold">训练集跌至 88.9%</text>
+
+      <!-- 箭头 3 -->
+      <path d="M 506 150 L 524 150" stroke="var(--border-color)" stroke-width="2" />
+
+      <!-- 步骤 4: 针对性修复 -->
+      <rect x="524" y="45" width="150" height="210" rx="6" fill="var(--bg-card)" stroke="var(--emerald)" stroke-width="1.5" />
+      <rect x="524" y="45" width="150" height="26" rx="6" fill="var(--emerald-bg)" />
+      <text x="534" y="63" fill="var(--emerald)" font-family="var(--font-sans)" font-size="12" font-weight="bold">Step 3: 样例补齐</text>
+      <text x="534" y="95" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Sonnet 5 (Low)</text>
+      <text x="534" y="115" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">+ 路由/退款上限</text>
+      <text x="534" y="145" fill="var(--emerald)" font-family="var(--font-sans)" font-size="11">读失败工单精准补全</text>
+      <rect x="534" y="170" width="130" height="30" rx="4" fill="var(--emerald-bg)" />
+      <text x="546" y="190" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11" font-weight="bold">维持 1.0 美分</text>
+      <text x="534" y="235" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11" font-weight="bold">训练集回升 98.9%</text>
+
+      <!-- 箭头 4 -->
+      <path d="M 674 150 L 692 150" stroke="var(--border-color)" stroke-width="2" />
+
+      <!-- 步骤 5: 留出集泛化 -->
+      <rect x="692" y="45" width="145" height="210" rx="6" fill="var(--bg-card)" stroke="var(--cyan)" stroke-width="2" />
+      <rect x="692" y="45" width="145" height="26" rx="6" fill="var(--cyan-bg)" />
+      <text x="702" y="63" fill="var(--cyan)" font-family="var(--font-sans)" font-size="12" font-weight="bold">Step 4: 留出验证</text>
+      <text x="702" y="95" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">14 Held-out Tickets</text>
+      <text x="702" y="115" fill="var(--cyan)" font-family="var(--font-mono)" font-size="11" font-weight="bold">全新盲测集验证</text>
+      <text x="702" y="145" fill="var(--text-main)" font-family="var(--font-sans)" font-size="11">泛化表现优异</text>
+      <rect x="702" y="170" width="125" height="30" rx="4" fill="var(--cyan-bg)" />
+      <text x="712" y="190" fill="var(--cyan)" font-family="var(--font-mono)" font-size="11" font-weight="bold">成本降至原 ~1/5</text>
+      <text x="702" y="235" fill="var(--cyan)" font-family="var(--font-mono)" font-size="11" font-weight="bold">准确率: 90.5%</text>
+      <text x="702" y="250" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="10">(原基线仅 78.6%)</text>
+
+      <!-- 底部结论 -->
+      <rect x="25" y="270" width="810" height="40" rx="6" fill="var(--bg-card)" stroke="var(--border-color)" stroke-width="1" />
+      <text x="45" y="295" fill="var(--text-main)" font-family="var(--font-sans)" font-size="12">
+        <tspan fill="var(--accent)" font-weight="bold">Hillclimb 调优精髓：</tspan>
+        非盲目调大模型或调高 Effort，而是通过「配置降级 → 失败样例归因 → 补充关键规则约束」，在低成本模型上实现更高准确率。
+      </text>
+    </svg>
+  </div>
+  <div class="figure-caption"><strong>原文图 6 ｜ 爬山搜索（Hillclimbing）改善成本与性能的表现</strong>：通过评测集驱动的自动化配置搜索，实现每单成本从 Opus 4.8 高成本降至 Sonnet 5 的 1 美分，且留出集得分由 78.6% 跃迁至 90.5%。</div>
+</div>
+
+    </section>
+
+    <hr>
+
+    <!-- 第五章 -->
+    <section id="sec-bill">
+      <h2>三处单点查完，怎样审计整张账单？</h2>
+      <p>把提示词缓存、反模式清洗、Effort 校准、批量处理（Batching）和输出长度约束结合起来，可以形成一套常用的综合成本优化流程。</p>
+      <p>为了让这套流程标准化，官方提供了全局成本审计命令：<code>/claude-api cost-optimize</code>。它不仅定位成本，还会应用适合当前应用的削减措施；如果提供评测集，它会同时展示节省与表现之间的权衡。</p>
+
+      <h3>它先找钱花在哪里，再排序节省杠杆</h3>
+      <ol>
+        <li><strong>定位 Token 消耗来源</strong>：该工具首先定位 Token 消耗去向。数据来源优先级依次为：若持有 Claude Admin API key，优先从组织的 <a href="https://platform.claude.com/docs/en/manage-claude/usage-cost-api" target="_blank" rel="noopener">usage and cost reports</a>（使用量与成本报告）获取；若应用记录了日志，则从每次 API 响应携带的 <code>usage</code> 对象获取；若两者皆无，则通过读取请求构建代码进行估算。最后一种只是估算，不能当成真实账单。</li>
+        <li><strong>排序可用节省项</strong>：建立分析后，自顶向下对可用的节省杠杆进行排序：优先采用提示词缓存（prompt caching），裁剪每次请求携带的内容（包括 prompt-audit），限制输出长度（bounding output），以及将无人值守任务转移至<a href="https://platform.claude.com/docs/en/build-with-claude/batch-processing" target="_blank" rel="noopener">批处理</a>（batching）。</li>
+        <li><strong>结合评测权衡成本与表现</strong>：如果开发者提供了评测集（evaluation），它会进一步计算并比较不同 Effort 级别与模型选择下的成本与表现，展示开销节省与性能表现之间的权衡。</li>
+      </ol>
+
+      <h3>四项公开基准说明：不同任务，节省手段并不相同</h3>
+      <p>以常用的主力模型 Sonnet 5 作为基线，运行 <code>/claude-api cost-optimize</code> 在四个公开基准测试中测试了优化效果（图 7）：</p>
+
+      <!-- 嵌入图 7 -->
+      
+<div class="figure-card">
+  <div class="svg-container">
+    <svg viewBox="0 0 860 360" width="860" height="360" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="10" width="840" height="340" rx="10" fill="var(--bg-card-subtle)" stroke="var(--border-color)" stroke-width="1" />
+      
+      <!-- 4 组水平条形对比 -->
+      <!-- 基准 1: LegalBench -->
+      <text x="35" y="65" fill="var(--text-main)" font-family="var(--font-sans)" font-size="13" font-weight="bold">LegalBench (法律推理)</text>
+      <text x="35" y="85" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">共享前缀缓存 + Low Effort + Batch API</text>
+      <rect x="280" y="55" width="400" height="24" rx="4" fill="var(--border-color)" />
+      <text x="690" y="72" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">基线 100%</text>
+      <rect x="280" y="55" width="168" height="24" rx="4" fill="var(--accent)" />
+      <text x="330" y="72" fill="#FFFFFF" font-family="var(--font-mono)" font-size="11" font-weight="bold">成本 -58%</text>
+      <text x="760" y="72" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11" font-weight="bold">持平 (±噪声)</text>
+
+      <!-- 基准 2: tau2-bench retail -->
+      <text x="35" y="135" fill="var(--text-main)" font-family="var(--font-sans)" font-size="13" font-weight="bold">tau2-bench retail (零售客服)</text>
+      <text x="35" y="155" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">显式断点多轮提示词缓存 (Prompt Caching)</text>
+      <rect x="280" y="125" width="400" height="24" rx="4" fill="var(--border-color)" />
+      <text x="690" y="142" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">基线 100%</text>
+      <rect x="280" y="125" width="108" height="24" rx="4" fill="var(--accent)" />
+      <text x="300" y="142" fill="#FFFFFF" font-family="var(--font-mono)" font-size="11" font-weight="bold">成本 -73%</text>
+      <text x="760" y="142" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11" font-weight="bold">通过率持平</text>
+
+      <!-- 基准 3: OfficeQA Pro -->
+      <text x="35" y="205" fill="var(--text-main)" font-family="var(--font-sans)" font-size="13" font-weight="bold">OfficeQA Pro (文档长问答)</text>
+      <text x="35" y="225" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">文档缓存 + 离线批处理 (Batching)</text>
+      <rect x="280" y="195" width="400" height="24" rx="4" fill="var(--border-color)" />
+      <text x="690" y="212" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">$136.20</text>
+      <rect x="280" y="195" width="192" height="24" rx="4" fill="var(--accent)" />
+      <text x="330" y="212" fill="#FFFFFF" font-family="var(--font-mono)" font-size="11" font-weight="bold">降至 $64.87 (-52%)</text>
+      <text x="760" y="212" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11" font-weight="bold">准确率无损</text>
+
+      <!-- 基准 4: SWE-bench Verified -->
+      <text x="35" y="275" fill="var(--text-main)" font-family="var(--font-sans)" font-size="13" font-weight="bold">SWE-bench Verified (代码修复)</text>
+      <text x="35" y="295" fill="var(--text-muted)" font-family="var(--font-mono)" font-size="11">Medium Effort + 约束简洁输出 (步数29→17)</text>
+      <rect x="280" y="265" width="400" height="24" rx="4" fill="var(--border-color)" />
+      <text x="690" y="282" fill="var(--text-dim)" font-family="var(--font-mono)" font-size="11">75.2M Tokens</text>
+      <rect x="280" y="265" width="180" height="24" rx="4" fill="var(--accent)" />
+      <text x="320" y="282" fill="#FFFFFF" font-family="var(--font-mono)" font-size="11" font-weight="bold">成本 -55% (33.7M)</text>
+      <text x="760" y="282" fill="var(--emerald)" font-family="var(--font-mono)" font-size="11" font-weight="bold">解决率不变</text>
+
+      <!-- 底部图例 -->
+      <rect x="280" y="318" width="14" height="14" rx="2" fill="var(--accent)" />
+      <text x="300" y="330" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="11">cost-optimize 优化后实际支出占比</text>
+      <rect x="520" y="318" width="14" height="14" rx="2" fill="var(--border-color)" />
+      <text x="540" y="330" fill="var(--text-muted)" font-family="var(--font-sans)" font-size="11">未优化原始基线 (100%)</text>
+    </svg>
+  </div>
+  <div class="figure-caption"><strong>原文图 7 ｜ 运行 /claude-api cost-optimize 在各基准测试中的成本与表现变化</strong>：四大公开基准测试全面斩获 50%~73% 的实质性降本幅度，且任务通过率完全维持在基准水平。</div>
+</div>
+
+
+      <ul>
+        <li><strong>LegalBench 法律合规推理（降本 ~58%）</strong>：
+          cost-optimize 建议缓存跨任务的共享前缀、将 effort 设为 low，并通过 Batch API 处理任务。思考 Token（Thinking tokens）从 102,779 降至 8,284，通过率变化保持在噪声范围内，成本降低约 58%。</li>
+        <li><strong>tau2-bench retail 零售客服场景（降本 ~73%）</strong>：
+          通过设置显式断点实现提示词缓存，cost-optimize 将支出降低了 72%（四舍五入约 73%），同时通过率保持持平。</li>
+        <li><strong>OfficeQA Pro 办公文档长问答（降本 ~52%）</strong>：
+          cost-optimize 引入了批处理与文档缓存，总运行成本直接从 136.20 美元降至 64.87 美元。</li>
+        <li><strong>SWE-bench Verified 软件工程代码修复（降本 ~55%）</strong>：
+          检测发现默认配置已经正确进行了缓存。节省来自将 effort 统一设为 medium，并将 agent 的回复输出约束为简明扼要的几句话。单个任务的中位数执行步数从 29 步降至 17 步，Prompt Token 消耗从 75.2M 降至 33.7M，成本降低约 55%。</li>
+      </ul>
+    </section>
+
+    <hr>
+
+    <!-- 第六章 -->
+    <section id="sec-matrix">
+      <h2>三个工具怎么选：看你从哪类问题开始</h2>
+      <p>这三个命令都属于 <code>claude-api</code> skill，并已内置在 Claude Code 中。它们不是必须依次执行的三道关卡，而是对应不同起点：</p>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 25%;">阶段与状态</th>
+              <th style="width: 25%;">选用工具</th>
+              <th style="width: 50%;">适用场景与具体动作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>模型刚升级，怀疑提示词有历史包袱</strong></td>
+              <td><code>/claude-api prompt-audit</code></td>
+              <td>扫描工作目录中的应用代码、提示词、<code>CLAUDE.md</code>、Skills 和工具描述，找出可能带来额外 token、工具调用、冲突或报错的反模式。</td>
+            </tr>
+            <tr>
+              <td><strong>账单变高，但不知道钱花在哪里</strong></td>
+              <td><code>/claude-api cost-optimize</code></td>
+              <td>定位 token 去向，并检查缓存、裁剪请求、限制输出和批处理等杠杆；提供评测集后还能比较模型与 Effort 的权衡。</td>
+            </tr>
+            <tr>
+              <td><strong>已有可重复评测，想搜索更合适的配置</strong></td>
+              <td><code>/claude-api hillclimb</code></td>
+              <td>划分训练集与测试集，提出配置改动，并根据失败训练样例继续调整；最终结果仍在留出测试集上验证。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- 第七章：交互沙盘 -->
+    <section id="sec-sandbox">
+      <h2>实操沙盘：API 成本多维推演与反模式消融模拟</h2>
+      <p>为了帮助架构师更直观地衡量各项优化杠杆的实际收益，下方提供两个可计算的交互沙盘。所有运算均基于文中实证模型与 Anthropic 定价公式进行毫秒级推导。</p>
+
+      <!-- 沙盘 1 -->
+      <div class="sandbox-panel">
+        <div class="sandbox-header">
+          <div class="sandbox-title">沙盘 1 ｜ Claude API 架构降本收益模拟器</div>
+          <span class="sandbox-tag">多维算力与缓存模型推演</span>
+        </div>
+
+        <div class="sandbox-grid">
+          <!-- 控件组 1 -->
+          <div class="control-group">
+            <div class="control-label">
+              <span>选择基准模型</span>
+              <span style="font-family:var(--font-mono);color:var(--accent);">MODEL</span>
+            </div>
+            <select id="sel-model">
+              <option value="sonnet-5" selected>Sonnet 5 (主力推荐 · $3/$15)</option>
+              <option value="opus-5">Opus 5 (最强推理 · $15/$75)</option>
+              <option value="fable-5.1">Fable 5.1 (前沿代码 · 缓存超低价 $0.25)</option>
+              <option value="fable-5">Fable 5 (上一代代码 · 缓存 $1.00)</option>
+            </select>
+            <div class="control-desc">不同模型系列具备不同的 Prefill 基础单价与缓存读取费率。</div>
+          </div>
+
+          <!-- 控件组 2 -->
+          <div class="control-group">
+            <div class="control-label">
+              <span>单轮上下文 Token 规模</span>
+              <span id="label-tokens" style="font-family:var(--font-mono);color:var(--accent);">40,000 tokens</span>
+            </div>
+            <input type="range" id="rng-tokens" min="5000" max="120000" step="5000" value="40000">
+            <div class="control-desc">包含静态 System Prompt、工具定义及知识库前缀的单轮总体积。</div>
+          </div>
+
+          <!-- 控件组 3 -->
+          <div class="control-group">
+            <div class="control-label">
+              <span>多轮交互总轮数</span>
+              <span id="label-turns" style="font-family:var(--font-mono);color:var(--accent);">10 轮</span>
+            </div>
+            <input type="range" id="rng-turns" min="1" max="25" step="1" value="10">
+            <div class="control-desc">单次会话或 Agent 子任务执行过程中反复请求 LLM 的总次数。</div>
+          </div>
+
+          <!-- 控件组 4 -->
+          <div class="control-group">
+            <div class="control-label">
+              <span>Prompt 缓存命中率</span>
+              <span id="label-cache-hit" style="font-family:var(--font-mono);color:var(--accent);">80%</span>
+            </div>
+            <input type="range" id="rng-cache-hit" min="0" max="100" step="5" value="80">
+            <div class="control-desc">静态前缀完全一致的 token 比例，未命中部分需全额重算 Prefill。</div>
+          </div>
+
+          <!-- 控件组 5 -->
+          <div class="control-group">
+            <div class="control-label">
+              <span>Effort 档位调整</span>
+              <span style="font-family:var(--font-mono);color:var(--accent);">EFFORT</span>
+            </div>
+            <select id="sel-effort">
+              <option value="low" selected>Low Effort (快速收敛 / 输出约束)</option>
+              <option value="medium">Medium Effort (均衡输出)</option>
+              <option value="high">High Effort (深度推演 / 默认基线)</option>
+              <option value="max">Max Effort (极难任务专用)</option>
+            </select>
+            <div class="control-desc">调整模型在单次任务中的思考深度，直接影响生成的推理 Token 规模。</div>
+          </div>
+
+          <!-- 控件组 6 -->
+          <div class="control-group">
+            <div class="control-label">
+              <span>启用批处理 API (Batch API)</span>
+              <span style="font-family:var(--font-mono);color:var(--accent);">BATCH</span>
+            </div>
+            <label class="checkbox-item">
+              <input type="checkbox" id="chk-batch">
+              <span>针对非实时/离线任务开启 Batch 模式（享受全单 50% 额外折扣）</span>
+            </label>
+            <div class="control-desc">适合 LegalBench、OfficeQA 等异步评估或离线长文档处理。</div>
+          </div>
+        </div>
+
+        <!-- 数据回显卡片行 -->
+        <div class="stat-cards-row">
+          <div class="stat-card">
+            <div class="stat-card-title">未优化基准支出</div>
+            <div class="stat-card-value" id="out-base-cost">$1.47</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-title">优化后实际支出</div>
+            <div class="stat-card-value" id="out-opt-cost" style="color:var(--emerald);">$0.56</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-title">净节约资金</div>
+            <div class="stat-card-value" id="out-save-amount">$0.91</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-title">综合降本幅度</div>
+            <div class="stat-card-value" id="out-save-pct" style="color:var(--emerald);">61.9%</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-title">Prefill 重算总量</div>
+            <div class="stat-card-value" id="out-stat-prefill" style="font-size:1.15rem;">112.0k</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-title">缓存读取命中总量</div>
+            <div class="stat-card-value" id="out-stat-cache" style="font-size:1.15rem;color:var(--cyan);">288.0k</div>
+          </div>
+        </div>
+
+        <div class="verdict-box" id="out-eval-verdict">
+          通过启用 Prompt Caching (命中率 80%) 与调校 Effort 至 low，累计节省开销 61.9% ($0.91)。
+        </div>
+      </div>
+
+      <!-- 沙盘 2 -->
+      <div class="sandbox-panel">
+        <div class="sandbox-header">
+          <div class="sandbox-title">沙盘 2 ｜ 提示词反模式（Anti-Patterns）审计与消融推演沙盘</div>
+          <span class="sandbox-tag">客服基准迁移故障注入分析</span>
+        </div>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+          勾选系统提示词中残留的各类旧版补丁，观察对模型 Token 消耗、工具调用与业务风险的实时量化冲击：
+        </p>
+
+        <div class="sandbox-grid">
+          <div class="control-group" style="grid-column: span 2;">
+            <label class="checkbox-item">
+              <input type="checkbox" id="chk-anti-1" checked>
+              <span><strong>① 核验仪式（Verification rituals）</strong>：要求“回答前反复核对两遍”，导致每次交互触发重复冗余的订单或用户查询。</span>
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" id="chk-anti-2" checked>
+              <span><strong>② 强调催促词（Emphasis boosters）</strong>：全大写“CRITICAL: YOU MUST ALWAYS...”，导致极端啰嗦与数十次不必要的检索。</span>
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" id="chk-anti-3" checked>
+              <span><strong>③ 外挂草稿本（Scratchpads）</strong>：强制在 <code>&lt;scratchpad&gt;</code> 中 6 步思考，造成模型将工具调用写进 reasoning 而未实际执行。</span>
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" id="chk-anti-4">
+              <span><strong>④ 陈旧 Few-shot 样例（Stale examples）</strong>：沿用上一代失败模式样本，前沿模型机械模仿导致简单问题生成多余长推导。</span>
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" id="chk-anti-5">
+              <span><strong>⑤ 矛盾规则条目（Contradictory rules）</strong>：同时要求“按政策退款”与“未经升级不得退款”，导致模型扣留正常退款并死锁。</span>
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" id="chk-anti-6">
+              <span><strong>⑥ 废弃思考配置参数（Deprecated config）</strong>：保留上一代手动思考预算（Manual Thinking Budget），在新 API 中触发直接报错。</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="stat-cards-row">
+          <div class="stat-card">
+            <div class="stat-card-title">额外冗余 Token</div>
+            <div class="stat-card-value" id="out-anti-redundant-tokens" style="color:var(--rose);">13,500 tokens</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-title">单交互浪费开销</div>
+            <div class="stat-card-value" id="out-anti-waste-cost" style="color:var(--rose);">$0.108 /单</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-title">整体风险评级</div>
+            <div class="stat-card-value" id="out-anti-risk-level" style="font-size:1.15rem;color:var(--amber);">中高风险 (严重冗余与漏单)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-title">业务准确率冲击</div>
+            <div class="stat-card-value" id="out-anti-accuracy-delta" style="font-size:1.15rem;color:var(--rose);">-5.3% (工具调用降级)</div>
+          </div>
+        </div>
+
+        <div class="verdict-box" id="out-anti-summary" style="border-color:var(--rose);">
+          历史草稿本与过度核验叠加，模型将工具调用写进 reasoning 而未实际触发物理执行。
+        </div>
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- 第八章：延伸与作者 -->
+    <section id="sec-appendix">
+      <h2>官方技术资源与延伸实操指南</h2>
+      
+      <h3>继续实操官方参考资料</h3>
+      <ul>
+        <li><strong>优化指南｜</strong><a href="https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence#cut-spend-without-losing-quality" target="_blank" rel="noopener">Cut spend without losing quality</a> —— 从缓存、模型选择和 Effort 入手制定降本方案。</li>
+        <li><strong>成本优化 Cookbook｜</strong><a href="https://platform.claude.com/cookbook/cost-optimization-cost-optimization#prompt-caching" target="_blank" rel="noopener">Claude Cost Optimization Cookbook</a> —— 查看 Prompt Caching 等方法的具体工程实现。</li>
+        <li><strong>Claude API Skill 源码｜</strong><a href="https://github.com/anthropics/skills/tree/main/skills/claude-api" target="_blank" rel="noopener">GitHub / anthropics / skills / claude-api</a> —— 查看文中 <code>prompt-audit</code>、<code>cost-optimize</code> 与 <code>hillclimb</code> 三个自动化命令的源码与说明。</li>
+      </ul>
+
+      <h3>原文与作者团队</h3>
+      <ul>
+        <li><strong>官方技术博客原文｜</strong><a href="https://claude.com/blog/reducing-cost-and-improving-performance-with-claude-platform" target="_blank" rel="noopener">Reducing cost and improving performance with Claude Platform</a></li>
+        <li><strong>作者团队｜</strong>
+          <a href="https://x.com/@RLanceMartin" target="_blank" rel="noopener">Lance Martin</a>、
+          <a href="https://x.com/@brada" target="_blank" rel="noopener">Brad Abrams</a>、
+          <a href="https://x.com/@IsabellaKHe" target="_blank" rel="noopener">Isabella He</a>、
+          <a href="https://x.com/@benlehrburger" target="_blank" rel="noopener">Ben Lehrburger</a>
+        </li>
+      </ul>
+    </section>
+  </main>
+
+  <!-- 原生 JavaScript 逻辑 -->
+  <script>
+  (function() {
+    function byId(id) {
+      return document.getElementById(id);
+    }
+
+    // 1. 主题切换
+    var htmlEl = document.documentElement;
+    var btnTheme = byId("btn-theme-toggle");
+    var themeIndicator = byId("theme-indicator");
+
+    function updateThemeDisplay(theme) {
+      if (themeIndicator) {
+        themeIndicator.textContent = theme.toUpperCase();
+      }
+    }
+
+    if (btnTheme) {
+      btnTheme.addEventListener("click", function() {
+        var cur = htmlEl.getAttribute("data-theme") || "dark";
+        var next = cur === "dark" ? "light" : "dark";
+        htmlEl.setAttribute("data-theme", next);
+        updateThemeDisplay(next);
+      });
+    }
+
+    // 2. 阅读进度条
+    var progressEl = byId("read-progress");
+    window.addEventListener("scroll", function() {
+      if (!progressEl) return;
+      var docH = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      if (docH <= 0) return;
+      var pct = (window.scrollY / docH) * 100;
+      progressEl.style.width = Math.min(100, Math.max(0, pct)) + "%";
+    });
+
+    // 3. 侧栏目录高亮监听
+    var navLinks = document.querySelectorAll(".nav-link");
+    var sections = [];
+    for (var i = 0; i < navLinks.length; i++) {
+      var h = navLinks[i].getAttribute("href");
+      if (h && h.indexOf("#") === 0) {
+        var sec = byId(h.slice(1));
+        if (sec) sections.push({ el: sec, link: navLinks[i] });
+      }
+    }
+
+    window.addEventListener("scroll", function() {
+      var top = window.scrollY + 100;
+      var current = null;
+      for (var j = 0; j < sections.length; j++) {
+        if (sections[j].el.offsetTop <= top) {
+          current = sections[j].link;
+        }
+      }
+      if (current) {
+        for (var k = 0; k < navLinks.length; k++) {
+          navLinks[k].classList.remove("active");
+        }
+        current.classList.add("active");
+      }
+    });
+
+    // 4. 沙盘 1 计算模型
+    var selModel = byId("sel-model");
+    var rngTokens = byId("rng-tokens");
+    var rngTurns = byId("rng-turns");
+    var rngCacheHit = byId("rng-cache-hit");
+    var selEffort = byId("sel-effort");
+    var chkBatch = byId("chk-batch");
+
+    var lblTokens = byId("label-tokens");
+    var lblTurns = byId("label-turns");
+    var lblCacheHit = byId("label-cache-hit");
+
+    var outBaseCost = byId("out-base-cost");
+    var outOptCost = byId("out-opt-cost");
+    var outSaveAmount = byId("out-save-amount");
+    var outSavePct = byId("out-save-pct");
+    var outStatPrefill = byId("out-stat-prefill");
+    var outStatCache = byId("out-stat-cache");
+    var outEvalVerdict = byId("out-eval-verdict");
+
+    var PRICING = {
+      "opus-5": [15.0, 18.75, 1.50, 75.0],
+      "sonnet-5": [3.0, 3.75, 0.30, 15.0],
+      "fable-5.1": [3.0, 3.75, 0.25, 15.0],
+      "fable-5": [3.0, 3.75, 1.00, 15.0]
+    };
+
+    var EFFORT_MULT = {
+      "low": 0.6,
+      "medium": 1.0,
+      "high": 1.5,
+      "max": 2.2
+    };
+
+    function updateSim1() {
+      var modelKey = selModel ? selModel.value : "sonnet-5";
+      var inputTokens = rngTokens ? parseInt(rngTokens.value, 10) : 40000;
+      var turns = rngTurns ? parseInt(rngTurns.value, 10) : 10;
+      var cacheHitPct = rngCacheHit ? parseInt(rngCacheHit.value, 10) : 80;
+      var effortKey = selEffort ? selEffort.value : "low";
+      var isBatch = chkBatch ? chkBatch.checked : false;
+
+      if (lblTokens) lblTokens.textContent = inputTokens.toLocaleString() + " tokens";
+      if (lblTurns) lblTurns.textContent = turns + " 轮";
+      if (lblCacheHit) lblCacheHit.textContent = cacheHitPct + "%";
+
+      var p = PRICING[modelKey] || PRICING["sonnet-5"];
+      var mult = EFFORT_MULT[effortKey] || 1.0;
+
+      // 未优化基线
+      var baseInM = (inputTokens * turns) / 1000000.0;
+      var baseOutM = (1200 * EFFORT_MULT["high"] * turns) / 1000000.0;
+      var baseCost = baseInM * p[0] + baseOutM * p[3];
+
+      // 优化后
+      var firstTurnCost = (inputTokens / 1000000.0) * p[1];
+      var remTurns = Math.max(0, turns - 1);
+      var hitRate = cacheHitPct / 100.0;
+
+      var readTokensPerTurn = inputTokens * hitRate;
+      var missTokensPerTurn = inputTokens * (1.0 - hitRate);
+
+      var remReadCost = (readTokensPerTurn * remTurns / 1000000.0) * p[2];
+      var remMissCost = (missTokensPerTurn * remTurns / 1000000.0) * p[0];
+
+      var optOutM = (1200 * mult * turns) / 1000000.0;
+      var optOutCost = optOutM * p[3];
+
+      var optCost = firstTurnCost + remReadCost + remMissCost + optOutCost;
+      if (isBatch) optCost *= 0.5;
+
+      var saveAmount = Math.max(0.0, baseCost - optCost);
+      var savePct = baseCost > 0 ? (saveAmount / baseCost * 100.0) : 0.0;
+
+      var cachedTokens = readTokensPerTurn * remTurns;
+      var prefillTokens = inputTokens + missTokensPerTurn * remTurns;
+
+      if (outBaseCost) outBaseCost.textContent = "$" + baseCost.toFixed(2);
+      if (outOptCost) outOptCost.textContent = "$" + optCost.toFixed(2);
+      if (outSaveAmount) outSaveAmount.textContent = "$" + saveAmount.toFixed(2);
+      if (outSavePct) outSavePct.textContent = savePct.toFixed(1) + "%";
+      if (outStatPrefill) outStatPrefill.textContent = (prefillTokens / 1000.0).toFixed(1) + "k";
+      if (outStatCache) outStatCache.textContent = (cachedTokens / 1000.0).toFixed(1) + "k";
+      if (outEvalVerdict) {
+        outEvalVerdict.textContent = "通过启用 Prompt Caching (命中率 " + cacheHitPct + "%) 与调校 Effort 至 " + effortKey + "，累计节省开销 " + savePct.toFixed(1) + "% ($" + saveAmount.toFixed(2) + ")。";
+      }
+    }
+
+    if (selModel) selModel.addEventListener("change", updateSim1);
+    if (rngTokens) rngTokens.addEventListener("input", updateSim1);
+    if (rngTurns) rngTurns.addEventListener("input", updateSim1);
+    if (rngCacheHit) rngCacheHit.addEventListener("input", updateSim1);
+    if (selEffort) selEffort.addEventListener("change", updateSim1);
+    if (chkBatch) chkBatch.addEventListener("change", updateSim1);
+
+    // 5. 沙盘 2 反模式审计
+    var chkAnti1 = byId("chk-anti-1");
+    var chkAnti2 = byId("chk-anti-2");
+    var chkAnti3 = byId("chk-anti-3");
+    var chkAnti4 = byId("chk-anti-4");
+    var chkAnti5 = byId("chk-anti-5");
+    var chkAnti6 = byId("chk-anti-6");
+
+    var outAntiTokens = byId("out-anti-redundant-tokens");
+    var outAntiWaste = byId("out-anti-waste-cost");
+    var outAntiRisk = byId("out-anti-risk-level");
+    var outAntiAcc = byId("out-anti-accuracy-delta");
+    var outAntiSummary = byId("out-anti-summary");
+
+    var TOKENS_MAP = [3500, 5800, 4200, 2400, 1800, 0];
+
+    function updateSim2() {
+      var chks = [
+        chkAnti1 ? chkAnti1.checked : false,
+        chkAnti2 ? chkAnti2.checked : false,
+        chkAnti3 ? chkAnti3.checked : false,
+        chkAnti4 ? chkAnti4.checked : false,
+        chkAnti5 ? chkAnti5.checked : false,
+        chkAnti6 ? chkAnti6.checked : false
+      ];
+
+      var extraTokens = 0;
+      var riskScore = 0;
+      var hasError = false;
+      var hasContradict = false;
+
+      for (var m = 0; m < chks.length; m++) {
+        if (chks[m]) {
+          extraTokens += TOKENS_MAP[m];
+          if (m === 5) hasError = true;
+          if (m === 4) hasContradict = true;
+          riskScore++;
+        }
+      }
+
+      var wasteCost = (extraTokens / 1000.0) * 0.008;
+
+      var riskText = "安全 (Clean Prompt)";
+      var accText = "基准状态 (+5.3% 优化空间)";
+      var summaryText = "提示词结构纯净，完全释放前沿原生推理能力，兼具最低 Token 消耗与最高业务准确率。";
+
+      if (hasError) {
+        riskText = "极高危 (API 报错阻断)";
+        accText = "-100% (路由拒绝)";
+        summaryText = "检测到包含过时 API 思考参数（Manual Thinking Budget），在新版 Claude Messages API 中将被直接拒收报错！";
+      } else if (hasContradict) {
+        riskText = "高危 (业务异常/扣款拦截)";
+        accText = "-8.5% (规则死锁)";
+        summaryText = "存在相互矛盾的指令规则，模型将陷入决策冲突并无故扣留正常退款申请。";
+      } else if (riskScore >= 3) {
+        riskText = "中高风险 (严重冗余与漏单)";
+        accText = "-5.3% (工具调用降级)";
+        summaryText = "历史草稿本与过度核验叠加，模型将工具调用写进 reasoning 而未实际触发物理执行。";
+      } else if (riskScore >= 1) {
+        riskText = "轻度风险 (Token 膨胀与时延增加)";
+        accText = "-2.1% (无效冗长)";
+        summaryText = "检测到催促词或陈旧样例，引发模型过度输出与推理预算空转。";
+      }
+
+      if (outAntiTokens) outAntiTokens.textContent = extraTokens.toLocaleString() + " tokens";
+      if (outAntiWaste) outAntiWaste.textContent = "$" + wasteCost.toFixed(3) + " /单";
+      if (outAntiRisk) {
+        outAntiRisk.textContent = riskText;
+        outAntiRisk.style.color = hasError || hasContradict ? "var(--rose)" : (riskScore >= 3 ? "var(--amber)" : "var(--emerald)");
+      }
+      if (outAntiAcc) outAntiAcc.textContent = accText;
+      if (outAntiSummary) {
+        outAntiSummary.textContent = summaryText;
+        outAntiSummary.style.borderColor = hasError || hasContradict || riskScore >= 3 ? "var(--rose)" : "var(--accent-border)";
+      }
+    }
+
+    var antiList = [chkAnti1, chkAnti2, chkAnti3, chkAnti4, chkAnti5, chkAnti6];
+    for (var n = 0; n < antiList.length; n++) {
+      if (antiList[n]) antiList[n].addEventListener("change", updateSim2);
+    }
+
+    // 初始化一次
+    updateSim1();
+    updateSim2();
+  })();
+  </script>
+</body>
+</html>
