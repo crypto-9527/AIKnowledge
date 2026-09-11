@@ -40,11 +40,21 @@ def _repo_root(start: Path) -> Path:
 
 
 def resolve_paths():
+    """返回 (src, [(label, path), ...])。
+
+    运行时存在**两个**全局目录：历史遗留的 ~/.workbuddy/skills 与当前实际加载的
+    ~/.workbuddy-ai/skills。后者才是 Skill 工具真正读取的位置，必须一并同步，
+    否则 --apply 会「报告同步成功」但运行时 Skill 内容毫无变化（2026-09-11 实证：
+    两个目录的 SKILL.md 曾分别为 43167 / 40776 字节，差异长期未被发现）。
+    """
     src = _here().parent                            # [SOURCE]  <root>/skills/<name>
     aik = _repo_root(src)                           # 仓库根（AIKnowledge）
-    project = aik / ".workbuddy" / "skills" / SKILL_NAME
-    glob = Path.home() / ".workbuddy" / "skills" / SKILL_NAME
-    return src, project, glob
+    targets = [
+        ("PROJECT     项目级运行时      ", aik / ".workbuddy" / "skills" / SKILL_NAME),
+        ("GLOBAL      全局运行时(遗留)  ", Path.home() / ".workbuddy" / "skills" / SKILL_NAME),
+        ("GLOBAL-AI   全局运行时(实际加载)", Path.home() / ".workbuddy-ai" / "skills" / SKILL_NAME),
+    ]
+    return src, targets
 
 
 def snapshot(root: Path):
@@ -109,22 +119,22 @@ def main():
     ap.add_argument("--check", action="store_true", help="仅检查三处差异（默认行为，显式写出更易读）")
     args = ap.parse_args()
 
-    src, project, glob = resolve_paths()
+    src, targets = resolve_paths()
     print(f"单一真值源 (SOURCE): {src}")
     src_snap = snapshot(src)
     print(f"  {len(src_snap)} 个文件")
 
-    ok_p = report("PROJECT 项目级运行时", project, src_snap)
-    ok_g = report("GLOBAL  全局运行时", glob, src_snap)
+    results = []
+    for label, tgt in targets:
+        results.append((label, tgt, report(label, tgt, src_snap)))
 
     if not args.apply:
         print("\n（只读检查模式。如需同步请追加 --apply）")
-        sys.exit(0 if (ok_p and ok_g) else 2)
+        sys.exit(0 if all(ok for _, _, ok in results) else 2)
 
-    if not ok_p:
-        apply_to("PROJECT", project)
-    if not ok_g:
-        apply_to("GLOBAL", glob)
+    for label, tgt, ok in results:
+        if not ok:
+            apply_to(label, tgt)
     print("\n同步完成。建议再跑一次 --check 复核。")
 
 

@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="1VNDHqszXcLYztLhlkTVOF">
+<head data-page-node-id="GtUKmQHehiaaJAMw280649">
+<meta charset="utf-8" data-page-node-id="EbkbzPM7waYb8vkPMPGX6A">
+<meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="274fY3yeFZilRrSlbl0HGm">
+<title>crypto-ai-qt｜有状态量化 Agent 架构选型与落地方案</title>
+<meta name="description" content="crypto-ai-qt 有状态量化 Agent 架构选型、DSH 插件化二开与运行验收方案。" data-page-node-id="u0LVQU2YtHmJmmopEFhmcJ">
+<style>
+:root {
+  --sidebar-w: 280px;
+  --content-max: 1180px;
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 16px;
+  --bg: #FAF7F2;
+  --paper: #FFFFFF;
+  --bg-sunk: #F2EDE4;
+  --bg-code: #F5F0E8;
+  --ink: #2A2724;
+  --sub: #6B6560;
+  --text-faint: #928B83;
+  --line: #E5DED4;
+  --line-strong: #D5CBBE;
+  --accent: #D97757;
+  --soft: #F6E7E0;
+  --warn: #B8862F;
+  --warnbg: #F8EED9;
+  --success: #2E8B6F;
+  --sbg: #E3F0EA;
+  --danger: #C9503F;
+  --dangerbg: #F8E5E1;
+  --cyan: #3D7F96;
+  --cyan-soft: #E2EFF3;
+  --shadow: 0 1px 3px rgba(42,39,36,.06), 0 6px 20px rgba(42,39,36,.04);
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-head: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-code: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+}
+
+html[data-theme="dark"] {
+  --bg: #181715;
+  --paper: #201E1B;
+  --bg-sunk: #141311;
+  --bg-code: #191816;
+  --ink: #E8E3DC;
+  --sub: #A7A099;
+  --text-faint: #7C756E;
+  --line: #35322D;
+  --line-strong: #463F39;
+  --accent: #E2886A;
+  --soft: #33241D;
+  --warn: #D9A94E;
+  --warnbg: #2E2718;
+  --success: #5FB99A;
+  --sbg: #1D2B26;
+  --danger: #E0796A;
+  --dangerbg: #33201D;
+  --cyan: #6FB0C6;
+  --cyan-soft: #1B2A30;
+  --shadow: 0 1px 3px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.3);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 32px;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.8;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button, input {
+  font-family: inherit;
+}
+button {
+  cursor: pointer;
+}
+
+/* ---------- 阅读进度条 ---------- */
+#progress-track {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  z-index: 100;
+}
+#progress-bar {
+  height: 3px;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+/* ---------- 侧栏目录 ---------- */
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--sidebar-w);
+  padding: 28px 18px 40px;
+  background: var(--paper);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  z-index: 50;
+  box-sizing: border-box;
+}
+.sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 3px;
+}
+
+.brand {
+  padding: 0 8px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.brand small {
+  display: block;
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.brand strong {
+  font-family: var(--font-head);
+  font-size: 21px;
+  display: block;
+  margin: 10px 0 4px;
+  color: var(--ink);
+}
+.brand p {
+  font-size: 12.5px;
+  color: var(--sub);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 0 4px;
+}
+.toolbar button {
+  flex: 1;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--bg-sunk);
+  border-radius: var(--radius-s);
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+.toolbar button:hover {
+  background: var(--soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.toc {
+  padding: 6px 0;
+}
+.toc a {
+  display: block;
+  padding: 7px 10px;
+  border-radius: var(--radius-s);
+  color: var(--sub);
+  font-size: 12.5px;
+  line-height: 1.55;
+  margin: 3px 0;
+  border-left: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+.toc a:hover {
+  background: var(--bg-sunk);
+  color: var(--ink);
+  text-decoration: none;
+}
+.toc a.active {
+  background: var(--soft);
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* ---------- 正文主体：侧栏贴左，正文在剩余区域居中 ---------- */
+.main {
+  display: block;
+  max-width: var(--content-max);
+  margin-left: calc(var(--sidebar-w) + max(0px, (100% - var(--sidebar-w) - var(--content-max)) / 2));
+  margin-right: max(0px, calc((100% - var(--sidebar-w) - var(--content-max)) / 2));
+  padding: 42px 42px 90px;
+  box-sizing: border-box;
+}
+
+/* ---------- 英雄首屏 ---------- */
+.hero {
+  background: linear-gradient(135deg, #1C2333 0%, #2A3654 50%, #1D2A44 100%);
+  color: #FFFFFF;
+  padding: 44px 44px 36px;
+  border-radius: var(--radius-l);
+  margin-bottom: 28px;
+  box-shadow: var(--shadow);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.eyebrow {
+  color: #BAC6FF;
+  font-size: 11.5px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.hero h1 {
+  font-family: var(--font-head);
+  font-size: clamp(28px, 3.4vw, 42px);
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 16px 0 16px;
+  max-width: 980px;
+  letter-spacing: -0.5px;
+}
+.hero p {
+  max-width: 900px;
+  color: #D4DDF4;
+  font-size: 16.5px;
+  line-height: 1.75;
+  margin: 0;
+}
+.meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+.meta span {
+  font-size: 11.5px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-s);
+  background: rgba(255, 255, 255, 0.06);
+  color: #E6EBF8;
+}
+
+/* ---------- 顶部定调 Ribbon ---------- */
+.ribbon {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 24px 0 28px;
+}
+.ribbon div {
+  padding: 18px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+.ribbon strong {
+  font-size: 18px;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+.ribbon small {
+  color: var(--sub);
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ---------- 章节容器 ---------- */
+section {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 32px 34px;
+  margin: 24px 0;
+  min-width: 0;
+  box-shadow: var(--shadow);
+}
+
+h2 {
+  font-family: var(--font-head);
+  font-size: 24px;
+  line-height: 1.4;
+  margin: 0 0 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  letter-spacing: -0.3px;
+}
+h3 {
+  font-family: var(--font-head);
+  font-size: 18px;
+  line-height: 1.5;
+  margin: 28px 0 12px;
+  color: var(--ink);
+}
+p {
+  margin: 12px 0;
+  color: var(--ink);
+}
+.lead {
+  font-size: 16.5px;
+  line-height: 1.8;
+  color: var(--ink);
+  margin-bottom: 18px;
+}
+
+/* ---------- 提示框 Note ---------- */
+.note {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  padding: 16px 20px;
+  background: var(--soft);
+  border-radius: var(--radius-s);
+  margin: 20px 0;
+  font-size: 14.5px;
+  line-height: 1.75;
+}
+.note.info {
+  border-left-color: var(--cyan);
+  background: var(--cyan-soft);
+  color: var(--ink);
+}
+.note.warn {
+  border-left-color: var(--warn);
+  background: var(--warnbg);
+  color: var(--ink);
+}
+.note.success {
+  border-left-color: var(--success);
+  background: var(--sbg);
+  color: var(--ink);
+}
+.note strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* ---------- 来源与引用标签 ---------- */
+.refs {
+  font-size: 11px;
+  white-space: normal;
+}
+.refs a {
+  margin-left: 3px;
+  white-space: nowrap;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--soft);
+}
+
+/* ---------- 表格排版 ---------- */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  margin: 20px 0;
+  background: var(--paper);
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 650px;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+  padding: 13px 15px;
+  overflow-wrap: anywhere;
+}
+th {
+  background: var(--bg-sunk);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+tr:last-child td {
+  border-bottom: none;
+}
+tbody tr:hover {
+  background: var(--bg-sunk);
+}
+td strong {
+  font-weight: 650;
+  color: var(--ink);
+}
+tbody td:first-child strong {
+  color: var(--accent);
+}
+
+/* ---------- 卡片组 Cards ---------- */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 20px 0;
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 18px 20px;
+  background: var(--bg-sunk);
+  box-shadow: var(--shadow);
+}
+.card h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-weight: 700;
+}
+.card p {
+  font-size: 13.5px;
+  color: var(--sub);
+  margin: 0;
+  line-height: 1.65;
+}
+
+/* ---------- 代码块 ---------- */
+code {
+  font-family: var(--font-code);
+  font-size: 0.88em;
+  background: var(--bg-sunk);
+  border: 1px solid var(--line);
+  padding: 2px 6px;
+  border-radius: var(--radius-s);
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+pre {
+  background: var(--bg-code);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 18px 20px;
+  border-radius: var(--radius-m);
+  overflow-x: auto;
+  font-family: var(--font-code);
+  font-size: 12.8px;
+  line-height: 1.75;
+  margin: 20px 0;
+}
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+  white-space: pre;
+}
+
+.label {
+  font-size: 11px;
+  background: var(--soft);
+  color: var(--accent);
+  padding: 3px 8px;
+  border-radius: var(--radius-s);
+  font-weight: 600;
+  display: inline-block;
+}
+
+.search {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  color: var(--ink);
+  background: var(--bg-sunk);
+  margin: 18px 0;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.search:focus {
+  border-color: var(--accent);
+}
+
+/* ---------- 业务架构泳道图 Lane ---------- */
+.architecture {
+  background: var(--bg-sunk);
+  padding: 22px;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--line);
+  margin: 22px 0;
+}
+.lane {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--paper);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+.lane-head {
+  font-weight: 700;
+  font-size: 14.5px;
+  margin-bottom: 16px;
+  color: var(--accent);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.lane-head span {
+  color: var(--sub);
+  font-weight: 400;
+  font-size: 12px;
+}
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.steps > div {
+  flex: 1;
+  min-width: 0;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  text-align: center;
+  padding: 12px 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.steps > .parallel-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  flex: 1.2;
+}
+.parallel-inputs > span {
+  display: block;
+  background: var(--soft);
+  padding: 10px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.steps small {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--sub);
+  margin-top: 5px;
+}
+.steps b {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 16px;
+}
+.lane p {
+  font-size: 12.5px;
+  color: var(--sub);
+  margin: 12px 0 0;
+  line-height: 1.6;
+}
+.connector {
+  font-size: 12.5px;
+  text-align: center;
+  padding: 14px 0;
+  color: var(--accent);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- 来源与文献 Source ---------- */
+.source {
+  border-bottom: 1px solid var(--line);
+  padding: 16px 0;
+  scroll-margin-top: 32px;
+}
+.source:last-child {
+  border: 0;
+}
+.source strong {
+  font-size: 14px;
+  color: var(--ink);
+  display: block;
+  margin-bottom: 4px;
+}
+.source p {
+  font-size: 13px;
+  color: var(--sub);
+  margin: 6px 0;
+  line-height: 1.6;
+}
+.source > a {
+  display: inline-block;
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--accent);
+}
+
+.footer {
+  font-size: 12.5px;
+  color: var(--sub);
+  padding: 24px 6px 0;
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+  line-height: 1.7;
+}
+.top {
+  font-size: 12.5px;
+  display: block;
+  text-align: right;
+  margin-top: 24px;
+  color: var(--sub);
+}
+.top:hover {
+  color: var(--accent);
+}
+tr[hidden] {
+  display: none;
+}
+
+/* ---------- 响应式断点 ---------- */
+@media (max-width: 1080px) {
+  .sidebar {
+    position: relative;
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding: 20px;
+  }
+  .brand {
+    padding-bottom: 14px;
+  }
+  .toc {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .main {
+    margin-left: 0;
+    margin-right: 0;
+    max-width: 100%;
+    padding: 24px 20px 60px;
+  }
+  .toolbar {
+    margin: 12px 0;
+  }
+  .hero {
+    padding: 32px 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: 14.5px;
+  }
+  .main {
+    padding: 16px 14px 48px;
+  }
+  .hero {
+    padding: 24px 18px;
+  }
+  .hero h1 {
+    font-size: 24px;
+  }
+  section {
+    padding: 22px 18px;
+  }
+  .toc {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ribbon {
+    grid-template-columns: 1fr;
+  }
+  .cards {
+    grid-template-columns: 1fr;
+  }
+  h2 {
+    font-size: 21px;
+  }
+  .lane-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .steps {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .steps b {
+    transform: rotate(90deg);
+    text-align: center;
+    margin: 4px 0;
+  }
+  .steps > div {
+    padding: 10px;
+  }
+  .architecture {
+    padding: 14px;
+  }
+  pre {
+    padding: 14px;
+  }
+}
+
+/* ---------- 打印适配 ---------- */
+@media print {
+  .sidebar, .ribbon, .toolbar, .search, .top, #progress-track {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: #111 !important;
+    font-size: 10pt;
+  }
+  .main {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .hero {
+    background: white !important;
+    color: #111 !important;
+    border-bottom: 2px solid #333 !important;
+    border-radius: 0 !important;
+    padding: 12pt 0 !important;
+  }
+  .hero p, .eyebrow {
+    color: #333 !important;
+  }
+  .hero h1 {
+    font-size: 22pt !important;
+    color: #111 !important;
+  }
+  .meta span {
+    border: 1px solid #888 !important;
+    color: #333 !important;
+  }
+  section {
+    padding: 12pt 0 !important;
+    border: 0 !important;
+    border-top: 1px solid #999 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    break-inside: auto;
+  }
+  h2, h3 {
+    break-after: avoid;
+    color: #111 !important;
+  }
+  table {
+    min-width: 0 !important;
+    font-size: 8.5pt !important;
+  }
+  th, td {
+    padding: 6pt !important;
+    border: 1px solid #bbb !important;
+    color: #111 !important;
+  }
+  tr {
+    break-inside: avoid;
+  }
+  .table-wrap {
+    overflow: visible !important;
+    border: 0 !important;
+  }
+  pre {
+    white-space: pre-wrap !important;
+    background: #f4f4f4 !important;
+    color: #111 !important;
+    border-color: #bbb !important;
+  }
+  pre code {
+    white-space: pre-wrap !important;
+  }
+  .note {
+    background: #f6f6f6 !important;
+    color: #222 !important;
+    break-inside: avoid;
+  }
+  .architecture {
+    background: #fafafa !important;
+  }
+  .lane {
+    break-inside: avoid;
+  }
+  .steps > div {
+    background: #eee !important;
+  }
+  .source > a {
+    color: #333 !important;
+  }
+  .refs a {
+    color: #333 !important;
+  }
+}
+</style>
+</head>
+<body id="top" data-page-node-id="B4A8LiXEOZFsivaM1Ky3Gu">
+<div id="progress-track" data-page-node-id="hv2b9C23cIB8kv3xqZBFlj"><div id="progress-bar" data-page-node-id="5C1BePmZn03Wdqyut8JlIA"></div></div>
+<aside id="sidebar" class="sidebar" data-page-node-id="py0MMqVJDz5hvbXB8oExUC">
+  <div class="brand" data-page-node-id="vhU4Ea1oc8AtvHvW3bo0DD">
+    <small data-page-node-id="WSRNsjMHMdDHbApA0ftcpn">ARCHITECTURE DECISION STUDY</small>
+    <strong data-page-node-id="m4xUeLdB8JwnMSrFTpgZuf">crypto-ai-qt</strong>
+    <p data-page-node-id="uMhG35otR2TrsNcKzXwojN">有状态量化 Agent<br data-page-node-id="9AzeOdexbJZD5V6n0HEm4F">架构选型与落地方案</p>
+  </div>
+  <div class="toolbar" data-page-node-id="BLfajq8CeBeOLJBvskzu7R">
+    <button id="theme" type="button" data-page-node-id="lNW91WUqi0PEvQ4qrTXcCe">浅色</button>
+    <button id="print" type="button" data-page-node-id="4M541JONpnkeHJsjPNbg5k">打印</button>
+  </div>
+  <nav class="toc" aria-label="文档目录" data-page-node-id="rTMkqtapNJua3HN9qDPTjP">
+<a href="#decision" data-page-node-id="3HgDkcN4ttHaG93sK8ymsx">01 · 最终选型决策</a><a href="#scope" data-page-node-id="T0drQABSif1hQJxyQwXn1F">02 · 审阅范围与事实等级</a><a href="#problem" data-page-node-id="ne7gAKgh5n82mfu4OkOa7k">03 · 真正需要修复的，不是“单 Prompt”</a><a href="#current" data-page-node-id="P3cm5u7CQx856FAgwfes5P">04 · 当前项目已经有哪些基础</a><a href="#comparison" data-page-node-id="oR12L2JfMSrZDwJ3G0lC5E">05 · 九类方案横向比较</a><a href="#dsh" data-page-node-id="Y8URWy2F1f7mODko0Cy2t5">06 · DSH 究竟适不适合深度二开</a><a href="#fork" data-page-node-id="g3KD4GrezY62VZv9fRwKMa">07 · 三种二开方式：只推荐前两级</a><a href="#architecture" data-page-node-id="Em3DSLtISiIyIkabLrNB8Z">08 · 推荐目标业务架构</a><a href="#continuity" data-page-node-id="JRCvNJCFg2J9kPAUb6KrJw">09 · 历史决策记忆如何真正落地</a><a href="#learning" data-page-node-id="DBAFaijjhxC3yWEplFjscX">10 · 自我进化：让结果反馈进入下一版</a><a href="#integration" data-page-node-id="4i1cND4dHtozqSp63ucNLO">11 · DSH 二开边界：一个薄适配层</a><a href="#performance" data-page-node-id="p9acGbJtt89bIdCwhL0s4E">12 · 性能与成本：需要实验，不接受口号</a><a href="#experiment" data-page-node-id="WMg6U2yYAtvszWFJW5rpl5">13 · 最小对照实验：先证明价值再决定迁移</a><a href="#roadmap" data-page-node-id="mwsgKBntMpdqpzyAqL16im">14 · 分阶段实施与交付物</a><a href="#risks" data-page-node-id="O8mOMasYBINNO9s2AvjtOL">15 · 必须写进设计的反模式</a><a href="#actions" data-page-node-id="QLCyvEHErPHpRWOm6JuHMR">16 · 建议批准的第一张工程任务单</a><a href="#sources" data-page-node-id="STW6hfwx7zKOwXQclfvFh7">17 · 来源与证据定位</a>
+  </nav>
+</aside>
+<main id="main" class="main" data-page-node-id="OxC1SAu331LJWdYKIySmf2">
+<header class="hero" data-page-node-id="7eYTNBO5hYpMDyPo3qSdcS"><div class="eyebrow" data-page-node-id="l73wUM63DA5asCFJVBKFZ1">STATEFUL CONTINUITY · GOVERNED LEARNING · REPLACEABLE HARNESS</div><h1 data-page-node-id="jhQCiCMYnvEeuqpZmK8lN2">让量化系统拥有连续性与学习能力，<br data-page-node-id="S8IhpOaCXrdguJCGgnmkMv">而不是把整套交易内核搬进聊天框架。</h1><p data-page-node-id="IIdTSZCb9GfqvBAhD7eDMG">围绕 DSH 深度二开与开源替代方案，给出生产主链、历史记忆、结果反馈、研究工作台及独立授权的明确分工。</p><div class="meta" data-page-node-id="GNCEprb5mBX6w1Ttzha26n"><span data-page-node-id="3OSqXbmToZVhRyKLjEG3Yc">研究日期 2026-09-09</span><span data-page-node-id="rL4cz7EtvLQRzBNiTy0Z48">设计建议 · 非生产资格证明</span><span data-page-node-id="U3fMriG2yBJjdUG4DHUOwa">只读源码与官方资料核对</span><span data-page-node-id="rSNyckVHtoGlgsyUYlXyCL">单文件 · 离线可读</span></div></header><div class="ribbon" data-page-node-id="adaWQHqXsnNDBxiYHxj8wb"><div data-page-node-id="mHcOiSl7yeNMSWIdVvbmRY"><strong data-page-node-id="BIenLb1dlFRppBvVScjbCy">交易内核保留</strong><small data-page-node-id="MDow8yiku8yWQDT2foBdkQ">数据 / 状态 / 风控 / 执行 / 证据</small></div><div data-page-node-id="Vdewkr59RIQcQMDhmgeq9X"><strong data-page-node-id="YcgB3EpJ7AANOtLfAATStN">记忆先原地验收</strong><small data-page-node-id="sGlEifd1WV8WB14PKimghD">复用 Memory V1，不从零再造</small></div><div data-page-node-id="BRbcFQEEQVnxN4nwOHbnyb"><strong data-page-node-id="ADMzdoDPOKzY5LauKcTely">DSH 插件化优先</strong><small data-page-node-id="nwjkEynzengK1LMcoR5GJP">用于研究与工作台，不能自行授权</small></div></div><section id="decision" data-page-node-id="gwIJUSy84bonhY4pAJJQug"><h2 data-page-node-id="DyLD46BPwkIvha48zzJWVQ">01 · 最终选型决策</h2><p class="lead" data-page-node-id="0PD28zFGJnGKT83Ah0PUxa">可以把 DSH 深度二开为量化产品，但不建议把现有交易内核整体迁入 DSH。<strong data-page-node-id="4fIArs7rdbMnuDE4sIT3Lj">推荐路线是：crypto-ai-qt 原地状态化；DSH 以插件 / profile / bundle 方式成为研究与运营工作台，而不是交易所的直接控制者。</strong></p><div class="note info" data-page-node-id="wOqhymmQiHGLFukKxw1FM8"><strong data-page-node-id="vDvzED5tZFgRUX048YJaZo">明确回答三个问题：</strong>历史连续性先由现有 Memory V1 解决；自我改进先打通领域 Evidence→评测→Prompt Candidate→授权链；只有通用研究会话、工具编排与工作台体验交给外部 Harness。三个问题不能靠“换框架”一次性消除。</div><div class="table-wrap" data-page-node-id="HwPQT6zw5cotMhnlc5EVDF"><table data-page-node-id="ydaHEpGOjkXGK97onw9JqK"><thead data-page-node-id="HBWQAsHypPp63o9ohFXkO4"><tr data-page-node-id="uuDDN93vzTJprzq7De00hG"><th data-page-node-id="C3lbh8FF6dmpczE0PTCPmC">决策项</th><th data-page-node-id="ueFkvpLmqJlA7lh46L2Xfg">本报告建议</th><th data-page-node-id="21MIcTTC7738uZKcP4p8F7">当前资格</th></tr></thead><tbody data-page-node-id="PdYytbCYTHVAU9Xj49fZPm"><tr data-page-node-id="jBjtN9HDkaaYDfsCJgy0LX"><td data-page-node-id="61l9OuWegI8T71n4n8PZs3">生产交易底座</td><td data-page-node-id="6iw75X5J6ZbDTAUdSEoVBD">保留 crypto-ai-qt 的数据、Graph、Guard、Gateway、对账和审计，不做 TypeScript 全量重写。</td><td data-page-node-id="ksSRB77EVNgIp9EyD6TzrQ">既有项目能力；具体部署仍需运行证据。</td></tr><tr data-page-node-id="wZyYUU3hJaFOCAaFakk5O7"><td data-page-node-id="jDLXBu0j28hAKHMGPWi7Rh">眼前的记忆缺口</td><td data-page-node-id="1Wk4BH6z1nuN4ly9cGdbRH">先验证 Memory V1 接线、模式、身份、降级和实际注入，避免再建一套记忆。</td><td data-page-node-id="oeZqJOGvUd2cIAnenLrXBC">仓库规格声明离线验证；不等于已启用。 <span class="refs" data-page-node-id="JmlM7WmPykKx5E8SMryWn3"><a href="#S02" data-page-node-id="cFBTDtkqAENAKllOUSuVqH">[S02]</a><a href="#S03" data-page-node-id="MHv2wcaEfFkKecJTUtOp4l">[S03]</a></span></td></tr><tr data-page-node-id="N1ybCEXwtVwWGGu44LiGtU"><td data-page-node-id="Waw6DEin0O1RRHA9gTmQYy">DSH 二次开发</td><td data-page-node-id="aVlAeHcyeyOVjfQUtP8u8p">优先外挂量化插件和应用发行配置；必要时维护少量可上游合并的补丁。</td><td data-page-node-id="v6a1bXiFFjsA2jk9XwFDoZ">建议优先进行工作台 PoC；尚非正式选型。</td></tr><tr data-page-node-id="ULmnxOS09GhCZgpbW5O4ux"><td data-page-node-id="Stcuel9j7hp8pkxBBwrsQp">Python 对照方案</td><td data-page-node-id="S5Nw7y5VaRqIqz6OcHP13e">现有 LangGraph + 按需引入 DeepAgents 的 ResearchRunner，作为同预算对照。</td><td data-page-node-id="Tv0RFoJKVgLa1zoODnQfaX">评估候选，不与 DSH 同时叠加上线。</td></tr><tr data-page-node-id="fCOonwpmuuADfu3PqxUYNo"><td data-page-node-id="7tuqkj0ClKzdRS5DGEUhxL">其他开源项目</td><td data-page-node-id="LO5MEgBfjbt8hwcbPuoCsA">按能力借鉴，不再叠加 Letta / Mastra / Reef 的第二套事实源与发布链。</td><td data-page-node-id="pDnVrPuA8p6Wn5hFSqYUjy">对照/方法参考，不是安装清单。</td></tr></tbody></table></div><p data-page-node-id="0xDkkSh1KHxtlv2kQRfvyy">若本轮只能批准一项工程任务，应选择 <strong data-page-node-id="dulLrlD3xDBlzVrEqeA1MV">Memory V1 运行接线与故障隔离验收</strong>，而不是 DSH 全量 Fork。若另立“量化研究产品”子项目，DSH 插件化二开是合理方向。</p><a class="top" href="#top" data-page-node-id="SrwghfULob018qeVfPsV6J">返回顶部 ↑</a></section><section id="scope" data-page-node-id="edTrUq5quDGi5xerUa1bAu"><h2 data-page-node-id="jjRCFxWODkkAo4vR2Q6zVO">02 · 审阅范围与事实等级</h2><div class="table-wrap" data-page-node-id="fWmUmzj3uShuYsGpy9F6uZ"><table data-page-node-id="lKuk5KMHmEQlVPMotd1f6r"><thead data-page-node-id="aW6frTtPlCBlLpI5hp9soX"><tr data-page-node-id="YpJlsDNIC31qbLTZZaCFHh"><th data-page-node-id="HXmC6IKbphRUW3fwStqzil">对象</th><th data-page-node-id="siIC7KVEtcXMNFKZdC7Eou">本轮读取基线</th><th data-page-node-id="YVQaq4OEIHzNftYXX4MiBN">允许据此作出的结论</th></tr></thead><tbody data-page-node-id="pQYU4T5IesMBD3CN5WGxXA"><tr data-page-node-id="GFbpF8nTIHEvmH1GKO1HkT"><td data-page-node-id="n2W0mTZEA7p8HUeJrBjToE">crypto-ai-qt</td><td data-page-node-id="o2tAjOnCsCvVYZfYwlzn4l">main@<code data-page-node-id="Mpszcv4pYQ5jcqWbMoYNGw">ce6eb50f390af36f778df0d3049cb41cc942807e</code><br data-page-node-id="19OqBMPkZWJTITD1yanGEL">提交时间：2026-09-05 00:16:56 UTC</td><td data-page-node-id="6vvNc7g7GFFCwoPGUSMx9a">远端仓库静态代码/文档现状，不等同于本地未提交改动或真实部署。 <span class="refs" data-page-node-id="1qKqs0rIJwiLY7sdRZxnQy"><a href="#S01" data-page-node-id="4L2YfEI4fmPnZ7Y6efDyPB">[S01]</a></span></td></tr><tr data-page-node-id="l9Iv0WHbRI0Xru0VxDO33z"><td data-page-node-id="SomtftgFjdKcLe3KRM81lp">DeepSeek Harness</td><td data-page-node-id="HGz4cHB4C1GGSThrauBxnY">master@<code data-page-node-id="hMKidiWYbc9j4jl2R4HIe8">5dda764ed3aa172535a7967b06ff95d9cbfe536a</code><br data-page-node-id="u6GPuckLethDkXHLKSNl2v">根 package：<code data-page-node-id="ZoVspg1MJrYfgaZsa08W4q">0.1.5-alpha.1</code></td><td data-page-node-id="R9SEXJzMrFxyGpxFVgFljL">基于该快照的架构与安全分析；不认定其为稳定生产依赖。 <span class="refs" data-page-node-id="mMoQHGIOXz6SaDgYTAkPFc"><a href="#S07" data-page-node-id="1tIDG1NosrPiPahPTLtr0h">[S07]</a><a href="#S11" data-page-node-id="h8yAG6WJQkOa4hpHiDaHRG">[S11]</a></span></td></tr><tr data-page-node-id="paCaIKSdK7CLGPMyiSPslF"><td data-page-node-id="mL9PeXg9mx0eWOCJBb61uS">其他方案</td><td data-page-node-id="j1d6egwdpk7AMXzOtzNEhw">2026-09-09 获取的官方仓库/文档</td><td data-page-node-id="mNC79hfasC8fQiiWxHxwLr">能力与适配性筛选；未对全部项目逐行审计或进行统一性能实测。</td></tr><tr data-page-node-id="BczUGJnRQftjugeyj1XDAS"><td data-page-node-id="RRJpdBPYWRgwWHMEQPKFTS">本轮执行</td><td data-page-node-id="mWiaMzAvjYcwAsTrhiOPNJ">只读仓库与官方资料；生成本报告</td><td data-page-node-id="toxMceB5HOpXDfibzlnB4M">未安装框架、未修改用户仓库、未运行仓库测试、未访问 Docker/数据库/交易所、未做收益回测。</td></tr></tbody></table></div><div class="note warn" data-page-node-id="RrdhFpMCHprnyAVl6Q0Csr">本文的“推荐”是架构决策建议，不代表用户批准、正式依赖选型或生产授权。后续仍按 <code data-page-node-id="N9I3AWxWcY8Ev6b4rhacEN">PROPOSED → DESIGNED → IMPLEMENTED → OFFLINE_VERIFIED → RUNTIME_OBSERVED → FORMALLY_QUALIFIED → PRODUCTION_AUTHORIZED</code> 逐项补证。</div><p data-page-node-id="jsQBOlnijYvQqLVaYf6b3R">本报告不沿用前文未经量表支持的架构评分，也不把某个测试总数、README 的 production-ready 声明或高 Star 数作为金融系统验收依据。</p><a class="top" href="#top" data-page-node-id="1uhMBgUctLc6RU9As5q6Xx">返回顶部 ↑</a></section><section id="problem" data-page-node-id="In6OwbZXBmX6MbB8uF02wG"><h2 data-page-node-id="oIhrpkskOlDdcaUCzBOOPT">03 · 真正需要修复的，不是“单 Prompt”</h2><p data-page-node-id="LnFIvOzrRPY3jYA1haFuOo">单次 LLM 推理本身不会自动携带上一轮完整状态；但“单 Prompt + 显式状态输入 + 持久化领域状态”完全可以构成有连续性的系统。反过来，一个长期运行的 DSH Session 也可能因截断、错误摘要、错误身份或外部事实过期而作出不连续判断。<strong data-page-node-id="lM3ShHntSkkAYdRzGIXPbM">模块化不是失忆的充分原因；状态建模、读取和授权契约才是。</strong></p><div class="table-wrap" data-page-node-id="kh8C0RPasJUqwn6NENSmOo"><table data-page-node-id="WwLsbLiPPFSrvtS4WimiQJ"><thead data-page-node-id="84EGTrpJusHXjY6ownB9gT"><tr data-page-node-id="Iy3rmJ5DwHAfLGivNZgNGR"><th data-page-node-id="Tii5ocAX2CBInmR9TENRzz">用户感知的问题</th><th data-page-node-id="n4dIPTtUTdUJ6ux15oMZGn">真正所需机制</th><th data-page-node-id="L9UObgDcxQpSlLFr5dzGHD">普通 Session 能否单独解决</th></tr></thead><tbody data-page-node-id="EPt1Lts5wppmmDZDd5tZtJ"><tr data-page-node-id="b6AG9mdac7L0ClJsccr4Mx"><td data-page-node-id="ODB48aJISo3GQUGMtrFdWC">刚刚为什么 HOLD / 等待哪个条件？</td><td data-page-node-id="mknwIt4mafhsjF2Goj46EM">有界历史叙事 M0b，与当前合格事实区分。</td><td data-page-node-id="KC98RnXoYPZYk9hQsGf287">只能提供上下文，不保证有效性。</td></tr><tr data-page-node-id="ezBif79MGdKJFSp05NRpSp"><td data-page-node-id="7S1M8JqM1Ojfr5GBJdjkN8">是否还有 pending exit / cooldown？</td><td data-page-node-id="8BnmoSDlN2GZaK6PIbppUM">字段级来源与状态机 M0a；缺失不能默认为“没有约束”。</td><td data-page-node-id="9ScLfpjW2GUwfKGw6B0vAy">不能。</td></tr><tr data-page-node-id="AjSwD2JVNwdSiBAC25HRb7"><td data-page-node-id="et69GnDYMM7szeBe4pwz80">服务重启后做到哪？</td><td data-page-node-id="Ldt8uc0rs0v79k5L5sv3nN">持久任务/执行状态、幂等与外部结果核对。</td><td data-page-node-id="2ToViSJyhvT5qHeEvYDWy4">Session 日志不等于业务副作用恢复。</td></tr><tr data-page-node-id="0s9dZlr7mGTNPkG0ALpXpl"><td data-page-node-id="MFFq3Jow0BFLU4P3Dhy2p2">上个月踩过的坑能否复用？</td><td data-page-node-id="kVmgzAuEZ1GNaoCSggeCKM">有来源、适用范围、过期和撤销的研究知识。</td><td data-page-node-id="XkGSVuudkjcfxu6nLB7xwI">保存聊天不等于治理知识。</td></tr><tr data-page-node-id="WcjG6e9YCZ7Sy8At685s01"><td data-page-node-id="OtAUh1tbr6QUR19eEAy9A0">下一个 Prompt 是否更好？</td><td data-page-node-id="XF7Iy1kNRKKexbFPtflGe2">冻结协议、独立评测、最小变更、审批与受控激活。</td><td data-page-node-id="5DVgFdQlhKPxI2urXMXG1X">不能。</td></tr></tbody></table></div><div class="note info" data-page-node-id="IaUFvqUwPLIRwcmwgqq5ps"><strong data-page-node-id="WpkihwraJvx56FfFbJLqJq">推荐语义：</strong>把系统改造成“拥有持久策略身份的量化系统”，而不是“永远不结束的一段聊天”。策略身份跨批次稳定，当前行情/账户按每批次重新资格化；领域状态不依赖某个 LLM 进程活着。</div><p data-page-node-id="5sB7KHlCeXqmlmlPb0XyOx">LangGraph 官方已经区分 thread 内 checkpointer 与跨 thread store。这说明记忆不要求更换图运行时；但内存型 saver/store 不具备重启持久性，具体后端必须实测。 <span class="refs" data-page-node-id="5XaxwYragyWj0J6DhB7Weh"><a href="#S14" data-page-node-id="YNQY2AHkjmo5vcFp4MrrjE">[S14]</a></span></p><a class="top" href="#top" data-page-node-id="FB5p2Iz6d29J6rmk2DWVzm">返回顶部 ↑</a></section><section id="current" data-page-node-id="k89NA8Wk5C0m1kvoyLdxrD"><h2 data-page-node-id="ZqGd3ZXM2AjnRTBUCvFxkw">04 · 当前项目已经有哪些基础</h2><div class="table-wrap" data-page-node-id="La2PJ1cOD0nXDaH3xw6iDu"><table data-page-node-id="vC98h9ZAwtyFWGmdWqaeV3"><thead data-page-node-id="9WAqsS9WuHmVRfqUUthQEO"><tr data-page-node-id="czolOZ4JormJqxm44mluyH"><th data-page-node-id="HlJAEUm1iAsTpPqUWopHFz">能力</th><th data-page-node-id="GMSFP2NME2CSrwncPMBf0Z">本轮核对到的事实</th><th data-page-node-id="I2QMGjiq6kSMA5Ss1I9NXR">真正的下一步</th></tr></thead><tbody data-page-node-id="YwcDOCGtuGcixogzjpKERM"><tr data-page-node-id="3mukCVWnKk1Ht1jIPIpjHg"><td data-page-node-id="ePiaCzrN9FqHmVe4pW7IEz">M0a / M0b</td><td data-page-node-id="J4QoAdy9cD8jy5HOKkBhnt">Memory V1 规格状态段声明 IMPLEMENTED / OFFLINE_VERIFIED；NOT_RUNTIME_OBSERVED。 <span class="refs" data-page-node-id="omxzXvmJ8bVeHgBgA88C3G"><a href="#S02" data-page-node-id="3XtbaRyLGelhGxEQKxEMy2">[S02]</a></span></td><td data-page-node-id="L3aOrAdxRh4r57V2rB95vM">查明部署模式、身份链、观测和故障演练；不能把运行异常先归因于框架。</td></tr><tr data-page-node-id="VAblkUJFTHk6O5a4j7BIHR"><td data-page-node-id="GyOLkaxUH7nsBH6m7wL1l3">配置入口</td><td data-page-node-id="TSYg5nz1cDZJhFitChgOak"><code data-page-node-id="cYMdSi0P6RjoFp3nJkxLh7">REASONING_MEMORY_V1_MODE</code> 未设置时源码走 legacy；非 legacy 要求显式预算。 <span class="refs" data-page-node-id="ApO0yQ8Y7hI9LkwycOLB5Y"><a href="#S03" data-page-node-id="uhAaQXYNjSPmcVooOHq4IR">[S03]</a></span></td><td data-page-node-id="LoLkSGXKYDow16oniemSZE">读取运行配置而非只看代码；获得授权后按规定模式逐步验证，不直接开生产。</td></tr><tr data-page-node-id="hE6wFfkZW6Afxv9O3YSyTT"><td data-page-node-id="QoOeXB0MdnbCcnUpuuL3SX">连续性服务</td><td data-page-node-id="lRxhA6hYz8XJ1oLl1apZa4">现有进程内 service 已串联 Reader、Projector、Prompt Adapter，并记录 continuity_safety_status。 <span class="refs" data-page-node-id="dsO3IO6cB6is4GzWuGEobU"><a href="#S04" data-page-node-id="yxPsgulA1ynBcpKrSdfE0y">[S04]</a></span></td><td data-page-node-id="hi6KqTM9QsJjq9EpS4GhkI">保留领域语义，避免用框架的“聊天记忆”替代安全连续性。</td></tr><tr data-page-node-id="R8jHes4sfhnrPddmmKGWb8"><td data-page-node-id="FDR0bQWKHFapSyEl8Wc0MS">运行版本身份</td><td data-page-node-id="d601yEBJjcWnx4A6aMnuK5">已有 RuntimeComponentIdentity→capture v3→ServingConfigurationRoot→EvolutionEpisode/v6 链。 <span class="refs" data-page-node-id="HojJXwZKN1pEvCWpi9yjik"><a href="#S05" data-page-node-id="OfBSG0E10e7HIViFj2GEIS">[S05]</a></span></td><td data-page-node-id="1lymv5DLhajTLh8yf1j075">补全真实来源三元组及独立可复算链；不要另造平行版本身份证。</td></tr><tr data-page-node-id="3cmdnEHqBnd3eGi3JGRpAt"><td data-page-node-id="E6lX7KYyLvRr3CjC1bIf1S">Evolution</td><td data-page-node-id="sXpoyKXbwJnjRC2WO652Zk">已限定 Prompt 文本候选，独立冻结/回放/Pareto/账本；收益代理不等于实盘 PnL。 <span class="refs" data-page-node-id="dEUPu8V36fLYI7TA8R1OlE"><a href="#S05" data-page-node-id="YPAtt8xFqUFC1clJ7Xpah2">[S05]</a></span></td><td data-page-node-id="sSBayMET4xWJGTco5WmuGo">补齐正式样本与运行证据；不可让 DSH 默认自修改权限突破范围。</td></tr><tr data-page-node-id="3wLCt9eKDIbX0DUc37WdoS"><td data-page-node-id="m9Ot031QiNrNucTrJyuC4p">真实来源与评测</td><td data-page-node-id="0xnj5HFVxKjMXLHDO1NXDQ">矩阵仍列 P1 FORMAL_ENTRY_NOT_PROVEN_REAL_SOURCE、P2 FORMAL_ENTRY_NOT_PROVEN_DATASET。 <span class="refs" data-page-node-id="Jq3QdQZRHy3XR8sNDE2TWw"><a href="#S06" data-page-node-id="RDyUyHy6Ccvtk3WgChCCSc">[S06]</a></span></td><td data-page-node-id="rBWEEPeyd3BWcFhP9TiRq4">先关闭证据资格阻塞，不能以框架演示或 fixture 替代。</td></tr><tr data-page-node-id="DPSJjwOC4ANT6JaZvdV4ZX"><td data-page-node-id="p0cWUDADTEbEAVSjnCSmJV">QOM / 调度 / 外部 Harness</td><td data-page-node-id="vpQwWjYs4rGFKFHdn0mzuZ">已存在离线契约，Harness/Prefect 仍有未运行、未选型标记。 <span class="refs" data-page-node-id="w3Wb7vTtMorov9nPnDnpEf"><a href="#S06" data-page-node-id="qoFCAoQ12TN12B63KXg3MB">[S06]</a></span></td><td data-page-node-id="8YmCpgCZmeYZ6VixrAARhO">复用治理契约；分离“功能存在”“真实运行”“正式放行”。</td></tr></tbody></table></div><div class="note warn" data-page-node-id="BiwLgzNCzPndvuZAGTt5uK">一个尤其重要的纠偏：Memory V1 规格同时保留了“改造前源码基线”。不能只读旧基线段，就再次宣布整个 Memory V1 还不存在。也不能只读首段 OFFLINE_VERIFIED，就宣布线上已经正常启用。</div><a class="top" href="#top" data-page-node-id="NRdGNh7jyxMmsJQ1ShqZeq">返回顶部 ↑</a></section><section id="comparison" data-page-node-id="N6T0MqmjHuzhGXBQa95WHb"><h2 data-page-node-id="90qc4AgEu6mGE4VjUAsCvS">05 · 九类方案横向比较</h2><p data-page-node-id="6QyluxXKqA0nV7HGnewKC4">以下是按本项目约束作出的适配判断，不是通用框架排行榜。未进行同条件 benchmark，因此不声称 DSH、DeepAgents 或其他框架必然更快、更准、更省。</p><input id="candidate-filter" class="search" placeholder="筛选方案，例如：DSH、Python、记忆、研究" aria-label="筛选对比方案" data-page-node-id="GcQWJRG4CHxytJlikbs7xm"><div class="table-wrap" data-page-node-id="DAmIFsDHZlXnQ7fTmaVbz5"><table data-page-node-id="AjC6k74IiyH4fO4ChQ6dQG"><thead data-page-node-id="Ltd6PkNP0iJYDQPXM8JAh5"><tr data-page-node-id="Ce7A4hgfXQPZELtaF5Hjve"><th data-page-node-id="2rRHOjuRizH6Jm79iYszQD">方案</th><th data-page-node-id="JvleJ4f8EjIqICB72uZDHW">定位</th><th data-page-node-id="qadEDv7lPOMze1IESjDbNJ">优势</th><th data-page-node-id="9L6PFtI20NC1QEhhCtYBBr">必须补的边界</th><th data-page-node-id="kEKL2glphfcp36UmlBJNUH">结论</th></tr></thead><tbody data-page-node-id="xey39uvthSQvYvU7RbWxCs"><tr data-page-node-id="l75zDxNq6uMERgxAd7vAYp"><td data-page-node-id="NUtGPeCwSEkLDG37Goa1DW">现有 LangGraph + Memory V1 + Evolution</td><td data-page-node-id="Pj6LttF6baOsWrlVCnHMM3">领域内核 / 增量建设</td><td data-page-node-id="O5Mu8wZnJ5D6upI06bFVao">复用 Python、现有状态和评测；变更面最小。</td><td data-page-node-id="ZpHSCJmhaFVTcoYOpe6lIF">正式运行资格、数据闭环仍需补；不是只加 checkpoint。</td><td data-page-node-id="HMX3FsOJTHYHLavEecbLDv"><strong data-page-node-id="L4IEAZ1nnmJUcwcIfVumtc">近期落地第一选择</strong>。 <span class="refs" data-page-node-id="wQFmLNe9uavGrU7hAeIuGF"><a href="#S02" data-page-node-id="zXdzDYe4SAcDWPS5wSL9bA">[S02]</a><a href="#S05" data-page-node-id="UnOF8fOTvU1qPHvWBS9Jvg">[S05]</a><a href="#S14" data-page-node-id="o5cPB90ThpSY14ZADFHewJ">[S14]</a></span></td></tr><tr data-page-node-id="3aKkWomRFHIBvIuf0Vb8IJ"><td data-page-node-id="MJ6C7YUcIhr5tH9F28n84h">DeepSeek Harness</td><td data-page-node-id="4uCqna8OciK1qzqtwQuHJ7">可组合 Agent Runtime / 产品工作台</td><td data-page-node-id="l7Sv0L32ZJfEu1mYz2RPtJ">插件、持久 Session、模型输入回建、Python SDK、Web、研究工具编排。</td><td data-page-node-id="hup4vEGDOnyPWJpNzKEvYU">开发预览；无已验证的本项目成交归因和治理闭环；Node/Cordis 维护成本。</td><td data-page-node-id="xuz0Gl91zhm7kRLfNeR3bx"><strong data-page-node-id="10E076Qnvie0TAmBMbnBdc">研究工作台优先 PoC；不替换交易内核</strong>。 <span class="refs" data-page-node-id="Y6PEp4u6AEkBV0e4gRLPa4"><a href="#S07" data-page-node-id="qIwmhfRal8phxWOQPnZZFl">[S07]</a><a href="#S08" data-page-node-id="AmYY8ACETGP9TCDnnCKJub">[S08]</a><a href="#S09" data-page-node-id="DV7WHCLCWm1dlZpnvE1vST">[S09]</a></span></td></tr><tr data-page-node-id="vux9bTc9Sv4jx9i8AcerjF"><td data-page-node-id="6Mid6FaEGPhHS8RDLDvtxO">DeepAgents + 可选 LangMem</td><td data-page-node-id="hVSI7L0l6MxPKVa9t634Db">Python 研究运行时 / 记忆原语</td><td data-page-node-id="H6liyUd5bqmEIGiHa3igmQ">建立在 LangGraph 上；子 Agent、工具、上下文与持久后端；较易复用 Python 服务。</td><td data-page-node-id="JQ7JMXd0AZ7qp6BtYPWIWi">通用记忆不等于金融权威；安全依赖外部 tool/sandbox；自动改 Prompt 不能自发布。</td><td data-page-node-id="LomOCGSr8Hmh574TatZJgk"><strong data-page-node-id="kFsyW2JeMlFOCeKDvwR5Fd">DSH 唯一保留的低迁移成本对照</strong>。 <span class="refs" data-page-node-id="KsaoUeep7s5OAakeBOY4eV"><a href="#S12" data-page-node-id="Ir17eNHDymZpXGZDYw3JgE">[S12]</a><a href="#S13" data-page-node-id="DN3tNwMOuxSKpkmulwSbma">[S13]</a></span></td></tr><tr data-page-node-id="bBaPj8qAfBojbNLKnXjnA3"><td data-page-node-id="2qp9Q8Mck95SZH45OBaGgR">Letta Code / Agent SDK</td><td data-page-node-id="DnM78udEIwAxwZRFbvIQNw">持久身份与长期 Agent</td><td data-page-node-id="dDJFnGgd8FrYvPuOOhP0Iw">跨会话记忆、MemFS、dreaming、技能与个性化自修改。</td><td data-page-node-id="BqQ5ppB3J97z404ocV6VUi">更偏开放式长期 Agent；直接改写记忆/系统行为与当前金融治理不相同。旧 V1 server 已退役。</td><td data-page-node-id="92dSHXstVV0KFSAcqwJIuv">借鉴持久身份；不作为本项目资金主控。 <span class="refs" data-page-node-id="uTUcvzPdbo2giIni3DTnKq"><a href="#S15" data-page-node-id="ccYTqY5esURoUbvr7tJt7a">[S15]</a><a href="#S16" data-page-node-id="QBYrVXbA3H8lQt5xhHOkzB">[S16]</a></span></td></tr><tr data-page-node-id="XJwtFbmo3LmwFYhB9UkcAE"><td data-page-node-id="Rpq8yZ6325z5RPoFfZlrgQ">Mastra / OM</td><td data-page-node-id="5BPC95tE0mwDRAjH9OXQ2l">TypeScript Agent / Memory / Workflow</td><td data-page-node-id="L6K9NGNyhUSwb1rvHFnOuM">Observer/Reflector、跨 thread 存储、上下文压缩与缓存友好。</td><td data-page-node-id="8V3kS3AZXmRMZOCOj5DMNc">要接入另一套 Runtime/Store；摘要不能替代精确仓位与订单事实。</td><td data-page-node-id="KhO8y4QkkKtJtY0caj6HAR">借鉴 OM，不为了记忆换掉现有 Python 领域层。 <span class="refs" data-page-node-id="ianTcNzkyvvIHoSAFqAERh"><a href="#S17" data-page-node-id="qLCtxWCt6kGv14IOFzB3rM">[S17]</a></span></td></tr><tr data-page-node-id="8GTqPjF2I2kt9Fy92vmM0C"><td data-page-node-id="7Y6Eamm5S1aeMmUQmK94eM">RD-Agent + Qlib</td><td data-page-node-id="57v91f3G3oGuMv2FzFIYbp">量化研发 / 因子模型实验</td><td data-page-node-id="442ooyqzZKNxxO5EnV7lkI">研究假设、代码实现、实验反馈、因子—模型优化与回测研究链。</td><td data-page-node-id="IlkIjw461kNXnnuOzwIkEH">主攻因子/模型；不是现有 Prompt-only 范围；加密永续、逐笔费用和执行需另适配。</td><td data-page-node-id="S0is5jflsNNTmbBAOP1ySw"><strong data-page-node-id="jg8zEHjwCrP58BoouEd8xQ">量化研究方法最值得参考</strong>；后续独立因子项目再评估。 <span class="refs" data-page-node-id="fcMpmFq8EygjShWFmByUvr"><a href="#S18" data-page-node-id="2WeLn0wnCQ1N5fv9kxEIXJ">[S18]</a><a href="#S19" data-page-node-id="oz5dsaXa063VLQ9BK7Jg8a">[S19]</a></span></td></tr><tr data-page-node-id="XGLZILjzdKPvxpLqEEF5Z0"><td data-page-node-id="qi24xVCRMRiSaoEb5DDOy2">TradingAgents</td><td data-page-node-id="RUdxXv1bbKFYE0CYAWOgwq">金融分析 / 多角色决策研究</td><td data-page-node-id="Qjpw6rjICgwAEWvU6moNGP">现已具备持久日志、checkpoint、延迟 outcome 与 as_of 过滤。</td><td data-page-node-id="3pHH3zXBFFqQtkkqIRgz4C">ticker/date/收益反思不足以代替账户、网络、订单、资金费、部分成交及正式授权。</td><td data-page-node-id="J2HFGJb0PnmNvkogHzA8NI">借鉴 pending→outcome、时间隔离；不整套迁入。 <span class="refs" data-page-node-id="UCtNwATmSY8xsu9CeruOPm"><a href="#S20" data-page-node-id="XoI2x0qTSoe40CpRbnhGEy">[S20]</a><a href="#S21" data-page-node-id="xgtHq183UNq719b1inN7FD">[S21]</a></span></td></tr><tr data-page-node-id="09ggkX7tuJ6XZF5qoRf2JC"><td data-page-node-id="jDZvVD8MB6KdvMEA8HIJDT">FinMem</td><td data-page-node-id="2qRLRcD4xUbVUHbkmvbsce">分层金融记忆研究</td><td data-page-node-id="jUbteLtwBHLLyjqwDz620g">Profiling + 多层记忆 + 决策；与“历史如何影响判断”直接相关。</td><td data-page-node-id="VnCi49vLS8C6E29CXswChi">研究/仿真材料；不能从股票实验推导永续实盘安全和稳定 Alpha。</td><td data-page-node-id="1LT0efWY6o7yzaEnyB4tMO">研究记忆选择方法，不选作完整生产架构。 <span class="refs" data-page-node-id="jMFa1FC4NUkklmYHddKXT3"><a href="#S22" data-page-node-id="k2iGVyv9umAXfJe9FQ9Mh7">[S22]</a></span></td></tr><tr data-page-node-id="iiCnK9sIBFlRDeOBqiXBeg"><td data-page-node-id="7eZUfo8ntfj0dDttmEKS9B">Reef</td><td data-page-node-id="rFtbR2w1IOrU8CBdRzuiYL">经验反馈 / Recipe / 版本交付</td><td data-page-node-id="uGohPG7koxbhM1YAhGMGBy">Serve→Observe→Grow→Commit；反馈绑定、方法解耦与发布链。</td><td data-page-node-id="4lxfq0XOA2lJlHWKRQ620M">与现有 capture/root/Evolution 重叠；新代理会增加延迟、故障及第二套发布权威。</td><td data-page-node-id="8lGgXxwdcRzQNdUAuqxgwL">吸收协议和方法；当前不新增推理代理层。 <span class="refs" data-page-node-id="aicIyXw48hNYE7FoFqPrmf"><a href="#S23" data-page-node-id="eVEcHAt2ReboSJoCQrT4Hj">[S23]</a></span></td></tr></tbody></table></div><div class="note warn" data-page-node-id="54iFDrjQvKeImSTGETiuoQ"><strong data-page-node-id="qHC1SSeb8C3mb9f7JomCBr">未找到可直接替换整套系统的现成方案。</strong>在本次核对范围内，没有一个项目的资料足以证明：现成同时满足加密永续成交守恒、字段级事实权威、历史连续性、Prompt-only 受控进化、故障恢复、独立授权与生产可回滚。这个结论是“未见足够证据”，不是断言所有开源系统都做不到。</div><p data-page-node-id="TexeQeFbRfijb1dk0mzkpg">特别说明：不引用旧 TradingAgents 的 RAM-only Issue 作为当前缺陷。当前源码已经采用 TradingMemoryLog 并按结果已知日期进行 as_of 过滤。其框架层面的“能记住”，与我们要求的“某个 account/network/lane 下的状态有资格约束动作”仍不是同一能力。 <span class="refs" data-page-node-id="MP3DmuXZFvPM5KXkcEQeIi"><a href="#S21" data-page-node-id="JWzhpKO0oifQACHCmpH9SR">[S21]</a></span></p><a class="top" href="#top" data-page-node-id="w0vRn85KGD36LkBNW0THRj">返回顶部 ↑</a></section><section id="dsh" data-page-node-id="gCJCKe2JkWGaeO3hobeEW7"><h2 data-page-node-id="3tiQuE9kuHJ2N8flGWmKP1">06 · DSH 究竟适不适合深度二开</h2><h3 data-page-node-id="DedyvFcnNJAaNqyPa5RZGn">适合的部分：把通用研究运行时做成量化应用</h3><div class="cards" data-page-node-id="Lhdjkwc2ow0wrhAUeXTl5K"><article class="card" data-page-node-id="ATJ5KDUab2GVSgCtgPwU6n"><h3 data-page-node-id="yaqQQ1Cwxw2C5nICcChzM4">插件组合</h3><p data-page-node-id="H85wVJirc1BYFDz8wSoxOX">把量化工具、候选输出、研究说明、界面面板做成外围插件；不需要为了业务能力先改 Agent Loop 内核。</p></article><article class="card" data-page-node-id="Cmd9CM2ueU6a87z6gEt2GP"><h3 data-page-node-id="CfO05D7GRQMyMrOvoPI6eX">持久会话与可回建输入</h3><p data-page-node-id="JTW1C8ySdOGQbby106tLwq">SessionEvent 可保留研究过程；恢复与 replay 为调研审计提供基础，但不能替代交易事实或证明 Provider 完全可重现。</p></article><article class="card" data-page-node-id="GDKTVuUOTwsQpUp5rwQAFn"><h3 data-page-node-id="o1Qq9LKZA0PzhrKXjnWFpb">Python 接入已有路径</h3><p data-page-node-id="bcbzNT2dmQjO3VnBqrzFjT">当前 DSH 已有 Python SDK；它通过 Node CLI / SDK profile 运行，不必把量化计算全部改写为 TypeScript。</p></article><article class="card" data-page-node-id="50QLUg1czW6tOYLkgzwRtF"><h3 data-page-node-id="QUTArCGZ8bFeYW1HUWXngN">产品工作台</h3><p data-page-node-id="WUfSjD5pa7DExJHIF97QCv">会话、工具、日志、模型、研究团队等通用界面能力可复用；资金权限审批由领域后端验证。</p></article></div> <span class="refs" data-page-node-id="BGhWTlCaBmqdSs1onIFu0Y"><a href="#S09" data-page-node-id="QZ34qGCsqDGiQL1xEHzReE">[S09]</a></span><h3 data-page-node-id="thO1jNAi1GC7SGAyTZpHDt">不能误判的四个边界</h3><div class="table-wrap" data-page-node-id="rfn5apW6IMoScHaMLLpSNP"><table data-page-node-id="JZT9fEGyt42BmEvWCLGHpB"><thead data-page-node-id="EcdSG8bxZ0xeSdjieKOHvU"><tr data-page-node-id="PwLoNGp4Prxqz3jfUMwXW6"><th data-page-node-id="CeaXVkEC9LEU6e63PfDbwc">边界</th><th data-page-node-id="txtTMMhcJb5lOnLVRLgcrt">当前事实 / 设计要求</th></tr></thead><tbody data-page-node-id="YcmW1aI9i34TJ3OMaC8kPU"><tr data-page-node-id="TzD2y9ASXeohQic9FGXVAs"><td data-page-node-id="emDAEYIjZKmyssOTBrosh0">生产成熟度</td><td data-page-node-id="SEsCNTrsTyvmXJgsGui3F1">官方 SAFETY 明确：实验性开发预览，未经安全审计，不能视为 secure / production-ready。内建 sandbox/approval 不构成充分隔离。 <span class="refs" data-page-node-id="9ydR6upci9o6dxj5KdruxJ"><a href="#S08" data-page-node-id="mu2ZUtA2e4DThCEEckhQIG">[S08]</a></span></td></tr><tr data-page-node-id="AePkIErur7NGuHolMQTmrZ"><td data-page-node-id="rvPKqC6SyzVD0sJAfNdgxd">会话不等于学习</td><td data-page-node-id="n49ssOpIC0Sxn1Pu9DwXbG">Session 解决研究上下文承接，不自动建立逐笔成交归因、样本资格、冻结评测和正式生产授权。</td></tr><tr data-page-node-id="mFbPCCnCMhVqVDtBSSRxHD"><td data-page-node-id="LjH28cVyriisKiLfFIbHbs">Schedule 不是纯内存，也不是完整业务调度器</td><td data-page-node-id="pCoLmd13ii8r8yanNQMcRi">当前已有持久提醒，支持 after / at / every，但必须原 Session live；固定间隔 ≥300 秒，无 Cron/cold-session scheduler。dispatch 只是提醒入队，不是研究完成。 <span class="refs" data-page-node-id="GPSfnIWoMmwGP0uT7vahkU"><a href="#S10" data-page-node-id="V6rlnCBN3uOKGjTglnWViz">[S10]</a></span></td></tr><tr data-page-node-id="2n4c1kDq5M0TsL2XIM3zkJ"><td data-page-node-id="Z0E7fKDgrCTrHh3AfPnign">Python SDK 不消除跨运行时成本</td><td data-page-node-id="NMQwdsiIRtpLCwM7WFMEXE">仍需管理 Node、Cordis、profile、依赖版本、进程/协议失败；Python 领域服务和 DSH 权限必须独立。 <span class="refs" data-page-node-id="GimTaWiaz6MhKCzg29ASdX"><a href="#S09" data-page-node-id="1kmy3OT5lcWs0NEUENs1vv">[S09]</a><a href="#S11" data-page-node-id="ld0ldceuxuFOFh6aVPhhUZ">[S11]</a></span></td></tr></tbody></table></div><div class="note info" data-page-node-id="wfv1i6hsWiWsoeJEtpsapI">二开可以做得很深，但应该深在<strong data-page-node-id="GJ8nXaEsolcavBeHrtZ95b">量化领域插件、契约、研究工作流与观测界面</strong>，而不是深在私有修改 DSH 的通用 Agent Loop、Session 格式和安全内核。</div><a class="top" href="#top" data-page-node-id="eu7I74Cg2lpUJTYYThejRM">返回顶部 ↑</a></section><section id="fork" data-page-node-id="cxDHPH44OhoZwhReqfhPMB"><h2 data-page-node-id="1kVEo98b1QFGrYHCaGKxFj">07 · 三种二开方式：只推荐前两级</h2><div class="table-wrap" data-page-node-id="4cO7Rd1h3gtYUGNsNumYtf"><table data-page-node-id="6aOt137sSyXCtPBAdWhN8I"><thead data-page-node-id="tqQxPT3JVT1dk50sZTbdF7"><tr data-page-node-id="FZAJUpBmjopj32AbuB8wHy"><th data-page-node-id="XNeUZ09I7BhBKAzN8EpZE7">方式</th><th data-page-node-id="pSLP7iDkDrYwFaCC0QFMSC">实际改动</th><th data-page-node-id="CohMUg1IRg4f3YI2JAzuOL">本项目判断</th></tr></thead><tbody data-page-node-id="ZSgzvGQ9g0zgdlZNog2sDA"><tr data-page-node-id="yn8nzI0jqmFjObLyuIApSp"><td data-page-node-id="jGK1H80DcgSltjqHnNSQzF">A · 外挂插件 / bundle / profile</td><td data-page-node-id="O7zIKH8Yo5NHqaR2sqSVXX">独立量化插件包，通过公开扩展点调用 Python 领域 API；锁定 DSH 版本；自定义 UI。</td><td data-page-node-id="K6t28adDxdtnWrXOGo1Bdy"><strong data-page-node-id="qhX1PPJPHG4CaEK4wBMFSV">优先方案</strong>。减少跟随上游变化的成本，方便替换研究后端。</td></tr><tr data-page-node-id="rvcOysSc9xh6053iKJLMnV"><td data-page-node-id="vUWi8a060iD9xWL1B5go5m">B · 薄 Fork / 私有发行版</td><td data-page-node-id="nFnDNF9Apta9OU2DKNvB7N">复用上游实现，维护少量必要兼容补丁与签名发行配置；每个补丁有回归测试和回合并计划。</td><td data-page-node-id="LSw9FvdDo61BPjEcjUY6di">只有公开扩展点确实不够时采用；先证明阻塞点。</td></tr><tr data-page-node-id="0ID1z6kHzTOnXwjiIOpUML"><td data-page-node-id="qOc7SsAFOaiOAjrQtGZ7bG">C · 全量改造为交易内核</td><td data-page-node-id="QT5UypjFeW4ImcsNhCBtCE">重写 Graph、账户、订单、费用、风险、对账、版本与数据服务，再搬进 DSH。</td><td data-page-node-id="oLSX9HF8IDsiCAZXokM8Mb"><strong data-page-node-id="55UGliqsuZV7H2JD3DRAPC">当前不建议</strong>。迁移成本与回归面大，但并未消除领域数据和治理难题。</td></tr></tbody></table></div><p data-page-node-id="LB39HWR7MDrgCgEmFLyZyo">“保留原项目”不是拒绝架构升级。可以大幅重构状态边界、调用协议、工作台和研究工具；只是避免把已沉淀的交易语义与验证资产作为更换框架的附带损耗。</p><div class="note warn" data-page-node-id="mbffEg3MIyX7rGAPlvkilf"><strong data-page-node-id="jsjkX5ZONkP5RkxYhA6blA">权限范围必须区分：</strong>当前 Prompt-only 限制的是 Agent 自动产生的变更类型；不是禁止工程团队经独立授权做代码重构。人类批准的工程迁移仍需新版本身份、回归与部署验收，不能伪装成普通 Prompt Candidate。</div><a class="top" href="#top" data-page-node-id="Lf9GFGkUTLHKEgoNZK8aLy">返回顶部 ↑</a></section><section id="architecture" data-page-node-id="Stm92Y8Rp0tyywFE3FEgmp"><h2 data-page-node-id="o9YJbTckxP2e9r1fwedKfC">08 · 推荐目标业务架构</h2><p data-page-node-id="eAg6vMF3E1G4Yq0hlO9tHe"><span class="label" data-page-node-id="JgZiWcVdZNQA65ZOLeUuRx">PROPOSED · 未部署</span> 一个交易领域内核，一个可替换 ResearchRunner，一套事实资格与晋级权威；DSH 和 Python Runner 是替代关系，不是串联关系。</p><div class="architecture" data-page-node-id="YYtr8rM9upPPA6PVVuqdfS">
+<div class="lane" data-page-node-id="f7u81vXhKaCHaxqANwCUeg"><div class="lane-head" data-page-node-id="TVb6xPyQ8TqCCOwHniz2ER">A / 实时交易平面<span data-page-node-id="0CBYMbZGzlbKfC7qk5Yl2B">不等待研究系统</span></div><div class="steps" data-page-node-id="oUHKiY2eMYtSEFUUoaTtOd"><div class="parallel-inputs" data-page-node-id="hrtx2ldsfaAanOQn83AsAj"><span data-page-node-id="IhVPwqRLD5BNWPsFP8sCtV">合格市场快照<small data-page-node-id="ufEHHQVQlWC41QGJEoDH99">Analysis Hub</small></span><span data-page-node-id="J7aig4UP4TA3AdOYrCZWuh">当前账户 / 订单<small data-page-node-id="PiZ31MwEHKui2WE6UcR2iX">独立来源资格 · 并列输入</small></span></div><b data-page-node-id="IznmVyodfpDT1mNE3uceyU">→</b><div data-page-node-id="0fGX880W2yRmhQxmw9DgAg">Reasoning / Brain<br data-page-node-id="FNBThX820fjA6hIAve5BjY"><small data-page-node-id="LUsktjO69RnbOA2YtkLuaV">有界 M0a / M0b</small></div><b data-page-node-id="q5nhigTlJOjOmxcSw6vXNL">→</b><div data-page-node-id="YB9ESjIPEcTOjAq6ztAUVe">Guard / Gateway<br data-page-node-id="xvCgbl6ppTos91DZAXyT94"><small data-page-node-id="LjRnWSq3AQQOD92T3Nbd38">确定性权限约束</small></div><b data-page-node-id="39KxdNmhyIIAuCrnQN4iQH">→</b><div data-page-node-id="mkAgVnqdtmzpmF5DiSaB6S">执行与核对<br data-page-node-id="2xTqf8Y5wClFN5ohG3I8Fj"><small data-page-node-id="mE1tMAs0OwPlH7KA3yDKdI">交易所事实</small></div></div><p data-page-node-id="5yFHhCPX9IdXezyNNY8PTN">市场与账户分别按字段完成资格校验，再汇入 Brain；账户不由行情派生。非确定性 LLM 被确定性的安全与执行边界约束。</p></div>
+<div class="connector" data-page-node-id="ROhAZ0XlH0eXuXczU0HrgD">↓ 异步、可核对的观察副本；缺失材料不得获得学习资格</div>
+<div class="lane" data-page-node-id="DnLkLzHPc7V6IYEFlV8kc6"><div class="lane-head" data-page-node-id="5LOHxBZdyURPiEXP0PKg7i">B / 领域学习平面<span data-page-node-id="ElaYDVmbBJlMAJ9rMooLPQ">crypto-ai-qt 持有</span></div><div class="steps" data-page-node-id="hSbvVOLb2EMoCuhMQBogwZ"><div data-page-node-id="qbzMU2DPRu8NH9UGuo20IT">Serving Root<br data-page-node-id="rhUlrwV60ThFBpwpVxINkO"><small data-page-node-id="OHvNUloN1NP1jdyNbedCqw">实际版本身份</small></div><b data-page-node-id="JQo03rZN7mtZsw1gfA0Oqn">→</b><div data-page-node-id="7YwyUTmOwnf6wSpEqWZEmU">Position / Outcome<br data-page-node-id="vrjDaAErNHKvGHLZwQvDAi"><small data-page-node-id="PZeb0nPkaXo3EJFX1FvG01">派生证据 + 逐笔核对</small></div><b data-page-node-id="giZFt5ySLHqBfYi17ghEUp">→</b><div data-page-node-id="epYgDEfREQ6Ihw1Z1o3yjE">Source / Time Gate<br data-page-node-id="Cvnufuottu6hUi45zbasQU"><small data-page-node-id="WXYwdz0wCqkhd0xUSzhPK8">资格与迟到版本</small></div><b data-page-node-id="mTz9QNqsBrW3z6qKzStNtv">→</b><div data-page-node-id="F9YdddDwgt5ZwOSFciVK41">冻结研究数据<br data-page-node-id="SFLvFJZGaV4KpdyD6p5hbm"><small data-page-node-id="H73iuzkClgl1pPPBxmdsLF">development only</small></div></div></div>
+<div class="connector" data-page-node-id="jGokOK0kh5Xt1NYcXkBwtx">↓ 只读授权 bundle 与有界研究预算</div>
+<div class="lane research" data-page-node-id="AEvUjMHkWZBwEQsK082b8L"><div class="lane-head" data-page-node-id="W8ZBY4OwYRnuBWS1TCVORK">C / 量化研究工作台<span data-page-node-id="bPaB5DA3l1w1Qv0mREMkM7">DSH 或 Python Runner</span></div><div class="steps" data-page-node-id="qYVcu3JAFus46ORxi6nbrc"><div data-page-node-id="Gt81KBCLgBHBJenH06lpJt">研究 Session<br data-page-node-id="txqlfHUO3gn2TkSCMLhjvc"><small data-page-node-id="uFifiHuqgwamBl4b0Uw6cO">无资金凭据</small></div><b data-page-node-id="TlFClEpgA2uXtKB7kBsFhw">→</b><div data-page-node-id="q35cGMDERy4mJQurJQWANn">复盘/反证<br data-page-node-id="2jONb0DKkxGjtZvDtY3HYn"><small data-page-node-id="h97iuh7gKJupSDjQEIRwpm">QOM / Playbook</small></div><b data-page-node-id="g32UxVK5kzd4uc3yzSqFfj">→</b><div data-page-node-id="pXdGHr0QtQkePnaxoCFfhj">单一假设<br data-page-node-id="1HdmdbYgHC692Idye13be9"><small data-page-node-id="uNFN3r1uF24CJfYEAsQfcT">证据引用</small></div><b data-page-node-id="4GfkgfTT1uYGaRweWXDI89">→</b><div data-page-node-id="6SjYxgBZ4dLR8EI9oFL7Qz">最小 Prompt Diff<br data-page-node-id="QUh8kgktnDN0U5z903Rilj"><small data-page-node-id="rsywrQpd2RWFgKIA9AGYqI">候选而非发布</small></div></div></div>
+<div class="connector" data-page-node-id="AXpaxNNIDxZa50a4JockVG">↓ 只提交候选；不能自行盖章</div>
+<div class="lane" data-page-node-id="Q9YsbksGNMRu2MfFPpqOs1"><div class="lane-head" data-page-node-id="IBS5WUqCKMzkb1IQYOGoUZ">D / 独立验证与发布边界<span data-page-node-id="dmotsJW6F7bLI67zEGWdeA">不属于研究 Agent</span></div><div class="steps" data-page-node-id="7ZgDXzHeiMrknIRUyTlPgj"><div data-page-node-id="ya2HnTDKpl5gF9zpAxZgd7">编译/规则测试</div><b data-page-node-id="FyBj2APuarRjDZvTG8nNjK">→</b><div data-page-node-id="4RgbiFfRt5XCB2tn8aH6EQ">独立回放<br data-page-node-id="mGDhQeLsiVTsZgJa64rnk4"><small data-page-node-id="IJFCdaFTlaeC4yu0IXDUwD">holdout / incident</small></div><b data-page-node-id="PPTaaydnvmJFTENRG0GjVA">→</b><div data-page-node-id="0vZm4PME6SKDNXn3cJRneC">风险与行为漂移</div><b data-page-node-id="dhecY6UZ3JY215aL2DCwYD">→</b><div data-page-node-id="rMAA6WrCikObBNVxfJTC6U">逐环境授权<br data-page-node-id="cBKR9vgizh0HV5b59O3nOg"><small data-page-node-id="9SvPQ8dZyRIAv2bcqhVSAG">Shadow / Testnet / Canary</small></div><b data-page-node-id="pWMNOybiwzesDDyV6EDt3D">→</b><div data-page-node-id="X7yAlrVKqWg3ANrVSwzXrD">受控激活<br data-page-node-id="GtkLO5IJujtolBN3gvl1B6"><small data-page-node-id="EseVh1BRm2KV5i5vurjxHL">下个允许的版本边界</small></div></div></div>
+</div><div class="note info" data-page-node-id="8AKKalFwH3CCvv3IQF0eBN">研究失败允许不产生新版本；交易侧软历史缺失允许继续处理；但安全连续性未知必须限制新增风险，硬账户/订单事实未知继续走既有 fail-closed。<strong data-page-node-id="Ump5ABGhzDw1T8Kz4RpkBC">流程活着，不代表所有交易动作都获准。</strong></div><p data-page-node-id="PbpgiWNCQGxQEcB53UCnBE">长期 QOM / Playbook 只服务研究与候选生成；线上 Brain 只使用批准 Prompt、当前合格事实及批准的 M0 投影，不直接把未验证研究结论当作实时交易规则。</p><a class="top" href="#top" data-page-node-id="PIYUN10to9X4foGLSbWHk8">返回顶部 ↑</a></section><section id="continuity" data-page-node-id="y7kcPHfMFxABuMuLkLnqKx"><h2 data-page-node-id="SbekwvEsH5NxyrzOIEyxHh">09 · 历史决策记忆如何真正落地</h2><h3 data-page-node-id="fTuYsiUqv8yJizx0EFJCBE">9.1 持久身份，不等于常驻巨大 Session</h3><pre data-page-node-id="LDKk0UmpcATQOfYhDQCBjO"><code data-page-node-id="oiUPys8FeR5gSSIHNOgmzj">策略/账户作用域（建议设计，不是现有 schema 声明）
+  account_ref + venue + network + instrument + symbol + lane + horizon
+
+每轮决策
+  batch_id + snapshot_as_of + decision_id + serving_configuration_root
+
+每个持仓生命周期
+  position_episode_id + order/fill identities + approved plan/version
+
+研究任务
+  research_run_id + frozen_bundle_hash + recipe_version + budget</code></pre><p data-page-node-id="cJCNpC9CvzFNJ2pK0dhgQ0">相同 symbol 不足以共享记忆。BTC-USDT 与 BTC-USDC、主网与测试网、不同账户/车道、不同决策周期必须分别建模；跨范围经验迁移只能经独立研究与适用性验证。</p><h3 data-page-node-id="9NxekEoLsXSg5sVE1Y3bqk">9.2 不要求所有分析 Agent 都长期记忆化</h3><div class="table-wrap" data-page-node-id="TVFuyQGoVpK1syDwRBJOIn"><table data-page-node-id="LxR0N1R47hkZ6xPgZJBNdJ"><thead data-page-node-id="vRtbD9H1ZRSymcp2uToWh6"><tr data-page-node-id="pFCih1UmlgdSvYEmhgYJb0"><th data-page-node-id="N1g0pD8wxpH5IQ5DxHt60d">组件</th><th data-page-node-id="PvLD63rKTHu51xehLue64k">建议状态语义</th></tr></thead><tbody data-page-node-id="Wvk8HwrhYxPUld8q3ocvpN"><tr data-page-node-id="UB5vmYiONiFFApcarwchOr"><td data-page-node-id="RQ9cD55dfORfmOl5LGwVVH">Contract / Options / Vision 分析服务</td><td data-page-node-id="NZEa4VBSrGrpr5qBFMpMeH">优先保留受限、批次化分析；输入事实、来源和版本明确。不要为每个模块建立无限自反思 Session。</td></tr><tr data-page-node-id="3yJelGIHTBaegU4ZvrzUe2"><td data-page-node-id="N9DBEiv1CRajemCgl1VzzU">Reasoning / 决策协调</td><td data-page-node-id="siFahZ4pQEbk743RQu6Dud">承担当前决策的连续性投影；优先复用现有 Reasoning，不默认再增加一个 LLM supervisor 调用。</td></tr><tr data-page-node-id="Cf6XOVZWvSx93iKQBr1tHj"><td data-page-node-id="HEeG7cKllQXLYluBkEsG9s">M0a</td><td data-page-node-id="turDIpR424qJHd7uOAScju">由结构化来源和代码验证产生；pending_exit、cooldown 等安全字段逐字段规定 UNKNOWN 行为。</td></tr><tr data-page-node-id="AzyPlaksnN747T8hXWwIHF"><td data-page-node-id="BRjKE3Ywi3VAduCS03FT0S">M0b</td><td data-page-node-id="nlXu4sh3cnkxpr9NILOU2u">可选历史叙事；类型化白名单、长度预算、不可信标记、污染隔离；无事实或执行权威。</td></tr><tr data-page-node-id="L1TpRKFToABgDSAW9mHIH5"><td data-page-node-id="ehtgbdN5G8UBnWz8wkEt3A">研究 Session</td><td data-page-node-id="cUarN33HXznOpMeaoMp8m7">可以长期保存并按任务恢复，但只消费合格的历史材料；不作为当前持仓真值。</td></tr></tbody></table></div><h3 data-page-node-id="6CqmEG0w3yCfdxDgMjE6ik">9.3 第一轮验收必须覆盖</h3><pre data-page-node-id="DPT9LlBCYwsDbSNfRgDZCh"><code data-page-node-id="h8aoLmzvzkGOP28JXap9D0">Redis 超时 / 断连 / 损坏 JSON
+→ 有界返回；区分软记忆缺失与 safety continuity unknown
+
+跨账户 / symbol / network / lane / instance
+→ 拒绝串线；记录身份与原因
+
+过期 / 未来时间 / 当前事实冲突
+→ 历史失效；不能用“最近写入”冒充合格事实
+
+M0b Prompt Injection
+→ 隔离可选字段；硬事实错误不能被一并吞掉
+
+无记忆 / 重启 / 重复事件 / pending exit 未确认
+→ 验证主流程可处理、权限安全收敛、无重复执行</code></pre><div class="note warn" data-page-node-id="hEYtr5miRHG8HAGSdkOGED">Memory V1 的 shadow 观测模式与交易系统的 Shadow 环境不是同一个概念。测试 M0 投影，不等于已获准运行新的策略 Shadow；二者配置、状态与证据应分开。</div><a class="top" href="#top" data-page-node-id="zNpkUjTjMzqmf2FXHaZ5US">返回顶部 ↑</a></section><section id="learning" data-page-node-id="7cuZBuSmBVvFrvAhLZkLc1"><h2 data-page-node-id="ExpmFjdQ5111ZLwGipsdEU">10 · 自我进化：让结果反馈进入下一版</h2><p data-page-node-id="AHWzuE8lHwQ38Tawy6InD1">成熟的闭环不是“亏了就让模型反思”。应把<strong data-page-node-id="PJeypYojl41LGHAcP2mj0X">观察事实、失败解释、可修改对象和授权结果</strong>分开。</p><pre data-page-node-id="Z1Q9MwZV3UCncxiCkpeiMP"><code data-page-node-id="BRUMIhWt0whp6BvXzPCICd">一次业务闭环（设计建议）
+1. 固定当轮实际运行配置与输入身份，记录决策/Guard/发布事实。
+2. 收集订单、逐笔成交、费用、资金费、账户变化；区分未成交与零收益。
+3. 以 PositionEpisode 聚合，但仍保留多个 Decision→多个 Order/Fill 的关系。
+4. 做来源、身份、时间、分页、守恒和独立权威验证。
+5. 同时保留 Market Outcome 与 Trade/Execution/Portfolio Outcome。
+6. 资格与适用性通过后，冻结 development bundle；生成器不得读封存评测。
+7. 研究器提出一个假设和最小 Prompt 变更；不会自动变成 QOM 真值。
+8. 独立评测运行；使用现有关键风险门与方向漂移观察。
+9. 成功/失败实验都保留记录；Playbook 的结论另行审查、可过期撤销。
+10. 只有独立授权后才激活批准版本；失败可以结束为无变更。</code></pre><div class="note warn" data-page-node-id="bvYB93cEDubJumlDZxrrrO">统计关联不是因果证明。真实亏损不等于预测错误，真实盈利也不等于策略正确；无成交 HOLD/REJECTED 必须保留市场后验。多次候选反复触碰 holdout 或让评测结论通过 Playbook 回流生成器，会形成泄漏。</div><p data-page-node-id="kqWJypw3WPwwW8TPhBpoMY">优先复用当前 ServingConfigurationRoot、EvolutionEpisode、P1/P2 与候选工件，不因为引入 DSH 再增加一套独立 AgentVersion/Truth/Promotion 数据库。确有新信息时优先扩展现有工件引用，而不是堆叠新 Receipt 名词。 <span class="refs" data-page-node-id="tSTnS2YllxcRYd6OAyCJK0"><a href="#S05" data-page-node-id="NpOcDIzoq7HRG8i3ET57Qa">[S05]</a><a href="#S06" data-page-node-id="H2t4Ag9D8bDlxgfceRTw9I">[S06]</a></span></p><a class="top" href="#top" data-page-node-id="hhFJFHvN8sVmR8v4yFAGxu">返回顶部 ↑</a></section><section id="integration" data-page-node-id="mfX3TB3kgoErKDNTEl8pv5"><h2 data-page-node-id="MCcRPYEpcGvNNMC2FJpypX">11 · DSH 二开边界：一个薄适配层</h2><p data-page-node-id="miAQTzjGfaMHwYqTAGpQrk">下列名称是建议的应用分包，不是上游已经存在的量化插件。DSH 公开架构允许使用插件注册工具、拦截请求/工具事件、增加会话事件和 UI；Python SDK 可启动 SDK profile。 <span class="refs" data-page-node-id="TKlEXFZLIgQsZV9IstsBe3"><a href="#S09" data-page-node-id="ENGMV2qarQuGA2Pky93jRo">[S09]</a></span></p><div class="table-wrap" data-page-node-id="XDXCc7Ar5UD0pYVulxBrje"><table data-page-node-id="rr57vKinwZAG5DNEta2uhl"><thead data-page-node-id="yHPNzoJ2onUdwPdIAXgO6R"><tr data-page-node-id="fAiXDOYtNrPdnINknTnKDY"><th data-page-node-id="Wi2dWHIjUO4tSEBliHsFIe">建议模块</th><th data-page-node-id="0EC0v9eoV3F9RQboE3087d">职责</th><th data-page-node-id="LvtS4cqGZgO0scTAyHQb20">明确禁止</th></tr></thead><tbody data-page-node-id="c5DQRQVPBcwAaYRVT4GebT"><tr data-page-node-id="nCxGFmkvemMf3TcpMJXs2V"><td data-page-node-id="c7fHDbiAEl3YUgCq0efWhk">quant-evidence-client</td><td data-page-node-id="cINlvtovRJbjgtSaLZS94Z">读取已授权、冻结、脱敏的 bundle 和内容寻址结果；Decimal 以字符串传输。</td><td data-page-node-id="bd52SOnN1BOwtP3I72VUNo">通用数据库写权限、用 UI 缓存值补正式事实。</td></tr><tr data-page-node-id="QXnIeLD3PDg6LL9p2ngTAd"><td data-page-node-id="CZrInPZrjoKRiz9Hp9WLkb">quant-research-profile</td><td data-page-node-id="a9pJl1HphGxCp5X28HGuvF">锁定模型、工具集合、研究预算与 Session；根据任务恢复研究。</td><td data-page-node-id="tFj6awD32yk1cmOspG30EW">动态装插件、任意改运行配置、读取生产秘密。</td></tr><tr data-page-node-id="8hxWYwCy1FsqhJd7Exm9jR"><td data-page-node-id="3U5E0KMrH8rnIGWjiasQno">quant-knowledge-reader</td><td data-page-node-id="FJgw9md0jjIjUUnyqYYnvw">按 scope/as_of/资格读取 QOM 或 Playbook；返回引用与适用性。</td><td data-page-node-id="4Pht4zZoRL3PPDwI0WioL8">覆盖 M0a 或把生成的反思直接升格为已验证记忆。</td></tr><tr data-page-node-id="Vf1VJIuBHhgJqFop2rUgZf"><td data-page-node-id="OqhzkhN8cBT2YVo4dBzvFY">quant-candidate-submit</td><td data-page-node-id="tHrYGp83GHBhTjlpl00yMu">提交允许范围内的 Prompt overlay + 单一 hypothesis + 引用。</td><td data-page-node-id="QhnuHwnLBHLCQXtSb1jHWo">改 Guard/Gateway/阈值、直接写生产 YAML。</td></tr><tr data-page-node-id="EXUKn5CetA4oADPtZNB3Di"><td data-page-node-id="SKQReXDxmxyPCruTeZChe0">quant-console</td><td data-page-node-id="3NbVMItLrKTEUeLbGlUHbW">呈现研究轨迹、候选差异、阻塞条件、成本与审批请求。</td><td data-page-node-id="3nFcLzFBnVXCl63U1lHIkG">前端按钮或 LLM 文本自授生产权限。</td></tr></tbody></table></div><h3 data-page-node-id="5JOlM15UpRPVPQYsaEfWL6">领域接口示意</h3><pre data-page-node-id="AmQCUD7oPwvu79fo6FRjSA"><code data-page-node-id="gAUzax8D618yUGYIdkQOZH">Read APIs / Tools
+  list_eligible_research_bundles(scope, as_of)
+  read_evidence_artifact(artifact_hash)
+  get_reviewed_playbook(scope, as_of, budget)
+  read_research_job_status(job_id)
+
+Write only to isolated research artifacts
+  submit_prompt_candidate(parent_hash, diff, evidence_refs)
+  request_evaluation(candidate_hash, protocol_hash)
+  submit_research_report(report_hash)
+
+Research Agent does NOT receive
+  place_order / close_position / publish_signal
+  activate_production / alter_guard / set_risk_limit
+  update_trade_truth / install_unreviewed_plugin</code></pre><p data-page-node-id="Nwp2ylFcSFGbY1dvhAFpXS">request_evaluation 仅提交任务，不授予评测器角色、封存数据读取权或生产权限。独立 evaluator 使用另一身份和工作目录；生成器看到的结果反馈受 holdout touch 与信息回流政策约束。</p><h3 data-page-node-id="6MMwTlCb0OqAFmAhU6CPw6">持久化与权限</h3><p data-page-node-id="x0KDJYz7dL9BoUBX8BKB14">领域事实与晋级账本由 Python 侧唯一持有；DSH Session 是研究过程记录。两者通过 job/artifact ID 关联，不做双向多主写入。研究容器/VM 无交易 Key、无 Docker socket、无主网执行出口；只给白名单领域 API。内置沙箱用于降低风险，不能作为唯一隔离层。 <span class="refs" data-page-node-id="rLbtTEHpwlmhHczPFO5uxz"><a href="#S08" data-page-node-id="QHYfgLSgLKg3OyaA6cimH2">[S08]</a></span></p><div class="note warn" data-page-node-id="7eeeGlCxcAAsJxaQ8B9yCq">生产态版本切换要绑定 expected parent、nonce/有效期和批准范围。当前批次固定 Prompt 组合；既有 PositionEpisode 的退出计划版本不能被无声重写。但紧急 Kill Switch、账户事实更新和更严格安全限制始终有效，不被“版本锁定”冻结。</div><a class="top" href="#top" data-page-node-id="amz63vF5bE4dpleBHIZwOA">返回顶部 ↑</a></section><section id="performance" data-page-node-id="ni8WOav1wYmbgbPBaVz4qB"><h2 data-page-node-id="er8gJMOZ22g121K6XGOdWH">12 · 性能与成本：需要实验，不接受口号</h2><p data-page-node-id="PjJnuOli5pfOmRkc6DdFLo">框架的语言和界面不是收益或延迟的直接保证。性能应按完整业务动作衡量，并把“模型调用耗时”和“框架/存储/工具额外耗时”分开。</p><pre data-page-node-id="6y2prIFNJqTeEKGX6q30TQ"><code data-page-node-id="hm6wSbeUNqxZnAgRCpEznx">决策延迟 = 输入资格与投影 + LLM 调用链 + Guard/发布 + 排队/重试开销
+研究总成本 = 主 Agent + 子 Agent + 反思/记忆整合 + Judge
+           + 重复试验 + 工具/算力 + 人工审阅 + 维护成本</code></pre><div class="table-wrap" data-page-node-id="EedupDmzRNaYC80Kv8b2OJ"><table data-page-node-id="iAmN7Da2m9m1HuG6vjfWGe"><thead data-page-node-id="Vth305q8UxquNR3kY0F2wG"><tr data-page-node-id="PT98dWhEX00HGrA1IZUYfW"><th data-page-node-id="2hBHYNqqTPq6ZH5WcrwCWZ">优化项</th><th data-page-node-id="wNL2daNBfOKHrHTlcAa1uU">优先动作</th><th data-page-node-id="PTOvKMHL6aFCnXqux6TeX6">不能牺牲的边界</th></tr></thead><tbody data-page-node-id="L0Hz2JttE4y0fC2CrfaqCN"><tr data-page-node-id="iX3pzXlX8x1mh51z9eXkqy"><td data-page-node-id="xcVFHSDZxwrAWN5G8zNEv3">线上调用量</td><td data-page-node-id="miBkKgmCXXF1aVBYGA4qI5">先复用 Reasoning 作为协调点；M0 读取用代码，不每轮新增“记忆 LLM”。</td><td data-page-node-id="cjZBgwbyQMikbvg1NdnFX7">不以额外多 Agent 投票作为默认安全证明。</td></tr><tr data-page-node-id="KFnfY2Gqld6AL7sKeKqv4X"><td data-page-node-id="VPikvSru5zEKhHu0DE8B3F">上下文</td><td data-page-node-id="SqlGEP28CNflC7BzK7pa8n">稳定角色/Schema/批准规则在前；当前精确事实和有界历史在后。</td><td data-page-node-id="myoYGDM0ppzxPGUFODi8eP">不能把不可信历史移入高权威 system 指令以换缓存。</td></tr><tr data-page-node-id="VkIDZurVEYNGYyOMVpdoBD"><td data-page-node-id="Jq13ESQQtnk2XKNNhXNUFN">缓存</td><td data-page-node-id="nRwVAjl9KHFxOg18H2ioLr">区分 Provider prefix/KV cache、历史评测响应缓存和领域材料缓存。</td><td data-page-node-id="TQCqpjrk4mt4HZgRH5oOnX">不得复用旧行情下的 LLM 答案作为新交易决策。</td></tr><tr data-page-node-id="Ysr3gkVLnckzHV4Pzm3oo7"><td data-page-node-id="rkTXN93yu3g5gtJCF526BB">反思触发</td><td data-page-node-id="FNnr7oc6n3sWcT32p2VuWh">按标签成熟、完整 Outcome、已复核异常或数据量阈值启动离线任务。</td><td data-page-node-id="Ksj4WXJiGEb4lIxGy5GqoR">并非每次成交都立即改 Prompt。</td></tr><tr data-page-node-id="0FYYdWvTHDD3TuOgRGpStb"><td data-page-node-id="H9oUlOhtPq5biRL5CDtxqk">并发</td><td data-page-node-id="8EXrj54sDyInX6LMjHgTQz">独立只读分析可做经验证的并行化；同账户风险与执行保持受控顺序。</td><td data-page-node-id="O1fkQKFDRA0wAIKolq7RsM">不能把一次收益比较当成可并发开仓的许可。</td></tr><tr data-page-node-id="EP0yFMuhg4CQFmyiC5YpD9"><td data-page-node-id="OcXEmE6P5u7rHRPKBzZCyX">重试</td><td data-page-node-id="wKTpN5prd5EXCUsSbdW97F">Provider 瞬态失败有界退避；领域副作用先查状态再按幂等协议处理。</td><td data-page-node-id="y7MIumkR6EmYUIkT93BiIo">LLM 重采样可能改变动作；订单超时不能直接重复提交。</td></tr><tr data-page-node-id="F7taOiJMHQaZHmGgqrhDOc"><td data-page-node-id="BRtJUT2mUBV00fMuCKnAo0">长任务恢复</td><td data-page-node-id="mydrpcZxI1ymWu9XESRTUD">保存研究工件/步骤状态，在任务边界恢复。</td><td data-page-node-id="08wupAskGs6CVDB0Qr1XaB">Session 恢复不自动等于外部订单 exactly-once。</td></tr></tbody></table></div><p data-page-node-id="895DylglLS3xbdbCTjEcge">普通前缀缓存不会让模型“学会”旧决策；它只是复用本次请求中相同输入的计算。经验记忆、推理缓存与策略版本必须分别治理。Mastra OM 的稳定 observation 设计可借鉴，但压缩比、记忆 benchmark 与交易成本/收益不能互相替代。 <span class="refs" data-page-node-id="3dNesKlVIzE6XOWODPoOt7"><a href="#S17" data-page-node-id="opfSgfyQSCyQzNmgXFKJhy">[S17]</a></span></p><a class="top" href="#top" data-page-node-id="x9oMeVOHYQ47o8QAMWfQjV">返回顶部 ↑</a></section><section id="experiment" data-page-node-id="jVu6tO8PNmBtmO3jz3y6Sw"><h2 data-page-node-id="FCIFEyjyENlfIddzpA6vN1">13 · 最小对照实验：先证明价值再决定迁移</h2><p data-page-node-id="uZeMJQvHysVhbixqkH7tQ2">采用同一冻结输入、实际模型/Provider、批准工具集、推理预算与评测协议。<strong data-page-node-id="jPQ9G7esqtrFiSloJBioCr">分开测“记忆增益”和“Harness 增益”，不能在换框架时顺便换模型、改 Prompt、加五个 Agent，然后把结果全部归功于框架。</strong></p><div class="table-wrap" data-page-node-id="Mq3ki6eFyGlbif2quzgWFh"><table data-page-node-id="EBuLGlq1TybqlaVqgG1b2w"><thead data-page-node-id="5BABYLktvFRWlz3YF3Gcvy"><tr data-page-node-id="GYmdF0PAz6d69JDF68KZbX"><th data-page-node-id="p2AXCNvHWvq5EGCGLYtcrE">实验</th><th data-page-node-id="kVZ0DzVm8NtlnbpkkyheAH">变量</th><th data-page-node-id="jZcriw9kNZ8cZJcEPwuERX">目的</th></tr></thead><tbody data-page-node-id="dt0E6M9ilB5FBvWHGrq47V"><tr data-page-node-id="3NxpGENirU0XP1XvEAw9rv"><td data-page-node-id="qlsrG4m4qn8vDw9HZvmwSM">A · 当前主链基线</td><td data-page-node-id="WxtxHEaj2VIlT2nPrRMivk">当前批准配置，不新增功能。</td><td data-page-node-id="DlWoqGKMciW8OLsIRSOd3h">建立真实成本、延迟、动作与资格覆盖基线。</td></tr><tr data-page-node-id="KqnxGiSQM7c1zDqM39i5f0"><td data-page-node-id="CmV3pKdoPdeFHmr9JfN9Dn">B · 原项目 + Memory V1</td><td data-page-node-id="hbE4UvO4wPalENBu5SVNcR">只改变批准的连续性投影路径；先离线/只观测。</td><td data-page-node-id="RRq294NTCT6XmneeTF0U1Q">验证遗漏连续性、冲突和故障传播是否改善。</td></tr><tr data-page-node-id="pNWIBlZd3r6IwA9Y5oip3A"><td data-page-node-id="YZq19c5qfZQFNC7DBsHUhw">C · DSH ResearchRunner</td><td data-page-node-id="TdkMMD4kODRLTA7AzJGJ3Q">与 Python 研究 runner 使用同 bundle、相同工具、预算和候选协议。</td><td data-page-node-id="IOlNgbEKUmsW3CQeCpDgN0">验证 DSH 是否减少研究开发/操作负担，且无质量、安全或成本退化。</td></tr><tr data-page-node-id="4NynwgWNgBu2JOhuc701wL"><td data-page-node-id="6jtkvDDdXuGNpcIfYgf510">D · 可选 DeepAgents 对照</td><td data-page-node-id="YsFLk2xNpxBzwohQbwMOGH">只替换研究 runner；不改变交易链。</td><td data-page-node-id="MSKubOOsr8ptxpgsAGA5Na">检验 Python 复用优势是否比 DSH 工作台价值更高。</td></tr></tbody></table></div><h3 data-page-node-id="guXOko7no9Sr3JOf8ewJ5x">验收顺序</h3><div class="table-wrap" data-page-node-id="KFPeWEHqVHUzP9TkqKPl1R"><table data-page-node-id="pBjHOzv4ijcuwVH2EqT5T4"><thead data-page-node-id="4xE5dks8RUOfe9jbqFmb3N"><tr data-page-node-id="GabC4l5fb7EOOfDXMnx2Vw"><th data-page-node-id="5PwbtIg3mK1RNQwSolHfJw">关口</th><th data-page-node-id="yQrEjxaMXNa5B6L91zGQ3u">必须记录/验证</th></tr></thead><tbody data-page-node-id="cVbkRxl2D0JFl9Hj1L5BHj"><tr data-page-node-id="xfShNW8qBltB9iOrksMmwo"><td data-page-node-id="GWJkVKnvy0q0psIAKXNZGw">安全硬门</td><td data-page-node-id="SLD5mKOzuFoFZ5kOIx67yu">跨身份隔离、过期/未来数据、Prompt Injection、秘密与写权限、Guard 不可绕过、错误/缺失不被伪造为零。</td></tr><tr data-page-node-id="VtNsq2QqrnLN6XCUhfUvLs"><td data-page-node-id="2moBQtrEBfXOm9dfzEmfIW">业务语义</td><td data-page-node-id="AoH9ZUMXmEButuDvMSFcfp">pending exit / cooldown 未确认时风险收敛；批次/版本一致；无记忆路径保持既有输出契约与授权约束（不要求随机 LLM 输出逐字相同）；无重复副作用。</td></tr><tr data-page-node-id="clQ7YM3VL7M4mtYnFVLgpN"><td data-page-node-id="V10H0dvOiTC8js9wnHQzdk">学习正确性</td><td data-page-node-id="3fecZC1ptlFllktiFbDtUj">独立来源资格、无未来泄漏、sealed split、固定协议、失败实验保留而结论可撤销。</td></tr><tr data-page-node-id="VMM3sFbmixAINBeKVC5nXT"><td data-page-node-id="3UCI5tWmPI2Nu7GAaZxGue">行为与效应</td><td data-page-node-id="DcJaDhyypTmfNE9LK8og3O">按 regime 比较 OPEN/ADD/HOLD/CLOSE、置信度、Guard 拒绝、换手、成本与不确定性；不只看单一 PnL。</td></tr><tr data-page-node-id="gFHe62mpirkx8jtXsQamw2"><td data-page-node-id="dLVrMbJKweY6lGpVHu2DyI">恢复</td><td data-page-node-id="haGyca5XE9cs8BYVdmlcOs">研究进程被终止后可恢复；队列重复、超时、旧 parent 和 schema 漂移不会错误晋级。</td></tr><tr data-page-node-id="30BVoTW1CGpk3m3gXRIO7p"><td data-page-node-id="dBfAtcGRpNudWcQtpkoske">经济性</td><td data-page-node-id="RG8YfiJ7uTTlfdekoBxaqX">Cost/合法决策、Cost/合格研究结果、p50/p95 延迟、预算超限率、人工复核工作量。</td></tr></tbody></table></div><p data-page-node-id="9wzTLQFNksXJT9sF49PaBv">保留当前规定的数据门禁与多重复评估，不擅自降低 200/50/50 等已批准要求；统计置信程度仍需考虑相邻小时/同一仓位样本相关性。形式上有 300 条记录不代表 300 个独立市场实验。 <span class="refs" data-page-node-id="8br862iWALqcJqEtKamprq"><a href="#S05" data-page-node-id="0Bv7Ais58AQJXYYhc66yE1">[S05]</a></span></p><div class="note warn" data-page-node-id="znC0rEOSwQAWT56EYu83zz">安全与授权硬门失败直接阻断；质量没有明确增益而成本/维护负担显著上升时，不迁移。没有观察到退化不等于证明会赚钱。性能数字应来自该 PoC，不填写虚构“提升 3 倍”“命中 96%”。</div><a class="top" href="#top" data-page-node-id="P2gbpPvfjgxePkPpUH51pO">返回顶部 ↑</a></section><section id="roadmap" data-page-node-id="IkIlIJ57Gf1XMQmclj6Xp0"><h2 data-page-node-id="O5ZdFg8KFy5ijSUKRxKnzC">14 · 分阶段实施与交付物</h2><div class="table-wrap" data-page-node-id="TldiyFOFSTwtpX356o8wyW"><table data-page-node-id="TfrLKOqDSQch2fJX7AiS25"><thead data-page-node-id="syRiw3VZ9EhmiJnH42eBUQ"><tr data-page-node-id="VnFiAp9bRNjx2m9nMw7GeG"><th data-page-node-id="c8V4OIVYJcMJcwlFrkaDjl">阶段</th><th data-page-node-id="ImZGlwGRBkbiurGaP6NEF8">最小交付物</th><th data-page-node-id="WNey1uayC6cm8BGGowmCbz">进入下一阶段的条件</th></tr></thead><tbody data-page-node-id="QR7J0rGnySsWb3cnsLiCNO"><tr data-page-node-id="ZLQ8RdATo25jpC1SSjtqgj"><td data-page-node-id="v9SoaylEoFyrh11bZaPLSp">R0 · 运行事实盘点</td><td data-page-node-id="YAYk4J4JUa48dQc7Ia5jsx">远端提交、部署镜像、Prompt 来源、Memory 模式/预算、Provider 路径、日志与缺口报告。</td><td data-page-node-id="zk5DgOg0sKSSRKPQLR1THX">确认“源码有而未开”还是“已开但读不到/不可用”；不接新框架。</td></tr><tr data-page-node-id="H30BCmSrECi9NOfXLzRufI"><td data-page-node-id="XR9WTNO6vHEeur31AqyREM">R1 · Memory V1 验收</td><td data-page-node-id="eOT3PzEBz3E15wC3Q2q4OW">复用现有 Reader/Projector/Adapter；故障/冲突/身份测试与真实只观测收据。</td><td data-page-node-id="iTur7rauPQu8UjzIDDdXFO">主流程故障隔离和交易授权降级分别成立；具备回滚。</td></tr><tr data-page-node-id="TaIlWOtko7AA1Z2XKIrsy1"><td data-page-node-id="u8KZ4KGEczoXGqrqiMJU81">R2 · 最小结果反馈闭环</td><td data-page-node-id="ghdZ1p3u05O9ZPSsP05a3H">单一批准资产/账户/环境的完整 Serving→Outcome→资格→冻结数据链。</td><td data-page-node-id="yLArLiLnbDPPaqA1kyP6BV">真实来源与正式数据入场条件满足；无以 fixture 替代真实的升级。</td></tr><tr data-page-node-id="y5w0GBNB1USW42vPlleTIx"><td data-page-node-id="FAdChNl7FY4ONYHWM0eAPm">R3 · 手工受控学习</td><td data-page-node-id="xw1bKDF7Opqc6sC0BLxjws">一个可复现失效模式、一个 Prompt 假设、一个最小 diff、完整独立评价和拒绝/保留记录。</td><td data-page-node-id="JZpy61BeogIUGhfA2DtH5p">能重放并解释结果；即便候选失败，也保留完整实验资产。</td></tr><tr data-page-node-id="CIqHCbWrlFBkmDsrSFjVzJ"><td data-page-node-id="wV7y5MIX2SsfquqR3FF1Hv">R4 · DSH 插件 PoC</td><td data-page-node-id="zt1cNQ0YBqHw1ZmQ9aa9SD">只读量化工具、隔离研究环境、Session、候选提交和对照报告。</td><td data-page-node-id="kUVS8VSck83nZzEFKv7uGv">证明工作台/编排价值；正式选择一个研究 runner。</td></tr><tr data-page-node-id="H0EDpA5ABXkgdkgTyBLz5V"><td data-page-node-id="HsacM5cdZjvIEuEY9wcfAq">R5 · 长流程与产品化</td><td data-page-node-id="fKymhwzbgHyWrJ70tbZYsn">经选择的调度机制、观察等待、授权任务、幂等/恢复演练；必要时薄 Fork。</td><td data-page-node-id="1F29G2OdXCDsVpaAp7grAn">根据实际恢复与审批复杂度选择 Prefect/Temporal 等；不是为架构图默认安装。</td></tr><tr data-page-node-id="hCKqr5VAHF1CXJn90dn0xh"><td data-page-node-id="PW2gjZMGoqDKeYOV2XslH9">R6 · 受控放行</td><td data-page-node-id="aV4bqqKrJkYDMxqpsBrEE5">逐环境独立授权、候选/版本/回滚方案、部署回执和运行观察。</td><td data-page-node-id="xwW1q16mAWOdzEcCjoFHFx">现有 Guard / 晋级 / 生产授权全部成立；不自动扩大到主网。</td></tr></tbody></table></div><p data-page-node-id="K3G62tJdwFy7jCGTyyR78t">R1 是当前最小安全工程；R2/R3 是学习质量工程；R4/R5 才是 Harness 与产品化工程。三条线可以有独立研发任务，但不能借并行开发跳过上游资格。</p><a class="top" href="#top" data-page-node-id="945goMueae1ObGxWJD1H98">返回顶部 ↑</a></section><section id="risks" data-page-node-id="CmEH2sY3eDVsTfjuAFhiPv"><h2 data-page-node-id="eCtdEK8ZP2u98iOP6wiHuU">15 · 必须写进设计的反模式</h2><div class="table-wrap" data-page-node-id="iTPcqvXzFZHJFkv8Ti04iC"><table data-page-node-id="UNBBC9o1EY8n4HKwhVN2rD"><thead data-page-node-id="Ptjwsm2mUM0nelJ0CN38lJ"><tr data-page-node-id="qryuOSrmzo1v0RjuQylwKG"><th data-page-node-id="OAB5bvLar01vxYGbeUtms7">反模式</th><th data-page-node-id="r1FyBv2QyxyKZr0A0EH35q">后果</th><th data-page-node-id="b7LczqcZVE87J7H6HGwwXw">替代方案</th></tr></thead><tbody data-page-node-id="GVWiYL6QMWnUakVFaboFob"><tr data-page-node-id="87Gkdr21WczOD7brA1V90E"><td data-page-node-id="4DDd2PqHTn1PE64F8ARtik">把 BTC 所有历史放入单一永久会话</td><td data-page-node-id="IUvd1HQb5QfcfKFfUAx65o">旧价格、旧仓位、重复理由和新事实混杂；上下文不断膨胀。</td><td data-page-node-id="Pt8kkpTJlhG0EhMp33HXrx">稳定策略身份 + 批次新鲜事实 + 有界 M0 + 独立长期研究知识。</td></tr><tr data-page-node-id="luifBfBmCOwwvR6DHZ4wEy"><td data-page-node-id="Rq1vHrE2CuXDGqq9YCfEot">DSH Session 日志成为第二个订单账本</td><td data-page-node-id="8inG6fF7XWMmEHeS0uhbVx">服务说“已下单”与交易所实际成交被混为一谈。</td><td data-page-node-id="XlyUfPWjTODD11gicP02s7">领域 execution/order/fill 唯一权威；Session 只引用结果工件。</td></tr><tr data-page-node-id="u0r5G7nkqhxwmG9k71uoro"><td data-page-node-id="KOd6dkeiIz02VpGcAj8kTX">改 Prompt 后当前持仓计划无声切换</td><td data-page-node-id="8jJiiT7dvDuWcMWp4VtQfL">退出语义漂移，归因与复盘失真。</td><td data-page-node-id="pArJzYbfIU61EvBBDzIGAH">批次和已接受计划版本绑定；例外走明确迁移/紧急安全流程。</td></tr><tr data-page-node-id="A5emsvX0v3yhxytsLNHivF"><td data-page-node-id="DgZpxSaSidvUR9CFfGR6Xw">长期研究 Wiki 直接注入实时 Brain</td><td data-page-node-id="6r3KHwK2vrUnAcoQkymJjy">封存评测或失效经验绕过批准 Prompt 改变行为。</td><td data-page-node-id="YPDpO8AYcWlYJeNhuzjcLB">离线审阅与编译为候选；所有生产行为变更按原门禁。</td></tr><tr data-page-node-id="GnU2Mua4DNnPLMaMszd25i"><td data-page-node-id="4o4ULo4uWdZcXcmMXvhWBZ">将全部亏损自动写为负面经验</td><td data-page-node-id="uEb5p7AsaiRkVpX0IlDVrN">正常风险被误判为缺陷；策略可能退化为永远 HOLD。</td><td data-page-node-id="trQ06JJtxQ71SFOHLvg42D">分层评价，保留成功/失败/边界样本及不确定性。</td></tr><tr data-page-node-id="4XrIxSAodf9Pdrp0vu4F9a"><td data-page-node-id="tJLfUrABBEDnKiBUtXaOyS">只凭模型不同就认为 reviewer 独立</td><td data-page-node-id="nCZAzRGVjImxf4s3JTIZaF">身份、工具、数据访问与审批仍可能由同一个控制者操纵。</td><td data-page-node-id="3WaQs5lvoSmIyqAWwf2V6a">执行与数据权限独立；模型多样性仅是辅助。</td></tr><tr data-page-node-id="PHvJkNR9VcTUL3fF7kvXon"><td data-page-node-id="eA2s1LdZwzONQuLRc67QMu">让研究进程持有主网 Key / 数据库写账号</td><td data-page-node-id="tM8uvhZEnx7ViVsyykWGkq">注入、工具缺陷或配置错误直接形成资金风险。</td><td data-page-node-id="2Rx0hV5d53jW7f9EKJiZfu">凭据、网络、工具与部署身份物理/逻辑隔离。</td></tr><tr data-page-node-id="LJTaN5iUotNbfe2I0ZSxb0"><td data-page-node-id="E7jldVmFlDTLNXMPHkptAL">为省 token 缓存旧决策答案</td><td data-page-node-id="WA26x3Dzc36bAE9qgWVNsD">市场与账户变化后复用失效动作。</td><td data-page-node-id="wilRl58bUAjEzz0hcewWgw">只缓存合适的确定性材料、相同冻结评测结果和 Provider 前缀计算。</td></tr><tr data-page-node-id="S2Vkvdj0AfA4xiVo9rpChV"><td data-page-node-id="nLyKFNshcdvuAvQ3ejmECQ">先做巨型平台，再等真实闭环补上</td><td data-page-node-id="sYQ7qACkgzbWPD5XRFVco1">功能很多，但无法证明一个真实问题被修好。</td><td data-page-node-id="PblBRVcnXxgHyAneq5w0Tx">先复盘一个合格 Episode、修复一个假设、跑完一次独立评估。</td></tr></tbody></table></div><a class="top" href="#top" data-page-node-id="SRd4Dta8dOLcYca1RnAbdK">返回顶部 ↑</a></section><section id="actions" data-page-node-id="F4qub5gz5LtoCt8WBpa2V1"><h2 data-page-node-id="h3DYSwBNZQBmmC0cuPdlgC">16 · 建议批准的第一张工程任务单</h2><h3 data-page-node-id="akyZ5DfWCAyL4QyCMxpkcH">任务：Memory V1 运行差距确认与安全连续性验收</h3><p data-page-node-id="IYc3QUrGPvxLyeFHy1DGUv"><strong data-page-node-id="L1RUdQxiGOYB6iYU7AlCqO">目标：</strong>回答“当前实际决策为什么没有可靠使用历史”，而不是直接替换框架。</p><pre data-page-node-id="gDUm6iCRlsBVEHTA0icBo1"><code data-page-node-id="82xBYfjD96aQ0aTrGmCLuD">只读确认
+  部署版本/镜像是否对应审阅代码
+  REASONING_MEMORY_V1_MODE 的实际有效值
+  显式预算是否齐备、运行身份是否完整
+  是否产生 memory_v1_projection 与 continuity_safety_status
+  当前事实与历史记录的 symbol/account/lane/network 是否匹配
+  历史不可用时安全动作如何收敛
+
+交付
+  运行配置与代码差异表（脱敏）
+  最小复现与故障矩阵
+  按 source/identity/time/fault 分类的阻塞原因
+  拟修改文件清单 + 定向测试计划 + 回滚方式
+
+不在本任务内
+  安装 DSH/Letta/Mastra/Prefect
+  直接修改生产 Prompt
+  连接 M1/QOM/Candidate/Promotion
+  改变 Guard/Gateway/风险阈值
+  启动或扩大真实资金执行</code></pre><div class="note success" data-page-node-id="LBNYrx2ga53NPq9kXLJUX4"><strong data-page-node-id="l9KzJgBf6vLoNoIvgDoF9T">最终建议：</strong>生产主链先原地升级；研究产品可以选择 DSH 插件化二开。让外部框架可替换，让量化状态、证据、授权和已验证经验属于 crypto-ai-qt。这样既能满足长期能力演进，也避免每遇到一个更强框架就推倒重来。</div><a class="top" href="#top" data-page-node-id="upOikbCFq7t9PNHmDfSnxa">返回顶部 ↑</a></section><section id="sources" data-page-node-id="pH1Fs3Edl98jS439EZGjzF"><h2 data-page-node-id="nOCBpqrpJdBNP5e2UmDfvB">17 · 来源与证据定位</h2><p data-page-node-id="gm49DI3Co6Hu2y0ITMFixC">访问/核对日期：2026-09-09。S01–S11 固定本轮读取提交；其他链接为官方项目入口或文档，后续复现应再固定对应提交与依赖锁文件。本报告没有使用第三方 Star 排名或宣传收益作为选型依据。</p><article class="source" id="S01" data-page-node-id="rPW1Ofc9OtN5i0R0kGrAjW"><strong data-page-node-id="JwzxXRbyeV8UqXCvZtdjUl">S01 · crypto-ai-qt 审阅提交</strong><p data-page-node-id="7JEK82DASSarhwhI3pCHzo">远端 main 本轮读取快照；不代表用户本地未提交工作树或部署版本。</p><a href="https://github.com/crypto-9527/crypto-ai-qt/commit/ce6eb50f390af36f778df0d3049cb41cc942807e" target="_blank" rel="noopener noreferrer" data-page-node-id="IIXAmfgtrJJDaCkXlcPf5z">https://github.com/crypto-9527/crypto-ai-qt/commit/ce6eb50f390af36f778df0d3049cb41cc942807e</a></article><article class="source" id="S02" data-page-node-id="SEu5k9MHCE5tcTbRJ0dU6n"><strong data-page-node-id="Z9LNOWlX71yg3VINx8HALA">S02 · Memory V1 权威设计规格</strong><p data-page-node-id="bpAkWYE5DF72UihgoTlSVo">状态段声明 IMPLEMENTED / OFFLINE_VERIFIED；默认 legacy；运行、正式资格、生产授权未证明。文中“当前源码基线”是改造前基线，不能与首段状态混读。</p><a href="https://github.com/crypto-9527/crypto-ai-qt/blob/ce6eb50f390af36f778df0d3049cb41cc942807e/docs/superpowers/specs/2026-08-30-memory-v1-continuity-layer-design.md" target="_blank" rel="noopener noreferrer" data-page-node-id="BbEzWWEnkEbzBbGYuRX5WN">https://github.com/crypto-9527/crypto-ai-qt/blob/ce6eb50f390af36f778df0d3049cb41cc942807e/docs/superpowers/specs/2026-08-30-memory-v1-continuity-layer-design.md</a></article><article class="source" id="S03" data-page-node-id="YlQD3cIeYAwCXhtzyNYzc7"><strong data-page-node-id="opVTMnlV0jbFyFPMPyBIzj">S03 · Memory V1 配置解析</strong><p data-page-node-id="phEwDzrnMBqvAAqtZoWrie">源码默认 legacy；非 legacy 要求显式预算，max_items 不得超过 24。</p><a href="https://github.com/crypto-9527/crypto-ai-qt/blob/ce6eb50f390af36f778df0d3049cb41cc942807e/src/brain/memory/config.py" target="_blank" rel="noopener noreferrer" data-page-node-id="0PuLIqoz7NDV3tUJqFsxuD">https://github.com/crypto-9527/crypto-ai-qt/blob/ce6eb50f390af36f778df0d3049cb41cc942807e/src/brain/memory/config.py</a></article><article class="source" id="S04" data-page-node-id="tGU1Ff0lm26ucmM9Vtyyvw"><strong data-page-node-id="Zv1O6CJoWeMj04qgd2b7AO">S04 · Memory V1 进程内服务</strong><p data-page-node-id="3z4nQqH4F5BsFs8JES8TNN">Reader→Projector→Prompt Adapter；身份检查、Gateway receipt、连续性状态与结构化观测。</p><a href="https://github.com/crypto-9527/crypto-ai-qt/blob/ce6eb50f390af36f778df0d3049cb41cc942807e/src/brain/memory/service.py" target="_blank" rel="noopener noreferrer" data-page-node-id="BRrxz8P1NCqEVHX9uwc5EK">https://github.com/crypto-9527/crypto-ai-qt/blob/ce6eb50f390af36f778df0d3049cb41cc942807e/src/brain/memory/service.py</a></article><article class="source" id="S05" data-page-node-id="g5L8zxiGtUHQfVuZYhZ9fR"><strong data-page-node-id="Gv8Lj0Aco7KMvdFOE0khr7">S05 · Evolution Plane 离线迭代</strong><p data-page-node-id="FIN7MidOKYNshyYpHwe08P">Prompt-only、冻结数据集、ServingConfigurationRoot、独立评估、收益代理与真实 PnL 的边界、record-only 晋级。</p><a href="https://github.com/crypto-9527/crypto-ai-qt/blob/ce6eb50f390af36f778df0d3049cb41cc942807e/docs/02_Brain层/02_Evolution_Plane离线迭代.md" target="_blank" rel="noopener noreferrer" data-page-node-id="nmM3w8oaQda9EFDCEtAZBq">https://github.com/crypto-9527/crypto-ai-qt/blob/ce6eb50f390af36f778df0d3049cb41cc942807e/docs/02_Brain层/02_Evolution_Plane离线迭代.md</a></article><article class="source" id="S06" data-page-node-id="ET9N3bq1PYtdrkaEGi8IzP"><strong data-page-node-id="MQVbGfsrDpAVgVxDOd6VCh">S06 · 需求—证据矩阵</strong><p data-page-node-id="BzpLxUNLQrJRQsVqjgFHDZ">P1/P2 正式资格阻塞、QOM/Workflow 离线状态、Harness/Prefect 未运行与未正式选型。</p><a href="https://github.com/crypto-9527/crypto-ai-qt/blob/ce6eb50f390af36f778df0d3049cb41cc942807e/docs/superpowers/plans/2026-08-25-self-compounding-requirement-evidence-matrix.md" target="_blank" rel="noopener noreferrer" data-page-node-id="zttjPCPg5P3e2k9Rrzmb4L">https://github.com/crypto-9527/crypto-ai-qt/blob/ce6eb50f390af36f778df0d3049cb41cc942807e/docs/superpowers/plans/2026-08-25-self-compounding-requirement-evidence-matrix.md</a></article><article class="source" id="S07" data-page-node-id="5eerqByTqYC8UEeDBNo4Rt"><strong data-page-node-id="J4zmvxZ52BwoQg27mdKe0l">S07 · DeepSeek Harness README</strong><p data-page-node-id="ZjifPTaAC80XSs1GfrPIZH">Everything-is-a-plugin；Developer Preview；MIT。</p><a href="https://github.com/deepseek-ai/deepseek-harness/blob/5dda764ed3aa172535a7967b06ff95d9cbfe536a/README.md" target="_blank" rel="noopener noreferrer" data-page-node-id="tmYMUMIwC42E9E1fBFYiGW">https://github.com/deepseek-ai/deepseek-harness/blob/5dda764ed3aa172535a7967b06ff95d9cbfe536a/README.md</a></article><article class="source" id="S08" data-page-node-id="u8v9zUd2d4xr5C5gcz12hM"><strong data-page-node-id="QPvpu848wf1Q75IdXzIZQ6">S08 · DeepSeek Harness SAFETY</strong><p data-page-node-id="6pNlwMCrSCGMrhc2CMbHOa">未经安全审计；不得视为安全或 production-ready；沙箱不是充分安全保证。</p><a href="https://github.com/deepseek-ai/deepseek-harness/blob/5dda764ed3aa172535a7967b06ff95d9cbfe536a/SAFETY.md" target="_blank" rel="noopener noreferrer" data-page-node-id="oWaPMFWacJ1uOFZsdEkUYr">https://github.com/deepseek-ai/deepseek-harness/blob/5dda764ed3aa172535a7967b06ff95d9cbfe536a/SAFETY.md</a></article><article class="source" id="S09" data-page-node-id="b9GEG3lyNCqfKMskHCE987"><strong data-page-node-id="vVKUNSd8pCmE7zT6FUJd5Y">S09 · DeepSeek Harness 架构</strong><p data-page-node-id="GufMDagg2CmTlmyhW7K9Cq">Plugin / profile / bundle、SessionEvent、模型输入可回建、Python SDK 启动 Node CLI、live patch 规则。</p><a href="https://github.com/deepseek-ai/deepseek-harness/blob/5dda764ed3aa172535a7967b06ff95d9cbfe536a/docs/architecture.md" target="_blank" rel="noopener noreferrer" data-page-node-id="A3zyQInQnhZBuQSxD5Uooq">https://github.com/deepseek-ai/deepseek-harness/blob/5dda764ed3aa172535a7967b06ff95d9cbfe536a/docs/architecture.md</a></article><article class="source" id="S10" data-page-node-id="W6C70lDIOI2Y81J4UjoP8S"><strong data-page-node-id="byDWhIbDqu4k8lY0q7QGsC">S10 · DSH Schedule 子系统</strong><p data-page-node-id="cIgJ5qdzwAcdtngpMmRIDe">持久 Session-local reminders；固定间隔至少 300 秒；无 Cron 表达式、无 cold-session scheduler；dispatch 不等于业务成功。</p><a href="https://github.com/deepseek-ai/deepseek-harness/blob/5dda764ed3aa172535a7967b06ff95d9cbfe536a/docs/subsystems/schedule.md" target="_blank" rel="noopener noreferrer" data-page-node-id="DXpU3PFGX5nz8mbi3dTVJK">https://github.com/deepseek-ai/deepseek-harness/blob/5dda764ed3aa172535a7967b06ff95d9cbfe536a/docs/subsystems/schedule.md</a></article><article class="source" id="S11" data-page-node-id="oTiXfcIgiURawItk6qx7Cz"><strong data-page-node-id="CHPP2KcRb2evSv79KsB8vO">S11 · DSH package.json</strong><p data-page-node-id="FB6gOT7gVROyHDT1AybY7F">读取快照根 package 版本 0.1.5-alpha.1；不是声称 npm 最新稳定版。</p><a href="https://github.com/deepseek-ai/deepseek-harness/blob/5dda764ed3aa172535a7967b06ff95d9cbfe536a/package.json" target="_blank" rel="noopener noreferrer" data-page-node-id="0LgXJY1BSdFmkCRyvdclGB">https://github.com/deepseek-ai/deepseek-harness/blob/5dda764ed3aa172535a7967b06ff95d9cbfe536a/package.json</a></article><article class="source" id="S12" data-page-node-id="32bJmkQaui81nWvCa7DZDN"><strong data-page-node-id="aOSXxahMbe7pQpi5wEeyfr">S12 · Deep Agents README</strong><p data-page-node-id="oOwA2ekXd5d2wcbBnKqMMV">LangGraph-based；上下文管理、子 Agent、持久后端；可扩展而不 fork；安全依赖 tool/sandbox，而非模型自律。</p><a href="https://github.com/langchain-ai/deepagents/blob/main/README.md" target="_blank" rel="noopener noreferrer" data-page-node-id="FLhlMkpdascQCvgRwAAZFo">https://github.com/langchain-ai/deepagents/blob/main/README.md</a></article><article class="source" id="S13" data-page-node-id="lm5AVv3PoAjdesRvtxajbx"><strong data-page-node-id="EwEEAawbDv2Qzt7kq4JQEW">S13 · LangMem README</strong><p data-page-node-id="BG6pN8iE3sI8RB2PcjG5zk">记忆提取、后台整合、Prompt refinement；InMemoryStore 重启丢失；可接自有存储。</p><a href="https://github.com/langchain-ai/langmem/blob/main/README.md" target="_blank" rel="noopener noreferrer" data-page-node-id="offu71DxFpIaDb7nKtIA71">https://github.com/langchain-ai/langmem/blob/main/README.md</a></article><article class="source" id="S14" data-page-node-id="Xja90mOzSc678Aqa5XNrCa"><strong data-page-node-id="sE1T1AIVffu1tCZT7sw0Bu">S14 · LangGraph Persistence 官方文档</strong><p data-page-node-id="wCVjj9sUy1DQ6q5BKbud3D">Checkpointer 是 thread 内状态，Store 是跨 thread 数据；两者不等于交易事实或自动学习。</p><a href="https://docs.langchain.com/oss/python/langgraph/persistence" target="_blank" rel="noopener noreferrer" data-page-node-id="jRsx9HEIs61vbaGXSxhBvs">https://docs.langchain.com/oss/python/langgraph/persistence</a></article><article class="source" id="S15" data-page-node-id="aFTF79XjQEy7FZLCpFl54r"><strong data-page-node-id="Y9MHWJCDd2DvDc1VNnVyu0">S15 · Letta 项目当前入口</strong><p data-page-node-id="NrpH5hOTfV6zoaeX4AIqxU">当前源码转至 letta-code；旧 V1 server archive 不受支持，不能按旧方案推荐。</p><a href="https://github.com/letta-ai/letta/blob/main/README.md" target="_blank" rel="noopener noreferrer" data-page-node-id="Hq3JxN5baxFWr9xbRxKHqO">https://github.com/letta-ai/letta/blob/main/README.md</a></article><article class="source" id="S16" data-page-node-id="SpgaRxq9TH7mMBL73BiKGj"><strong data-page-node-id="1lXY76JQRjlERoPpFBt2Wn">S16 · Letta Code README</strong><p data-page-node-id="OLqtSME9GcjY1nZQmWNScd">持久身份、MemFS、记忆/技能自改、dreaming；其运行行为不自动满足交易治理。</p><a href="https://github.com/letta-ai/letta-code" target="_blank" rel="noopener noreferrer" data-page-node-id="5EbLpWlcjiuX6AVjOcxWJ5">https://github.com/letta-ai/letta-code</a></article><article class="source" id="S17" data-page-node-id="7NAvmX6230S9FE5MqPv8Bu"><strong data-page-node-id="MkKtuUOxiyIFDZlZex2hWS">S17 · Mastra Observational Memory</strong><p data-page-node-id="68zS5TCBAZC4vnxYSHRhUA">Observer / Reflector、存储、resource/thread、稳定 observation prefix；不能推出量化 PnL 事实可靠。</p><a href="https://mastra.ai/docs/memory/observational-memory" target="_blank" rel="noopener noreferrer" data-page-node-id="Hp64AwadRTqhzt53o7Cp0s">https://mastra.ai/docs/memory/observational-memory</a></article><article class="source" id="S18" data-page-node-id="IOGKcZV5xgE8GHY01vE5pb"><strong data-page-node-id="mDNg4FyWli70KX8B5zxuO6">S18 · Microsoft RD-Agent README</strong><p data-page-node-id="dAeq5RfxlFZyYFKDa5rPHf">Research/Development 反馈迭代、量化因子—模型研究；文档列出的 Linux / Docker 运行要求。</p><a href="https://github.com/microsoft/RD-Agent/blob/main/README.md" target="_blank" rel="noopener noreferrer" data-page-node-id="XeS6FHVoDmTJiXPhDjN8Cd">https://github.com/microsoft/RD-Agent/blob/main/README.md</a></article><article class="source" id="S19" data-page-node-id="W8HJrTQu5x546ZxeO5WRqw"><strong data-page-node-id="r7dTGLoIOUw2ssO2haVNRo">S19 · Microsoft Qlib</strong><p data-page-node-id="h0s5orVkYtJEAJ75JXM161">数据、训练、回测与量化研究框架；现有加密永续契约需要独立适配。</p><a href="https://github.com/microsoft/qlib" target="_blank" rel="noopener noreferrer" data-page-node-id="wM2MzpAEzUmag9cJvVAAL9">https://github.com/microsoft/qlib</a></article><article class="source" id="S20" data-page-node-id="1fvKRzTGlg5MMZDDpnIkYb"><strong data-page-node-id="ulQFcVAEWL4HhsUbv07XjX">S20 · TradingAgents README</strong><p data-page-node-id="tEL0BkyZMznc2MvzpL86kE">当前 v0.4.0 说明；持久日志、checkpoint 和 point-in-time 修复；研究用途。</p><a href="https://github.com/TauricResearch/TradingAgents/blob/main/README.md" target="_blank" rel="noopener noreferrer" data-page-node-id="nIknJ6btdC9s6EyiFYcG6Y">https://github.com/TauricResearch/TradingAgents/blob/main/README.md</a></article><article class="source" id="S21" data-page-node-id="xt3LAZT0OAkUWpCDqNSZkd"><strong data-page-node-id="EVNzQRA7UR7ZLbFkGfTs83">S21 · TradingAgents TradingMemoryLog</strong><p data-page-node-id="C4Ept532POFV6KdUJ5IcpX">pending decision、outcome/reflection、as_of；字段重点为 ticker/date/return，并非完整账户订单账本。</p><a href="https://github.com/TauricResearch/TradingAgents/blob/main/tradingagents/agents/utils/memory.py" target="_blank" rel="noopener noreferrer" data-page-node-id="DbNtBKuqaMisvFHxCgsX6P">https://github.com/TauricResearch/TradingAgents/blob/main/tradingagents/agents/utils/memory.py</a></article><article class="source" id="S22" data-page-node-id="zCYapC3jKnBqQBBaTMfxFr"><strong data-page-node-id="bfdsDphoWGFOfScVdae35g">S22 · FinMem 作者代码库</strong><p data-page-node-id="XO8oxRVz9wqHWXCHP79Ly3">Profiling、分层记忆、Decision-making；股票交易研究/仿真来源，不据此认定永续实盘能力。</p><a href="https://github.com/pipiku915/FinMem-LLM-StockTrading" target="_blank" rel="noopener noreferrer" data-page-node-id="Wu2DE9o5HdB6O9KO9WHwaX">https://github.com/pipiku915/FinMem-LLM-StockTrading</a></article><article class="source" id="S23" data-page-node-id="axQQd1lCSD6dWGizhOTGcg"><strong data-page-node-id="nNkeG9pVx7eBomInuMGn4l">S23 · Reef README</strong><p data-page-node-id="YSIL3u3nyZTCysjp9q7XgW">Serve / Observe / Grow / Commit；记录反馈、Recipe、版本交付；额外平台会带来重叠边界。</p><a href="https://github.com/Human-Agent-Society/reef/blob/main/README.md" target="_blank" rel="noopener noreferrer" data-page-node-id="UByrKr7FnX063jVt7iZ4jQ">https://github.com/Human-Agent-Society/reef/blob/main/README.md</a></article><a class="top" href="#top" data-page-node-id="y2nyVTQE0YkDG31Q40Yu3h">返回顶部 ↑</a></section><footer class="footer" data-page-node-id="ulhNYOlhCQQjWQhN2crhwD">生成说明：本报告只交付架构研究与工程路线，不修改用户项目。仓库源码、文档状态、正式资格与真实运行结果已分别表达。框架能力不等于盈利保证。</footer>
+</main>
+<script>
+(function(){
+  var root = document.documentElement;
+  var themeBtn = document.getElementById('theme');
+  if (themeBtn) {
+    themeBtn.addEventListener('click', function(){
+      var isDark = root.getAttribute('data-theme') === 'dark';
+      var next = isDark ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      themeBtn.textContent = next === 'dark' ? '浅色' : '深色';
+    });
+  }
+  var printBtn = document.getElementById('print');
+  if (printBtn) {
+    printBtn.addEventListener('click', function(){
+      window.print();
+    });
+  }
+  var filterInput = document.getElementById('candidate-filter');
+  if (filterInput) {
+    filterInput.addEventListener('input', function(){
+      var q = filterInput.value.trim().toLowerCase();
+      var rows = document.querySelectorAll('#comparison tbody tr');
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        r.hidden = !r.textContent.toLowerCase().includes(q);
+      }
+    });
+  }
+  var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+  var sections = Array.prototype.slice.call(document.querySelectorAll('main section'));
+  if ('IntersectionObserver' in window) {
+    var observer = new IntersectionObserver(function(entries){
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i];
+        if (entry.isIntersecting) {
+          for (var j = 0; j < links.length; j++) {
+            var href = links[j].getAttribute('href');
+            links[j].classList.toggle('active', href === '#' + entry.target.id);
+          }
+        }
+      }
+    }, { rootMargin: '-10% 0px -70% 0px' });
+    for (var k = 0; k < sections.length; k++) {
+      observer.observe(sections[k]);
+    }
+  }
+  var progressBar = document.getElementById('progress-bar');
+  if (progressBar) {
+    window.addEventListener('scroll', function(){
+      var winScroll = document.documentElement.scrollTop || document.body.scrollTop;
+      var height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      var scrolled = height > 0 ? (winScroll / height) * 100 : 0;
+      progressBar.style.width = scrolled + '%';
+    });
+  }
+})();
+</script>
+</body>
+</html>
