@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T:0 工程师：AI 会计为什么总在猜？因为总账只记结论，丢了来龙去脉 · 连接型会计地图与本体重构白皮书</title>
+<meta name="description" content="深度剖析 Airwallex 旗下 T:0 团队长文：给总账接上再快的 Agent 也只能猜。复式记账自带能用算术核对的本体，重构对象/链接/动作与连接型会计地图，实现 AI 读写分离与零天关账。">
+<style>
+/* ============================================================
+   0. 设计令牌（统一排版基线：黑曜石深色 / 暖羊皮纸浅色）
+   ============================================================ */
+:root{
+  --sidebar-w: 280px;
+  --content-max: 1180px;
+  --r-sm: 6px; --r-md: 10px; --r-lg: 16px;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-head: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+  --aike-sidebar-w: 280px;
+  --aike-content-max: 1180px;
+}
+html[data-theme="dark"]{
+  --bg:#181715; --bg-elev:#1F1D1B; --bg-card:#211F1C; --bg-card-hover:#272421;
+  --bg-code:#141210; --bg-inline:#2A2622; --bg-quote:rgba(226,136,106,.08);
+  --border:#35312C; --border-soft:#2A2622;
+  --text:#EDE9E3; --text-mid:#B8B1A7; --text-dim:#8C857B;
+  --accent:#E2886A; --accent-soft:rgba(226,136,106,.13); --accent-line:rgba(226,136,106,.45);
+  --emerald:#6FBF8F; --emerald-soft:rgba(111,191,143,.12);
+  --amber:#E0B054; --amber-soft:rgba(224,176,84,.12);
+  --cyan:#6BB6C9; --cyan-soft:rgba(107,182,201,.12);
+  --rose:#DE7878; --rose-soft:rgba(222,120,120,.12);
+  --shadow: 0 1px 2px rgba(0,0,0,.40), 0 10px 28px rgba(0,0,0,.30);
+  --svg-bg:#1A1816; --svg-node:#24211E; --svg-border:#423D37; --svg-border-hi:#E2886A;
+  --svg-text:#EDE9E3; --svg-dim:#8C857B; --svg-accent:#E2886A;
+  --svg-clearing:#2A241F;
+  color-scheme: dark;
+}
+html[data-theme="light"]{
+  --bg:#FAF7F2; --bg-elev:#FFFFFF; --bg-card:#FFFFFF; --bg-card-hover:#F9F6F1;
+  --bg-code:#F5EFE7; --bg-inline:#EFE9E1; --bg-quote:rgba(217,119,87,.07);
+  --border:#E5DED4; --border-soft:#EFE9E1;
+  --text:#2A2622; --text-mid:#57504A; --text-dim:#857C72;
+  --accent:#D97757; --accent-soft:rgba(217,119,87,.10); --accent-line:rgba(217,119,87,.40);
+  --emerald:#2E8B57; --emerald-soft:rgba(46,139,87,.10);
+  --amber:#B8860B; --amber-soft:rgba(184,134,11,.10);
+  --cyan:#2B7A8C; --cyan-soft:rgba(43,122,140,.10);
+  --rose:#C24B4B; --rose-soft:rgba(194,75,75,.10);
+  --shadow: 0 1px 2px rgba(60,50,40,.06), 0 10px 28px rgba(60,50,40,.07);
+  --svg-bg:#FDFBF7; --svg-node:#FFFFFF; --svg-border:#D8D0C4; --svg-border-hi:#D97757;
+  --svg-text:#2A2622; --svg-dim:#857C72; --svg-accent:#D97757;
+  --svg-clearing:#F6EFE6;
+  color-scheme: light;
+}
+
+/* ============================================================
+   1. 基础全局与排版
+   ============================================================ */
+*{ box-sizing: border-box; }
+html{ scroll-behavior: smooth; }
+body{
+  margin:0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color .25s ease, color .25s ease;
+}
+#readbar{
+  position: fixed; top:0; left:0; height:3px; width:0;
+  background: linear-gradient(90deg, var(--accent), var(--amber));
+  z-index: 60; pointer-events:none;
+}
+a{ color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-line); }
+a:hover{ border-bottom-color: var(--accent); }
+strong,b{ font-weight: 650; color: var(--text); }
+em{ font-style: italic; color: var(--text-mid); }
+hr{ border:0; border-top:1px solid var(--border); margin: 2.6em 0; }
+
+/* 侧栏贴左，桌面宽屏绝对居中布局 */
+body:has(> .app-sidebar) > .app-main {
+  margin-left: calc(var(--sidebar-w) + max(0px, (100% - var(--sidebar-w) - var(--content-max)) / 2));
+  margin-right: max(0px, calc((100% - var(--sidebar-w) - var(--content-max)) / 2));
+  max-width: var(--content-max);
+}
+
+@media (max-width: 1080px){
+  body:has(> .app-sidebar) > .app-main {
+    margin-left: 0;
+    margin-right: 0;
+    max-width: 100%;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+/* ============================================================
+   2. 侧栏与目录
+   ============================================================ */
+.app-sidebar{
+  position: fixed; top:0; left:0; bottom:0; width: var(--sidebar-w);
+  background: var(--bg-elev);
+  border-right: 1px solid var(--border);
+  padding: 26px 0 20px;
+  display: flex; flex-direction: column;
+  z-index: 50;
+  transition: transform .28s ease;
+}
+.sb-head{ padding: 0 22px 16px; border-bottom: 1px solid var(--border-soft); }
+.sb-kicker{
+  font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: 8px;
+}
+.sb-title{
+  font-family: var(--font-head); font-size: 15px; line-height:1.45;
+  color: var(--text); margin:0 0 10px; font-weight: 700;
+}
+.sb-tools{ display:flex; gap:8px; flex-wrap: wrap; }
+.sb-btn{
+  font-family: var(--font-body); font-size: 12px; line-height:1;
+  padding: 7px 12px; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--text-mid);
+  border: 1px solid var(--border);
+  transition: all .18s ease;
+}
+.sb-btn:hover{ color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.toc{ flex:1 1 auto; overflow-y: auto; padding: 16px 12px 10px 22px; }
+.toc-label{
+  font-size: 10.5px; letter-spacing:.14em; text-transform: uppercase;
+  color: var(--text-dim); font-weight:700; margin: 0 0 10px;
+}
+.toc-list{ list-style:none; margin:0; padding:0; }
+.toc-list li{ margin: 0; }
+.toc-list a{
+  display:block; padding: 5px 10px; margin: 1px 0;
+  font-size: 13px; line-height:1.45; color: var(--text-mid);
+  border:0; border-left: 2px solid transparent; border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  transition: all .16s ease;
+}
+.toc-list a:hover{ color: var(--accent); background: var(--accent-soft); }
+.toc-list a.active{
+  color: var(--accent); font-weight: 650;
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+.toc-list li.sub a{ padding-left: 20px; font-size: 12.5px; }
+
+/* 移动端菜单控制 */
+.nav-toggle-btn{
+  display:none; position: fixed; bottom: 20px; left: 20px; z-index: 55;
+  padding: 10px 16px; border-radius: 999px; background: var(--accent);
+  color: #fff; border:0; font-size: 13px; font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3); cursor: pointer;
+}
+@media (max-width: 1080px){
+  .app-sidebar{ transform: translateX(-100%); }
+  body.nav-open .app-sidebar{ transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,.5); }
+  .nav-toggle-btn{ display:block; }
+}
+
+/* ============================================================
+   3. 主内容排版
+   ============================================================ */
+.app-main{
+  padding: 40px 32px 100px;
+  min-height: 100vh;
+}
+.hero{
+  margin-bottom: 3.2em;
+  padding-bottom: 2em;
+  border-bottom: 1px solid var(--border);
+}
+.hero-tag{
+  display:inline-flex; align-items:center; gap:8px;
+  font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700;
+  padding: 4px 12px; border-radius: 999px; background: var(--accent-soft);
+  margin-bottom: 16px; border: 1px solid var(--accent-line);
+}
+.hero h1{
+  font-family: var(--font-head);
+  font-size: clamp(28px, 4.2vw, 42px);
+  line-height: 1.25; margin: 0 0 16px;
+  color: var(--text); font-weight: 700;
+}
+.hero-sub{
+  font-size: clamp(17px, 2.2vw, 20px);
+  line-height: 1.55; color: var(--text-mid);
+  margin: 0 0 24px;
+}
+.doc-meta-card{
+  display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px; background: var(--bg-elev); border: 1px solid var(--border);
+  padding: 16px 20px; border-radius: var(--r-md); font-size: 13px;
+}
+.doc-meta-item strong{ color: var(--text-mid); font-weight: 600; display:block; margin-bottom: 2px; }
+.doc-meta-item span{ color: var(--text); font-weight: 500; }
+
+/* 核心论点 Callout */
+.callout-box{
+  background: var(--bg-quote);
+  border-left: 4px solid var(--accent);
+  padding: 20px 24px;
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  margin: 2.2em 0;
+}
+.callout-box h4{ margin: 0 0 10px; font-size: 16px; color: var(--accent); font-weight: 700; }
+.callout-box p{ margin: 0 0 10px; font-size: 15px; line-height: 1.7; }
+.callout-box p:last-child{ margin-bottom: 0; }
+.callout-box ul{ margin: 8px 0 0 18px; padding:0; font-size: 14.5px; }
+.callout-box li{ margin-bottom: 6px; }
+
+/* 章节标题 */
+h2{
+  font-family: var(--font-head);
+  font-size: clamp(22px, 3.2vw, 28px);
+  line-height: 1.35;
+  margin: 2.6em 0 0.9em;
+  padding-top: 0.6em;
+  border-top: 1px dashed var(--border-soft);
+  color: var(--text);
+  font-weight: 700;
+}
+h2:first-of-type{ border-top:0; padding-top:0; }
+h3{
+  font-family: var(--font-head);
+  font-size: clamp(18px, 2.4vw, 22px);
+  line-height: 1.4;
+  margin: 1.8em 0 0.6em;
+  color: var(--text);
+  font-weight: 650;
+}
+h4{ font-size: 16px; margin: 1.4em 0 0.4em; color: var(--text); font-weight: 650; }
+
+p{ margin: 0 0 1.35em; color: var(--text); }
+ul, ol{ margin: 0 0 1.4em 1.4em; padding:0; }
+li{ margin-bottom: 0.5em; }
+
+blockquote{
+  margin: 1.8em 0;
+  padding: 16px 22px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-quote);
+  color: var(--text);
+  font-style: italic;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+
+/* 表格排版 */
+.table-wrap{
+  overflow-x: auto;
+  margin: 1.8em 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+table{
+  width: 100%; border-collapse: collapse; font-size: 14px; text-align: left;
+}
+th, td{
+  padding: 12px 16px; border-bottom: 1px solid var(--border-soft);
+  vertical-align: top;
+}
+th{
+  background: var(--bg-card); font-weight: 650; color: var(--text);
+  border-bottom: 2px solid var(--border);
+}
+tr:last-child td{ border-bottom: 0; }
+tr:hover td{ background: var(--bg-card-hover); }
+
+/* SVG 架构图卡片 */
+.svg-card{
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 20px;
+  margin: 2em 0;
+  box-shadow: var(--shadow);
+}
+.svg-card-title{
+  font-size: 14px; font-weight: 700; color: var(--accent);
+  margin-bottom: 6px; display:flex; align-items:center; gap:8px;
+}
+.svg-card-desc{
+  font-size: 13px; color: var(--text-dim); margin-bottom: 14px; line-height: 1.5;
+}
+.svg-wrap{
+  width: 100%; overflow-x: auto; display:flex; justify-content: center;
+}
+.svg-wrap svg{
+  max-width: 100%; height: auto; display: block;
+}
+
+/* 交互沙盘容器 */
+.sandbox-box{
+  background: var(--bg-elev);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-lg);
+  padding: 24px;
+  margin: 2.6em 0;
+  box-shadow: var(--shadow);
+}
+.sandbox-head{
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 14px; margin-bottom: 18px;
+}
+.sandbox-badge{
+  font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+  font-weight: 700; color: var(--accent); background: var(--accent-soft);
+  padding: 3px 10px; border-radius: 999px; display:inline-block; margin-bottom: 6px;
+}
+.sandbox-title{
+  font-family: var(--font-head); font-size: 20px; margin: 0 0 6px; color: var(--text); font-weight: 700;
+}
+.sandbox-intro{ font-size: 13.5px; color: var(--text-mid); margin: 0; }
+
+.sandbox-toolbar{
+  display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.sandbox-btn{
+  background: var(--bg-card);
+  color: var(--text-mid);
+  border: 1px solid var(--border);
+  padding: 8px 14px;
+  border-radius: var(--r-sm);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all .16s ease;
+}
+.sandbox-btn:hover{
+  border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
+}
+.sandbox-btn.active{
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+
+.sandbox-grid{
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px; margin-top: 16px;
+}
+.sandbox-panel{
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  padding: 16px;
+}
+.sandbox-panel-title{
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-dim); margin-bottom: 10px; display:flex; justify-content: space-between;
+}
+.sandbox-text-out{
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.6;
+  white-space: pre-wrap; color: var(--text);
+  background: var(--bg-code); padding: 12px; border-radius: var(--r-sm);
+  border: 1px solid var(--border-soft);
+}
+
+/* 控件样式 */
+.ctrl-group{ margin-bottom: 14px; }
+.ctrl-label{ display:block; font-size: 12.5px; font-weight: 600; color: var(--text-mid); margin-bottom: 6px; }
+.ctrl-select, .ctrl-range{
+  width: 100%; padding: 8px 12px; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  color: var(--text); font-size: 13.5px; font-family: var(--font-body);
+}
+
+/* 页脚 */
+.doc-meta{
+  margin-top: 4em; padding-top: 2em; border-top: 1px solid var(--border);
+  font-size: 13px; color: var(--text-dim);
+}
+.doc-meta dl{ display:grid; grid-template-columns: 120px 1fr; gap: 8px 16px; margin:0; }
+.doc-meta dt{ font-weight: 650; color: var(--text-mid); }
+.doc-meta dd{ margin:0; color: var(--text-dim); }
+
+/* 回到顶部按钮 */
+#toTopBtn{
+  position: fixed; bottom: 20px; right: 20px; width: 40px; height: 40px;
+  border-radius: 50%; background: var(--bg-elev); color: var(--text);
+  border: 1px solid var(--border); box-shadow: var(--shadow);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; opacity: 0; pointer-events: none; transition: all .2s ease;
+  z-index: 55;
+}
+#toTopBtn.visible{ opacity: 1; pointer-events: auto; }
+#toTopBtn:hover{ border-color: var(--accent); color: var(--accent); }
+
+@media print{
+  .app-sidebar, #readbar, #toTopBtn, .nav-toggle-btn, .sb-tools, .sandbox-toolbar{ display:none !important; }
+  body:has(> .app-sidebar) > .app-main{ margin: 0 !important; max-width: 100% !important; padding: 0 !important; }
+  body{ background:#fff !important; color:#000 !important; }
+  .table-wrap, .svg-card, .sandbox-box{ box-shadow:none !important; border: 1px solid #ccc !important; }
+}
+</style>
+</head>
+<body>
+
+<div id="readbar"></div>
+
+<!-- 侧栏导航 -->
+<aside class="app-sidebar" id="sidebar">
+  <div class="sb-head">
+    <div class="sb-kicker">T:0 Architecture Whitepaper</div>
+    <div class="sb-title">AI 会计为什么总在猜？</div>
+    <div class="sb-tools">
+      <button class="sb-btn" id="aikeThemeBtn" type="button" aria-label="切换主题">浅色</button>
+      <button class="sb-btn" id="expandTocBtn" type="button" aria-label="返回顶部">顶部</button>
+    </div>
+  </div>
+  <nav class="toc" id="tocNav">
+    <div class="toc-label">目录导览</div>
+    <ul class="toc-list">
+      <li><a href="#s-overview">摘要与核心观点</a></li>
+      <li><a href="#s-ledger-flat">一、总账只记结局，扔了故事</a></li>
+      <li><a href="#s-faster-bookkeeper">二、行业的解法：更快的簿记员</a></li>
+      <li><a href="#s-palantir-ontology">三、Palantir 究竟搞明白了什么</a></li>
+      <li><a href="#s-accounting-nature">四、会计天生自带本体</a></li>
+      <li><a href="#s-connected-map">五、连接型会计地图</a></li>
+      <li class="sub"><a href="#s-map-objects">5.1 对象（Objects）与方言归一</a></li>
+      <li class="sub"><a href="#s-map-links">5.2 链接（Links）与双向可证核对</a></li>
+      <li class="sub"><a href="#s-map-actions">5.3 动作（Actions）与读写分离</a></li>
+      <li><a href="#s-agent-superpowers">六、地图上的 Agent 能做什么</a></li>
+      <li class="sub"><a href="#s-agent-variance">6.1 波动分析：从编故事到路径查询</a></li>
+      <li class="sub"><a href="#s-agent-reconcile">6.2 对账：带着预期核实，无需匹配</a></li>
+      <li class="sub"><a href="#s-agent-audit">6.3 审计：从抽样到全年全量遍历</a></li>
+      <li class="sub"><a href="#s-agent-close">6.4 关账：关账不再是名词，持续关好</a></li>
+      <li class="sub"><a href="#s-agent-whatif">6.5 假设推演：在真实分支重放世界</a></li>
+      <li><a href="#s-three-lessons">七、金融落地的三条核心教训</a></li>
+      <li><a href="#s-conclusion">八、结语：模型带来流利，地图带来真实</a></li>
+      <li><a href="#s-appendix-trace">附录：交互图表文字版与案例全明细</a></li>
+      <li><a href="#s-interactive-lab">实证交互沙盘：全链路穿透实验台</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<button class="nav-toggle-btn" id="tocToggleBtn" type="button" aria-label="展开目录">目录</button>
+
+<!-- 主文档容器 -->
+<main class="app-main" id="main">
+
+  <!-- Hero 区域 -->
+  <header class="hero" id="s-overview">
+    <div class="hero-tag">Airwallex / T:0 架构长文深度消化 · 财务智能体本体重构白皮书</div>
+    <h1>AI 会计为什么总在猜？因为总账只记结论，丢了来龙去脉</h1>
+    <p class="hero-sub">给总账接上再快的 Agent，它也只能猜。复式记账自带能用算术核对的「本体」，把被软件丢掉的链接存回来，AI 才能指着证据回答「为什么」。</p>
+    
+    <div class="doc-meta-card">
+      <div class="doc-meta-item">
+        <strong>原作者</strong>
+        <span>Erik（@eya0，Airwallex 旗下 T:0 工程师）</span>
+      </div>
+      <div class="doc-meta-item">
+        <strong>基准来源</strong>
+        <span><a href="https://x.com/eya0/status/2097801524579864803" target="_blank" rel="noopener">《Why Every AI Accountant Fails, and Why Palantir Knew First》</a></span>
+      </div>
+      <div class="doc-meta-item">
+        <strong>核心范式</strong>
+        <span>复式记账本体 · 确定性规则引擎 · AI 读写分离 · 连接型会计地图</span>
+      </div>
+      <div class="doc-meta-item">
+        <strong>交付基准</strong>
+        <span>2026-09-14 · 单文件全自包含架构</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- 核心观点摘要 Callout -->
+  <div class="callout-box">
+    <h4>核心导读与架构提炼</h4>
+    <ul>
+      <li><strong>总账每一行都是结论</strong>：一笔 4,120 美元的订阅在总账里散成 7 行、5 个科目，来龙去脉留在支付处理商、计费系统和银行里。T:0 说，他们把这样一份总账交给大模型，问三遍「递延收入为什么变了」，得到三个互相矛盾的答案。</li>
+      <li><strong>借用 Palantir 框架</strong>：作者借 Palantir 的「对象 / 链接 / 动作」框架指出：会计的对象全行业通用，链接还能用算术核对（付款 = 发票余额，打款 = 付款合计 − 手续费合计，处处借等于贷）；证明不了的就不连，把缺口报出来。</li>
+      <li><strong>T:0 的架构解法</strong>：数据进来时先把各系统的方言归一成标准对象（比如 deposit 在三个系统里是三件事），每条分录由规则生成并挂在对象上；AI 可以读遍整张图、提议规则，但不直接记账，数字只来自确定性引擎。</li>
+      <li><strong>财务业务能力重构</strong>：T:0 称波动分析、对账、审计、关账在这张图上已变成沿链接的查询和确认，用上它的财务团队关账时间缩短 90%，并列出 Reddit、GoodRx 等客户。这些数字和客户名只见于作者自述；账本分支推演还没做到。</li>
+    </ul>
+  </div>
+
+  <p>过去两年，市场上涌现了一批 AI 会计产品，发布页上的承诺大同小异：Agent 嵌进账本、对账从几天缩到几分钟、自动起草波动说明（解释科目余额为什么变了）、「几小时关账，不是几周」、九成多的手工活被自动化。</p>
+
+  <p>近日跨境支付公司 Airwallex（空中云汇）旗下的财务技术子公司 T:0 结束私测，面向美国初创企业开放。T:0 的工程团队成员 <a href="https://x.com/eya0" target="_blank" rel="noopener">Erik（@eya0）</a>在 X 上发表了一篇长文<a href="https://x.com/eya0/status/2097801524579864803" target="_blank" rel="noopener">《Why Every AI Accountant Fails, and Why Palantir Knew First》</a>。</p>
+
+  <p><strong>现有的 AI 会计产品回答不了“为什么”，问题不在模型能力，而在它们脚下那张被软件拍扁的总账。会计在五百年前诞生时就自带了一套本体（复式记账），错在多数软件选择无视它，在过账那一刻把链接丢掉，只剩一张结论清单。</strong></p>
+
+  <p>这是 T:0 团队写的产品与架构文章，客户案例和效果数字是厂商自己的说法。作者借 Palantir（一家给政府和大企业做数据平台的美国软件公司）的「对象 / 链接 / 动作」框架，说明为什么先修好账本底座，AI 才能在财务上给出可信的答案。</p>
+
+  <!-- 第一章 -->
+  <section id="s-ledger-flat">
+    <h2>总账只记“结局”，却把“故事”扔了</h2>
+    <p>要理解这个判断，先得看懂会计软件底层的总账（General Ledger，简称 GL）究竟长什么样。</p>
+    <p>复式记账的基本规则其实很简单：每笔业务至少记两边，一边借、一边贷，两边金额必须相等。无论打开哪套现代企业资源计划系统（ERP，如 SAP、NetSuite 或 QuickBooks），总账的本质都是一张扁平的流水表：日期、科目、借、贷、备注，动辄几百万行。</p>
+    <p>每一行分录都是一个故事的结局。至于故事的前因后果与交易链路，总账里全都没有。</p>
+    <p>Erik 在文章中举了一个具体的年度订阅收费案例：一笔商业事件，在总账里变成了 7 行互相孤立的分录，前后一周、横跨三个日期、分散在五个科目里：应收账款、递延收入、清算账户、手续费、银行存款。支出方向的每一块钱也一样，从公司卡扣款到从两个账户出资的工资发放。图 1 右边只画了这一条收入线，完整的地图覆盖整个总账：账单、工资、公司卡、转账、股权。</p>
+
+    <!-- 图 1 矢量图表与对比展示 -->
+    <div class="svg-card" id="fig-1">
+      <div class="svg-card-title">图 1：同一笔订阅在总账里和在会计地图里（架构高保真对比）</div>
+      <div class="svg-card-desc">左边是总账里孤立的 7 行流水，时间断裂、科目分散、丢失因果关系；右边是连接型地图中从订单到银行流水的完整有向图拓扑，每条线自带算术证明。</div>
+      <div class="svg-wrap">
+        <svg viewBox="0 0 1060 440" width="1060" height="440" xmlns="http://www.w3.org/2000/svg">
+          <!-- 背景网格与左右分区 -->
+          <rect x="10" y="10" width="480" height="420" rx="12" fill="var(--svg-bg)" stroke="var(--svg-border)" stroke-width="1.5" />
+          <rect x="520" y="10" width="530" height="420" rx="12" fill="var(--svg-bg)" stroke="var(--svg-border)" stroke-width="1.5" />
+          
+          <!-- 左侧：传统扁平总账 (General Ledger) -->
+          <text x="35" y="42" fill="var(--rose)" font-size="15" font-weight="700">【传统扁平总账】只有孤立结果，故事被碾平</text>
+          <text x="35" y="62" fill="var(--svg-dim)" font-size="12">7 行分录 · 跨越 3 个日期 · 分散在 5 个科目 · 上下文丢失</text>
+          
+          <!-- 表头 -->
+          <rect x="30" y="80" width="440" height="28" fill="var(--bg-elev)" rx="4" />
+          <text x="40" y="98" fill="var(--svg-text)" font-size="11" font-weight="700">日期</text>
+          <text x="105" y="98" fill="var(--svg-text)" font-size="11" font-weight="700">会计科目</text>
+          <text x="270" y="98" fill="var(--svg-text)" font-size="11" font-weight="700">借方 (DR)</text>
+          <text x="375" y="98" fill="var(--svg-text)" font-size="11" font-weight="700">贷方 (CR)</text>
+
+          <!-- 7行数据卡片 -->
+          <!-- 3/14 -->
+          <g transform="translate(30, 115)">
+            <rect x="0" y="0" width="440" height="24" fill="var(--bg-card)" />
+            <text x="10" y="16" fill="var(--svg-dim)" font-size="11">03-14</text>
+            <text x="75" y="16" fill="var(--svg-text)" font-size="11">应收账款 (AR)</text>
+            <text x="240" y="16" fill="var(--emerald)" font-size="11" font-weight="600">&#36;4,120.00</text>
+            <text x="345" y="16" fill="var(--svg-dim)" font-size="11">-</text>
+          </g>
+          <g transform="translate(30, 142)">
+            <rect x="0" y="0" width="440" height="24" fill="var(--bg-card)" />
+            <text x="10" y="16" fill="var(--svg-dim)" font-size="11">03-14</text>
+            <text x="75" y="16" fill="var(--svg-text)" font-size="11">递延收入 (Def Rev)</text>
+            <text x="240" y="16" fill="var(--svg-dim)" font-size="11">-</text>
+            <text x="345" y="16" fill="var(--accent)" font-size="11" font-weight="600">&#36;4,120.00</text>
+          </g>
+
+          <!-- 3/18 -->
+          <g transform="translate(30, 175)">
+            <rect x="0" y="0" width="440" height="24" fill="var(--bg-card)" />
+            <text x="10" y="16" fill="var(--svg-dim)" font-size="11">03-18</text>
+            <text x="75" y="16" fill="var(--svg-text)" font-size="11">处理商清算账户</text>
+            <text x="240" y="16" fill="var(--emerald)" font-size="11" font-weight="600">&#36;4,120.00</text>
+            <text x="345" y="16" fill="var(--svg-dim)" font-size="11">-</text>
+          </g>
+          <g transform="translate(30, 202)">
+            <rect x="0" y="0" width="440" height="24" fill="var(--bg-card)" />
+            <text x="10" y="16" fill="var(--svg-dim)" font-size="11">03-18</text>
+            <text x="75" y="16" fill="var(--svg-text)" font-size="11">应收账款 (AR)</text>
+            <text x="240" y="16" fill="var(--svg-dim)" font-size="11">-</text>
+            <text x="345" y="16" fill="var(--accent)" font-size="11" font-weight="600">&#36;4,120.00</text>
+          </g>
+
+          <!-- 3/21 -->
+          <g transform="translate(30, 235)">
+            <rect x="0" y="0" width="440" height="24" fill="var(--bg-card)" />
+            <text x="10" y="16" fill="var(--svg-dim)" font-size="11">03-21</text>
+            <text x="75" y="16" fill="var(--svg-text)" font-size="11">银行存款 (Cash)</text>
+            <text x="240" y="16" fill="var(--emerald)" font-size="11" font-weight="600">&#36;3,996.40</text>
+            <text x="345" y="16" fill="var(--svg-dim)" font-size="11">-</text>
+          </g>
+          <g transform="translate(30, 262)">
+            <rect x="0" y="0" width="440" height="24" fill="var(--bg-card)" />
+            <text x="10" y="16" fill="var(--svg-dim)" font-size="11">03-21</text>
+            <text x="75" y="16" fill="var(--svg-text)" font-size="11">手续费支出 (Fees)</text>
+            <text x="240" y="16" fill="var(--emerald)" font-size="11" font-weight="600">&#36;123.60</text>
+            <text x="345" y="16" fill="var(--svg-dim)" font-size="11">-</text>
+          </g>
+          <g transform="translate(30, 289)">
+            <rect x="0" y="0" width="440" height="24" fill="var(--bg-card)" />
+            <text x="10" y="16" fill="var(--svg-dim)" font-size="11">03-21</text>
+            <text x="75" y="16" fill="var(--svg-text)" font-size="11">处理商清算账户</text>
+            <text x="240" y="16" fill="var(--svg-dim)" font-size="11">-</text>
+            <text x="345" y="16" fill="var(--accent)" font-size="11" font-weight="600">&#36;4,120.00</text>
+          </g>
+
+          <rect x="30" y="325" width="440" height="42" fill="var(--rose-soft)" rx="6" />
+          <text x="40" y="344" fill="var(--rose)" font-size="11.5" font-weight="700">总账缺陷：大模型三问“递延收入为什么变了”，得到三个互相矛盾的猜测</text>
+          <text x="40" y="360" fill="var(--svg-dim)" font-size="10.5">因为数据里只有数字结局，发票、付款、批处理扣款与银行流水的关系全被扔了</text>
+
+          <!-- 右侧：连接型会计地图 (Connected Map) -->
+          <text x="545" y="42" fill="var(--emerald)" font-size="15" font-weight="700">【连接型会计地图】保留故事脉络，数字皆能溯源</text>
+          <text x="545" y="62" fill="var(--svg-dim)" font-size="12">对象有类型 · 链接有算术证明 · 动作受规则严格驱动 · 可双向穿透遍历</text>
+
+          <!-- 节点 1: 订单/合同 -->
+          <rect x="545" y="90" width="130" height="52" rx="6" fill="var(--svg-node)" stroke="var(--svg-border-hi)" stroke-width="1.5" />
+          <text x="555" y="112" fill="var(--svg-text)" font-size="12" font-weight="700">订单 / 合同</text>
+          <text x="555" y="130" fill="var(--svg-dim)" font-size="10">Order #SUB-4120</text>
+
+          <!-- 箭头 1 -->
+          <path d="M 675 116 L 725 116" stroke="var(--svg-border-hi)" stroke-width="1.8" fill="none" />
+          <text x="680" y="108" fill="var(--accent)" font-size="9.5">开出发票</text>
+
+          <!-- 节点 2: 发票 -->
+          <rect x="730" y="90" width="140" height="52" rx="6" fill="var(--svg-node)" stroke="var(--svg-border)" stroke-width="1.5" />
+          <text x="740" y="112" fill="var(--svg-text)" font-size="12" font-weight="700">发票 Invoice</text>
+          <text x="740" y="130" fill="var(--accent)" font-size="10">借:应收 / 贷:递延 &#36;4,120</text>
+
+          <!-- 箭头 2 -->
+          <path d="M 870 116 L 910 116 L 910 170 L 610 170 L 610 200" stroke="var(--svg-border)" stroke-width="1.5" stroke-dasharray="3,3" fill="none" />
+          
+          <!-- 节点 3: 客户付款 -->
+          <rect x="545" y="200" width="135" height="56" rx="6" fill="var(--svg-node)" stroke="var(--svg-border)" stroke-width="1.5" />
+          <text x="555" y="222" fill="var(--svg-text)" font-size="12" font-weight="700">客户付款 Payment</text>
+          <text x="555" y="238" fill="var(--emerald)" font-size="10">核销发票 &#36;4,120.00</text>
+          <text x="555" y="250" fill="var(--svg-dim)" font-size="9.5">借:处理商清算 / 贷:应收</text>
+
+          <!-- 箭头 3 -->
+          <path d="M 680 228 L 735 228" stroke="var(--svg-border-hi)" stroke-width="1.8" fill="none" />
+          <text x="682" y="220" fill="var(--accent)" font-size="9.5">打包结算</text>
+
+          <!-- 节点 4: 处理商打款 (Payout) -->
+          <rect x="740" y="195" width="155" height="66" rx="6" fill="var(--svg-clearing)" stroke="var(--amber)" stroke-width="1.5" />
+          <text x="750" y="217" fill="var(--amber)" font-size="12" font-weight="700">处理商打款 Payout</text>
+          <text x="750" y="233" fill="var(--svg-text)" font-size="10">合并 41 笔付款</text>
+          <text x="750" y="247" fill="var(--svg-dim)" font-size="9.5">扣手续费 &#36;123.60 净额 &#36;3,996.40</text>
+
+          <!-- 箭头 4 -->
+          <path d="M 895 228 L 935 228 L 935 300" stroke="var(--svg-border-hi)" stroke-width="1.8" fill="none" />
+          <text x="900" y="220" fill="var(--accent)" font-size="9.5">银行对账核实</text>
+
+          <!-- 节点 5: 银行流水 -->
+          <rect x="850" y="300" width="170" height="54" rx="6" fill="var(--svg-node)" stroke="var(--emerald)" stroke-width="1.5" />
+          <text x="860" y="322" fill="var(--emerald)" font-size="12" font-weight="700">银行交易 Bank Tx</text>
+          <text x="860" y="338" fill="var(--svg-text)" font-size="10">到账净额: &#36;3,996.40</text>
+          <text x="860" y="350" fill="var(--svg-dim)" font-size="9.5">对账锚点 · 确认到账</text>
+
+          <!-- 底部审计穿透特性 -->
+          <rect x="545" y="375" width="480" height="42" fill="var(--emerald-soft)" rx="6" />
+          <text x="555" y="394" fill="var(--emerald)" font-size="11.5" font-weight="700">双向确定性穿透：人和 Agent 都能顺着链条双向漫游</text>
+          <text x="555" y="410" fill="var(--svg-dim)" font-size="10.5">从银行入账逆向拆解 41 笔打款，精确定位 &#36;4,120 合同与发票，答案附带全部证据链</text>
+        </svg>
+      </div>
+    </div>
+
+    <p>故事的其余部分散落在账本之外：支付处理商、计费系统、银行流水、数据仓库。这就是月末关账存在的原因——一队人从结论倒推故事；审计则是第二队人重做同样的事，风险更高、掌握的背景更少。</p>
+    <p>现在，把前沿大模型接入到这套扁平的总账上，向它提出 CFO 真正关心的问题：</p>
+    <blockquote>“为什么这个月递延收入变了？”</blockquote>
+    <p>T:0 团队说他们做过这个测试——导出一份总账交给前沿大模型，同一个问题问三遍，得到三个自信、写得漂亮、却彼此矛盾的答案。这不是模型能力不够，而是答案根本不在数据里。总账记录了结论，却扔掉了连接。要求 AI 仅凭一张扁平总账去解释业务，就像让人光凭电影片尾的演职员名单去推导完整剧情。你能得到一段流利、符合语法、看似合理的文字，但那只是一个猜测。</p>
+  </section>
+
+  <!-- 第二章 -->
+  <section id="s-faster-bookkeeper">
+    <h2>行业的解法：更快的簿记员</h2>
+    <p>开头列的这些产品，背后的工程是真的，对账、起草、关账确实都变快了。</p>
+    <p>T:0 团队的真实反应是：那又怎样？</p>
+    <p>每一款这类产品都接受了总账的现状——一张扁平的结论清单，外加一堆互不通话的源系统，然后在上面放一个极快的 Agent。Agent 做数据考古确实更快了：匹配更快、起草更快、关账更快。但它没有改变什么是可知的。</p>
+    <p>如果数据模型本身回答不了“为什么”，坐在上面的 Agent 也回答不了。它只能猜得更流利。而一个说得流利的猜测，恰恰是 CFO、审计师和董事会永远不能接受的东西。</p>
+    <p><strong>一个更快的簿记员依然只是簿记员。天花板不在模型，而在底座。</strong></p>
+    <p>要让 AI 在财务里给出可信的答案，先得修好它脚下的底座，而修底座正是 Palantir 出名的原因。</p>
+  </section>
+
+  <!-- 第三章 -->
+  <section id="s-palantir-ontology">
+    <h2>Palantir 究竟搞明白了什么</h2>
+    <p>Ontology（本体）这个词原本属于哲学系和数据库教科书，现在 CEO 们也会在财报电话会上讨论它。在 Palantir 的演示里，逻辑始终如一：AI 并不是因为模型弱而失败，而是因为脚下没有坚实的东西可站。因此，在让 AI 接触决策之前，需要先建立组织的数字孪生——存在的对象、对象之间的链接、改变对象的动作，让 AI 在这个模型上运作，而不是面对一堆互不相连的原始表格。</p>
+    <p>剥离掉神秘感，本体的概念其实很简单，只有三个基本构件：</p>
+    <ul>
+      <li><strong>对象（Objects）</strong>：业务里的名词。一架飞机、一次货运、一张采购订单。它们不是表格里的一行，而是带有属性和生命周期的实体。</li>
+      <li><strong>链接（Links）</strong>：名词之间的关系。这次货运履约了那张订单；这个零件属于那架飞机。</li>
+      <li><strong>动作（Actions）</strong>：受控的动词。明确定义、可审计的操作，只有它们被允许改变对象的状态，并写回源系统。</li>
+    </ul>
+    <p>作者认为，这正是 Palantir 做成大生意的关键：模型在有类型的对象和真实关系上推理，给出的答案有现实依据；在原始表格上推理，只能产出看着合理的文字。模型正在商品化，真正的护城河是模型脚下的语义层。</p>
+    <p>但 Palantir 生意里的难点在于：每个客户的世界都不一样。飞机不是货运，也不是病人。Palantir 必须派工程师针对每个客户、每个对象从零开始建模，因为在日常运营中，本体是高度定制的（Bespoke），必须逐个客户做出选择。</p>
+  </section>
+
+  <!-- 第四章 -->
+  <section id="s-accounting-nature">
+    <h2>会计天生自带本体</h2>
+    <p>1494 年，卢卡·帕乔利（Luca Pacioli）出版了《算术、几何、比及比例概要》，记录了当时威尼斯商人使用的簿记方法。用现代眼光看，他写下的其实是一套数据结构定义（Schema）：每笔经济事件都被记录为特定类型的分录，借贷必须平衡，分录连向结算的事件，并在交易之间串联。复式记账不只是一种记账惯例，它是一套本体，甚至可能是生产环境中运行时间最久的一套。</p>
+    <p>与 Palantir 的客户不同，会计的本体还是完全标准的。T:0 调研了从 QuickBooks 到 SAP 等 7 家主流 ERP 的对象模型，发现每家系统里都出现了同样的三十多个对象：发票（Invoice）、贷项通知单（Credit Memo）、付款（Payment）、退款（Refund）、预付款（Prepayment）、账单（Bill）、打款（Payout）、工资发放（Payroll Run）等。这些厂商并没有互相抄袭，对象之所以一致，是因为它们对应的是真实的商业事件，而商业在任何地方长得都差不多。名词早在几百年前就确定了。</p>
+    
+    <div class="callout-box">
+      <h4>核心分水岭：会计里的链接是可以证明的（Provable Links）</h4>
+      <p>还有一项特性将会计与 Palantir 曾建模过的所有领域区分开来：<strong>在会计里，链接是可以证明的。</strong></p>
+      <p>在日常运营的本体中，“这批货运与那个供应商相关”是一个建模决定——有用，但属于建模者的断言。而在会计里，一笔退款确凿对应某一笔付款，一笔付款确凿核销某张特定发票。整张图处处都要满足借贷相等的铁律。这是整张图自带的完整性校验，比后人发明“数据校验”这个词早了五百年。其他领域建好本体只能寄希望于它是对的；会计则自带核对机制。对 AI 来说，这种区别至关重要：在靠断言建起来的本体上，你只能相信模型的依据是对的；而在可证的本体上，你可以核对。</p>
+    </div>
+
+    <p>这也让当下会计软件的现状显得尤为奇特：本体就在眼前，古老、标准且可用算术验证，却没有系统真正建立在它之上。ERP 把对象存了下来，却在过账那一刻把链接丢掉。分录就是故事死掉的地方。</p>
+    <p>因此，T:0 换了一种相反的方式来构建系统。</p>
+  </section>
+
+  <!-- 第五章 -->
+  <section id="s-connected-map">
+    <h2>连接型会计地图</h2>
+    <p>T:0 的出发点只有一个：保留故事。财务报表上的每一个数字，都应该是一条可以反向回溯的路径的终点，穿过每一个对象和每一条链接，一直追溯到最初触发它的商业事件。T:0 将其称为“连接型会计地图”（Connected Accounting Map）。</p>
+    <p>作者在文中称，这套地图已在生产环境中运行，每年为 Reddit、GoodRx、Vimeo 和 MasterClass 等公司的财务团队生成数十亿条会计记录。</p>
+    <blockquote>
+      <strong>说明</strong>：这些客户名和「每年数十亿条记录」只出现在作者这篇文章里，Airwallex 新闻稿、T:0 CEO 的发布博客和官网都没有提到，属于公司自述；T:0 公开发布材料写的目标客户是美国初创公司。
+    </blockquote>
+    <p>这套地图包含三个部分：</p>
+
+    <!-- 5.1 对象 -->
+    <h3 id="s-map-objects">对象（Objects）</h3>
+    <p>进入系统的每一笔经济事件，都会变成系统能够理解的标准对象：发票、付款、退款、打款、账单、工资发放、银行交易。不管从哪个源系统进来，同一类事件都是同一种形状；记录知道自己是什么、涉及谁、处在生命周期哪一步。</p>
+    <p>这听起来理所当然，做起来却极其繁重。本体虽然标准，但现实系统里的数据并不统一。最典型的例子是“deposit”这个词：</p>
+    <ul>
+      <li><strong>QuickBooks</strong>：指正准备送往银行的一批客户付款，T:0 解析成「一批客户付款」。</li>
+      <li><strong>NetSuite</strong>：指还没开票、客户先付的款项（预付款），T:0 解析成「等待对应发票的预付款」。</li>
+      <li><strong>商业银行对账单</strong>：指任何进账的现金，T:0 解析成「等待确认的银行交易」。</li>
+    </ul>
+    <p>一个词代表三件毫无关联的事件，对应三种不同的会计分录。如果把“deposit”读错，图就会把客户的预付款连到别人的银行流水上，下游每个结论都会跟着悄悄出错，而且没人发现。这也是这项工作必须在数据摄入时、一个源系统一个源系统地完成，在任何 AI 出场之前做好的原因；地图无法在事后套在既有系统上。</p>
+
+    <!-- 5.2 链接 -->
+    <h3 id="s-map-links">链接（Links）</h3>
+    <p>每个对象都将关系作为数据来保存。这笔付款核销了那张发票；这次处理商结算打款扫走了这 41 笔付款，并扣掉 41 笔手续费；这笔退款冲销了某笔特定扣款，而扣款又对应着特定合同。</p>
+    <p>在账本支出侧也是完全相同的逻辑：账单付款核销供应商账单、转账为工资发放出资、银行交易确认钱真的到了。</p>
+
+    <!-- 图 2 资金流入与资金流出对应结构 -->
+    <div class="svg-card" id="fig-2">
+      <div class="svg-card-title">图 2：资金流入与资金流出的对应结构与算术核对铁律</div>
+      <div class="svg-card-desc">收钱（Money In）和付钱（Money Out）两条链形状完全对称，钱在路上经由清算账户中转归零，每条连线都能用算术双向核对。</div>
+      <div class="svg-wrap">
+        <svg viewBox="0 0 1060 460" width="1060" height="460" xmlns="http://www.w3.org/2000/svg">
+          <!-- 上层：资金流入 Money In -->
+          <rect x="15" y="15" width="1030" height="190" rx="10" fill="var(--svg-bg)" stroke="var(--emerald)" stroke-width="1.2" stroke-dasharray="6,4" />
+          <text x="35" y="42" fill="var(--emerald)" font-size="14" font-weight="700">【资金流入链 · Money In】收入一侧</text>
+
+          <!-- 步骤节点 -->
+          <g transform="translate(40, 65)">
+            <rect x="0" y="0" width="140" height="60" rx="6" fill="var(--svg-node)" stroke="var(--svg-border)" />
+            <text x="12" y="24" fill="var(--svg-text)" font-size="12" font-weight="700">客户 / 合同</text>
+            <text x="12" y="45" fill="var(--svg-dim)" font-size="10.5">商业约定生效</text>
+          </g>
+
+          <path d="M 180 95 L 230 95" stroke="var(--emerald)" stroke-width="2" fill="none" />
+
+          <g transform="translate(230, 65)">
+            <rect x="0" y="0" width="160" height="60" rx="6" fill="var(--svg-node)" stroke="var(--svg-border)" />
+            <text x="12" y="24" fill="var(--svg-text)" font-size="12" font-weight="700">发票行 (Invoice)</text>
+            <text x="12" y="45" fill="var(--accent)" font-size="10.5">借:应收 / 贷:递延</text>
+          </g>
+
+          <path d="M 390 95 L 440 95" stroke="var(--emerald)" stroke-width="2" fill="none" />
+
+          <g transform="translate(440, 65)">
+            <rect x="0" y="0" width="170" height="60" rx="6" fill="var(--svg-node)" stroke="var(--svg-border)" />
+            <text x="12" y="24" fill="var(--svg-text)" font-size="12" font-weight="700">客户付款 (Payment)</text>
+            <text x="12" y="45" fill="var(--svg-dim)" font-size="10.5">借:清算 / 贷:应收</text>
+          </g>
+
+          <path d="M 610 95 L 660 95" stroke="var(--emerald)" stroke-width="2" fill="none" />
+
+          <g transform="translate(660, 65)">
+            <rect x="0" y="0" width="170" height="60" rx="6" fill="var(--svg-clearing)" stroke="var(--amber)" stroke-width="1.5" />
+            <text x="12" y="24" fill="var(--amber)" font-size="12" font-weight="700">处理商打款 (Payout)</text>
+            <text x="12" y="45" fill="var(--svg-dim)" font-size="10.5">借:银行,借:手续费/贷:清算</text>
+          </g>
+
+          <path d="M 830 95 L 880 95" stroke="var(--emerald)" stroke-width="2" fill="none" />
+
+          <g transform="translate(880, 65)">
+            <rect x="0" y="0" width="140" height="60" rx="6" fill="var(--svg-node)" stroke="var(--emerald)" stroke-width="1.5" />
+            <text x="12" y="24" fill="var(--emerald)" font-size="12" font-weight="700">银行交易入账</text>
+            <text x="12" y="45" fill="var(--svg-dim)" font-size="10.5">结算净额到账确认</text>
+          </g>
+
+          <text x="50" y="165" fill="var(--svg-text)" font-size="11" font-weight="600">核对铁律：</text>
+          <text x="120" y="165" fill="var(--emerald)" font-size="11">① 客户付款 = 发票未付余额</text>
+          <text x="360" y="165" fill="var(--amber)" font-size="11">② 打款结算 = 付款合计 − 手续费合计</text>
+          <text x="680" y="165" fill="var(--cyan)" font-size="11">③ 清算账户借贷一进一出归零 · 借贷恒等</text>
+
+          <!-- 下层：资金流出 Money Out -->
+          <rect x="15" y="225" width="1030" height="190" rx="10" fill="var(--svg-bg)" stroke="var(--rose)" stroke-width="1.2" stroke-dasharray="6,4" />
+          <text x="35" y="252" fill="var(--rose)" font-size="14" font-weight="700">【资金流出链 · Money Out】支出一侧（完全对偶）</text>
+
+          <!-- 步骤节点 -->
+          <g transform="translate(40, 275)">
+            <rect x="0" y="0" width="140" height="60" rx="6" fill="var(--svg-node)" stroke="var(--svg-border)" />
+            <text x="12" y="24" fill="var(--svg-text)" font-size="12" font-weight="700">供应商 / 合同</text>
+            <text x="12" y="45" fill="var(--svg-dim)" font-size="10.5">采购发生</text>
+          </g>
+
+          <path d="M 180 305 L 230 305" stroke="var(--rose)" stroke-width="2" fill="none" />
+
+          <g transform="translate(230, 275)">
+            <rect x="0" y="0" width="160" height="60" rx="6" fill="var(--svg-node)" stroke="var(--svg-border)" />
+            <text x="12" y="24" fill="var(--svg-text)" font-size="12" font-weight="700">账单行 (Bill Line)</text>
+            <text x="12" y="45" fill="var(--rose)" font-size="10.5">借:费用 / 贷:应付账款</text>
+          </g>
+
+          <path d="M 390 305 L 440 305" stroke="var(--rose)" stroke-width="2" fill="none" />
+
+          <g transform="translate(440, 275)">
+            <rect x="0" y="0" width="170" height="60" rx="6" fill="var(--svg-node)" stroke="var(--svg-border)" />
+            <text x="12" y="24" fill="var(--svg-text)" font-size="12" font-weight="700">账单付款 (Bill Pay)</text>
+            <text x="12" y="45" fill="var(--svg-dim)" font-size="10.5">借:应付 / 贷:付款清算</text>
+          </g>
+
+          <path d="M 610 305 L 660 305" stroke="var(--rose)" stroke-width="2" fill="none" />
+
+          <g transform="translate(660, 275)">
+            <rect x="0" y="0" width="170" height="60" rx="6" fill="var(--svg-clearing)" stroke="var(--amber)" stroke-width="1.5" />
+            <text x="12" y="24" fill="var(--amber)" font-size="12" font-weight="700">付款流出 (Payout)</text>
+            <text x="12" y="45" fill="var(--svg-dim)" font-size="10.5">借:付款清算 / 贷:银行</text>
+          </g>
+
+          <path d="M 830 305 L 880 305" stroke="var(--rose)" stroke-width="2" fill="none" />
+
+          <g transform="translate(880, 275)">
+            <rect x="0" y="0" width="140" height="60" rx="6" fill="var(--svg-node)" stroke="var(--rose)" stroke-width="1.5" />
+            <text x="12" y="24" fill="var(--rose)" font-size="12" font-weight="700">银行交易扣款</text>
+            <text x="12" y="45" fill="var(--svg-dim)" font-size="10.5">确认资金离境扣减</text>
+          </g>
+
+          <text x="50" y="375" fill="var(--svg-text)" font-size="11" font-weight="600">核对铁律：</text>
+          <text x="120" y="375" fill="var(--rose)" font-size="11">① 账单付款 = 账单总额</text>
+          <text x="360" y="375" fill="var(--amber)" font-size="11">② 银行实际扣款 = 付款流出净额</text>
+          <text x="680" y="375" fill="var(--cyan)" font-size="11">③ 适用于工资、公司卡扣款、报销与内部调拨</text>
+
+          <text x="360" y="435" fill="var(--svg-dim)" font-size="11">双向汇总检验：两侧最后都必须满足银行到账 = 结算净额，且整张图处处借方等于贷方。</text>
+        </svg>
+      </div>
+    </div>
+
+    <p>图 2 下面一行是资金流出，结构和收入一侧一样，从供应商和账单开始，最后落到银行交易，中间三步的分录是：</p>
+    <ul>
+      <li><strong>账单行</strong>：借 费用，贷 应付账款</li>
+      <li><strong>账单付款</strong>：借 应付账款，贷 账单付款清算</li>
+      <li><strong>付款流出</strong>：借 账单付款清算，贷 银行</li>
+    </ul>
+    <p>「账单付款清算」和前面的处理商清算一样，是钱在路上时用的中转科目，付出去时记进、银行扣款时转出，正常一进一出归零。同样的形状还出现在工资、公司卡扣款、报销和内部转账里。</p>
+    <p>图底部列出了每条连线怎么核对：收入一侧，付款 = 发票余额，打款 = 付款合计 − 手续费合计；支出一侧，账单付款 = 账单总额；两侧最后都要满足银行到账 = 结算净额，而且处处借等于贷。</p>
+    <p>回到 3 月那笔 4,120 美元的订阅案例：在 T:0 里，它不再是 7 行分散的分录，而是一条完整路径：合同 → 发票 → 客户付款 → 打款 → 银行流水，人和机器都能顺着它双向走（图 1 右侧起点画的是订单 Order）。这笔付款的 123.60 美元手续费挂在打款上，每条分录仍连着生成它的对象。反过来走也行：从银行里那笔入账出发，先拆出这次打款包含的 41 笔付款，找到这笔 4,120 美元的客户付款，再追到发票和合同。</p>
+    <blockquote>
+      <strong>不可证则不连</strong>：会计对链接的要求是：证明不了就不连。如果打款金额对不上，或者付款找不到发票，地图不会去猜，而是记录下缺口并明确提示。在财务领域，一个诚实的缺口远比一个貌似合理的连接更有价值。
+    </blockquote>
+
+    <!-- 5.3 动作 -->
+    <h3 id="s-map-actions">动作（Actions）与读写严格分离</h3>
+    <p>对象与链接描述世界，过账规则改变世界。T:0 里的每一笔分录都来自规则：当这类对象在特定条件下出现时，查看其链接的对象，并记下这笔分录。过账时不再临场判断，没有“通常这样”。同样的事件输入，每次输出的账目完全一致。</p>
+    <p>这并不等于会计判断消失了，而是判断挪到了它该在的地方：由人认真做一次，写成人人都能读的规则，而不是每月在上千笔交易里看不见地反复重做。至于 AI 如何改变判断本身，原作者表示会另写文章讨论。</p>
+    
+    <div class="callout-box">
+      <h4>核心准则：读写严格分离（Read/Write Segregation）</h4>
+      <ul>
+        <li><strong>读取侧</strong>：AI 可以自由探索整张地图，回答提问、起草报告、调查异常、解释变动，给出的每个结论都有据可查，带着遍历路径。</li>
+        <li><strong>写入侧</strong>：AI 只负责设计，绝对不执行（<strong>The AI designs, it never executes</strong>）。它可以提议过账规则、建议新供应商支出的归类、草拟落实政策的工作流。但每一项提议都必须经过人工审核，转化为规则，交给确定性引擎执行。AI 生成提议，不生成数字；数字只能来自算术。</li>
+      </ul>
+    </div>
+
+    <!-- 图 3 Palantir 运营本体与 T:0 会计地图逐项对照 -->
+    <div class="svg-card" id="fig-3">
+      <div class="svg-card-title">图 3：Palantir 运营本体与 T:0 会计地图全维度对照矩阵</div>
+      <div class="svg-card-desc">对比本体论在通用业务运营与专业财务会计中的根本分野：会计本体不仅全行业标准化，且天生自带五百年前就确立的算术证明闭环。</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:16%;">对比维度</th>
+              <th style="width:42%;">Palantir 运营本体（Operations Ontology）</th>
+              <th style="width:42%;">T:0 连接型会计地图（Accounting Map）</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>1. 对象 (Objects)</strong></td>
+              <td>高度定制（Bespoke）：飞机、零件、货运、病患。每个客户世界完全不同，需驻场工程师逐个从零建模。</td>
+              <td><strong>全行业通用标准</strong>：发票、账单、付款、打款等 30 余个核心对象。自 1494 年起名词即已确定，各 ERP 仅为方言差异。</td>
+            </tr>
+            <tr>
+              <td><strong>2. 链接 (Links)</strong></td>
+              <td>主观断言（Subjective Assertions）：“这批货运归属该供应商”为建模者设定的关系，只能假设其正确，外部无从核验。</td>
+              <td><strong>数学可证明（Mathematically Provable）</strong>：付款确凿核销发票，打款确凿汇聚交易。处处满足借贷相等铁律，无法证明则拒绝连接。</td>
+            </tr>
+            <tr>
+              <td><strong>3. 动作 (Actions)</strong></td>
+              <td>受控动词操作：明确定义动作，允许改变对象状态并直接写回源系统。</td>
+              <td><strong>确定性规则引擎</strong>：分录由人审定的代码规则生成。<strong>AI 只提议规则、绝不执行记账</strong>；数字纯靠算术引擎生成。</td>
+            </tr>
+            <tr>
+              <td><strong>4. 校验机制</strong></td>
+              <td>启发式校验：靠业务规则脚本或人工抽查维持数据一致性。</td>
+              <td><strong>内生自洽性</strong>：复式记账自带完整性自检，两端平衡（借方 ≡ 贷方），清算账户强行归零。</td>
+            </tr>
+            <tr>
+              <td><strong>5. 实施边际成本</strong></td>
+              <td>极高：每个大客户需派出 Forward Deployed Engineer 长期常驻定制。</td>
+              <td><strong>低边际复用</strong>：只需在数据摄入侧做好 7 大 ERP 与支付网关的方言映射，核心对象模型全局复用。</td>
+            </tr>
+            <tr>
+              <td><strong>6. AI 的职责与信任</strong></td>
+              <td>在有类型的对象与关系上推理，产出决策建议；信任依赖建模团队的权威。</td>
+              <td><strong>读写分离与路径查验</strong>：AI 漫游整张图出示证据链；信任不靠语言流利，靠每步可沿链接被确定性核对。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 第六章 -->
+  <section id="s-agent-superpowers">
+    <h2>地图上的 Agent 能做什么</h2>
+    <p>清单上的 Agent 只能给昨天的流程提速；地图上的 Agent 能做老流程做不到的事，而且按作者的说法，可以无人盯着做，因为它说的每句话都能拿它走过的图去核对。正是地图对 Agent 的约束，让人敢把真正的责任交给它（需要指出的是，这种独立运作仅限于读取侧的调查和核对，写入账本依然必须经过人审定的规则）。作者说，下面五项里前四项是 T:0 的 AI 现在的工作方式，第五项是下一步方向。先一眼看完：</p>
+    <ul>
+      <li><strong>波动分析</strong>：以前看着两个余额的差编故事；在地图上沿连线查出背后具体的合同和账单。</li>
+      <li><strong>对账</strong>：以前把总账和银行流水一笔笔配对；在地图上拿图里已有的预期去核实。</li>
+      <li><strong>审计</strong>：以前人工抽样再推断；在地图上全年全量遍历。</li>
+      <li><strong>关账</strong>：以前月底集中拉平；在地图上一直处于关好账的状态。</li>
+      <li><strong>假设推演</strong>：在真实账本的分支上算新条款的影响。还没做到。</li>
+    </ul>
+
+    <!-- 6.1 波动分析 -->
+    <h3 id="s-agent-variance">波动分析：“为什么”变成了查询，不再是命题作文</h3>
+    <p>今天的 AI 波动分析（比较两期科目余额并解释变化）大多是根据叙事去猜：模型看着两个余额的差额，写一个关于差额的故事。</p>
+    <p>在地图上，问 T:0 为什么递延收入变了，它不会去编故事，而是沿着连线遍历。比如它会给出这样的结果：214 份合同按期履约确认收入，12 份发生了变更，3 笔退款冲销了前期的确认。在支出侧也一样，问“为什么云成本涨了 40%”，它会直接拆到背后具体的供应商账单和卡交易，而不是给出一篇看着合理的段落。AI 追踪的是以数据形式存在的链条，拿出的结论都附带证据，因为证据就是它走过的路径。</p>
+
+    <!-- 6.2 对账 -->
+    <h3 id="s-agent-reconcile">对账：不再需要匹配</h3>
+    <p>银行对账之所以存在，是因为总账和银行就像两个互不相识的陌生人，必须有人居中介绍。“银行对账快 90%”是这波产品最爱用的宣传数字。</p>
+    <p>但在 T:0 里，这种介绍早就完成了。一笔处理商结算打款、一笔账单付款、一次工资出资，每个节点都会预告银行里该出现的一笔流水，精确到金额、账户和时间窗口。3 月那笔打款在银行入账之前，就已经说明了会进来多少钱，其中属于这笔订阅的份额是 3,996.40 美元。银行流水进入时，是拿着图里已有的预期去核实，而不是重新匹配。剩下的少数真正例外，由 Agent 带着完整上下文逐个查：哪条链接断了、图预期的是什么、实际来了什么。匹配得更快只是功能，不再需要匹配才是架构。</p>
+
+    <!-- 6.3 审计 -->
+    <h3 id="s-agent-audit">审计：从抽样变成全量遍历</h3>
+    <p>审计之所以抽样，是因为手工回溯任何一个数字的源头成本太高，不可能逐笔核查，只能抽样：比如人工抽 60 笔，再推断总体。</p>
+    <p>在 T:0 里，每个数字都自带来历，验证变成了遍历。银行对账单上任意一笔入账，都能拆到里面的每一笔付款，再追到各自的发票和合同。不再由人抽 60 笔再推断，而是由 Agent 全年持续遍历整张图，带着走过的路径报告发现。审计不再是每年一次的发掘，而是系统一直维持的属性。</p>
+
+    <!-- 6.4 关账 -->
+    <h3 id="s-agent-close">关账：不再是一个名词</h3>
+    <p>月末关账之所以存在，是因为脱节的系统慢慢漂移，必须定期强行拉平。</p>
+    <p>如果账本的链接一直在持续维护，在某种意义上它一直处于关好账的状态，关账就变成了一个确认节点，而不是一场要熬过去的工程。据 T:0 自述，用上地图的财务团队把关账时间缩短了 90%；文中另举了一家的例子，关账从 6 天缩到 3 天。市场在夸口几天关账而不是几周，真正的终点是“关账”不再是一个名词。</p>
+    <p>OpenAI 财务团队也把零天关账列为目标，至今仍在建设中，见<a href="/article/openai-ai-native-finance/">《OpenAI CFO 分享用AI改造财务团队经验》</a>。</p>
+
+    <!-- 6.5 假设推演 -->
+    <h3 id="s-agent-whatif">假设推演（What-If）：在真实账本分支上推演未来（尚未实现）</h3>
+    <p>连接型地图记录了已经发生的世界，同时也可以像代码一样创建分支（Fork）。</p>
+    <p>按作者的设想，向 AI 提出假设时，它不去空想，而是分叉出真实的事件历史，套用不同的收入政策、合同结构或定价模式，让确定性引擎在分支上重放真实世界，并输出两个世界之间的差异（Diff）。新合同条款下账会是什么样，直接在真实交易上算出来，而不是在电子表格里建模。会计向来是记录过去的学科，能分叉的地图会让它变成排演未来的工具。</p>
+    <p>回头看这五项：它们都是 AI 能力，没有一项是模型能力。模型和别人用的是同一批，差别在给它们站的是什么。把最聪明的 Agent 放在扁平账本上它会猜，放在地图上它就知道。</p>
+  </section>
+
+  <!-- 第七章 -->
+  <section id="s-three-lessons">
+    <h2>三条教训</h2>
+    <p>对于认真思考严肃金融场景中 AI 落地的团队，T:0 总结了三条教训：</p>
+    <ol>
+      <li><strong>本体是标准的，数据是混乱的</strong>。T:0 原以为难点在于 AI，结果并不是，难点是归一化。7 个 ERP、十几个支付平台，每家把同样的五百年老对象塑造成不同的方言（正如前文提到的 deposit）。没有捷径，每一个被跳过的边角情况，最后都会变成某个人对不上的账。</li>
+      <li><strong>在金融领域，概率成立的链接比没有链接更糟</strong>。AI 行业通常习惯了 95% 的置信度：这对推荐系统足够好，对审计却是致命的。一个大概率对的链接，迟早会在某人的收入数字里错一次，而这样一次发现就会毁掉对系统里所有其他链接的信任。T:0 靠的办法是：链接要么被证实，要么就不存在，而且缺了要让人一眼看见。信任像利息一样累积，一次违约就能抹掉多年。</li>
+      <li><strong>AI 靠出示路径赢得信任，而不是靠推理说辞</strong>。财务总监、审计师或董事会不会因为 AI 的解释听起来严谨就相信它，他们只相信证据。能经受住审计检验的 AI 结论，只有那些能对应到地图路径的结论：这些对象、这些链接、这条规则、这条分录。建好让每个答案都能溯源的底座，信任就不再是盲目的冒险，而变成了一次查验。</li>
+    </ol>
+  </section>
+
+  <!-- 第八章 -->
+  <section id="s-conclusion">
+    <h2>结语</h2>
+    <p>行业正在竞相把更聪明的 Agent 架在同样陈旧的总账之上。作者认为，这场比赛的方向跑反了：模型带来的是表达的流利，地图带来的才是真实。而在会计里，真实本身就是产品的全部价值。</p>
+    <p>作者说，Palantir 证明了组织愿意为了让 AI 值得信赖而围绕本体重构数据，代价是必须逐个客户手工搭建本体。会计从不需要施工队，它的本体自 1494 年起就在眼前，全行业通用，自带校验机制，只是在等待软件认真对待它。</p>
+    <p>T:0 的自我定位正是那套软件：不是一个更聪明的簿记员，而是一本每个数字都还记得自己来历的账，加上终于读得懂它的 AI。</p>
+    <p>Palantir 向运营展示了本体的价值，而 T:0 想展示给财务。</p>
+  </section>
+
+  <!-- 第九章：附录 -->
+  <section id="s-appendix-trace">
+    <h2>文中交互图表的文字版</h2>
+
+    <h3 id="app-timeline">订阅案例时间线（对应「总账只记“结局”，却把“故事”扔了」一节）</h3>
+    <ul>
+      <li><strong>3 月 14 日 · 开出发票</strong>：客户签下 4,120 美元的年度订阅，钱还没收到，服务也还没提供。分录：借 应收账款 4,120.00；贷 递延收入 4,120.00。递延收入是已开票但服务还没提供、先记成对客户的负债，国内准则一般叫「合同负债」，本文沿用美国准则的叫法。</li>
+      <li><strong>3 月 18 日 · 客户付款</strong>：钱先落在支付处理商（比如 Stripe 这类处理商）那里，还没进公司的银行账户。分录：借 处理商清算 4,120.00；贷 应收账款 4,120.00。处理商清算是个中转科目，钱在处理商那儿时记进去，打到银行时转出来，一进一出归零。</li>
+      <li><strong>3 月 21 日 · 处理商打款</strong>：处理商把这笔付款和另外 40 笔打包成一次结算打款付给公司，这笔扣掉自己的手续费 123.60，净额 3,996.40 随整批进入银行。分录：借 银行存款 3,996.40；借 手续费 123.60；贷 处理商清算 4,120.00。只看这一笔：4,120.00 − 123.60 = 3,996.40。</li>
+    </ul>
+    <p>三个日期、7 行分录、5 个科目；借方合计 12,360.00，贷方合计 12,360.00。</p>
+
+    <h3 id="app-reverse">从一行账倒着查（对应「链接（Links）」一节）</h3>
+    <p>同一笔生意在地图里是一条链：合同 / 订单 →（开出发票）→ 发票（发票行：借 应收账款、贷 递延收入）→（付款核销这张发票）→ 客户付款（借 处理商清算、贷 应收账款）→（这笔付款被打包进打款）→ 打款（借 银行存款、借 手续费、贷 处理商清算；同批 41 笔付款、41 笔手续费）→（打款被银行流水确认）→ 银行交易（对账锚点，不生成分录）。</p>
+    <ul>
+      <li>3 月 14 日的两行（应收账款、递延收入）来自「发票行」，这一对借贷相等，都是 4,120.00。</li>
+      <li>3 月 18 日的两行（处理商清算、应收账款）来自「客户付款」，挂在「付款核销这张发票」这条连线上；核对：付款金额 = 发票未付余额，4,120.00 = 4,120.00。</li>
+      <li>3 月 21 日的三行（银行存款、手续费、处理商清算）来自「打款」，挂在「打款被银行流水确认」这条连线上；核对：银行到账金额 = 整批打款的结算净额（41 笔付款合计减 41 笔手续费合计），这笔订阅贡献其中的 3,996.40；处理商清算 3 月 18 日借 4,120.00、21 日贷 4,120.00，余额归零。</li>
+    </ul>
+  </section>
+
+  <!-- 第十章：实证交互沙盘 -->
+  <section id="s-interactive-lab">
+    <h2>实证交互沙盘：连接型会计地图穿透与核对实验台</h2>
+    <p>为加深对 T:0 架构的工程理解，本白皮书特别构建三个纯内联交互沙盘，演示真实业务场景下的正逆向穿透、大模型幻觉对比与方言归一化机制。</p>
+
+    <!-- 沙盘 1: 订阅收费全链路穿透与分录审计沙盘 -->
+    <div class="sandbox-box" id="box-sandbox-trace">
+      <div class="sandbox-head">
+        <span class="sandbox-badge">Sandbox 01 · 交易链路穿透实验</span>
+        <h3 class="sandbox-title">年度订阅全链路正逆向穿透沙盘</h3>
+        <p class="sandbox-intro">交互验证 4,120 美元年度订阅如何贯穿 5 个核心对象与 7 行分录，演示人和 Agent 顺着链接双向穿透与借贷核对。</p>
+      </div>
+
+      <div class="sandbox-toolbar">
+        <button class="sandbox-btn active" id="btn-step-inv" type="button">① 3月14日 开出发票</button>
+        <button class="sandbox-btn" id="btn-step-pay" type="button">② 3月18日 客户付款</button>
+        <button class="sandbox-btn" id="btn-step-payout" type="button">③ 3月21日 处理商打款</button>
+        <button class="sandbox-btn" id="btn-step-bank" type="button">④ 3月21日 银行到账流水</button>
+      </div>
+
+      <div class="sandbox-toolbar">
+        <span style="font-size:12px; color:var(--text-dim); display:inline-flex; align-items:center; margin-right:6px;">穿透模式：</span>
+        <button class="sandbox-btn active" id="btn-mode-forward" type="button">正向发生追溯 (Forward)</button>
+        <button class="sandbox-btn" id="btn-mode-reverse" type="button">逆向审计穿透 (Reverse)</button>
+      </div>
+
+      <div class="sandbox-grid">
+        <div class="sandbox-panel">
+          <div class="sandbox-panel-title">
+            <span>当前业务节点与对象类型</span>
+            <span style="color:var(--accent);">Object Entity</span>
+          </div>
+          <h4 id="out-trace-step-title" style="margin:0 0 8px; font-size:15px; color:var(--accent);">3月14日 · 开出发票（Invoice Generated）</h4>
+          <div class="sandbox-text-out" id="out-trace-obj-meta">【对象实体】类型: Invoice | 标识: INV-2026-8821 | 关联订单: Order#SUB-4120 | 金额: USD 4,120.00 | 状态: Issued (未付款)</div>
+        </div>
+
+        <div class="sandbox-panel">
+          <div class="sandbox-panel-title">
+            <span>挂载分录与借贷核验</span>
+            <span style="color:var(--emerald);">GL Entries</span>
+          </div>
+          <div class="sandbox-text-out" id="out-trace-entries">分录1: 借 应收账款 (Accounts Receivable) &#36;4,120.00
+分录2: 贷 递延收入 (Deferred Revenue) &#36;4,120.00
+[平衡校验]: 借方合计 &#36;4,120.00 == 贷方合计 &#36;4,120.00 (平衡)</div>
+        </div>
+      </div>
+
+      <div class="sandbox-grid" style="margin-top:16px;">
+        <div class="sandbox-panel">
+          <div class="sandbox-panel-title">
+            <span>算术核对铁律 (Mathematical Proof)</span>
+            <span style="color:var(--amber);">Arithmetic Check</span>
+          </div>
+          <div class="sandbox-text-out" id="out-trace-check-math">【算术核对铁律】发票行借贷平衡：借方应收账款 USD 4,120.00 = 贷方递延收入 USD 4,120.00。服务尚未履约交付，先确认为合同负债（递延收入）。</div>
+        </div>
+
+        <div class="sandbox-panel">
+          <div class="sandbox-panel-title">
+            <span>Agent 遍历路径与证据链</span>
+            <span style="color:var(--cyan);">Agent Trace Path</span>
+          </div>
+          <div class="sandbox-text-out" id="out-trace-agent-path">遍历路径: Contract[Order#SUB-4120] ──(触发开票)──> Invoice[INV-2026-8821] ──> 生成2行分录 [AR / DefRev]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 沙盘 2: 波动分析对比演习 -->
+    <div class="sandbox-box" id="box-sandbox-variance">
+      <div class="sandbox-head">
+        <span class="sandbox-badge">Sandbox 02 · 智能体决策对照</span>
+        <h3 class="sandbox-title">递延收入波动分析：LLM 猜测 vs 图遍历查询</h3>
+        <p class="sandbox-intro">CFO 提问：“为什么这个月递延收入变了？” 对比传统大模型看扁平总账的虚假叙事与连接型地图确定性遍历。</p>
+      </div>
+
+      <div class="sandbox-toolbar">
+        <button class="sandbox-btn active" id="btn-var-graph" type="button">连接型地图：确定性遍历查询</button>
+        <button class="sandbox-btn" id="btn-var-llm-1" type="button">传统 LLM：运行 1（猜测叙事）</button>
+        <button class="sandbox-btn" id="btn-var-llm-2" type="button">传统 LLM：运行 2（矛盾叙事）</button>
+        <button class="sandbox-btn" id="btn-var-llm-3" type="button">传统 LLM：运行 3（脑补归因）</button>
+      </div>
+
+      <div class="sandbox-grid">
+        <div class="sandbox-panel">
+          <div class="sandbox-panel-title">
+            <span>分析结论输出</span>
+            <span id="out-var-reliability" style="color:var(--emerald); font-weight:700;">100% 确定性可验证 · 附带全部 229 份合同与发票遍历路径</span>
+          </div>
+          <h4 id="out-var-title" style="margin:0 0 10px; font-size:15px; color:var(--text);">连接型地图：确定性图遍历（Graph Traversal Verification）</h4>
+          <div class="sandbox-text-out" id="out-var-desc">递延收入变动净额 +USD 918,760.00。原因溯源：214 份年度合同按期履约确认收入（+USD 881,680.00），12 份合同发生计费变更重算（+USD 49,440.00），3 笔退款冲销前期已确认收入（-USD 12,360.00）。</div>
+        </div>
+
+        <div class="sandbox-panel">
+          <div class="sandbox-panel-title">
+            <span>底层依据与事实核查</span>
+            <span style="color:var(--amber);">Auditable Grounding</span>
+          </div>
+          <div class="sandbox-text-out" id="out-var-evidence">遍历证据：Graph.traverse(Account['Deferred Revenue']).filter(period='2026-03') -> 汇总 214 条履约事件 + 12 条重算变更 + 3 条退款核销冲销。无任何主观推测或幻觉填充。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 沙盘 3: 方言归一化与缺口探测器 -->
+    <div class="sandbox-box" id="box-sandbox-dialect">
+      <div class="sandbox-head">
+        <span class="sandbox-badge">Sandbox 03 · 数据摄入与完整性核查</span>
+        <h3 class="sandbox-title">ERP 方言归一化与“不可证则不连”缺口探测器</h3>
+        <p class="sandbox-intro">演示 "deposit" 词义歧义若解析错误带来的灾难，以及打款金额不匹配时系统拒绝概率猜测、主动暴露缺口的机制。</p>
+      </div>
+
+      <div class="sandbox-grid">
+        <div class="sandbox-panel">
+          <div class="ctrl-group">
+            <label class="ctrl-label" for="sel-dialect-term">选择源系统查看 "deposit" 方言：</label>
+            <select class="ctrl-select" id="sel-dialect-term">
+              <option value="quickbooks">QuickBooks：一批送往银行的客户付款</option>
+              <option value="netsuite">NetSuite：未开票预收款项</option>
+              <option value="bank">商业银行对账单：任何进账现金交易</option>
+            </select>
+          </div>
+          <div class="sandbox-panel-title">方言含义与误认后果</div>
+          <div style="font-size:13px; margin-bottom:8px;"><strong>源端原意：</strong><span id="out-dialect-meaning">正准备送往银行的一批客户付款汇总（A batch of customer payments being sent to bank）</span></div>
+          <div style="font-size:13px; margin-bottom:8px; color:var(--rose);"><strong>误读灾难：</strong><span id="out-dialect-error">若按字面理解为普通存入现金，系统会跳过未开票预收核销，导致应收账款与银行流水断裂，后续对账多出孤立款项！</span></div>
+          <div style="font-size:13px; color:var(--emerald);"><strong>T:0 标准化：</strong><span id="out-dialect-standard">标准对象：一批客户付款（PaymentBatch），挂载多笔客户付款对象，等待对应银行打款结算。</span></div>
+        </div>
+
+        <div class="sandbox-panel">
+          <div class="ctrl-group">
+            <label class="ctrl-label" for="rng-gap-diff">模拟处理商打款差异金额 (美元，范围 -&#36;100 ~ +&#36;100)：</label>
+            <input type="range" class="ctrl-range" id="rng-gap-diff" min="-100" max="100" value="0" step="10">
+          </div>
+          <div class="sandbox-panel-title">
+            <span>链接核验状态</span>
+            <span id="out-gap-status" style="color:var(--emerald); font-weight:700;">链接已证明 (Link Mathematically Proven) · 算术平衡</span>
+          </div>
+          <div class="sandbox-text-out" id="out-gap-detail">打款总额 = 付款合计 (USD 4,120.00) − 手续费 (USD 123.60) = 净到账 USD 3,996.40。差额: USD 0.00。满足借贷相等铁律，链接确凿成立！</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 页面 Footer 元信息 -->
+  <footer class="doc-meta">
+    <dl>
+      <dt>文档来源</dt><dd>why-every-ai-accountant-fails.md（原作者：Erik @eya0，Airwallex / T:0 工程师）</dd>
+      <dt>知识产权说明</dt><dd>本白皮书提炼自公开技术长文，文中提及之 Reddit、GoodRx 等客户案例及关账提速 90% 均属原作者自述。</dd>
+      <dt>排版与工程</dt><dd>遵循 AIKnowledge 统一排版基线（暖羊皮纸/黑曜石），零外部依赖，纯内联矢量图表与可验证沙盘。</dd>
+      <dt>交付物规范</dt><dd>单文件 HTML · 静态 8 项全绿 · 运行时冒烟全绿 · 存储于唯一落地目录</dd>
+    </dl>
+  </footer>
+
+</main>
+
+<button id="toTopBtn" type="button" aria-label="回到顶部">↑</button>
+
+<script>
+(function () {
+  'use strict';
+
+  var THEME_KEY = 'aike-accounting-theme';
+
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  /* ============================================================
+     1. 主题切换与持久化（默认 dark）
+     ============================================================ */
+  function applyTheme(theme, persist) {
+    document.documentElement.setAttribute('data-theme', theme);
+    var btn = byId('aikeThemeBtn');
+    if (btn) {
+      btn.textContent = (theme === 'dark') ? '浅色' : '深色';
+      btn.setAttribute('aria-label', (theme === 'dark') ? '切换到浅色主题' : '切换到深色主题');
+    }
+    if (persist) {
+      try {
+        window.localStorage.setItem(THEME_KEY, theme);
+      } catch (e) {
+        /* 隐私模式忽略 */
+      }
+    }
+  }
+
+  function initTheme() {
+    var theme = 'dark';
+    try {
+      var saved = window.localStorage.getItem(THEME_KEY);
+      if (saved === 'light' || saved === 'dark') {
+        theme = saved;
+      }
+    } catch (e) {
+      /* 隐私模式忽略 */
+    }
+    applyTheme(theme, false);
+  }
+
+  function wireTheme() {
+    var btn = byId('aikeThemeBtn');
+    if (!btn) { return; }
+    btn.addEventListener('click', function () {
+      var cur = document.documentElement.getAttribute('data-theme');
+      applyTheme(cur === 'dark' ? 'light' : 'dark', true);
+    });
+  }
+
+  /* ============================================================
+     2. 导航控制与滚动监听
+     ============================================================ */
+  function wireNav() {
+    var toggleBtn = byId('tocToggleBtn');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', function () {
+        document.body.classList.toggle('nav-open');
+      });
+    }
+
+    var topBtn = byId('toTopBtn');
+    var expandBtn = byId('expandTocBtn');
+    if (expandBtn) {
+      expandBtn.addEventListener('click', function () {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+    if (topBtn) {
+      topBtn.addEventListener('click', function () {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+
+    window.addEventListener('scroll', function () {
+      var top = window.pageYOffset || document.documentElement.scrollTop;
+      var total = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      var pct = total > 0 ? (top / total) * 100 : 0;
+      var rbar = byId('readbar');
+      if (rbar) {
+        rbar.style.width = pct + '%';
+      }
+      if (topBtn) {
+        if (top > 350) {
+          topBtn.classList.add('visible');
+        } else {
+          topBtn.classList.remove('visible');
+        }
+      }
+    });
+
+    // 目录高亮监听
+    if ('IntersectionObserver' in window) {
+      var headings = document.querySelectorAll('section[id], header[id]');
+      var tocLinks = document.querySelectorAll('.toc-list a');
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            var id = entry.target.getAttribute('id');
+            tocLinks.forEach(function (link) {
+              var href = link.getAttribute('href');
+              if (href === '#' + id) {
+                link.classList.add('active');
+              } else {
+                link.classList.remove('active');
+              }
+            });
+          }
+        });
+      }, { rootMargin: '-10% 0px -75% 0px' });
+
+      headings.forEach(function (h) {
+        observer.observe(h);
+      });
+    }
+  }
+
+  /* ============================================================
+     3. 沙盘 1：交易全链路穿透逻辑
+     ============================================================ */
+  var traceState = {
+    step: 'inv',
+    mode: 'forward'
+  };
+
+  var traceData = {
+    inv: {
+      title: "3月14日 · 开出发票（Invoice Generated）",
+      forwardMeta: "【对象实体】类型: Invoice | 标识: INV-2026-8821 | 关联订单: Order#SUB-4120 | 金额: USD 4,120.00 | 状态: Issued (未付款)",
+      reverseMeta: "【审计逆向穿透】追溯终点：客户合同 Order#SUB-4120 与发票 INV-2026-8821 完整匹配，确认为年度订阅收费。",
+      entries: "分录1: 借 应收账款 (Accounts Receivable) &#36;4,120.00\n" +
+        "分录2: 贷 递延收入 (Deferred Revenue) &#36;4,120.00\n" +
+        "[平衡校验]: 借方合计 &#36;4,120.00 == 贷方合计 &#36;4,120.00 (平衡)",
+      checkMath: "【算术核对铁律】发票行借贷平衡：借方应收账款 USD 4,120.00 = 贷方递延收入 USD 4,120.00。服务尚未履约交付，先确认为合同负债（递延收入）。",
+      forwardPath: "遍历路径: Contract[Order#SUB-4120] ──(触发开票)──> Invoice[INV-2026-8821] ──> 生成2行分录 [AR / DefRev]",
+      reversePath: "逆向路径: [BankTx#BTX-102] ──> [Payout#PO-904] ──> [Payment#PAY-301] ──> Invoice[INV-2026-8821] ──> Contract"
+    },
+    pay: {
+      title: "3月18日 · 客户付款（Payment Settled at Gateway）",
+      forwardMeta: "【对象实体】类型: Payment | 标识: PAY-2026-301 | 关联发票: INV-2026-8821 | 支付网关: Stripe | 状态: Succeeded",
+      reverseMeta: "【审计逆向穿透】通过打款批次拆解出的具体客户付款。付款金额精确核销 INV-2026-8821 发票余额。",
+      entries: "分录3: 借 处理商清算账户 (Processor Clearing) &#36;4,120.00\n" +
+        "分录4: 贷 应收账款 (Accounts Receivable) &#36;4,120.00\n" +
+        "[核销校验]: 应收账款期末净余额 &#36;0.00 (完全核销)",
+      checkMath: "【算术核对铁律】付款核销发票：付款金额 &#36;4,120.00 ≡ 发票未付金额 &#36;4,120.00。资金落在支付网关，进入中转科目清算账户。",
+      forwardPath: "遍历路径: Invoice[INV-2026-8821] ──(客户付款核销)──> Payment[PAY-2026-301] ──> 生成2行分录 [Clearing / AR]",
+      reversePath: "逆向路径: Payout[PO-2026-904] ──(解包第18笔)──> Payment[PAY-2026-301] ──(核销关系)──> Invoice[INV-2026-8821]"
+    },
+    payout: {
+      title: "3月21日 · 处理商打款（Processor Payout Batch）",
+      forwardMeta: "【对象实体】类型: Payout | 标识: PO-2026-904 | 包含交易: 41 笔付款 | 包含手续费: 41 笔 | 状态: Transferred",
+      reverseMeta: "【审计逆向穿透】银行流水入账对应的批量打款对象。整批总额 &#36;168,920.00，扣除手续费后净额打入银行。",
+      entries: "分录5: 借 银行存款 (Cash in Bank) &#36;3,996.40\n" +
+        "分录6: 借 手续费支出 (Merchant Fees) &#36;123.60\n" +
+        "分录7: 贷 处理商清算账户 (Processor Clearing) &#36;4,120.00\n" +
+        "[清算平衡]: 该笔处理商清算账户借方与贷方各 &#36;4,120.00，期末余额 &#36;0.00 清零",
+      checkMath: "【算术核对铁律】打款净额平衡：银行到账 &#36;3,996.40 + 手续费 &#36;123.60 = 原始付款总额 &#36;4,120.00。中转科目一进一出严格归零！",
+      forwardPath: "遍历路径: Payment[PAY-301] ──(打包打款)──> Payout[PO-904, 包含41笔] ──> 拆解挂载分录 [Cash / Fee / Clearing]",
+      reversePath: "逆向路径: BankTx[BTX-2026-102] ──(对账匹配)──> Payout[PO-2026-904] ──> 展开 41 笔付款明细"
+    },
+    bank: {
+      title: "3月21日 · 银行流水到账（Bank Transaction Confirmed）",
+      forwardMeta: "【对象实体】类型: Bank Transaction | 标识: BTX-2026-102 | 账户: SVB Checking *8820 | 金额: &#36;3,996.40 (整批汇入)",
+      reverseMeta: "【审计逆向穿透起点】审计师手头的银行月结单任意一笔入账。无需重新匹配，直接通过已有预期锚点反查图谱。",
+      entries: "【对账说明】: 银行流水属于外部对账锚点（Anchor），不重复生成总账分录。已有预期与实际流水 &#36;3,996.40 完全一致，自动闭环。",
+      checkMath: "【算术核对铁律】银行入账校验：银行流水金额 &#36;3,996.40 ≡ Payout 结算净额 (&#36;4,120.00 − &#36;123.60)。整体借方合计 12,360.00 == 贷方合计 12,360.00。",
+      forwardPath: "遍历路径: Payout[PO-904] ──(入账核实)──> BankTx[BTX-102] ──> 交易生命周期圆满闭环",
+      reversePath: "逆向起点: BankTx[BTX-102] ──> 逆向启动图遍历，沿对象指针反推所有 41 份上游订单与发票"
+    }
+  };
+
+  function renderTrace() {
+    var cur = traceData[traceState.step];
+    var isReverse = (traceState.mode === 'reverse');
+
+    byId('out-trace-step-title').textContent = cur.title;
+    byId('out-trace-obj-meta').textContent = isReverse ? cur.reverseMeta : cur.forwardMeta;
+    byId('out-trace-entries').textContent = cur.entries;
+    byId('out-trace-check-math').textContent = cur.checkMath;
+    byId('out-trace-agent-path').textContent = isReverse ? cur.reversePath : cur.forwardPath;
+
+    var stepBtns = ['btn-step-inv', 'btn-step-pay', 'btn-step-payout', 'btn-step-bank'];
+    stepBtns.forEach(function (bId) {
+      byId(bId).classList.remove('active');
+    });
+    if (traceState.step === 'inv') byId('btn-step-inv').classList.add('active');
+    if (traceState.step === 'pay') byId('btn-step-pay').classList.add('active');
+    if (traceState.step === 'payout') byId('btn-step-payout').classList.add('active');
+    if (traceState.step === 'bank') byId('btn-step-bank').classList.add('active');
+
+    byId('btn-mode-forward').classList.toggle('active', !isReverse);
+    byId('btn-mode-reverse').classList.toggle('active', isReverse);
+  }
+
+  function wireTrace() {
+    byId('btn-step-inv').addEventListener('click', function () { traceState.step = 'inv'; renderTrace(); });
+    byId('btn-step-pay').addEventListener('click', function () { traceState.step = 'pay'; renderTrace(); });
+    byId('btn-step-payout').addEventListener('click', function () { traceState.step = 'payout'; renderTrace(); });
+    byId('btn-step-bank').addEventListener('click', function () { traceState.step = 'bank'; renderTrace(); });
+
+    byId('btn-mode-forward').addEventListener('click', function () { traceState.mode = 'forward'; renderTrace(); });
+    byId('btn-mode-reverse').addEventListener('click', function () { traceState.mode = 'reverse'; renderTrace(); });
+  }
+
+  /* ============================================================
+     4. 沙盘 2：波动分析真假对比
+     ============================================================ */
+  var varData = {
+    graph: {
+      title: "连接型地图：确定性图遍历（Graph Traversal Verification）",
+      reliability: "100% 确定性可验证 · 附带全部 229 份合同与发票遍历路径",
+      desc: "递延收入变动净额 +USD 918,760.00。原因溯源：214 份年度合同按期履约确认收入（+USD 881,680.00），12 份合同发生计费变更重算（+USD 49,440.00），3 笔退款冲销前期已确认收入（-USD 12,360.00）。",
+      evidence: "遍历证据：Graph.traverse(Account['Deferred Revenue']).filter(period='2026-03') -> 汇总 214 条履约事件 + 12 条重算变更 + 3 条退款核销冲销。无任何主观推测或幻觉填充。"
+    },
+    llm1: {
+      title: "传统 LLM 运行 1（只读扁平总账凭空编故事）",
+      reliability: "高危幻觉 · 0 证据支撑 (叙事猜测)",
+      desc: "“本月递延收入增加了约 92 万美元。主要原因是公司在第一季度末开展了春季营销推广活动，大量新客户签署了年度企业级软件订阅并一次性预付账款，拉动了预收账款的上涨。”",
+      evidence: "【事实勘误】总账里只有日期和金额，模型根本看不到营销活动数据。所谓“春季营销推广”完全是大语言模型根据期初期末差额脑补的合理化修辞！"
+    },
+    llm2: {
+      title: "传统 LLM 运行 2（同一提示词二次运行，自相矛盾）",
+      reliability: "矛盾输出 · 逻辑漂移",
+      desc: "“递延收入变动主要由于多位关键客户在前序季度的合同续约周期重叠，提前支付了下一财年的维保服务费用；同时若干大客户在3月实施了付款账期调整。”",
+      evidence: "【事实勘误】与第 1 次回答截然不同！同样的总账流水，同一个大模型，换一次运行就把原因从“营销拉新”改成了“老客户续约维保”。CFO 无法向审计师出示任何一条事实。"
+    },
+    llm3: {
+      title: "传统 LLM 运行 3（脑补归因，遗漏全部退款与变更）",
+      reliability: "重大错漏 · 遗漏核心红冲与退款",
+      desc: "“递延收入平稳增长符合 SaaS 商业常态，显示公司经常性收入健康沉淀，未见异常合同波动。”",
+      evidence: "【事实勘误】模型完全没有识别出 3 月存在 3 笔因争议导致的退款红冲（-&#36;12,360），更遗漏了 12 份变更重算的合同。扁平账本无法提供因果链，AI 只能流利地猜。"
+    }
+  };
+
+  function setVarMode(key) {
+    var item = varData[key];
+    byId('out-var-title').textContent = item.title;
+    byId('out-var-desc').textContent = item.desc;
+    byId('out-var-reliability').textContent = item.reliability;
+    byId('out-var-evidence').textContent = item.evidence;
+
+    var btns = ['btn-var-graph', 'btn-var-llm-1', 'btn-var-llm-2', 'btn-var-llm-3'];
+    btns.forEach(function (bId) {
+      byId(bId).classList.remove('active');
+    });
+    if (key === 'graph') byId('btn-var-graph').classList.add('active');
+    if (key === 'llm1') byId('btn-var-llm-1').classList.add('active');
+    if (key === 'llm2') byId('btn-var-llm-2').classList.add('active');
+    if (key === 'llm3') byId('btn-var-llm-3').classList.add('active');
+  }
+
+  function wireVariance() {
+    byId('btn-var-graph').addEventListener('click', function () { setVarMode('graph'); });
+    byId('btn-var-llm-1').addEventListener('click', function () { setVarMode('llm1'); });
+    byId('btn-var-llm-2').addEventListener('click', function () { setVarMode('llm2'); });
+    byId('btn-var-llm-3').addEventListener('click', function () { setVarMode('llm3'); });
+  }
+
+  /* ============================================================
+     5. 沙盘 3：方言归一化与缺口探测
+     ============================================================ */
+  var dialectData = {
+    quickbooks: {
+      meaning: "正准备送往银行的一批客户付款汇总（A batch of customer payments being sent to bank）",
+      error: "若按字面理解为普通存入现金，系统会跳过未开票预收核销，导致应收账款与银行流水断裂，后续对账多出孤立款项！",
+      standard: "标准对象：一批客户付款（PaymentBatch），挂载多笔客户付款对象，等待对应银行打款结算。"
+    },
+    netsuite: {
+      meaning: "客户先付、尚未开出对应发票的预收款项（Customer Prepayment）",
+      error: "若误认为已确认付款，系统会错误提前冲销应收账款，导致资产负债表负债（合同负债）低估，违反收入确认准则！",
+      standard: "标准对象：预付款（Prepayment），生命周期挂起等待关联发票生成后再行核销。"
+    },
+    bank: {
+      meaning: "商业银行对账单上的任何单笔进账流水（Cash Deposit）",
+      error: "若直接以此生成收入分录，会重复确认已经由支付处理商记录的交易，造成收入翻倍虚增！",
+      standard: "标准对象：银行交易（BankTransaction），定位为外部对账锚点，核对而非重复生成分录。"
+    }
+  };
+
+  function updateDialect() {
+    var sel = byId('sel-dialect-term');
+    var val = sel ? sel.value : 'quickbooks';
+    var d = dialectData[val];
+    byId('out-dialect-meaning').textContent = d.meaning;
+    byId('out-dialect-error').textContent = d.error;
+    byId('out-dialect-standard').textContent = d.standard;
+  }
+
+  function updateGap() {
+    var rng = byId('rng-gap-diff');
+    var diff = rng ? parseInt(rng.value, 10) : 0;
+    var statusEl = byId('out-gap-status');
+    var detailEl = byId('out-gap-detail');
+
+    if (diff === 0) {
+      statusEl.textContent = "链接已证明 (Link Mathematically Proven) · 算术平衡";
+      statusEl.style.color = "var(--emerald)";
+      detailEl.textContent = "打款总额 = 付款合计 (USD 4,120.00) − 手续费 (USD 123.60) = 净到账 USD 3,996.40。差额: USD 0.00。满足借贷相等铁律，链接确凿成立！";
+    } else {
+      statusEl.textContent = "拒绝连接 (Unmatched Gap Detected) · 发现未平衡缺口";
+      statusEl.style.color = "var(--rose)";
+      var sign = diff > 0 ? ("+&#36;" + diff) : ("-&#36;" + Math.abs(diff));
+      detailEl.textContent = "【审计阻断】实际打款与图谱预期存在 " + sign + ".00 算术差异！系统坚决拒绝概率猜测，主动标红暴露出账务缺口，等待人工审计复核，绝不向 CFO 提交虚假平账！";
+    }
+  }
+
+  function wireDialectAndGap() {
+    var sel = byId('sel-dialect-term');
+    if (sel) {
+      sel.addEventListener('change', updateDialect);
+    }
+    var rng = byId('rng-gap-diff');
+    if (rng) {
+      rng.addEventListener('input', updateGap);
+    }
+  }
+
+  /* ============================================================
+     初始化装配
+     ============================================================ */
+  function init() {
+    initTheme();
+    wireTheme();
+    wireNav();
+    wireTrace();
+    renderTrace();
+    wireVariance();
+    setVarMode("graph");
+    wireDialectAndGap();
+    updateDialect();
+    updateGap();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

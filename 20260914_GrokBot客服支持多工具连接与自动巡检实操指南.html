@@ -1,0 +1,2485 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>用 Grok Bot 做客服支持：从多工具连接、5 类高频任务到自动巡检的实操指南 | AIKnowledge</title>
+  <style>
+    /* ==========================================================================
+       1. 全局设计系统与双主题令牌 (AIKnowledge 统一基线)
+       ========================================================================== */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+      /* 统一基线尺度 */
+      --aike-sidebar-w: 280px;
+      --aike-container-max: 1360px;
+      --aike-content-max: 1180px;
+      --aike-radius-sm: 6px;
+      --aike-radius-md: 10px;
+      --aike-radius-lg: 16px;
+
+      /* 状态与语义令牌 */
+      --emerald: #10B981;
+      --emerald-bg: rgba(16, 185, 129, 0.12);
+      --emerald-border: #059669;
+      --rose: #EF4444;
+      --rose-bg: rgba(239, 68, 68, 0.12);
+      --rose-border: #DC2626;
+      --amber: #F59E0B;
+      --amber-bg: rgba(245, 158, 11, 0.12);
+      --amber-border: #D97706;
+      --cyan: #06B6D4;
+      --cyan-bg: rgba(6, 182, 212, 0.12);
+      --cyan-border: #0891B2;
+      --purple: #8B5CF6;
+      --purple-bg: rgba(139, 92, 246, 0.12);
+      --purple-border: #7C3AED;
+    }
+
+    /* 深色主题（黑曜石质感，默认） */
+    html[data-theme="dark"] {
+      --aike-bg: #181715;
+      --aike-bg-soft: #1F1D1A;
+      --aike-surface: #22201D;
+      --aike-surface-2: #2C2925;
+      --aike-surface-3: #38342F;
+      --aike-text: #EDEAE5;
+      --aike-text-muted: #A6A096;
+      --aike-text-faint: #706B63;
+      --aike-border: #36332E;
+      --aike-border-soft: #2F2C28;
+      --aike-accent: #E2886A;
+      --aike-accent-hover: #F0A58C;
+      --aike-accent-soft: rgba(226, 136, 106, 0.18);
+      --aike-accent-contrast: #181715;
+      --aike-code-bg: #14120F;
+      --aike-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);
+      --aike-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.40);
+      --aike-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.50);
+
+      /* 图表与控件辅助色 */
+      --svg-grid: #2C2925;
+      --svg-node-bg: #22201D;
+      --svg-text: #EDEAE5;
+      --svg-text-dim: #A6A096;
+    }
+
+    /* 浅色主题（暖羊皮纸质感） */
+    html[data-theme="light"] {
+      --aike-bg: #FAF7F2;
+      --aike-bg-soft: #F3EFEA;
+      --aike-surface: #FFFFFF;
+      --aike-surface-2: #F3EFEA;
+      --aike-surface-3: #EAE5DE;
+      --aike-text: #2D2A26;
+      --aike-text-muted: #6B655E;
+      --aike-text-faint: #968F85;
+      --aike-border: #E5DFD5;
+      --aike-border-soft: #EFEBE4;
+      --aike-accent: #D97757;
+      --aike-accent-hover: #B55A3C;
+      --aike-accent-soft: rgba(217, 119, 87, 0.12);
+      --aike-accent-contrast: #FFFFFF;
+      --aike-code-bg: #F2ECE2;
+      --aike-shadow-sm: 0 1px 3px rgba(90, 70, 50, 0.06);
+      --aike-shadow-md: 0 4px 12px rgba(90, 70, 50, 0.08);
+      --aike-shadow-lg: 0 12px 32px rgba(90, 70, 50, 0.12);
+
+      /* 图表与控件辅助色 */
+      --svg-grid: #EAE5DE;
+      --svg-node-bg: #FFFFFF;
+      --svg-text: #2D2A26;
+      --svg-text-dim: #6B655E;
+    }
+
+    /* ==========================================================================
+       2. 基础重置与全局布局
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      line-height: 1.75;
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--aike-bg);
+      color: var(--aike-text);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      display: block;
+      overflow-x: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    #reading-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--aike-accent), var(--cyan));
+      width: 0%;
+      z-index: 9999;
+      transition: width 0.1s linear;
+    }
+
+    /* ==========================================================================
+       3. 侧边栏贴左 + 正文在剩余区域居中 (数学对称盒模型)
+       ========================================================================== */
+    .app-sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: var(--aike-sidebar-w);
+      background-color: var(--aike-surface);
+      border-right: 1px solid var(--aike-border);
+      overflow-y: auto;
+      padding: 24px 18px 40px 18px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: var(--aike-shadow-sm);
+    }
+
+    .sidebar-header {
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--aike-border-soft);
+    }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--aike-text);
+      text-decoration: none;
+    }
+
+    .brand-badge {
+      background: var(--aike-accent-soft);
+      color: var(--aike-accent);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .sidebar-desc {
+      font-size: 0.78rem;
+      color: var(--aike-text-muted);
+      margin-top: 6px;
+      line-height: 1.45;
+    }
+
+    .toc-nav {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .toc-group-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--aike-text-faint);
+      margin-top: 14px;
+      margin-bottom: 4px;
+      padding-left: 8px;
+    }
+
+    .toc-link {
+      display: block;
+      padding: 5px 10px;
+      font-size: 0.82rem;
+      color: var(--aike-text-muted);
+      text-decoration: none;
+      border-radius: var(--aike-radius-sm);
+      line-height: 1.4;
+      transition: all 0.15s ease;
+      border-left: 2px solid transparent;
+    }
+
+    .toc-link:hover {
+      color: var(--aike-text);
+      background-color: var(--aike-surface-2);
+    }
+
+    .toc-link.active {
+      color: var(--aike-accent);
+      background-color: var(--aike-accent-soft);
+      border-left-color: var(--aike-accent);
+      font-weight: 600;
+    }
+
+    .toc-sublink {
+      padding-left: 20px;
+      font-size: 0.78rem;
+    }
+
+    .sidebar-footer {
+      padding-top: 14px;
+      border-top: 1px solid var(--aike-border-soft);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .btn-theme {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--aike-surface-2);
+      border: 1px solid var(--aike-border);
+      border-radius: var(--aike-radius-sm);
+      color: var(--aike-text);
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-theme:hover {
+      border-color: var(--aike-accent);
+      color: var(--aike-accent);
+    }
+
+    /* 正文主体：剩余空间居中 */
+    .app-main {
+      display: block;
+      margin-left: calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+      margin-right: max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+      max-width: var(--aike-content-max);
+      padding: 48px 40px 120px 40px;
+      box-sizing: border-box;
+    }
+
+    @media (max-width: 1080px) {
+      .app-sidebar {
+        position: static;
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--aike-border);
+        box-shadow: none;
+      }
+      .app-main {
+        margin-left: 0;
+        margin-right: 0;
+        max-width: 100%;
+        padding: 24px 20px 80px 20px;
+      }
+    }
+
+    /* ==========================================================================
+       4. 排版层次与正文样式
+       ========================================================================== */
+    .doc-header {
+      margin-bottom: 36px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--aike-border);
+    }
+
+    .doc-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .badge-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .badge-tag.accent {
+      background: var(--aike-accent-soft);
+      color: var(--aike-accent);
+      border: 1px solid rgba(226, 136, 106, 0.3);
+    }
+
+    .badge-tag.emerald {
+      background: var(--emerald-bg);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-tag.cyan {
+      background: var(--cyan-bg);
+      color: var(--cyan);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+    }
+
+    .doc-title {
+      font-family: var(--font-serif);
+      font-size: clamp(1.85rem, 3vw, 2.45rem);
+      font-weight: 700;
+      line-height: 1.3;
+      color: var(--aike-text);
+      margin-bottom: 14px;
+      letter-spacing: -0.02em;
+    }
+
+    .doc-lead {
+      font-size: 1.05rem;
+      color: var(--aike-text-muted);
+      line-height: 1.7;
+      margin-bottom: 20px;
+    }
+
+    /* 顶部摘要与要点提炼卡片 */
+    .summary-card {
+      background: var(--aike-surface);
+      border: 1px solid var(--aike-border);
+      border-left: 4px solid var(--aike-accent);
+      border-radius: var(--aike-radius-md);
+      padding: 20px 24px;
+      margin-bottom: 36px;
+      box-shadow: var(--aike-shadow-sm);
+    }
+
+    .summary-card-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--aike-accent);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .summary-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .summary-list li {
+      position: relative;
+      padding-left: 20px;
+      font-size: 0.92rem;
+      color: var(--aike-text);
+      line-height: 1.6;
+    }
+
+    .summary-list li::before {
+      content: "•";
+      position: absolute;
+      left: 6px;
+      color: var(--aike-accent);
+      font-weight: bold;
+    }
+
+    /* 标题层级 */
+    h2 {
+      font-family: var(--font-serif);
+      font-size: 1.55rem;
+      font-weight: 700;
+      color: var(--aike-text);
+      margin-top: 48px;
+      margin-bottom: 18px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--aike-border-soft);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h3 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--aike-text);
+      margin-top: 30px;
+      margin-bottom: 12px;
+    }
+
+    h4 {
+      font-size: 1.0rem;
+      font-weight: 600;
+      color: var(--aike-text);
+      margin-top: 20px;
+      margin-bottom: 8px;
+    }
+
+    p {
+      font-size: 0.96rem;
+      line-height: 1.8;
+      color: var(--aike-text);
+      margin-bottom: 16px;
+    }
+
+    ul, ol {
+      margin-left: 24px;
+      margin-bottom: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    li {
+      font-size: 0.95rem;
+      line-height: 1.75;
+      color: var(--aike-text);
+    }
+
+    strong {
+      color: var(--aike-text);
+      font-weight: 600;
+    }
+
+    hr {
+      border: 0;
+      height: 1px;
+      background: var(--aike-border);
+      margin: 40px 0;
+    }
+
+    /* 引用与警示卡片 (Callouts) */
+    .callout {
+      border-radius: var(--aike-radius-md);
+      padding: 16px 20px;
+      margin: 24px 0;
+      border-left: 4px solid;
+      background: var(--aike-surface);
+      box-shadow: var(--aike-shadow-sm);
+    }
+
+    .callout-title {
+      font-size: 0.88rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .callout.important {
+      border-left-color: var(--rose);
+      background: var(--rose-bg);
+    }
+    .callout.important .callout-title {
+      color: var(--rose);
+    }
+
+    .callout.note {
+      border-left-color: var(--cyan);
+      background: var(--cyan-bg);
+    }
+    .callout.note .callout-title {
+      color: var(--cyan);
+    }
+
+    .callout.tip {
+      border-left-color: var(--emerald);
+      background: var(--emerald-bg);
+    }
+    .callout.tip .callout-title {
+      color: var(--emerald);
+    }
+
+    /* 模块卡片 */
+    .workflow-card {
+      background: var(--aike-surface);
+      border: 1px solid var(--aike-border);
+      border-radius: var(--aike-radius-lg);
+      padding: 24px 28px;
+      margin: 28px 0;
+      box-shadow: var(--aike-shadow-sm);
+    }
+
+    .workflow-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .workflow-badge {
+      font-size: 0.74rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--aike-surface-2);
+      color: var(--aike-accent);
+      border: 1px solid var(--aike-border);
+    }
+
+    /* 代码块与复制控件 */
+    .code-box {
+      position: relative;
+      background: var(--aike-code-bg);
+      border: 1px solid var(--aike-border);
+      border-radius: var(--aike-radius-md);
+      margin: 16px 0 22px 0;
+      overflow: hidden;
+    }
+
+    .code-box-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: var(--aike-surface-2);
+      border-bottom: 1px solid var(--aike-border-soft);
+      font-size: 0.76rem;
+      color: var(--aike-text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .btn-copy {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      background: var(--aike-surface);
+      border: 1px solid var(--aike-border);
+      border-radius: 4px;
+      color: var(--aike-text-muted);
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-copy:hover {
+      color: var(--aike-accent);
+      border-color: var(--aike-accent);
+    }
+
+    pre {
+      padding: 16px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      line-height: 1.65;
+      color: var(--aike-text);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.86em;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--aike-surface-2);
+      color: var(--aike-accent);
+      border: 1px solid var(--aike-border-soft);
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      border: none;
+      color: inherit;
+    }
+
+    /* 图表与视觉仿真卡片 */
+    .figure-container {
+      margin: 32px 0;
+      background: var(--aike-surface);
+      border: 1px solid var(--aike-border);
+      border-radius: var(--aike-radius-lg);
+      padding: 20px;
+      box-shadow: var(--aike-shadow-md);
+    }
+
+    .figure-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--aike-border-soft);
+    }
+
+    .figure-title-badge {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--aike-accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .figure-caption {
+      font-size: 0.84rem;
+      color: var(--aike-text-muted);
+      text-align: center;
+      margin-top: 14px;
+      font-style: italic;
+    }
+
+    /* 表格样式 */
+    .data-table-wrap {
+      overflow-x: auto;
+      margin: 20px 0;
+      border: 1px solid var(--aike-border);
+      border-radius: var(--aike-radius-md);
+      background: var(--aike-surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      text-align: left;
+    }
+
+    th {
+      background: var(--aike-surface-2);
+      padding: 10px 14px;
+      color: var(--aike-text);
+      font-weight: 600;
+      border-bottom: 1px solid var(--aike-border);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--aike-border-soft);
+      color: var(--aike-text);
+      vertical-align: top;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background-color: var(--aike-surface-2);
+    }
+
+    /* 步骤流卡片 */
+    .step-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    .step-item {
+      display: flex;
+      gap: 14px;
+      background: var(--aike-surface);
+      border: 1px solid var(--aike-border);
+      border-radius: var(--aike-radius-md);
+      padding: 14px 18px;
+    }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--aike-accent-soft);
+      color: var(--aike-accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    .step-body {
+      flex: 1;
+    }
+
+    .step-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 4px;
+      color: var(--aike-text);
+    }
+
+    .step-desc {
+      font-size: 0.88rem;
+      color: var(--aike-text-muted);
+      line-height: 1.6;
+    }
+
+    /* ==========================================================================
+       5. 交互沙盘系统样式
+       ========================================================================== */
+    .sandbox-container {
+      background: var(--aike-surface);
+      border: 2px solid var(--aike-accent);
+      border-radius: var(--aike-radius-lg);
+      padding: 24px;
+      margin: 32px 0;
+      box-shadow: var(--aike-shadow-lg);
+    }
+
+    .sandbox-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--aike-border);
+    }
+
+    .sandbox-tag {
+      background: var(--aike-accent);
+      color: var(--aike-accent-contrast);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .sandbox-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 860px) {
+      .sandbox-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sandbox-control-panel {
+      background: var(--aike-surface-2);
+      border: 1px solid var(--aike-border);
+      border-radius: var(--aike-radius-md);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .sandbox-display-panel {
+      background: var(--aike-surface-2);
+      border: 1px solid var(--aike-border);
+      border-radius: var(--aike-radius-md);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--aike-text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    select, input[type="range"] {
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--aike-surface);
+      border: 1px solid var(--aike-border);
+      border-radius: var(--aike-radius-sm);
+      color: var(--aike-text);
+      font-size: 0.88rem;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+
+    .btn-action {
+      padding: 8px 14px;
+      border-radius: var(--aike-radius-sm);
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+
+    .btn-action.primary {
+      background: var(--aike-accent);
+      color: var(--aike-accent-contrast);
+    }
+    .btn-action.primary:hover {
+      background: var(--aike-accent-hover);
+    }
+
+    .btn-action.secondary {
+      background: var(--aike-surface-3);
+      color: var(--aike-text);
+      border-color: var(--aike-border);
+    }
+    .btn-action.secondary:hover {
+      background: var(--aike-border);
+    }
+
+    .btn-action.danger {
+      background: var(--rose-bg);
+      color: var(--rose);
+      border-color: var(--rose-border);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .status-badge.pass {
+      background: var(--emerald-bg);
+      color: var(--emerald);
+      border: 1px solid var(--emerald-border);
+    }
+    .status-badge.blocked {
+      background: var(--rose-bg);
+      color: var(--rose);
+      border: 1px solid var(--rose-border);
+    }
+    .status-badge.hold {
+      background: var(--amber-bg);
+      color: var(--amber);
+      border: 1px solid var(--amber-border);
+    }
+
+    .log-box {
+      background: var(--aike-code-bg);
+      border: 1px solid var(--aike-border);
+      border-radius: var(--aike-radius-sm);
+      padding: 10px;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--aike-text-muted);
+      height: 90px;
+      overflow-y: auto;
+      line-height: 1.5;
+    }
+
+    /* ==========================================================================
+       6. 打印媒体查询 (Print Stylesheet)
+       ========================================================================== */
+    @media print {
+      .app-sidebar, #reading-progress, .theme-toggle-btn, .btn-copy, .btn-action {
+        display: none !important;
+      }
+      .app-main {
+        margin: 0 !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+      }
+      body {
+        background: #FFFFFF !important;
+        color: #000000 !important;
+      }
+      .workflow-card, .figure-container, .sandbox-container {
+        box-shadow: none !important;
+        border: 1px solid #CCC !important;
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 阅读进度条 -->
+  <div id="reading-progress"></div>
+
+  <!-- 左侧固定目录导航 -->
+  <aside class="app-sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <a href="#top" class="sidebar-brand">
+        <span>Grok Bot 支持系统</span>
+        <span class="brand-badge">SOP 指南</span>
+      </a>
+      <div class="sidebar-desc">多工具连接 · 5 类高频任务 · 自动巡检</div>
+    </div>
+
+    <nav class="toc-nav" id="toc-nav">
+      <div class="toc-group-title">概览与前置准备</div>
+      <a href="#top" class="toc-link">顶部与前言</a>
+      <a href="#overview" class="toc-link">一分钟速览</a>
+      <a href="#sec-connectors" class="toc-link">连接器授权与环境选择</a>
+      <a href="#sec-connectors-status" class="toc-link toc-sublink">Plain/Stripe/Databricks 状态</a>
+      <a href="#sec-connectors-stripe" class="toc-link toc-sublink">Stripe 网页授权三项核验</a>
+
+      <div class="toc-group-title">五类高频工作流</div>
+      <a href="#sec-task-1" class="toc-link">任务一：跨工具发布追踪</a>
+      <a href="#sec-task-2" class="toc-link">任务二：Bug 复现与证据链</a>
+      <a href="#sec-task-3" class="toc-link">任务三：流失根因与留存分析</a>
+      <a href="#sec-task-4" class="toc-link">任务四：退款审查与受控审批</a>
+      <a href="#sec-task-4-sandbox" class="toc-link toc-sublink">【沙盘】退款风控状态机</a>
+      <a href="#sec-task-5" class="toc-link">任务五：三类角色定制报告</a>
+
+      <div class="toc-group-title">自动化与工程落地</div>
+      <a href="#sec-routine" class="toc-link">自我运行的 Routine</a>
+      <a href="#sec-routine-sandbox" class="toc-link toc-sublink">【沙盘】巡检告警阈值计算</a>
+      <a href="#sec-first-run" class="toc-link">第一次试跑：八步路径</a>
+      <a href="#sec-boundaries" class="toc-link">落地边界与安全原则</a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button type="button" class="btn-theme" id="btn-theme-toggle">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" />
+          <line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+        <span id="txt-theme-label">切换浅色模式</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- 主体内容区 -->
+  <main class="app-main" id="main">
+
+    <!-- 顶部标题与元数据 -->
+    <header class="doc-header" id="top">
+      <div class="doc-meta">
+        <span class="badge-tag accent">xAI 官方工程实操复盘</span>
+        <span class="badge-tag emerald">Agentic Support SOP</span>
+        <span class="badge-tag cyan">权威单文件白皮书</span>
+      </div>
+      <h1 class="doc-title">用 Grok Bot 做客服支持：从多工具连接、5 类高频任务到自动巡检的实操指南</h1>
+      <p class="doc-lead">从 Plain、Stripe 与 Databricks SQL 的逐项授权，到五类客服工作流的可复制指令、交付验收、停止条件和 Routine 设置。</p>
+
+      <!-- 导言摘要卡片 -->
+      <div class="summary-card">
+        <div class="summary-card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 11 12 14 22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          核心落地原则与框架摘要
+        </div>
+        <ul class="summary-list">
+          <li><strong>逐项授权与环境核验</strong>：先为 Plain、Stripe、Databricks SQL 等所需系统逐项授权，并在网页授权页确认可访问的 environment 与第三方风险提示。</li>
+          <li><strong>五类工作流闭环 SOP</strong>：发布追踪、Bug 复现、流失分析、退款审查和自定义报告均给出了可复制指令、预期交付、人工验收与停止条件。</li>
+          <li><strong>写操作刚性阻断</strong>：退款流程按“读取政策、只读摘要、逐条建议、明确批准、执行与回复”的顺序运行；没有人工批准就不执行写操作。</li>
+          <li><strong>单次跑顺转 Routine</strong>：单次工作流跑顺后再转成 Routine，明确频率、查询范围、异常条件、通知去向和人工复核方式；截图数字仅作示意。</li>
+        </ul>
+      </div>
+
+      <p>客服支持是一个典型的高耗时工作，但同时也是与真实用户沟通、获取产品第一手信号的最佳渠道。在处理大规模日常工单时，一线支持人员往往要把大量时间消耗在跨系统切换上：在工单系统翻找历史沟通、在 Stripe 逐笔核对账单、在内部知识库与发布日志间核对功能变更，以及撰写结构高度雷同的跟进邮件。</p>
+      <p>引入 AI 支持 Agent 的目的，是把客服团队从这些低价值的复制粘贴与系统跳转中解脱出来，专注于异常个案与深度服务。但支持 Agent 的输出质量，完全取决于提供给它的上下文与操作工具。本指南基于官方实践与已核实的操作界面，梳理首次连接授权、5 类高频任务单次试跑、人工审批阻断到定时 Routine 自动巡检的完整落地方案。</p>
+
+      <!-- 图 1：Hero 架构全景矢量图 -->
+      <div class="figure-container">
+        <div class="figure-header">
+          <span class="figure-title-badge">图 1 · 官方系统拓扑图 (Hero Diagram)</span>
+          <span style="font-size:0.75rem; color:var(--aike-text-muted);">Grok Bot for Support Architecture</span>
+        </div>
+        <svg viewBox="0 0 960 320" width="100%" height="auto" style="max-height: 320px; font-family: var(--font-sans);">
+          <!-- 背景与网格 -->
+          <rect x="0" y="0" width="960" height="320" fill="var(--svg-node-bg)" rx="12" stroke="var(--aike-border)" stroke-width="1" />
+          
+          <!-- 左侧：跨系统数据源 (Context Layer) -->
+          <g transform="translate(30, 30)">
+            <rect x="0" y="0" width="220" height="260" rx="10" fill="var(--aike-surface-2)" stroke="var(--aike-border)" stroke-width="1" />
+            <text x="20" y="32" fill="var(--aike-accent)" font-size="14" font-weight="700">数据与工具连接层</text>
+            <text x="20" y="52" fill="var(--aike-text-muted)" font-size="11">Context & Tool Providers</text>
+
+            <!-- 工具卡片 1: Plain -->
+            <rect x="16" y="70" width="188" height="42" rx="6" fill="var(--aike-surface)" stroke="var(--cyan-border)" stroke-width="1" />
+            <circle cx="34" cy="91" r="7" fill="var(--cyan)" />
+            <text x="50" y="95" fill="var(--aike-text)" font-size="12" font-weight="600">Plain (工单与客户消息)</text>
+
+            <!-- 工具卡片 2: Stripe -->
+            <rect x="16" y="122" width="188" height="42" rx="6" fill="var(--aike-surface)" stroke="var(--purple-border)" stroke-width="1" />
+            <circle cx="34" cy="143" r="7" fill="var(--purple)" />
+            <text x="50" y="147" fill="var(--aike-text)" font-size="12" font-weight="600">Stripe (账单与订阅)</text>
+
+            <!-- 工具卡片 3: Databricks -->
+            <rect x="16" y="174" width="188" height="42" rx="6" fill="var(--aike-surface)" stroke="var(--amber-border)" stroke-width="1" />
+            <circle cx="34" cy="195" r="7" fill="var(--amber)" />
+            <text x="50" y="199" fill="var(--aike-text)" font-size="12" font-weight="600">Databricks SQL (运营数仓)</text>
+
+            <!-- 工具卡片 4: Notion / Slack -->
+            <rect x="16" y="226" width="188" height="42" rx="6" fill="var(--aike-surface)" stroke="var(--emerald-border)" stroke-width="1" />
+            <circle cx="34" cy="247" r="7" fill="var(--emerald)" />
+            <text x="50" y="251" fill="var(--aike-text)" font-size="12" font-weight="600">Notion / Slack (知识与发布)</text>
+          </g>
+
+          <!-- 箭头流 1 -->
+          <path d="M255 160 L325 160" stroke="var(--aike-accent)" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrow)" />
+
+          <!-- 中间：Grok Bot 核心推理与任务编排 -->
+          <g transform="translate(330, 20)">
+            <rect x="0" y="0" width="300" height="280" rx="12" fill="var(--aike-surface-2)" stroke="var(--aike-accent)" stroke-width="2" />
+            <rect x="15" y="15" width="270" height="34" rx="6" fill="var(--aike-accent-soft)" />
+            <text x="150" y="37" fill="var(--aike-accent)" font-size="15" font-weight="700" text-anchor="middle">Grok Bot 核心编排引擎</text>
+
+            <!-- 子模块 1: 上下文聚类与分析 -->
+            <rect x="18" y="60" width="264" height="44" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border)" />
+            <text x="32" y="86" fill="var(--aike-text)" font-size="12" font-weight="600">① 跨工具检索与语义聚合</text>
+
+            <!-- 子模块 2: 政策核对与建议生成 -->
+            <rect x="18" y="112" width="264" height="44" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border)" />
+            <text x="32" y="138" fill="var(--aike-text)" font-size="12" font-weight="600">② 政策只读比对与处置建议</text>
+
+            <!-- 子模块 3: 人工显式审批阻断网关 -->
+            <rect x="18" y="164" width="264" height="48" rx="6" fill="var(--rose-bg)" stroke="var(--rose-border)" stroke-width="1.5" />
+            <text x="32" y="186" fill="var(--rose)" font-size="12" font-weight="700">③ 显式审批阻断网关 (Human Gate)</text>
+            <text x="32" y="202" fill="var(--aike-text-muted)" font-size="10">未批准严禁向底层执行写操作</text>
+
+            <!-- 子模块 4: 定时任务调度器 -->
+            <rect x="18" y="220" width="264" height="44" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border)" />
+            <text x="32" y="246" fill="var(--aike-text)" font-size="12" font-weight="600">④ Routine 定时巡检与异常监控</text>
+          </g>
+
+          <!-- 箭头流 2 -->
+          <path d="M635 160 L705 160" stroke="var(--emerald)" stroke-width="2" marker-end="url(#arrow)" />
+
+          <!-- 右侧：输出层与人工核验 -->
+          <g transform="translate(710, 30)">
+            <rect x="0" y="0" width="220" height="260" rx="10" fill="var(--aike-surface-2)" stroke="var(--aike-border)" stroke-width="1" />
+            <text x="20" y="32" fill="var(--emerald)" font-size="14" font-weight="700">业务交付与巡检出口</text>
+            <text x="20" y="52" fill="var(--aike-text-muted)" font-size="11">Deliverables & Mobile Alerts</text>
+
+            <rect x="16" y="70" width="188" height="42" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border)" />
+            <text x="28" y="95" fill="var(--aike-text)" font-size="11" font-weight="600">Notion 发布日历 / 流失明细</text>
+
+            <rect x="16" y="122" width="188" height="42" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border)" />
+            <text x="28" y="147" fill="var(--aike-text)" font-size="11" font-weight="600">测试环境复现视频 / 步骤报告</text>
+
+            <rect x="16" y="174" width="188" height="42" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border)" />
+            <text x="28" y="199" fill="var(--aike-text)" font-size="11" font-weight="600">角色定制指标信息图看板</text>
+
+            <rect x="16" y="226" width="188" height="42" rx="6" fill="var(--aike-surface)" stroke="var(--emerald-border)" />
+            <text x="28" y="251" fill="var(--emerald)" font-size="11" font-weight="600">移动端随时复核 / Slack 告警</text>
+          </g>
+        </svg>
+        <div class="figure-caption">图 1：xAI 官方《Grok Bot for Support》系统拓扑：连接器输入、Agent 编排与受控输出。</div>
+      </div>
+    </header>
+
+    <!-- 章节：一分钟速览 -->
+    <section id="overview">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--aike-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+        一分钟速览
+      </h2>
+      <div class="workflow-card">
+        <ul class="summary-list">
+          <li><strong>连接授权必须逐项确认</strong>：页面示例分别连接 Plain、Stripe 与 Databricks SQL；Stripe 授权页要求选择允许访问的具体 environment，并提醒只授权可信第三方。</li>
+          <li><strong>退款写操作必须设置显式人工批准</strong>：先读政策、汇总请求并提出建议，未获批准前不执行写操作；发布知识更新的示例也先暂存修改，而非直接公开。</li>
+          <li><strong>单次验证有效的工作流可直接转为自动巡检</strong>：经过对话调优的分析与监控指令，可配置包含频率、异常阈值与通知渠道的 Routine，在后台持续运行并通过移动端复核。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 章节：连接器授权与环境选择 -->
+    <section id="sec-connectors">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+        开始之前：连接器授权与环境选择
+      </h2>
+      <p>任何任务开始前，第一步是让 Grok Bot 安全获取跨工具的数据上下文。在 SupportGrok 对话中，用户可以直接提出连接第三方工具。</p>
+
+      <div id="sec-connectors-status">
+        <h3>多工具连接状态核对</h3>
+        <p>在实际操作中，支持人员需要逐项开放访问权限。界面通常会明确列出各个工具的连接状态：例如 Databricks SQL 已完成添加，Plain 提示提供授权按钮（Authorize），而 Stripe 则处于等待授权状态。</p>
+
+        <!-- 图 2：仿真 SupportGrok 连接状态界面 -->
+        <div class="figure-container">
+          <div class="figure-header">
+            <span class="figure-title-badge">图 2 · SupportGrok 工具连接面板仿真</span>
+            <span style="font-size:0.75rem; color:var(--aike-text-muted);">Connector Authorization Status</span>
+          </div>
+          <svg viewBox="0 0 880 200" width="100%" height="auto" style="max-height: 200px; font-family: var(--font-sans);">
+            <rect x="0" y="0" width="880" height="200" fill="var(--aike-surface-2)" rx="8" stroke="var(--aike-border)" stroke-width="1" />
+            
+            <!-- 卡片 1: Databricks SQL -->
+            <g transform="translate(30, 30)">
+              <rect x="0" y="0" width="250" height="140" rx="8" fill="var(--aike-surface)" stroke="var(--emerald-border)" stroke-width="1" />
+              <circle cx="25" cy="35" r="10" fill="var(--emerald-bg)" stroke="var(--emerald)" stroke-width="2" />
+              <text x="45" y="40" fill="var(--aike-text)" font-size="14" font-weight="700">Databricks SQL</text>
+              <text x="25" y="75" fill="var(--aike-text-muted)" font-size="12">运营数据仓库只读接入</text>
+              <rect x="25" y="95" width="90" height="24" rx="4" fill="var(--emerald-bg)" />
+              <text x="70" y="111" fill="var(--emerald)" font-size="11" font-weight="700" text-anchor="middle">✓ Connected</text>
+            </g>
+
+            <!-- 卡片 2: Plain -->
+            <g transform="translate(315, 30)">
+              <rect x="0" y="0" width="250" height="140" rx="8" fill="var(--aike-surface)" stroke="var(--cyan-border)" stroke-width="1" />
+              <circle cx="25" cy="35" r="10" fill="var(--cyan-bg)" stroke="var(--cyan)" stroke-width="2" />
+              <text x="45" y="40" fill="var(--aike-text)" font-size="14" font-weight="700">Plain Support</text>
+              <text x="25" y="75" fill="var(--aike-text-muted)" font-size="12">工单系统交互与标签视图</text>
+              <rect x="25" y="95" width="85" height="24" rx="4" fill="var(--cyan)" />
+              <text x="67" y="111" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">Authorize →</text>
+            </g>
+
+            <!-- 卡片 3: Stripe -->
+            <g transform="translate(600, 30)">
+              <rect x="0" y="0" width="250" height="140" rx="8" fill="var(--aike-surface)" stroke="var(--amber-border)" stroke-width="1" />
+              <circle cx="25" cy="35" r="10" fill="var(--amber-bg)" stroke="var(--amber)" stroke-width="2" />
+              <text x="45" y="40" fill="var(--aike-text)" font-size="14" font-weight="700">Stripe Billing</text>
+              <text x="25" y="75" fill="var(--aike-text-muted)" font-size="12">账单明细与退款执行</text>
+              <rect x="25" y="95" width="115" height="24" rx="4" fill="var(--amber-bg)" />
+              <text x="82" y="111" fill="var(--amber)" font-size="11" font-weight="700" text-anchor="middle">Waiting for Auth</text>
+            </g>
+          </svg>
+          <div class="figure-caption">图 2：在 SupportGrok 中提出要连接的系统，再逐项完成授权。</div>
+        </div>
+      </div>
+
+      <div id="sec-connectors-stripe">
+        <h3>Stripe 网页授权的三项人工核验</h3>
+        <p>点击 Stripe 授权时，系统会跳转至 Stripe 的网页授权页面。这里有三项需要人工确认：</p>
+        <div class="step-list">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <div class="step-title">选择所属环境（Environment）</div>
+              <div class="step-desc">必须明确授权的具体环境。连接后的应用只能访问所选环境的数据，后续若需连接其他环境需再授权。</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <div class="step-title">确认第三方可信度</div>
+              <div class="step-desc">页面明确提醒用户仅能向受信任的第三方开放权限。</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <div class="step-title">看清审核边界</div>
+              <div class="step-desc">截图中的 Stripe 页面说明，Stripe 尚未审查或验证 Cursor，也无法确认开发者身份及其如何使用信息；是否授权需要管理员自行判断。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout important">
+          <div class="callout-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            IMPORTANT · 权限审计核心边界
+          </div>
+          <p>连接器配置的核心原则是<strong>逐项授权、选择环境、审慎确认权限</strong>。系统不会凭空提供细粒度权限管控或自动安全网关，管理员必须严格按照环境范围与只读/写入边界逐个核验。</p>
+        </div>
+
+        <!-- 图 3：Stripe 网页授权仿真卡片 -->
+        <div class="figure-container">
+          <div class="figure-header">
+            <span class="figure-title-badge">图 3 · Stripe 网页授权页环境选择与风险免责提示</span>
+            <span style="font-size:0.75rem; color:var(--aike-text-muted);">OAuth Environment & Trust Boundaries</span>
+          </div>
+          <svg viewBox="0 0 880 230" width="100%" height="auto" style="max-height: 230px; font-family: var(--font-sans);">
+            <rect x="0" y="0" width="880" height="230" fill="var(--aike-surface-2)" rx="8" stroke="var(--aike-border)" />
+            
+            <!-- 模拟弹窗卡片 -->
+            <g transform="translate(140, 20)">
+              <rect x="0" y="0" width="600" height="190" rx="8" fill="var(--aike-surface)" stroke="var(--aike-border)" stroke-width="1.5" />
+              <rect x="0" y="0" width="600" height="36" rx="8" fill="var(--aike-surface-3)" />
+              <circle cx="20" cy="18" r="5" fill="#EF4444" />
+              <circle cx="36" cy="18" r="5" fill="#F59E0B" />
+              <circle cx="52" cy="18" r="5" fill="#10B981" />
+              <text x="300" y="23" fill="var(--aike-text-muted)" font-size="12" font-weight="600" text-anchor="middle">Stripe Connect · Authorize External Agent</text>
+
+              <!-- 环境选择栏 -->
+              <rect x="25" y="52" width="550" height="38" rx="6" fill="var(--aike-surface-2)" stroke="var(--aike-border)" />
+              <text x="40" y="76" fill="var(--aike-text)" font-size="12" font-weight="600">Select Environment:</text>
+              <rect x="180" y="59" width="130" height="24" rx="4" fill="var(--aike-surface)" stroke="var(--aike-accent)" />
+              <text x="245" y="75" fill="var(--aike-accent)" font-size="11" font-weight="700" text-anchor="middle">Production ✓</text>
+              <text x="340" y="75" fill="var(--aike-text-muted)" font-size="11">Sandbox / Test</text>
+
+              <!-- 风险告警框 -->
+              <rect x="25" y="100" width="550" height="42" rx="4" fill="var(--amber-bg)" stroke="var(--amber-border)" />
+              <text x="40" y="117" fill="var(--amber)" font-size="11" font-weight="700">⚠️ 第三方免责提醒 (Third-party Trust Notice):</text>
+              <text x="40" y="132" fill="var(--aike-text)" font-size="11">Stripe 尚未审查或验证第三方应用，请自行核验开发者身份及数据处理边界。</text>
+
+              <!-- 操作按钮 -->
+              <rect x="390" y="152" width="85" height="26" rx="4" fill="var(--aike-surface-3)" />
+              <text x="432" y="169" fill="var(--aike-text-muted)" font-size="11" text-anchor="middle">Cancel</text>
+              <rect x="485" y="152" width="90" height="26" rx="4" fill="var(--aike-accent)" />
+              <text x="530" y="169" fill="var(--aike-accent-contrast)" font-size="11" font-weight="700" text-anchor="middle">Authorize</text>
+            </g>
+          </svg>
+          <div class="figure-caption">图 3：选择允许访问的 environment，并在授权前阅读第三方风险提示。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 任务一：跨工具发布追踪与知识库同步 -->
+    <section id="sec-task-1">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+        任务一：跨工具发布追踪与知识库同步
+      </h2>
+      <p>在快节奏的产品迭代中，每周往往会有多次功能交付，且发布时间经常在最后一刻提前或推迟。这导致客服支持团队很难保持内部与外部知识库同步，也很难在发版后的第一时间向产品团队汇总用户反馈。</p>
+
+      <div class="workflow-card">
+        <div class="workflow-header">
+          <span style="font-weight:700; font-size:1.05rem;">跨工具发布追踪与知识暂存工作流</span>
+          <span class="workflow-badge">SOP-01</span>
+        </div>
+
+        <h4 id="sec-task-1-prep">准备工作</h4>
+        <ul>
+          <li>接入团队内部沟通工具（如 Slack 发布频道）。</li>
+          <li>接入产品排期工具（如 Notion 发布日历）。</li>
+          <li>接入公开帮助中心（Help Center）与内部产品文档。</li>
+          <li>配置客服知识暂存接口（如 Parahelp API）。</li>
+          <li>接入工单平台（如 Plain）并配置产品反馈标签视图。</li>
+        </ul>
+
+        <h4 id="sec-task-1-prompt">可复制指令模板</h4>
+        <div class="code-box">
+          <div class="code-box-header">
+            <span>PROMPT TEMPLATE · RELEASE TRACKING</span>
+            <button type="button" class="btn-copy" onclick="copyPrompt('code-task-1')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              复制指令
+            </button>
+          </div>
+          <pre><code id="code-task-1">请检查 [Slack发布频道名称] 中关于未来发布的最新动态，并在 [Notion工作区名称] 中建立接下来一周的发布日历，重点展示今天的排期。
+
+要求交付：
+1. 概括今天发布的具体内容，以及支持团队必须知悉的注意事项；
+2. 对照现有的产品文档与 Help Center：若内容已是最新请直接说明；若有小改动，请先通过 [知识库更新接口名称] 暂存知识更新，不要直接发布；
+3. 在 [工单系统名称] 中找出与本次发布相关的工单，打上描述性标签，并为产品团队创建一个专用的标签视图。</code></pre>
+        </div>
+
+        <h4 id="sec-task-1-checklist">应收到什么（交付物验收清单）</h4>
+        <p>按照截图示例，Bot 应交付：下一周发布日历、当天发布重点与支持团队须知、产品文档与帮助中心的比对结果、已暂存的知识更新、Plain 中的描述性标签，以及供产品团队查看的标签视图。原页面展示的是示意结果，不代表这些系统已替你完成真实配置。</p>
+
+        <h4>人工检查要点</h4>
+        <p>人工需要核对发布的实际生效时间是否与 Slack 讨论一致；检查暂存知识草稿是否准确反映了功能变动，确认无误后再推向生产知识库。</p>
+
+        <h4 id="sec-task-1-stop">何时不能自动继续（停止条件）</h4>
+        <p>基于案例可归纳出一条停止条件：当 Slack 与 Notion 的发布时间互相冲突，或 Bot 无法确认帮助中心是否已同步时，不要继续发布知识更新。先保留暂存稿，交给发布负责人核对；原文没有授权 Bot 自动公开发布。</p>
+
+        <!-- 图 4：跨工具发布追踪数据流示意图 -->
+        <div class="figure-container">
+          <div class="figure-header">
+            <span class="figure-title-badge">图 4 · 跨工具发布追踪数据流向与暂存机制</span>
+            <span style="font-size:0.75rem; color:var(--aike-text-muted);">Release Tracking Data Flow</span>
+          </div>
+          <svg viewBox="0 0 880 200" width="100%" height="auto" style="max-height: 200px; font-family: var(--font-sans);">
+            <rect x="0" y="0" width="880" height="200" fill="var(--aike-surface-2)" rx="8" stroke="var(--aike-border)" />
+
+            <!-- 节点 1: Slack 变更 -->
+            <g transform="translate(30, 40)">
+              <rect x="0" y="0" width="140" height="120" rx="8" fill="var(--aike-surface)" stroke="var(--aike-border)" />
+              <text x="70" y="35" fill="var(--aike-text)" font-size="12" font-weight="700" text-anchor="middle">Slack 讨论</text>
+              <text x="70" y="55" fill="var(--aike-text-muted)" font-size="10" text-anchor="middle">最新动态/排期变更</text>
+              <rect x="20" y="80" width="100" height="24" rx="4" fill="var(--aike-surface-3)" />
+              <text x="70" y="96" fill="var(--aike-accent)" font-size="10" text-anchor="middle">提取变更要点</text>
+            </g>
+
+            <path d="M175 100 L215 100" stroke="var(--aike-accent)" stroke-width="2" marker-end="url(#arrow)" />
+
+            <!-- 节点 2: Notion 日历 -->
+            <g transform="translate(220, 40)">
+              <rect x="0" y="0" width="140" height="120" rx="8" fill="var(--aike-surface)" stroke="var(--aike-border)" />
+              <text x="70" y="35" fill="var(--aike-text)" font-size="12" font-weight="700" text-anchor="middle">Notion 日历</text>
+              <text x="70" y="55" fill="var(--aike-text-muted)" font-size="10" text-anchor="middle">排期比对与日历建档</text>
+              <rect x="20" y="80" width="100" height="24" rx="4" fill="var(--aike-surface-3)" />
+              <text x="70" y="96" fill="var(--emerald)" font-size="10" text-anchor="middle">重点标出今日</text>
+            </g>
+
+            <path d="M365 100 L405 100" stroke="var(--aike-accent)" stroke-width="2" marker-end="url(#arrow)" />
+
+            <!-- 节点 3: Help Center & API 暂存 -->
+            <g transform="translate(410, 40)">
+              <rect x="0" y="0" width="180" height="120" rx="8" fill="var(--aike-surface)" stroke="var(--amber-border)" stroke-width="1.5" />
+              <text x="90" y="30" fill="var(--amber)" font-size="12" font-weight="700" text-anchor="middle">知识库比对与草稿暂存</text>
+              <text x="90" y="48" fill="var(--aike-text-muted)" font-size="10" text-anchor="middle">Help Center / Parahelp API</text>
+              <rect x="15" y="65" width="150" height="40" rx="4" fill="var(--amber-bg)" />
+              <text x="90" y="82" fill="var(--amber)" font-size="10" font-weight="700" text-anchor="middle">严格暂存 (Draft Only)</text>
+              <text x="90" y="96" fill="var(--aike-text-muted)" font-size="9" text-anchor="middle">未经人工审批不得发布</text>
+            </g>
+
+            <path d="M595 100 L635 100" stroke="var(--aike-accent)" stroke-width="2" marker-end="url(#arrow)" />
+
+            <!-- 节点 4: Plain 工单打标 -->
+            <g transform="translate(640, 40)">
+              <rect x="0" y="0" width="200" height="120" rx="8" fill="var(--aike-surface)" stroke="var(--cyan-border)" />
+              <text x="100" y="35" fill="var(--cyan)" font-size="12" font-weight="700" text-anchor="middle">Plain 工单反馈视图</text>
+              <text x="100" y="55" fill="var(--aike-text-muted)" font-size="10" text-anchor="middle">关联本次发版工单</text>
+              <rect x="25" y="75" width="150" height="30" rx="4" fill="var(--cyan-bg)" />
+              <text x="100" y="94" fill="var(--cyan)" font-size="10" font-weight="700" text-anchor="middle">创建产品专用标签视图</text>
+            </g>
+          </svg>
+          <div class="figure-caption">图 4：跨 Slack、Notion、帮助中心、Parahelp API 与 Plain 的示例链路；排期和条目仅作示意。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 任务二：Bug 复现与排查证据链 -->
+    <section id="sec-task-2">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h1v1a5 5 0 0 0 10 0v-1h1a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5z" />
+        </svg>
+        任务二：Bug 复现与排查证据链
+      </h2>
+      <p>用户提交的缺陷报告往往信息简略。如果客服能附带确凿的复现证据与分步操作，工程团队定位问题的速度将大幅提升。</p>
+
+      <div class="workflow-card">
+        <div class="workflow-header">
+          <span style="font-weight:700; font-size:1.05rem;">Bug 复现与分步证据链工作流</span>
+          <span class="workflow-badge">SOP-02</span>
+        </div>
+
+        <h4 id="sec-task-2-prep">准备工作</h4>
+        <ul>
+          <li>准备包含异常描述、用户操作路径和已知环境线索的工单。</li>
+          <li>确认 Bot 可以在不会影响真实用户数据的环境中尝试复现，并能录制问题状态。原文没有规定必须使用哪一种测试环境或连接器。</li>
+        </ul>
+
+        <h4 id="sec-task-2-prompt">可复制指令模板</h4>
+        <div class="code-box">
+          <div class="code-box-header">
+            <span>PROMPT TEMPLATE · BUG REPRODUCTION</span>
+            <button type="button" class="btn-copy" onclick="copyPrompt('code-task-2')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              复制指令
+            </button>
+          </div>
+          <pre><code id="code-task-2">请读取工单 [工单编号/标题] 中用户反馈的问题，在测试环境中尝试重新复现该故障。
+
+要求交付：
+1. 记录故障发生时的异常状态视频；
+2. 梳理出逐步复现步骤（Reproduction Steps）；如果材料足够，再注明前置条件、操作路径、预期状态和实际异常；
+3. 将复现材料整理成报告，准备同步给工程团队。</code></pre>
+        </div>
+
+        <h4 id="sec-task-2-checklist">应收到什么</h4>
+        <p>原文明确要求两项交付：记录异常状态的视频，以及可以交给工程团队的分步复现说明。日志或网络状态码只有在环境确实提供且成功捕获时才能附上，不能把没有采集到的诊断信息写成事实。</p>
+
+        <h4>人工检查要点</h4>
+        <p>人工支持人员需检查复现步骤是否还原了工单中的真实场景，视频是否确实展示了用户报告的异常，而非另一个相似问题。</p>
+
+        <h4 id="sec-task-2-stop">何时不能自动继续</h4>
+        <p>如果现有材料不足以复现，Bot 应明确写出缺少的环境、账号或步骤，不要补猜。若复现会改动真实用户数据，也应暂停并交给人工安排受控测试；这是基于案例用途给出的安全建议，原文没有描述具体测试基础设施。</p>
+      </div>
+    </section>
+
+    <!-- 任务三：用户流失根因聚类与留存分析 -->
+    <section id="sec-task-3">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--rose)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="8.5" cy="7" r="4" />
+          <line x1="18" y1="8" x2="23" y2="13" />
+          <line x1="23" y1="8" x2="18" y2="13" />
+        </svg>
+        任务三：用户流失根因聚类与留存分析
+      </h2>
+      <p>处理退订与威胁流失的工单不仅关乎挽留，更能暴露产品与定价的核心短板。依靠人工逐张工单阅读极难形成量化认知，Bot 可以对流失工单进行快速聚类与交叉透视。</p>
+
+      <div class="workflow-card">
+        <div class="workflow-header">
+          <span style="font-weight:700; font-size:1.05rem;">流失根因聚类与账户生命周期分析工作流</span>
+          <span class="workflow-badge">SOP-03</span>
+        </div>
+
+        <h4 id="sec-task-3-prep">准备工作</h4>
+        <ul>
+          <li>接入工单系统的历史邮件与消息数据。</li>
+          <li>确保可查询订阅时长与竞品提及等分析字段。</li>
+          <li>准备承载详细工单清单的页面；截图示例把明细放在 Notion。</li>
+        </ul>
+
+        <h4 id="sec-task-3-prompt">可复制指令模板</h4>
+        <div class="code-box">
+          <div class="code-box-header">
+            <span>PROMPT TEMPLATE · CHURN ANALYSIS</span>
+            <button type="button" class="btn-copy" onclick="copyPrompt('code-task-3')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              复制指令
+            </button>
+          </div>
+          <pre><code id="code-task-3">请调取 [工单系统名称] 中 [时间范围，如：过去一天 / 过去一周] 内所有表达过流失或退订倾向的用户工单。
+
+要求交付：
+1. 对流失的根本原因进行聚类（如价格问题、产品功能不足、账单争议、未使用、转向竞品等）；
+2. 交叉比对用户的订阅时长（Account Age）与竞品提及情况，生成“流失原因 × 订阅时长分布”图表；
+3. 计算总体邮件量、平均账户时长与各原因占比，并将包含完整上下文的详细工单列表同步至 [Notion页面路径]。</code></pre>
+        </div>
+
+        <h4 id="sec-task-3-checklist">应收到什么</h4>
+        <p>Bot 应交付一份多维统计摘要，包含分析的邮件总量、各分类原因分布、被提及的竞品名单、平均账户时长及分段区间。同时生成一张直观的“流失原因 × 订阅时长”交叉图，并附带可直接点击查看明细的 Notion 嵌入入口。</p>
+
+        <h4>人工检查要点</h4>
+        <p>业务负责人应抽查原始工单，确认每个原因类别的定义一致，并核对竞品名称是否真的出现在对应上下文中，避免把一般抱怨误判为转向竞品。</p>
+
+        <h4 id="sec-task-3-stop">何时不能自动继续</h4>
+        <p>若该时间段内拉取到的工单样本量过低导致分布失真，或者底层订阅数据关联失败时，不能直接作为流失决策依据，应先核对数据源同步状态。</p>
+
+        <!-- 图 5：流失聚类与订阅时长交叉矩阵原生 SVG 图表 -->
+        <div class="figure-container">
+          <div class="figure-header">
+            <span class="figure-title-badge">图 5 · 流失原因聚类 × 订阅时长分布交叉透视</span>
+            <span style="font-size:0.75rem; color:var(--aike-text-muted);">Churn Cluster & Account Age Cross Analysis</span>
+          </div>
+          <svg viewBox="0 0 880 260" width="100%" height="auto" style="max-height: 260px; font-family: var(--font-sans);">
+            <rect x="0" y="0" width="880" height="260" fill="var(--aike-surface-2)" rx="8" stroke="var(--aike-border)" />
+
+            <!-- 左侧统计摘要卡 -->
+            <g transform="translate(20, 20)">
+              <rect x="0" y="0" width="220" height="220" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border)" />
+              <text x="16" y="28" fill="var(--aike-text)" font-size="13" font-weight="700">流失工单分析摘要</text>
+              <text x="16" y="54" fill="var(--aike-text-muted)" font-size="11">样本总量: <tspan fill="var(--aike-accent)" font-weight="700">142 封邮件</tspan></text>
+              <text x="16" y="74" fill="var(--aike-text-muted)" font-size="11">平均账户时长: <tspan fill="var(--aike-text)" font-weight="600">4.8 个月</tspan></text>
+              <text x="16" y="94" fill="var(--aike-text-muted)" font-size="11">提及竞品比例: <tspan fill="var(--rose)" font-weight="700">28.4%</tspan></text>
+              
+              <line x1="16" y1="108" x2="204" y2="108" stroke="var(--aike-border-soft)" />
+              <text x="16" y="126" fill="var(--aike-text)" font-size="11" font-weight="600">Top 竞品提及榜:</text>
+              <text x="16" y="146" fill="var(--aike-text-muted)" font-size="11">1. Zendesk / Intercom</text>
+              <text x="16" y="164" fill="var(--aike-text-muted)" font-size="11">2. Helpscout</text>
+              <text x="16" y="182" fill="var(--aike-text-muted)" font-size="11">3. Front</text>
+              <text x="16" y="206" fill="var(--cyan)" font-size="10" font-weight="600">↗ Notion 明细清单已挂载</text>
+            </g>
+
+            <!-- 右侧交叉图表（矩阵热力与柱状模拟） -->
+            <g transform="translate(260, 20)">
+              <rect x="0" y="0" width="600" height="220" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border)" />
+              <text x="20" y="26" fill="var(--aike-text)" font-size="12" font-weight="700">流失原因 × 订阅时长（月）分布矩阵</text>
+              
+              <!-- 列头：时长区间 -->
+              <text x="140" y="50" fill="var(--aike-text-muted)" font-size="11" text-anchor="middle">&lt; 1个月</text>
+              <text x="230" y="50" fill="var(--aike-text-muted)" font-size="11" text-anchor="middle">1 - 3个月</text>
+              <text x="320" y="50" fill="var(--aike-text-muted)" font-size="11" text-anchor="middle">3 - 6个月</text>
+              <text x="410" y="50" fill="var(--aike-text-muted)" font-size="11" text-anchor="middle">6 - 12个月</text>
+              <text x="500" y="50" fill="var(--aike-text-muted)" font-size="11" text-anchor="middle">&gt; 12个月</text>
+
+              <!-- 行 1: 价格与价值 (Pricing) -->
+              <text x="20" y="80" fill="var(--aike-text)" font-size="11" font-weight="600">价格与预算</text>
+              <rect x="100" y="65" width="80" height="22" rx="4" fill="rgba(217, 119, 87, 0.4)" />
+              <rect x="190" y="65" width="80" height="22" rx="4" fill="rgba(217, 119, 87, 0.7)" />
+              <rect x="280" y="65" width="80" height="22" rx="4" fill="rgba(217, 119, 87, 0.5)" />
+              <rect x="370" y="65" width="80" height="22" rx="4" fill="rgba(217, 119, 87, 0.2)" />
+              <rect x="460" y="65" width="80" height="22" rx="4" fill="rgba(217, 119, 87, 0.1)" />
+
+              <!-- 行 2: 功能不足 (Feature Gap) -->
+              <text x="20" y="112" fill="var(--aike-text)" font-size="11" font-weight="600">功能缺失</text>
+              <rect x="100" y="97" width="80" height="22" rx="4" fill="rgba(139, 92, 246, 0.6)" />
+              <rect x="190" y="97" width="80" height="22" rx="4" fill="rgba(139, 92, 246, 0.8)" />
+              <rect x="280" y="97" width="80" height="22" rx="4" fill="rgba(139, 92, 246, 0.4)" />
+              <rect x="370" y="97" width="80" height="22" rx="4" fill="rgba(139, 92, 246, 0.3)" />
+              <rect x="460" y="97" width="80" height="22" rx="4" fill="rgba(139, 92, 246, 0.15)" />
+
+              <!-- 行 3: 转向竞品 (Competitor) -->
+              <text x="20" y="144" fill="var(--aike-text)" font-size="11" font-weight="600">转向竞品</text>
+              <rect x="100" y="129" width="80" height="22" rx="4" fill="rgba(239, 68, 68, 0.2)" />
+              <rect x="190" y="129" width="80" height="22" rx="4" fill="rgba(239, 68, 68, 0.5)" />
+              <rect x="280" y="129" width="80" height="22" rx="4" fill="rgba(239, 68, 68, 0.75)" />
+              <rect x="370" y="129" width="80" height="22" rx="4" fill="rgba(239, 68, 68, 0.6)" />
+              <rect x="460" y="129" width="80" height="22" rx="4" fill="rgba(239, 68, 68, 0.4)" />
+
+              <!-- 行 4: 未使用/项目搁置 (Unused) -->
+              <text x="20" y="176" fill="var(--aike-text)" font-size="11" font-weight="600">未充分使用</text>
+              <rect x="100" y="161" width="80" height="22" rx="4" fill="rgba(16, 185, 129, 0.7)" />
+              <rect x="190" y="161" width="80" height="22" rx="4" fill="rgba(16, 185, 129, 0.5)" />
+              <rect x="280" y="161" width="80" height="22" rx="4" fill="rgba(16, 185, 129, 0.25)" />
+              <rect x="370" y="161" width="80" height="22" rx="4" fill="rgba(16, 185, 129, 0.1)" />
+              <rect x="460" y="161" width="80" height="22" rx="4" fill="rgba(16, 185, 129, 0.05)" />
+
+              <text x="20" y="206" fill="var(--aike-text-faint)" font-size="10">* 色块浓度代表对应交叉单元格中流失工单的集中度分布。</text>
+            </g>
+          </svg>
+          <div class="figure-caption">图 5：示例输出包含原因、竞品提及、账户时长区间及交叉图；所有数量与比例仅作示意。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 任务四：退款请求审查与受控人工审批 -->
+    <section id="sec-task-4">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+          <line x1="1" y1="10" x2="23" y2="10" />
+        </svg>
+        任务四：退款请求审查与受控人工审批
+      </h2>
+      <p>退款处理直接涉及资金划转，既不能完全依靠人工导致积压，也绝不能让 AI 拥有不受约束的自动扣款与退款权力。合理流程是让 AI 负责政策核对与方案建议，最终确认权始终保留在人手中。</p>
+
+      <div class="workflow-card">
+        <div class="workflow-header">
+          <span style="font-weight:700; font-size:1.05rem;">退款政策核查与受控审批工作流</span>
+          <span class="workflow-badge">SOP-04 · 核心资金风控</span>
+        </div>
+
+        <h4 id="sec-task-4-prep">准备工作</h4>
+        <ul>
+          <li>在 Notion 或内部知识库中维护最新版退款政策（Refund Policy）。</li>
+          <li>赋予 Bot 对 Plain 工单中退款申请的只读检索权限。</li>
+          <li>连接实际执行退款的系统；页面另展示了 Stripe 连接器，但没有说明所有退款一定通过 Stripe 完成。无论连接什么系统，都要在指令中明确：未获批准前不得执行写操作。</li>
+        </ul>
+
+        <h4>执行逻辑与审批顺序</h4>
+        <p>基于案例归纳，该工作流必须严格遵循<strong>“检索政策 → 只读摘要 → 逐条给出处置建议 → 显式人工批准 → 执行写操作 → 回复用户”</strong>的刚性链路。</p>
+
+        <h4 id="sec-task-4-prompt">可复制指令模板</h4>
+        <div class="code-box">
+          <div class="code-box-header">
+            <span>PROMPT TEMPLATE · REFUND REVIEW</span>
+            <button type="button" class="btn-copy" onclick="copyPrompt('code-task-4')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              复制指令
+            </button>
+          </div>
+          <pre><code id="code-task-4">请首先阅读 [Notion退款政策页面] 的退款规则。然后检查 [工单系统名称] 中 [时间范围，如：过去一小时] 内收到的退款申请，并生成一份只读摘要。
+
+要求与安全限制：
+1. 未经我的显式批准（Explicit Approval），不得在底层系统执行任何写操作（严禁直接操作退款或更改订阅）；
+2. 对照政策，为每一笔退款申请提出具体建议（如：退款并取消订阅、拒绝退款、升级转交账单团队）；
+3. 针对符合挽留条件的特定客户，可提供对应的挽留折让方案（Retention Deal）；
+4. 等待我选择批准建议或暂缓；获得明确批准后，才执行相应变更并向用户回复决定。</code></pre>
+        </div>
+
+        <h4 id="sec-task-4-checklist">应收到什么</h4>
+        <p>按照截图示例，Bot 先输出待处理工单、申请原因与处置建议，例如 <code>Refund &amp; Cancel</code>、<code>Deny</code> 或 <code>Escalate to Billing Team</code>，再提供 <code>Approve recommended</code>（批准推荐项）与 <code>Hold</code>（暂缓）选项。截图中的工单数量、理由和建议仅作示意。</p>
+
+        <h4>人工检查要点</h4>
+        <p>人工审批人需逐笔核验 Bot 建议是否合规，重点复核非标准申请的折让方案是否越权，确认无误后点击批准。</p>
+
+        <h4 id="sec-task-4-stop">何时不能自动继续（核心阻断点）</h4>
+        <div class="callout important">
+          <div class="callout-title">⚠️ 资金安全核心停顿点</div>
+          <p><strong>在获得人工显式批准之前，不得执行退款写操作。</strong> 如果政策缺失、申请无法与政策对应，或审批人没有明确选择批准，就停留在摘要和建议阶段；可以人工选择 <code>Hold</code>，但原文没有承诺 Bot 会依据某些风险规则自动进入该状态。</p>
+        </div>
+
+        <!-- 图 6：退款审查与审批界面仿真卡片 -->
+        <div class="figure-container">
+          <div class="figure-header">
+            <span class="figure-title-badge">图 6 · 退款政策核对、处置建议与人工审批界面</span>
+            <span style="font-size:0.75rem; color:var(--aike-text-muted);">Refund Review & Explicit Approval</span>
+          </div>
+          <svg viewBox="0 0 880 230" width="100%" height="auto" style="max-height: 230px; font-family: var(--font-sans);">
+            <rect x="0" y="0" width="880" height="230" fill="var(--aike-surface-2)" rx="8" stroke="var(--aike-border)" />
+
+            <!-- 表格头部 -->
+            <g transform="translate(20, 20)">
+              <rect x="0" y="0" width="840" height="34" rx="4" fill="var(--aike-surface-3)" />
+              <text x="20" y="22" fill="var(--aike-text)" font-size="12" font-weight="700">工单与客户 (Ticket)</text>
+              <text x="230" y="22" fill="var(--aike-text)" font-size="12" font-weight="700">申请原因 (Reason)</text>
+              <text x="450" y="22" fill="var(--aike-text)" font-size="12" font-weight="700">政策核对结果 (Policy Match)</text>
+              <text x="660" y="22" fill="var(--aike-text)" font-size="12" font-weight="700">Grok Bot 建议操作</text>
+
+              <!-- 行 1 -->
+              <rect x="0" y="42" width="840" height="42" rx="4" fill="var(--aike-surface)" stroke="var(--aike-border-soft)" />
+              <text x="20" y="67" fill="var(--aike-text)" font-size="11" font-weight="600">#4902 Acme Corp ($490)</text>
+              <text x="230" y="67" fill="var(--aike-text-muted)" font-size="11">年付自动续费未提前通知</text>
+              <text x="450" y="67" fill="var(--emerald)" font-size="11" font-weight="600">✓ 续费 48h 内申请符合全退</text>
+              <rect x="660" y="52" width="110" height="22" rx="4" fill="var(--emerald-bg)" />
+              <text x="715" y="67" fill="var(--emerald)" font-size="11" font-weight="700" text-anchor="middle">Refund &amp; Cancel</text>
+
+              <!-- 行 2 -->
+              <rect x="0" y="90" width="840" height="42" rx="4" fill="var(--aike-surface)" stroke="var(--aike-border-soft)" />
+              <text x="20" y="115" fill="var(--aike-text)" font-size="11" font-weight="600">#4905 John Doe ($29)</text>
+              <text x="230" y="115" fill="var(--aike-text-muted)" font-size="11">已使用 25 天后要求全退</text>
+              <text x="450" y="115" fill="var(--rose)" font-size="11" font-weight="600">✕ 超出 14 天退款窗口</text>
+              <rect x="660" y="100" width="80" height="22" rx="4" fill="var(--rose-bg)" />
+              <text x="700" y="115" fill="var(--rose)" font-size="11" font-weight="700" text-anchor="middle">Deny</text>
+
+              <!-- 底部操作与写权限控制条 -->
+              <rect x="0" y="140" width="840" height="44" rx="4" fill="var(--aike-surface)" stroke="var(--amber-border)" stroke-width="1.5" />
+              <circle cx="25" cy="162" r="6" fill="var(--rose)" />
+              <text x="40" y="166" fill="var(--aike-text)" font-size="11" font-weight="600">写权限锁定：等待管理员显式审批。未经批准严禁在 Stripe 发起退款。</text>
+
+              <rect x="580" y="148" width="110" height="28" rx="4" fill="var(--aike-surface-3)" stroke="var(--aike-border)" />
+              <text x="635" y="166" fill="var(--aike-text)" font-size="11" font-weight="600" text-anchor="middle">Hold (暂缓)</text>
+
+              <rect x="705" y="148" width="125" height="28" rx="4" fill="var(--aike-accent)" />
+              <text x="767" y="166" fill="var(--aike-accent-contrast)" font-size="11" font-weight="700" text-anchor="middle">Approve (批准)</text>
+            </g>
+          </svg>
+          <div class="figure-caption">图 6：先生成处置建议，再等待批准或暂缓；截图内工单与理由仅作示意。</div>
+        </div>
+
+        <!-- 交互沙盘 1：退款审查与审批风控状态机模拟器 -->
+        <div class="sandbox-container" id="sec-task-4-sandbox">
+          <div class="sandbox-header">
+            <div>
+              <span class="sandbox-tag">交互沙盘 1</span>
+              <strong style="margin-left: 10px; font-size: 1.05rem;">退款审查与受控人工审批风控状态机</strong>
+            </div>
+            <span style="font-size:0.75rem; color:var(--aike-text-muted);">Refund Guardrail Simulator</span>
+          </div>
+          <p style="font-size:0.86rem; color:var(--aike-text-muted); margin-bottom:14px;">
+            体验 AI 在资金写操作中的“只读核验 ➔ 建议 ➔ 显式人工批准”三阶安全链。未点击批准前，底层 Stripe 写接口处于物理闭锁态。
+          </p>
+          <div class="sandbox-grid">
+            <!-- 控制侧 -->
+            <div class="sandbox-control-panel">
+              <div class="form-group">
+                <label class="form-label" for="rf-scenario-select">
+                  <span>选择待处理退款工单情境</span>
+                  <span style="font-size:0.75rem; color:var(--aike-accent);">Ticket Scenario</span>
+                </label>
+                <select id="rf-scenario-select" onchange="updateRefundSandbox()">
+                  <option value="case1">工单 #101：年付续订 24 小时内申请误扣款 ($499)</option>
+                  <option value="case2">工单 #102：订阅使用第 27 天申请全额退款 ($39)</option>
+                  <option value="case3">工单 #103：高意向企业大客户因预算削减提出终止 ($1,200)</option>
+                  <option value="case4">工单 #104：恶意欺诈争议工单 (Chargeback 威胁)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">审批人处置动作 (Human Gate Decision)</label>
+                <div class="btn-group">
+                  <button type="button" class="btn-action primary" id="btn-rf-approve" >Approve (批准)</button>
+                  <button type="button" class="btn-action secondary" id="btn-rf-hold" >Hold (暂缓/核实)</button>
+                  <button type="button" class="btn-action danger" id="btn-rf-deny" >Deny (拒绝)</button>
+                  <button type="button" class="btn-action secondary" id="btn-rf-reset" >重置工单</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 显示侧 -->
+            <div class="sandbox-display-panel">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.84rem; color:var(--aike-text-muted);">状态机阶段：</span>
+                <span id="out-rf-status" class="status-badge blocked">等待人工审批 (Locked)</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.84rem; color:var(--aike-text-muted);">政策比对结论：</span>
+                <span id="out-rf-policy" style="font-size:0.85rem; font-weight:600; color:var(--emerald);">符合 48h 宽限期退款规则</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.84rem; color:var(--aike-text-muted);">Grok 推荐操作：</span>
+                <span id="out-rf-action" style="font-size:0.85rem; font-weight:600; color:var(--aike-accent);">Refund &amp; Cancel</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.84rem; color:var(--aike-text-muted);">Stripe 写操作权限：</span>
+                <span id="out-rf-write-perm" class="status-badge blocked">⛔ 严禁写入 (No Permission)</span>
+              </div>
+              <div class="form-group" style="margin-top:6px;">
+                <label class="form-label">执行审计日志 (Audit Trail)</label>
+                <div class="log-box" id="out-rf-log">[14:02:01] 读取 Notion 退款政策: 规则命中匹配成功。<br>[14:02:02] 已生成只读摘要与处置建议，未获人工批准，Stripe API 处于写保护状态。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 任务五：面向三类角色的定制指标报告 -->
+    <section id="sec-task-5">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+          <path d="M22 12A10 10 0 0 0 12 2v10z" />
+        </svg>
+        任务五：面向三类角色的定制指标报告
+      </h2>
+      <p>不同团队及团队内部的不同岗位，关心的客服核心指标完全不同。传统做法是让 BI 团队维护多张仪表盘，而当底层数据可查询时，可以直接让 Bot 生成针对特定角色的定制化信息图。</p>
+
+      <div class="workflow-card">
+        <div class="workflow-header">
+          <span style="font-weight:700; font-size:1.05rem;">面向三类角色的多维指标看板工作流</span>
+          <span class="workflow-badge">SOP-05</span>
+        </div>
+
+        <h4 id="sec-task-5-prep">准备工作</h4>
+        <ul>
+          <li>打通底层数据仓库查询权限（如 Databricks SQL）。</li>
+          <li>明确各个角色的核心关注维度与统计口径。</li>
+        </ul>
+
+        <h4>核心指标归纳（按角色划分）</h4>
+        <p>根据实际管理场景，三类关键角色的监控重点存在明显分工：</p>
+        <div class="data-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>管理角色 (Role)</th>
+                <th>核心关注指标</th>
+                <th>业务决策关注点</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>AI 支持 Agent 负责人<br>(AI Support Agent Lead)</strong></td>
+                <td>
+                  • 端到端解决率 (End-to-End Resolution Rate)<br>
+                  • 渠道组合分布 (Channel Mix)
+                </td>
+                <td>评估 Bot 自主闭环能力，监控各渠道引流负载与分流成熟度。</td>
+              </tr>
+              <tr>
+                <td><strong>帮助中心负责人<br>(Help Center Lead)</strong></td>
+                <td>
+                  • 分流率 (Deflection Rate)<br>
+                  • 搜索成功率 (Search Success Rate)<br>
+                  • 内容有用度评价 (Helpfulness)
+                </td>
+                <td>发现知识库盲区与过时文档，降低进入人工工单池的总体比例。</td>
+              </tr>
+              <tr>
+                <td><strong>高阶支持负责人<br>(Premium Support Lead)</strong></td>
+                <td>
+                  • SLA 履约表现 (SLA Attainment)<br>
+                  • 高优先级工单总量 (P0/P1 Volume)<br>
+                  • 首次响应时间 (First Response Time)
+                </td>
+                <td>保障大客户及关键故障的兜底时效，防范违约风险与客诉升级。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4 id="sec-task-5-prompt">可复制指令模板</h4>
+        <div class="code-box">
+          <div class="code-box-header">
+            <span>PROMPT TEMPLATE · ROLE-BASED REPORTING</span>
+            <button type="button" class="btn-copy" onclick="copyPrompt('code-task-5')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              复制指令
+            </button>
+          </div>
+          <pre><code id="code-task-5">请查询底层数据仓库（如 [Databricks SQL数据源]），拉取 [统计时间范围，如：前一天] 的支持运营数据，为以下三类角色分别生成关键指标信息图：
+
+1. AI Support Agent 负责人：端到端解决率、各渠道流量占比；
+2. Help Center 负责人：分流率、搜索命中与成功率、内容有用度反馈；
+3. Premium Support 负责人：SLA 达标率、高优先级工单量、首次响应耗时。</code></pre>
+        </div>
+
+        <h4 id="sec-task-5-checklist">应收到什么</h4>
+        <p>Bot 应输出一份整合的信息图看板，各分块清晰对应上述三类角色的专属指标卡片与趋势分布，无需人工导出 CSV 重新制表。</p>
+
+        <h4>人工检查要点</h4>
+        <p>核对时间范围、三类读者和每个指标的业务口径是否与你的团队定义一致，并确认信息图能够追溯到实际查询数据。原文没有提供统一公式，因此不要把截图里的算法或数值当作行业标准。</p>
+
+        <h4 id="sec-task-5-stop">何时不能自动继续</h4>
+        <p>如果某个指标没有定义、数据不完整或查询失败，就不要把生成的信息图当作决策依据；先补齐口径或数据，再重新运行。这是基于示例归纳的验收要求。</p>
+
+        <!-- 图 7：三类角色指标仪表盘卡片 -->
+        <div class="figure-container">
+          <div class="figure-header">
+            <span class="figure-title-badge">图 7 · 面向三类角色的定制关键指标信息图</span>
+            <span style="font-size:0.75rem; color:var(--aike-text-muted);">Role-Based Dashboard Infographic</span>
+          </div>
+          <svg viewBox="0 0 880 240" width="100%" height="auto" style="max-height: 240px; font-family: var(--font-sans);">
+            <rect x="0" y="0" width="880" height="240" fill="var(--aike-surface-2)" rx="8" stroke="var(--aike-border)" />
+
+            <!-- 卡片 1: AI Support Agent Lead -->
+            <g transform="translate(20, 20)">
+              <rect x="0" y="0" width="260" height="200" rx="8" fill="var(--aike-surface)" stroke="var(--cyan-border)" stroke-width="1.5" />
+              <rect x="0" y="0" width="260" height="32" rx="8" fill="var(--cyan-bg)" />
+              <text x="130" y="21" fill="var(--cyan)" font-size="12" font-weight="700" text-anchor="middle">AI Support Agent Lead</text>
+
+              <text x="20" y="60" fill="var(--aike-text-muted)" font-size="11">端到端解决率 (Resolution):</text>
+              <text x="20" y="90" fill="var(--emerald)" font-size="26" font-weight="700">78.4%</text>
+
+              <text x="20" y="125" fill="var(--aike-text-muted)" font-size="11">渠道组合分布 (Channel Mix):</text>
+              <rect x="20" y="135" width="115" height="12" rx="2" fill="var(--cyan)" />
+              <rect x="138" y="135" width="68" height="12" rx="2" fill="var(--purple)" />
+              <rect x="208" y="135" width="32" height="12" rx="2" fill="var(--amber)" />
+              <text x="20" y="165" fill="var(--aike-text-muted)" font-size="10">Web (52%) · Email (31%) · App (17%)</text>
+            </g>
+
+            <!-- 卡片 2: Help Center Lead -->
+            <g transform="translate(310, 20)">
+              <rect x="0" y="0" width="260" height="200" rx="8" fill="var(--aike-surface)" stroke="var(--emerald-border)" stroke-width="1.5" />
+              <rect x="0" y="0" width="260" height="32" rx="8" fill="var(--emerald-bg)" />
+              <text x="130" y="21" fill="var(--emerald)" font-size="12" font-weight="700" text-anchor="middle">Help Center Lead</text>
+
+              <text x="20" y="60" fill="var(--aike-text-muted)" font-size="11">工单前置分流率 (Deflection):</text>
+              <text x="20" y="90" fill="var(--cyan)" font-size="26" font-weight="700">42.1%</text>
+
+              <text x="20" y="125" fill="var(--aike-text-muted)" font-size="11">搜索成功率: <tspan fill="var(--aike-text)" font-weight="700">89.6%</tspan></text>
+              <text x="20" y="148" fill="var(--aike-text-muted)" font-size="11">内容有用度反馈: <tspan fill="var(--emerald)" font-weight="700">91.2%</tspan></text>
+              <text x="20" y="172" fill="var(--aike-text-faint)" font-size="10">过去 24 小时未命中关键词: 18 个</text>
+            </g>
+
+            <!-- 卡片 3: Premium Support Lead -->
+            <g transform="translate(600, 20)">
+              <rect x="0" y="0" width="260" height="200" rx="8" fill="var(--aike-surface)" stroke="var(--purple-border)" stroke-width="1.5" />
+              <rect x="0" y="0" width="260" height="32" rx="8" fill="var(--purple-bg)" />
+              <text x="130" y="21" fill="var(--purple)" font-size="12" font-weight="700" text-anchor="middle">Premium Support Lead</text>
+
+              <text x="20" y="60" fill="var(--aike-text-muted)" font-size="11">SLA 履约达标率 (SLA Rate):</text>
+              <text x="20" y="90" fill="var(--aike-accent)" font-size="26" font-weight="700">99.1%</text>
+
+              <text x="20" y="125" fill="var(--aike-text-muted)" font-size="11">高优先级工单 (P0/P1): <tspan fill="var(--rose)" font-weight="700">14 件</tspan></text>
+              <text x="20" y="148" fill="var(--aike-text-muted)" font-size="11">首次响应均时: <tspan fill="var(--emerald)" font-weight="700">8.2 分钟</tspan></text>
+              <text x="20" y="172" fill="var(--aike-text-faint)" font-size="10">超时违约预警工单: 0 笔</text>
+            </g>
+          </svg>
+          <div class="figure-caption">图 7：同一份支持数据按三类角色生成不同指标组合；截图内比例与数值仅作示意。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 章节：配置自我运行的 Routine -->
+    <section id="sec-routine">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--aike-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+        </svg>
+        从单次对话到自动巡检：配置自我运行的 Routine
+      </h2>
+      <p>上述五个场景在单次对话验证通过后，最大的价值释放是把它们转为自动运行的巡检任务（Routine，即自动化工作流）。这样即便支持人员合上电脑或外出休息，Bot 仍会在云端持续监控队列与关键指标。</p>
+
+      <div class="workflow-card">
+        <h4 id="sec-routine-elements">六项核心配置要素（基于案例归纳）</h4>
+        <p>要把一个对话工作流固化为可靠的 Routine，配置时需要完整包含以下六个要素：</p>
+        <div class="step-list">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <div class="step-title">已验证的工作流</div>
+              <div class="step-desc">必须是此前在对话界面中经过实际调试、输入输出均已确认的稳定指令，切忌将未经验证的复杂 Prompt 直接挂载为 Routine。</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <div class="step-title">执行频率</div>
+              <div class="step-desc">根据业务节奏设定触发周期，例如每小时轮巡一次或每天特定时段执行。</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <div class="step-title">查询对象与数据范围</div>
+              <div class="step-desc">明确每次执行时检索的数据表、工单队列或时间窗口（如“过去一小时内的新增数据”）。</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <div class="step-title">异常触发条件（Alert Conditions）</div>
+              <div class="step-desc">明确界定什么情况下触发主动告警，例如“端到端解决率低于设定阈值”或“出现 SLA 违约（SLA Breach）”。</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">5</div>
+            <div class="step-body">
+              <div class="step-title">通知去向与渠道</div>
+              <div class="step-desc">明确异常要发到哪里；截图示例同时通知当前对话与一个指定 Slack 频道。</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">6</div>
+            <div class="step-body">
+              <div class="step-title">人工复核方式</div>
+              <div class="step-desc">原文说明可以从 Grok Bot Mobile App 按自己的时间查看结果，但没有展示移动端审批流程。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout note">
+          <div class="callout-title">NOTE · 阈值设置与业务基线</div>
+          <p>截图中出现的解决率百分比或 SLA 响应时长数值仅作流程演示，<strong>不代表推荐的行业阈值</strong>。每个团队必须结合自身历史基线与业务协议设定触发条件。</p>
+        </div>
+
+        <h4 id="sec-routine-prompt">可复制指令模板</h4>
+        <div class="code-box">
+          <div class="code-box-header">
+            <span>PROMPT TEMPLATE · CONVERT TO ROUTINE</span>
+            <button type="button" class="btn-copy" onclick="copyPrompt('code-task-routine')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              复制指令
+            </button>
+          </div>
+          <pre><code id="code-task-routine">请将上述经过验证的 [自定义报告/巡检任务名称] 转为一个定时 Routine。
+
+配置规则：
+1. 频率：设定为 [执行周期，如：每小时 / 每天固定时间] 自动运行一次；
+2. 异常判定：当检测到 [异常指标，如：端到端解决率低于指定阈值] 或 [严重事件，如：发生任意一笔SLA超时] 时触发告警；
+3. 通知去向：触发异常时，在当前对话记录日志，并同步推送至 [Slack告警频道名称]；
+4. 常规输出：若指标正常，保留静默记录，供我在移动端随时调阅。</code></pre>
+        </div>
+
+        <!-- 图 8：Routine 自动化频率与告警配置示意图 -->
+        <div class="figure-container">
+          <div class="figure-header">
+            <span class="figure-title-badge">图 8 · Routine 自动化巡检与双通道告警流向</span>
+            <span style="font-size:0.75rem; color:var(--aike-text-muted);">Routine Alert Pipeline</span>
+          </div>
+          <svg viewBox="0 0 880 200" width="100%" height="auto" style="max-height: 200px; font-family: var(--font-sans);">
+            <rect x="0" y="0" width="880" height="200" fill="var(--aike-surface-2)" rx="8" stroke="var(--aike-border)" />
+
+            <!-- 阶段 1: 触发周期 -->
+            <g transform="translate(30, 40)">
+              <rect x="0" y="0" width="150" height="120" rx="8" fill="var(--aike-surface)" stroke="var(--aike-border)" />
+              <text x="75" y="32" fill="var(--aike-text)" font-size="12" font-weight="700" text-anchor="middle">每小时定时轮巡</text>
+              <text x="75" y="52" fill="var(--aike-text-muted)" font-size="10" text-anchor="middle">Hourly Trigger</text>
+              <rect x="15" y="70" width="120" height="34" rx="4" fill="var(--aike-surface-3)" />
+              <text x="75" y="91" fill="var(--aike-accent)" font-size="11" font-weight="600" text-anchor="middle">拉取过去 1h 数据</text>
+            </g>
+
+            <path d="M185 100 L225 100" stroke="var(--aike-accent)" stroke-width="2" marker-end="url(#arrow)" />
+
+            <!-- 阶段 2: 阈值评估 -->
+            <g transform="translate(230, 40)">
+              <rect x="0" y="0" width="190" height="120" rx="8" fill="var(--aike-surface)" stroke="var(--amber-border)" stroke-width="1.5" />
+              <text x="95" y="32" fill="var(--amber)" font-size="12" font-weight="700" text-anchor="middle">异常条件核验判定</text>
+              <text x="95" y="52" fill="var(--aike-text-muted)" font-size="10" text-anchor="middle">Condition Matching</text>
+              <rect x="15" y="65" width="160" height="42" rx="4" fill="var(--amber-bg)" />
+              <text x="95" y="82" fill="var(--amber)" font-size="10" font-weight="700" text-anchor="middle">解决率 &lt; 75% 或</text>
+              <text x="95" y="96" fill="var(--amber)" font-size="10" font-weight="700" text-anchor="middle">发生 SLA 违约</text>
+            </g>
+
+            <!-- 分支：正常 vs 异常 -->
+            <path d="M425 80 L485 60" stroke="var(--emerald)" stroke-width="2" marker-end="url(#arrow)" />
+            <path d="M425 120 L485 140" stroke="var(--rose)" stroke-width="2" marker-end="url(#arrow)" />
+
+            <!-- 分支 A: 指标正常 -->
+            <g transform="translate(490, 20)">
+              <rect x="0" y="0" width="350" height="70" rx="6" fill="var(--aike-surface)" stroke="var(--emerald-border)" />
+              <text x="20" y="28" fill="var(--emerald)" font-size="12" font-weight="700">✓ 指标符合预期 (Normal Status)</text>
+              <text x="20" y="50" fill="var(--aike-text-muted)" font-size="11">保持静默日志写入，支持通过 Grok Bot Mobile App 随时复核。</text>
+            </g>
+
+            <!-- 分支 B: 触发异常告警 -->
+            <g transform="translate(490, 110)">
+              <rect x="0" y="0" width="350" height="70" rx="6" fill="var(--aike-surface)" stroke="var(--rose-border)" />
+              <text x="20" y="28" fill="var(--rose)" font-size="12" font-weight="700">🚨 异常触发主动告警 (Alert Triggered)</text>
+              <text x="20" y="50" fill="var(--aike-text)" font-size="11">当前会话记录异常详情 + 实时推送到专属 Slack 告警频道。</text>
+            </g>
+          </svg>
+          <div class="figure-caption">图 8：将单次报告转为每小时 Routine，并把异常发到当前对话和 Slack；截图阈值仅作示意。</div>
+        </div>
+
+        <!-- 交互沙盘 2：Routine 巡检与告警阈值决策计算器 -->
+        <div class="sandbox-container" id="sec-routine-sandbox">
+          <div class="sandbox-header">
+            <div>
+              <span class="sandbox-tag">交互沙盘 2</span>
+              <strong style="margin-left: 10px; font-size: 1.05rem;">Routine 自动巡检与告警阈值计算沙盘</strong>
+            </div>
+            <span style="font-size:0.75rem; color:var(--aike-text-muted);">Alert Decision Calculator</span>
+          </div>
+          <p style="font-size:0.86rem; color:var(--aike-text-muted); margin-bottom:14px;">
+            基于工单负荷、AI 处理比例、端到端解决率红线与响应耗时，动态反解当前巡检周期内的告警状态与分流指标。
+          </p>
+          <div class="sandbox-grid">
+            <!-- 调节滑块 -->
+            <div class="sandbox-control-panel">
+              <div class="form-group">
+                <div class="form-label">
+                  <span>每小时进线工单总量 (Tickets/hr):</span>
+                  <span id="lbl-ticket-vol">120 件</span>
+                </div>
+                <input type="range" id="rt-ticket-vol" min="20" max="400" step="10" value="120" oninput="updateRoutineSandbox()">
+              </div>
+
+              <div class="form-group">
+                <div class="form-label">
+                  <span>AI 接管分流比例 (%):</span>
+                  <span id="lbl-ai-pct">60%</span>
+                </div>
+                <input type="range" id="rt-ai-pct" min="10" max="95" step="5" value="60" oninput="updateRoutineSandbox()">
+              </div>
+
+              <div class="form-group">
+                <div class="form-label">
+                  <span>解决率告警阈值 (Threshold):</span>
+                  <span id="lbl-thresh-res">75%</span>
+                </div>
+                <input type="range" id="rt-thresh-res" min="50" max="90" step="1" value="75" oninput="updateRoutineSandbox()">
+              </div>
+
+              <div class="form-group">
+                <div class="form-label">
+                  <span>SLA 响应超时红线 (分钟):</span>
+                  <span id="lbl-sla-limit">15 分钟</span>
+                </div>
+                <input type="range" id="rt-sla-limit" min="5" max="60" step="5" value="15" oninput="updateRoutineSandbox()">
+              </div>
+
+              <button type="button" class="btn-action primary" id="btn-rt-recalc" >重新评估巡检状态</button>
+            </div>
+
+            <!-- 实时评估面板 -->
+            <div class="sandbox-display-panel">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.84rem; color:var(--aike-text-muted);">AI 每小时自主处理量：</span>
+                <span id="stat-rt-hourly-ai" style="font-size:0.92rem; font-weight:700; color:var(--cyan);">72 件/小时</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.84rem; color:var(--aike-text-muted);">预测端到端解决率：</span>
+                <span id="stat-rt-resolved" style="font-size:0.92rem; font-weight:700; color:var(--emerald);">78.5% (高于阈值)</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.84rem; color:var(--aike-text-muted);">SLA 违约超时风险：</span>
+                <span id="stat-rt-breach-risk" style="font-size:0.92rem; font-weight:700; color:var(--emerald);">低风险 (0.8%)</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.84rem; color:var(--aike-text-muted);">当前 Routine 判定状态：</span>
+                <span id="stat-rt-status" class="status-badge pass">NORMAL (静默写入日志)</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:0.84rem; color:var(--aike-text-muted);">推送目标通道：</span>
+                <span id="stat-rt-channel" style="font-size:0.84rem; color:var(--aike-text-muted);">Grok Mobile App (静默存储)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第一次试跑：按这个顺序开始 -->
+    <section id="sec-first-run">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+        第一次试跑：按这个顺序开始
+      </h2>
+      <p>下面是一条基于官方案例归纳的最小落地路径，不是 xAI 规定的唯一流程：</p>
+
+      <div class="step-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">只选一个任务</div>
+            <div class="step-desc">第一次先选发布追踪、流失分析或自定义报告之一，不要同时接入五条工作流。</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">列出实际数据源</div>
+            <div class="step-desc">写清需要查 Slack、Notion、Plain、Stripe、Databricks SQL 或你的替代系统中的哪些信息；没有用到的连接器先不授权。</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">逐项完成授权</div>
+            <div class="step-desc">在 Grok Bot 中提出连接要求，进入各自网页确认环境和权限范围；授权后先检查连接状态。</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">替换模板变量并单次运行</div>
+            <div class="step-desc">把本文提示词里的方括号替换成真实频道、页面、时间窗、指标与交付位置。</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <div class="step-title">按交付清单验收</div>
+            <div class="step-desc">不要只看回答是否流畅；逐项确认日历、标签、视频、步骤、聚类、建议或信息图是否真的存在且能追溯到来源。</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">6</div>
+          <div class="step-body">
+            <div class="step-title">先修正单次工作流</div>
+            <div class="step-desc">如果输出缺字段、分类不稳或数据源互相冲突，先修改指令和输入，不要立即定时化。</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">7</div>
+          <div class="step-body">
+            <div class="step-title">稳定后再建 Routine</div>
+            <div class="step-desc">补齐频率、查询范围、异常条件、通知去向和人工复核方式；截图阈值只是示意，应替换成自己的标准。</div>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">8</div>
+          <div class="step-body">
+            <div class="step-title">退款单独处理</div>
+            <div class="step-desc">退款可以让 Bot 查政策和给建议，但没有明确人工批准就不能执行写操作。</div>
+          </div>
+        </div>
+      </div>
+
+      <p>完成这八步后，你得到的不是一个泛化“客服机器人”，而是一条输入、输出、检查点和停止条件都能说清楚的具体工作流。再复制到第二个场景，成本和风险都更可控。</p>
+    </section>
+
+    <!-- 落地边界与安全原则 -->
+    <section id="sec-boundaries">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--rose)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+        落地边界与安全原则
+      </h2>
+      <p>在将 AI Agent 引入支持体系的过程中，团队需要始终明确其能力边界与风控原则：</p>
+
+      <div class="workflow-card">
+        <h4>1. 把来源展示与方法建议分开</h4>
+        <p>原文明确展示了退款前的人工批准，也展示了知识更新先暂存；其他停止条件和验收步骤是基于案例归纳的实施建议，不应冒充 Grok Bot 已内建的强制控制。</p>
+
+        <h4>2. 警惕环境混淆与过度赋权</h4>
+        <p>在第三方连接器授权时，严格限制应用所处的工作区与环境范围。连接第三方并不等于拥有安全审计保障，授权边界的把控责任始终在企业自身。</p>
+
+        <h4>3. 由易到难逐步固化</h4>
+        <p>先从发布追踪与指标报告等低风险场景跑起，在日常单次对话中充分摸清模型边界与提示词稳定性后，再逐步升级至带告警条件的定时 Routine。</p>
+      </div>
+
+      <div class="callout tip">
+        <div class="callout-title">💡 落地总结与核心心智模型</div>
+        <p>这也是这篇材料真正可迁移的价值：连接器让 Bot 看见工作所需的上下文，具体指令定义交付物，人工验收守住关键动作，Routine 再把已经跑顺的流程变成持续执行。自动化的起点不是“让 AI 处理客服”，而是把一个重复任务写到足够具体，具体到人能检查它到底做对了没有。</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 原生 JavaScript 交互逻辑 -->
+  <script>
+    (function () {
+      "use strict";
+
+      // 辅助选择器函数（不用 $ 符号，防止触发 LaTeX 误判）
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // 1. 阅读进度条
+      function handleScroll() {
+        var progressBar = byId("reading-progress");
+        if (!progressBar) return;
+        var scrollDoc = document.documentElement;
+        var totalHeight = scrollDoc.scrollHeight - scrollDoc.clientHeight;
+        if (totalHeight > 0) {
+          var scrolled = (scrollDoc.scrollTop / totalHeight) * 100;
+          progressBar.style.width = scrolled + "%";
+        }
+      }
+      window.addEventListener("scroll", handleScroll);
+
+      // 2. 双主题切换（黑曜石 vs 暖羊皮纸，默认深色）
+      var currentTheme = "dark";
+      var btnTheme = byId("btn-theme-toggle");
+      var txtTheme = byId("txt-theme-label");
+
+      function applyTheme(theme) {
+        currentTheme = theme;
+        document.documentElement.setAttribute("data-theme", theme);
+        if (txtTheme) {
+          txtTheme.textContent = theme === "dark" ? "切换浅色模式" : "切换深色模式";
+        }
+      }
+
+      if (btnTheme) {
+        btnTheme.addEventListener("click", function () {
+          var nextTheme = currentTheme === "dark" ? "light" : "dark";
+          applyTheme(nextTheme);
+        });
+      }
+
+      // 3. 目录滚动联动与高亮
+      var tocLinks = document.querySelectorAll(".toc-link");
+      var sections = [];
+      for (var i = 0; i < tocLinks.length; i++) {
+        var href = tocLinks[i].getAttribute("href");
+        if (href && href.startsWith("#") && href.length > 1) {
+          var targetElem = byId(href.substring(1));
+          if (targetElem) {
+            sections.push({ link: tocLinks[i], el: targetElem });
+          }
+        }
+      }
+
+      function updateActiveToc() {
+        var scrollPos = window.scrollY || document.documentElement.scrollTop;
+        var activeIndex = 0;
+        for (var idx = 0; idx < sections.length; idx++) {
+          if (sections[idx].el.offsetTop - 120 <= scrollPos) {
+            activeIndex = idx;
+          }
+        }
+        for (var j = 0; j < sections.length; j++) {
+          sections[j].link.classList.remove("active");
+        }
+        if (sections[activeIndex]) {
+          sections[activeIndex].link.classList.add("active");
+        }
+      }
+      window.addEventListener("scroll", updateActiveToc);
+      updateActiveToc();
+
+      // 4. 一键复制指令功能
+      window.copyPrompt = function (codeId) {
+        var codeElem = byId(codeId);
+        if (!codeElem) return;
+        var text = codeElem.innerText || codeElem.textContent;
+        navigator.clipboard.writeText(text).then(function () {
+          alert("指令已成功复制到剪贴板！");
+        }).catch(function () {
+          alert("复制失败，请手动选择复制。");
+        });
+      };
+
+      // 5. 交互沙盘 1：退款风控状态机逻辑
+      var refundScenarios = {
+        case1: {
+          policy: "符合 48h 宽限期退款规则",
+          action: "Refund & Cancel",
+          policyColor: "var(--emerald)",
+          detail: "年付自动续费未提前通知，按政策推荐全额退款并关闭订阅。"
+        },
+        case2: {
+          policy: "超出 14 天退款窗口 (第 27 天)",
+          action: "Deny",
+          policyColor: "var(--rose)",
+          detail: "使用时长已达 25+ 天，不符合免责退款条件，建议拒绝并说明条款。"
+        },
+        case3: {
+          policy: "高价值存量客户折让条款",
+          action: "Retention Deal (转交账单团队)",
+          policyColor: "var(--amber)",
+          detail: "建议提供 6 折续费折让挽留方案，暂不执行硬性退单。"
+        },
+        case4: {
+          policy: "存在拒付倒扣 (Chargeback) 风险",
+          action: "Escalate to Fraud/Legal",
+          policyColor: "var(--rose)",
+          detail: "检测到支付纠纷升级意向，建议冻结写权限并交风控法务处理。"
+        }
+      };
+
+      var currentRefundStatus = "blocked"; // blocked | hold | approved | denied
+
+      window.updateRefundSandbox = function () {
+        var selectElem = byId("rf-scenario-select");
+        var val = selectElem ? selectElem.value : "case1";
+        var sc = refundScenarios[val] || refundScenarios.case1;
+
+        var outPolicy = byId("out-rf-policy");
+        var outAction = byId("out-rf-action");
+        var outStatus = byId("out-rf-status");
+        var outPerm = byId("out-rf-write-perm");
+        var outLog = byId("out-rf-log");
+
+        if (outPolicy) {
+          outPolicy.textContent = sc.policy;
+          outPolicy.style.color = sc.policyColor;
+        }
+        if (outAction) {
+          outAction.textContent = sc.action;
+        }
+
+        // 重置为未审批锁定态
+        currentRefundStatus = "blocked";
+        if (outStatus) {
+          outStatus.className = "status-badge blocked";
+          outStatus.textContent = "等待人工审批 (Locked)";
+        }
+        if (outPerm) {
+          outPerm.className = "status-badge blocked";
+          outPerm.textContent = "⛔ 严禁写入 (No Permission)";
+        }
+        if (outLog) {
+          outLog.innerHTML = "[工单切换] 已载入工单 " + val + "<br>政策核验结果: " + sc.policy + "<br>系统锁定: 等待人工显式审批。";
+        }
+      };
+
+      window.actionRefund = function (act) {
+        var outStatus = byId("out-rf-status");
+        var outPerm = byId("out-rf-write-perm");
+        var outLog = byId("out-rf-log");
+        var selectElem = byId("rf-scenario-select");
+        var val = selectElem ? selectElem.value : "case1";
+
+        if (act === "approve") {
+          currentRefundStatus = "approved";
+          if (outStatus) {
+            outStatus.className = "status-badge pass";
+            outStatus.textContent = "✓ 已显式批准 (Approved)";
+          }
+          if (outPerm) {
+            outPerm.className = "status-badge pass";
+            outPerm.textContent = "✅ Stripe 写操作已开闸";
+          }
+          if (outLog) {
+            outLog.innerHTML = "[人工批准] 审批人点击 Approve 确认建议。<br>[Stripe 执行] 成功向用户返回回复，扣划/变更请求已送达。";
+          }
+        } else if (act === "hold") {
+          currentRefundStatus = "hold";
+          if (outStatus) {
+            outStatus.className = "status-badge hold";
+            outStatus.textContent = "⏸ 人工暂缓 (Hold)";
+          }
+          if (outPerm) {
+            outPerm.className = "status-badge blocked";
+            outPerm.textContent = "⛔ 保持写闭锁";
+          }
+          if (outLog) {
+            outLog.innerHTML = "[人工暂缓] 审批人标记 Hold。<br>等待进一步向财务或大客户总监核查账目，AI 维持静默状态。";
+          }
+        } else if (act === "deny") {
+          currentRefundStatus = "denied";
+          if (outStatus) {
+            outStatus.className = "status-badge blocked";
+            outStatus.textContent = "✕ 拒绝退款申请 (Denied)";
+          }
+          if (outPerm) {
+            outPerm.className = "status-badge blocked";
+            outPerm.textContent = "⛔ 不触发扣划写操作";
+          }
+          if (outLog) {
+            outLog.innerHTML = "[人工拒绝] 审批人驳回申请。<br>Grok Bot 准备生成基于条款的解释回复草稿。";
+          }
+        } else if (act === "reset") {
+          window.updateRefundSandbox();
+        }
+      };
+
+      // 6. 交互沙盘 2：Routine 巡检与告警阈值计算沙盘
+      window.updateRoutineSandbox = function () {
+        var inVol = byId("rt-ticket-vol");
+        var inAi = byId("rt-ai-pct");
+        var inThresh = byId("rt-thresh-res");
+        var inSla = byId("rt-sla-limit");
+
+        var vol = inVol ? parseInt(inVol.value, 10) : 120;
+        var aiPct = inAi ? parseInt(inAi.value, 10) : 60;
+        var thresh = inThresh ? parseInt(inThresh.value, 10) : 75;
+        var slaLimit = inSla ? parseInt(inSla.value, 10) : 15;
+
+        // 回显标签
+        if (byId("lbl-ticket-vol")) byId("lbl-ticket-vol").textContent = vol + " 件";
+        if (byId("lbl-ai-pct")) byId("lbl-ai-pct").textContent = aiPct + "%";
+        if (byId("lbl-thresh-res")) byId("lbl-thresh-res").textContent = thresh + "%";
+        if (byId("lbl-sla-limit")) byId("lbl-sla-limit").textContent = slaLimit + " 分钟";
+
+        // 计算数值
+        var hourlyAiCount = Math.round(vol * (aiPct / 100));
+        // 模拟排队与解决率：若进线压力过大，解决率呈现小幅回落
+        var baseRes = 85.0 - (vol / 400.0) * 12.0 + (slaLimit > 20 ? 3.0 : 0);
+        var actualRes = Math.min(96.0, Math.max(50.0, baseRes));
+
+        // SLA 违约风险
+        var riskPct = Math.max(0.1, (vol / 400.0) * (25.0 / slaLimit) * 5.0);
+
+        var statHourlyAi = byId("stat-rt-hourly-ai");
+        var statResolved = byId("stat-rt-resolved");
+        var statBreach = byId("stat-rt-breach-risk");
+        var statStatus = byId("stat-rt-status");
+        var statChannel = byId("stat-rt-channel");
+
+        if (statHourlyAi) statHourlyAi.textContent = hourlyAiCount + " 件/小时";
+        if (statResolved) {
+          statResolved.textContent = actualRes.toFixed(1) + "% (" + (actualRes >= thresh ? "高于阈值" : "低于阈值") + ")";
+          statResolved.style.color = actualRes >= thresh ? "var(--emerald)" : "var(--rose)";
+        }
+        if (statBreach) {
+          statBreach.textContent = riskPct.toFixed(1) + "% (" + (riskPct > 10.0 ? "高风险违约" : "正常履约区间") + ")";
+          statBreach.style.color = riskPct > 10.0 ? "var(--rose)" : "var(--emerald)";
+        }
+
+        // 告警状态判定
+        if (actualRes < thresh || riskPct > 12.0) {
+          if (statStatus) {
+            statStatus.className = "status-badge blocked";
+            statStatus.textContent = "🚨 ALERT (触发主动告警)";
+          }
+          if (statChannel) {
+            statChannel.textContent = "当前会话日志 + 实时推送 Slack 告警频道";
+            statChannel.style.color = "var(--rose)";
+          }
+        } else {
+          if (statStatus) {
+            statStatus.className = "status-badge pass";
+            statStatus.textContent = "NORMAL (静默写入日志)";
+          }
+          if (statChannel) {
+            statChannel.textContent = "Grok Mobile App (移动端按需查看)";
+            statChannel.style.color = "var(--aike-text-muted)";
+          }
+        }
+      };
+
+      // 显式事件绑定与完整接线
+      var btnApprove = byId('btn-rf-approve');
+      if (btnApprove) btnApprove.addEventListener('click', function() { window.actionRefund('approve'); });
+
+      var btnHold = byId('btn-rf-hold');
+      if (btnHold) btnHold.addEventListener('click', function() { window.actionRefund('hold'); });
+
+      var btnDeny = byId('btn-rf-deny');
+      if (btnDeny) btnDeny.addEventListener('click', function() { window.actionRefund('deny'); });
+
+      var btnReset = byId('btn-rf-reset');
+      if (btnReset) btnReset.addEventListener('click', function() { window.actionRefund('reset'); });
+
+      var btnRecalc = byId('btn-rt-recalc');
+      if (btnRecalc) btnRecalc.addEventListener('click', function() { window.updateRoutineSandbox(); });
+
+      // 初始化沙盘
+      window.updateRefundSandbox();
+      window.updateRoutineSandbox();
+
+    })();
+  </script>
+</body>
+</html>

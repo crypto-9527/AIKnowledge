@@ -1,0 +1,2019 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>如何设计和构建基于你自己业务的自定义Agent Harness？</title>
+  <style>
+    /* CSS 变量与设计令牌系统 (黑曜石深色默认 + 暖羊皮纸浅色) */
+    :root, html.dark, [data-theme="dark"] {
+      --bg: #181715;
+      --bg-card: #211F1C;
+      --bg-elevated: #2A2723;
+      --border: #33302B;
+      --border-strong: #4D4841;
+      --text-main: #E6E2DC;
+      --text-muted: #A8A29A;
+      --text-dim: #736D64;
+      --accent: #E2886A;
+      --accent-dim: rgba(226, 136, 106, 0.12);
+      --accent-glow: rgba(226, 136, 106, 0.25);
+      --c-teal: #4E8A83;
+      --c-teal-dim: rgba(78, 138, 131, 0.15);
+      --c-gold: #D4A373;
+      --c-gold-dim: rgba(212, 163, 115, 0.15);
+      --code-bg: #121110;
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
+      --font-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", SimSun, STSong, Georgia, serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    html.light, [data-theme="light"] {
+      --bg: #FAF7F2;
+      --bg-card: #FFFFFF;
+      --bg-elevated: #F2ECE1;
+      --border: #E6E0D6;
+      --border-strong: #CFC5B6;
+      --text-main: #2B2824;
+      --text-muted: #6E675E;
+      --text-dim: #999083;
+      --accent: #D97757;
+      --accent-dim: rgba(217, 119, 87, 0.1);
+      --accent-glow: rgba(217, 119, 87, 0.2);
+      --c-teal: #2D6A4F;
+      --c-teal-dim: rgba(45, 106, 79, 0.12);
+      --c-gold: #B07D38;
+      --c-gold-dim: rgba(176, 125, 56, 0.12);
+      --code-bg: #F4EFE6;
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    /* 基础重置 */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      scroll-behavior: smooth;
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.75;
+      font-family: var(--font-sans);
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 顶部阅读进度条 */
+    #reading-progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 0%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--c-teal), var(--accent));
+      z-index: 1000;
+      transition: width 0.1s linear;
+    }
+
+    /* 顶部固定导航栏 */
+    .top-header {
+      position: sticky;
+      top: 0;
+      background-color: var(--bg);
+      border-bottom: 1px solid var(--border);
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      z-index: 900;
+      backdrop-filter: blur(8px);
+    }
+    .header-title-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .badge-tag {
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .theme-toggle-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .theme-toggle-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* 主布局网格：左侧目录 + 右侧正文 */
+    .layout-container {
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex: 1;
+      padding: 24px 20px 60px 20px;
+      gap: 36px;
+    }
+
+    /* 侧边栏导航 (280px) */
+    .sidebar-nav {
+      width: 280px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 80px;
+      height: calc(100vh - 100px);
+      overflow-y: auto;
+      padding-right: 12px;
+    }
+    .sidebar-nav::-webkit-scrollbar {
+      width: 4px;
+    }
+    .sidebar-nav::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 2px;
+    }
+    .toc-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .toc-item a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      line-height: 1.4;
+      border-left: 2px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .toc-item a:hover {
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .toc-item a.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: var(--accent-dim);
+      font-weight: 600;
+    }
+    .toc-item.sub {
+      padding-left: 14px;
+    }
+    .toc-item.sub a {
+      font-size: 12px;
+    }
+
+    /* 主内容区 (最大1180px，居中) */
+    .main-content {
+      flex: 1;
+      max-width: 1100px;
+      min-width: 0;
+    }
+
+    /* 文章头部 */
+    .article-header {
+      padding-bottom: 28px;
+      margin-bottom: 32px;
+      border-bottom: 1px solid var(--border);
+    }
+    .meta-breadcrumbs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-bottom: 14px;
+    }
+    .main-h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(26px, 3.2vw, 36px);
+      line-height: 1.35;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 18px;
+      letter-spacing: -0.5px;
+    }
+    .lead-paragraph {
+      font-size: 17px;
+      line-height: 1.7;
+      color: var(--text-main);
+      margin-bottom: 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      padding: 16px 20px;
+      border-radius: 8px;
+    }
+
+    /* 核心观点四柱卡片 */
+    .pillar-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 14px;
+      margin: 22px 0 28px 0;
+    }
+    .pillar-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 16px;
+      border-radius: 10px;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .pillar-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+    }
+    .pillar-icon {
+      font-size: 18px;
+      margin-bottom: 8px;
+      color: var(--accent);
+    }
+    .pillar-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+    .pillar-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* 排版标题层级 */
+    h2 {
+      font-family: var(--font-serif);
+      font-size: clamp(20px, 2.4vw, 26px);
+      font-weight: 700;
+      color: var(--text-main);
+      margin: 44px 0 20px 0;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h2::before {
+      content: "";
+      display: inline-block;
+      width: 5px;
+      height: 22px;
+      background: var(--accent);
+      border-radius: 3px;
+    }
+    h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin: 28px 0 14px 0;
+    }
+
+    p {
+      margin-bottom: 18px;
+      color: var(--text-main);
+      font-size: 16px;
+      line-height: 1.78;
+    }
+    p strong {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    ul, ol {
+      margin: 12px 0 20px 24px;
+      color: var(--text-main);
+    }
+    li {
+      margin-bottom: 8px;
+      line-height: 1.7;
+    }
+
+    /* 引用块 */
+    blockquote {
+      margin: 22px 0;
+      padding: 16px 20px;
+      background: var(--accent-dim);
+      border-left: 4px solid var(--accent);
+      border-radius: 6px;
+      color: var(--text-main);
+      font-size: 15px;
+    }
+
+    /* 代码块 */
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin: 20px 0 26px 0;
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--text-main);
+    }
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.9em;
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    pre code {
+      background: none;
+      color: inherit;
+      padding: 0;
+    }
+
+    /* 矢量图容器 */
+    .diagram-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 28px 0;
+      box-shadow: var(--shadow-sm);
+    }
+    .diagram-caption {
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 12px;
+      font-weight: 500;
+    }
+    .arch-svg {
+      display: block;
+      margin: 0 auto;
+    }
+
+    /* 数据表格 */
+    .table-container {
+      overflow-x: auto;
+      margin: 24px 0 30px 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg-card);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      text-align: left;
+    }
+    th {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      font-weight: 700;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-strong);
+      white-space: nowrap;
+    }
+    td {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-main);
+      line-height: 1.6;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr:hover td {
+      background: var(--accent-dim);
+    }
+
+    /* 超链接 */
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* 分割线 */
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 40px 0;
+    }
+
+    /* 交互沙盘容器 (Harness Assembler Sandbox) */
+    .sandbox-card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--accent);
+      border-radius: 14px;
+      padding: 24px;
+      margin: 36px 0;
+      box-shadow: var(--shadow-md);
+    }
+    .sandbox-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sandbox-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .preset-selector {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .preset-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+    .preset-btn:hover, .preset-btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .sandbox-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 900px) {
+      .sandbox-body {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sandbox-ctrl-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .ctrl-group {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 14px;
+      border-radius: 8px;
+    }
+    .ctrl-group-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .cb-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      color: var(--text-main);
+      cursor: pointer;
+    }
+    .cb-label input {
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+
+    /* 实时仪表盘与生成代码展示 */
+    .sandbox-view-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .score-banner {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 16px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      text-align: center;
+    }
+    .score-item-title {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .score-item-val {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--accent);
+      font-family: var(--font-mono);
+    }
+    .code-preview-box {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      position: relative;
+    }
+    .code-box-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .code-box-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-dim);
+    }
+    .copy-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .copy-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .code-preview-box pre {
+      margin: 0;
+      padding: 0;
+      background: none;
+      border: none;
+      max-height: 280px;
+      font-size: 12px;
+    }
+
+    /* 中间件管道芯片流水展示 */
+    .pipe-chip-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .pipe-chip {
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
+    /* 自查清单互动项 */
+    .checklist-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 24px 0;
+    }
+    .checklist-progress-bar {
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 10px 0 16px 0;
+    }
+    .checklist-progress-fill {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width 0.2s ease;
+    }
+    .checklist-group {
+      margin-bottom: 16px;
+    }
+    .checklist-group-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .checklist-items {
+      list-style: none;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .check-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13.5px;
+      color: var(--text-main);
+      cursor: pointer;
+      padding: 4px 6px;
+      border-radius: 4px;
+      transition: background 0.15s ease;
+    }
+    .check-item:hover {
+      background: var(--accent-dim);
+    }
+    .check-item input {
+      margin-top: 4px;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+
+    /* 响应式断点 */
+    @media (max-width: 960px) {
+      .sidebar-nav {
+        display: none;
+      }
+      .layout-container {
+        padding: 16px 14px;
+      }
+    }
+
+    /* 打印自适应样式 */
+    @media print {
+      .top-header, .sidebar-nav, .theme-toggle-btn, .preset-selector, .copy-btn, #reading-progress-bar {
+        display: none !important;
+      }
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+      }
+      .layout-container {
+        max-width: 100% !important;
+        padding: 0 !important;
+      }
+      .sandbox-card, .diagram-container, .table-container {
+        border: 1px solid #cccccc !important;
+        box-shadow: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 顶部阅读进度条 -->
+  <div id="reading-progress-bar"></div>
+
+  <!-- 顶部标题栏 -->
+  <header class="top-header">
+    <div class="header-title-badge">
+      <span class="badge-tag">LANGCHAIN HARNESS 架构</span>
+      <span>业务自定义 Agent Harness 设计与中间件构建</span>
+    </div>
+    <div class="header-actions">
+      <button class="theme-toggle-btn" id="ctrl-theme-toggle" type="button" aria-label="切换界面主题">
+        <span id="stat-theme-text">切换明亮</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 主体网格容器 -->
+  <div class="layout-container">
+    
+    <!-- 左侧固顶目录导航 (TOC) -->
+    <nav class="sidebar-nav" aria-label="文章目录导航">
+      <div class="toc-title">目录导航 (CONTENTS)</div>
+      <ul class="toc-list">
+        <li class="toc-item"><a href="#sec-overview" class="active">0. 核心主旨与要点</a></li>
+        <li class="toc-item"><a href="#sec-decoupling">1. 概念解耦：Agent = Model + Harness</a></li>
+        <li class="toc-item"><a href="#sec-primitives">2. 极简原语与预组装底座的分水岭</a></li>
+        <li class="toc-item"><a href="#sec-middleware">3. 中间件机制：四大工程杠杆</a></li>
+        <li class="toc-item sub"><a href="#sec-mw-deterministic">3.1 确定性逻辑 (Deterministic)</a></li>
+        <li class="toc-item sub"><a href="#sec-mw-tools">3.2 工具生命周期治理 (Tools)</a></li>
+        <li class="toc-item sub"><a href="#sec-mw-state">3.3 自定义状态 (Custom State)</a></li>
+        <li class="toc-item sub"><a href="#sec-mw-stream">3.4 流处理器 (Stream Handlers)</a></li>
+        <li class="toc-item"><a href="#sec-capabilities">4. 从业务需求倒推 Harness 八大能力</a></li>
+        <li class="toc-item sub"><a href="#sec-sandbox">4.1 Harness 装配沙盘与代码生成</a></li>
+        <li class="toc-item sub"><a href="#sec-table">4.2 八项核心能力官方映射表</a></li>
+        <li class="toc-item"><a href="#sec-fit">5. 任务与底座适配度 (Task-Harness Fit)</a></li>
+        <li class="toc-item sub"><a href="#sec-checklist">5.1 最小设计自查清单</a></li>
+        <li class="toc-item"><a href="#sec-resources">6. 拓展资源与参考链接</a></li>
+      </ul>
+    </nav>
+
+    <!-- 右侧主体内容 -->
+    <main class="main-content">
+      
+      <!-- 文章头部与元数据 -->
+      <article class="article-header" id="sec-overview">
+        <div class="meta-breadcrumbs">
+          <span>AIKnowledge 知识库</span>
+          <span>&gt;</span>
+          <span>智能体架构工程</span>
+          <span>&gt;</span>
+          <span>Agent Harness 深度设计</span>
+        </div>
+        
+        <h1 class="main-h1">如何设计和构建基于你自己业务的自定义Agent Harness？</h1>
+        
+        <div class="lead-paragraph">
+          从业务所需的<strong>上下文（Context）</strong>、<strong>潜在故障（Failures）</strong>、<strong>强制策略（Policies）</strong>和<strong>运行环境（Environment）</strong>出发，借助 <code>create_agent</code> 与 <code>middleware</code>，把八类能力组合成真正适配具体任务的 Agent Harness。
+        </div>
+
+        <!-- 核心观点四柱卡片 -->
+        <div class="pillar-grid">
+          <div class="pillar-card">
+            <div class="pillar-icon">📐</div>
+            <div class="pillar-title">定义 Task-Harness Fit</div>
+            <div class="pillar-desc">厘清任务需要什么上下文、遭遇何种故障、强制什么策略，并在什么环境中运转。</div>
+          </div>
+          <div class="pillar-card">
+            <div class="pillar-icon">🧩</div>
+            <div class="pillar-title">Agent = Model + Harness</div>
+            <div class="pillar-desc">模型是无状态认知核心，Harness 的职责是在循环每一步精准输送高质量上下文。</div>
+          </div>
+          <div class="pillar-card">
+            <div class="pillar-icon">⚙️</div>
+            <div class="pillar-title">极简原语 vs 预装底座</div>
+            <div class="pillar-desc">create_agent 提供最小核心循环，借助 Middleware 四大工程杠杆赋予业务掌控力。</div>
+          </div>
+          <div class="pillar-card">
+            <div class="pillar-icon">🎯</div>
+            <div class="pillar-title">按需筛选拒绝堆砌</div>
+            <div class="pillar-desc">从八大能力中甄选业务真需求，映射为高内聚、可复用的流水线中间件栈。</div>
+          </div>
+        </div>
+
+        <p>
+          在构建面向具体业务的 AI Agent 时，开发者真正要决定的关键问题，往往并不是“选哪个最强模型”，而是厘清当前任务的具体运行诉求：它究竟<strong>需要哪些上下文（context it needs）</strong>、<strong>会遇到哪些潜在失败（failures it'll encounter）</strong>、<strong>必须执行哪些策略（policies it must enforce）</strong>，以及<strong>运行在怎样的真实环境（environment it operates in）之中</strong>。这四个维度，正是原文在定义 <strong>Task-Harness Fit（任务与底座适配度）</strong> 时明确指出的核心衡量标准。
+        </p>
+
+        <p>
+          构建真正实用的智能体，本质上是关于<strong>定制化（Customization）</strong>——如何让智能体在特定任务中连接到所需的上下文、数据与运行环境。包裹在模型外部的 <strong>Agent Harness（智能体运行底座/脚手架）</strong>，正是实现这种连接的工程实体。需要交代的是，原文并未给出开箱即用的完整业务实施教程，而是系统阐明了如何以极简原语为核心、利用中间件为业务量身设计和定制 Harness 的架构路径。
+        </p>
+
+        <!-- 矢量架构图 1: 生产级 Agent 的工程核心：自定义 Harness -->
+        <div class="diagram-container">
+          <svg class="arch-svg" viewBox="0 0 1000 480" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad-harness" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.03"/>
+    </linearGradient>
+    <linearGradient id="grad-model" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--c-teal)" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="var(--c-teal)" stop-opacity="0.05"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--c-teal)"/>
+    </marker>
+  </defs>
+
+  <rect x="10" y="10" width="980" height="460" rx="16" fill="var(--bg-card)" stroke="var(--border)" stroke-width="1.5"/>
+  
+  <rect x="40" y="40" width="920" height="400" rx="14" fill="url(#grad-harness)" stroke="var(--accent)" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="65" y="75" font-family="var(--font-sans)" font-size="16" font-weight="700" fill="var(--accent)" letter-spacing="1">AGENT HARNESS（智能体工程运行底座 / 脚手架）</text>
+  <text x="65" y="98" font-family="var(--font-sans)" font-size="13" fill="var(--text-muted)">核心职责：在循环的每一步（Every Step）为模型精准注入高质量上下文并保障环境闭环</text>
+
+  <g transform="translate(65, 125)">
+    <rect x="0" y="0" width="200" height="285" rx="10" fill="var(--bg)" stroke="var(--border)" stroke-width="1.2"/>
+    <rect x="0" y="0" width="200" height="34" rx="10" fill="var(--accent)" fill-opacity="0.12"/>
+    <text x="14" y="23" font-family="var(--font-sans)" font-size="13" font-weight="700" fill="var(--accent)">1. 业务输入维度 (Inputs)</text>
+    
+    <g transform="translate(14, 48)">
+      <rect x="0" y="0" width="172" height="48" rx="6" fill="var(--bg-card)" stroke="var(--border)"/>
+      <text x="10" y="20" font-size="12" font-weight="600" fill="var(--text-main)">上下文需求 (Context)</text>
+      <text x="10" y="38" font-size="11" fill="var(--text-muted)">多轮历史 / 知识检索 / 状态</text>
+    </g>
+    <g transform="translate(14, 106)">
+      <rect x="0" y="0" width="172" height="48" rx="6" fill="var(--bg-card)" stroke="var(--border)"/>
+      <text x="10" y="20" font-size="12" font-weight="600" fill="var(--text-main)">潜在故障 (Failures)</text>
+      <text x="10" y="38" font-size="11" fill="var(--text-muted)">瞬态抖动 / 超时 / 异常回退</text>
+    </g>
+    <g transform="translate(14, 164)">
+      <rect x="0" y="0" width="172" height="48" rx="6" fill="var(--bg-card)" stroke="var(--border)"/>
+      <text x="10" y="20" font-size="12" font-weight="600" fill="var(--text-main)">强制策略 (Policies)</text>
+      <text x="10" y="38" font-size="11" fill="var(--text-muted)">PII脱敏 / 审核关卡 / HITL</text>
+    </g>
+    <g transform="translate(14, 222)">
+      <rect x="0" y="0" width="172" height="48" rx="6" fill="var(--bg-card)" stroke="var(--border)"/>
+      <text x="10" y="20" font-size="12" font-weight="600" fill="var(--text-main)">宿主环境 (Environment)</text>
+      <text x="10" y="38" font-size="11" fill="var(--text-muted)">文件沙箱 / Shell / 执行器</text>
+    </g>
+  </g>
+
+  <g transform="translate(295, 125)">
+    <rect x="0" y="0" width="370" height="285" rx="10" fill="var(--bg)" stroke="var(--border)" stroke-width="1.2"/>
+    <rect x="0" y="0" width="370" height="34" rx="10" fill="var(--c-teal)" fill-opacity="0.12"/>
+    <text x="16" y="23" font-family="var(--font-sans)" font-size="13" font-weight="700" fill="var(--c-teal)">2. 中间件管控管道 (create_agent + Middleware)</text>
+    
+    <g transform="translate(16, 46)">
+      <rect x="0" y="0" width="162" height="106" rx="8" fill="var(--bg-card)" stroke="var(--border)"/>
+      <text x="10" y="22" font-size="12" font-weight="700" fill="var(--accent)">确定性逻辑</text>
+      <text x="10" y="42" font-size="11" fill="var(--text-main)">• 动态模型路由切换</text>
+      <text x="10" y="62" font-size="11" fill="var(--text-main)">• 提示词动态自适应</text>
+      <text x="10" y="82" font-size="11" fill="var(--text-main)">• 会话自动压缩摘要</text>
+    </g>
+    <g transform="translate(192, 46)">
+      <rect x="0" y="0" width="162" height="106" rx="8" fill="var(--bg-card)" stroke="var(--border)"/>
+      <text x="10" y="22" font-size="12" font-weight="700" fill="var(--c-teal)">工具生命周期</text>
+      <text x="10" y="42" font-size="11" fill="var(--text-main)">• Setup 依赖预加载</text>
+      <text x="10" y="62" font-size="11" fill="var(--text-main)">• Teardown 资源回收</text>
+      <text x="10" y="82" font-size="11" fill="var(--text-main)">• 权限与凭据动态注入</text>
+    </g>
+    <g transform="translate(16, 164)">
+      <rect x="0" y="0" width="162" height="106" rx="8" fill="var(--bg-card)" stroke="var(--border)"/>
+      <text x="10" y="22" font-size="12" font-weight="700" fill="var(--c-gold)">自定义状态</text>
+      <text x="10" y="42" font-size="11" fill="var(--text-main)">• 状态对象扩展属性</text>
+      <text x="10" y="62" font-size="11" fill="var(--text-main)">• 跨钩子共享执行计数</text>
+      <text x="10" y="82" font-size="11" fill="var(--text-main)">• 业务控制标志位(Flags)</text>
+    </g>
+    <g transform="translate(192, 164)">
+      <rect x="0" y="0" width="162" height="106" rx="8" fill="var(--bg-card)" stroke="var(--border)"/>
+      <text x="10" y="22" font-size="12" font-weight="700" fill="var(--text-main)">流处理器</text>
+      <text x="10" y="42" font-size="11" fill="var(--text-main)">• UI 流式打字增量</text>
+      <text x="10" y="62" font-size="11" fill="var(--text-main)">• 审计日志全量留痕</text>
+      <text x="10" y="82" font-size="11" fill="var(--text-main)">• 监控时延度量拦截</text>
+    </g>
+  </g>
+
+  <g transform="translate(700, 125)">
+    <rect x="0" y="0" width="230" height="285" rx="10" fill="url(#grad-model)" stroke="var(--c-teal)" stroke-width="1.5"/>
+    <rect x="0" y="0" width="230" height="34" rx="10" fill="var(--c-teal)" fill-opacity="0.18"/>
+    <text x="16" y="23" font-family="var(--font-sans)" font-size="13" font-weight="700" fill="var(--c-teal)">3. 纯语义推理核心 (Model)</text>
+    
+    <g transform="translate(16, 52)">
+      <rect x="0" y="0" width="198" height="60" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+      <text x="12" y="24" font-size="12" font-weight="700" fill="var(--text-main)">Foundation LLM</text>
+      <text x="12" y="44" font-size="11" fill="var(--text-muted)">Claude 4.6 / GPT-4o 等无状态大模型</text>
+    </g>
+
+    <g transform="translate(16, 126)">
+      <rect x="0" y="0" width="198" height="135" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+      <text x="12" y="22" font-size="12" font-weight="700" fill="var(--accent)">核心定律：</text>
+      <text x="12" y="44" font-size="11" fill="var(--text-main)">1. 智能体表现上限取决于</text>
+      <text x="12" y="62" font-size="11" fill="var(--accent)" font-weight="600">   提供给模型的上下文质量</text>
+      <text x="12" y="86" font-size="11" fill="var(--text-main)">2. 模型本身保持无状态</text>
+      <text x="12" y="104" font-size="11" fill="var(--text-main)">3. 由 Harness 调度工具交互</text>
+      <text x="12" y="122" font-size="11" fill="var(--text-muted)">   与维持时空连贯性</text>
+    </g>
+  </g>
+
+  <line x1="265" y1="265" x2="293" y2="265" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="665" y1="240" x2="698" y2="240" stroke="var(--c-teal)" stroke-width="2" marker-end="url(#arrow-teal)"/>
+  <line x1="700" y1="290" x2="667" y2="290" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)"/>
+</svg>
+          <div class="diagram-caption">图 1：生产级 Agent 的工程核心——业务输入维度、中间件管控管道与 Model 推理核心的全景架构</div>
+        </div>
+      </article>
+
+      <!-- 第一章：概念解耦：什么是 Harness？ -->
+      <section id="sec-decoupling">
+        <h2>概念解耦：什么是 Harness？为什么说 Agent = Model + Harness？</h2>
+        
+        <p>
+          在最本质的层面上，智能体就是一个模型在循环中不断调用外部工具，直到任务完成并返回结果：
+        </p>
+
+        <!-- 矢量架构图 2: Agent 的基础工具调用循环 -->
+        <div class="diagram-container">
+          <svg class="arch-svg" viewBox="0 0 900 320" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="loop-arr" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="loop-teal" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--c-teal)"/>
+    </marker>
+  </defs>
+
+  <rect x="10" y="10" width="880" height="300" rx="14" fill="var(--bg-card)" stroke="var(--border)" stroke-width="1.2"/>
+  
+  <g transform="translate(40, 110)">
+    <rect x="0" y="0" width="130" height="90" rx="10" fill="var(--bg)" stroke="var(--border)" stroke-width="1.5"/>
+    <text x="65" y="36" text-anchor="middle" font-size="13" font-weight="700" fill="var(--text-main)">任务输入</text>
+    <text x="65" y="58" text-anchor="middle" font-size="11" fill="var(--text-muted)">User Prompt</text>
+    <text x="65" y="74" text-anchor="middle" font-size="11" fill="var(--text-muted)">&amp; Context</text>
+  </g>
+
+  <g transform="translate(230, 95)">
+    <rect x="0" y="0" width="190" height="120" rx="12" fill="var(--bg)" stroke="var(--c-teal)" stroke-width="2"/>
+    <rect x="0" y="0" width="190" height="28" rx="12" fill="var(--c-teal)" fill-opacity="0.15"/>
+    <text x="95" y="20" text-anchor="middle" font-size="12" font-weight="700" fill="var(--c-teal)">Model 推理与决策</text>
+    <text x="95" y="55" text-anchor="middle" font-size="12" font-weight="600" fill="var(--text-main)">理解当前上下文</text>
+    <text x="95" y="75" text-anchor="middle" font-size="11" fill="var(--text-muted)">决策：调用工具还是直接返回？</text>
+    <rect x="30" y="88" width="130" height="22" rx="4" fill="var(--accent)" fill-opacity="0.12"/>
+    <text x="95" y="103" text-anchor="middle" font-size="10" font-weight="600" fill="var(--accent)">Tool Call / Final Answer</text>
+  </g>
+
+  <g transform="translate(480, 95)">
+    <rect x="0" y="0" width="190" height="120" rx="12" fill="var(--bg)" stroke="var(--accent)" stroke-width="2"/>
+    <rect x="0" y="0" width="190" height="28" rx="12" fill="var(--accent)" fill-opacity="0.15"/>
+    <text x="95" y="20" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">Tools 执行环境</text>
+    <text x="95" y="55" text-anchor="middle" font-size="12" font-weight="600" fill="var(--text-main)">执行动作与计算</text>
+    <text x="95" y="75" text-anchor="middle" font-size="11" fill="var(--text-muted)">API / DB / Shell / Code</text>
+    <rect x="30" y="88" width="130" height="22" rx="4" fill="var(--c-teal)" fill-opacity="0.12"/>
+    <text x="95" y="103" text-anchor="middle" font-size="10" font-weight="600" fill="var(--c-teal)">Tool Output 观测结果</text>
+  </g>
+
+  <g transform="translate(730, 110)">
+    <rect x="0" y="0" width="130" height="90" rx="10" fill="var(--bg)" stroke="var(--border)" stroke-width="1.5"/>
+    <text x="65" y="36" text-anchor="middle" font-size="13" font-weight="700" fill="var(--text-main)">任务完成</text>
+    <text x="65" y="58" text-anchor="middle" font-size="11" fill="var(--text-muted)">Final Output</text>
+    <text x="65" y="74" text-anchor="middle" font-size="11" fill="var(--text-muted)">终止循环</text>
+  </g>
+
+  <line x1="170" y1="155" x2="228" y2="155" stroke="var(--text-muted)" stroke-width="1.8" marker-end="url(#loop-teal)"/>
+  
+  <path d="M 420 135 L 478 135" stroke="var(--accent)" stroke-width="2" marker-end="url(#loop-arr)"/>
+  <text x="449" y="125" text-anchor="middle" font-size="11" font-weight="600" fill="var(--accent)">调用请求</text>
+
+  <path d="M 575 215 L 575 265 L 325 265 L 325 217" fill="none" stroke="var(--c-teal)" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#loop-teal)"/>
+  <text x="450" y="285" text-anchor="middle" font-size="11" font-weight="600" fill="var(--c-teal)">工具执行结果（Tool Result）更新上下文循环喂入模型</text>
+
+  <path d="M 420 175 L 728 175" stroke="var(--border-strong)" stroke-width="1.8" marker-end="url(#loop-arr)"/>
+  <text x="670" y="165" text-anchor="middle" font-size="11" fill="var(--text-muted)">判断无需工具</text>
+</svg>
+          <div class="diagram-caption">图 2：Agent 基础工具调用循环（Tool Calling Loop）与上下文状态更新流</div>
+        </div>
+
+        <p>
+          这一运行机制可以用一个核心公式清晰表达：
+        </p>
+
+        <blockquote>
+          <strong>Agent = Model + Harness</strong>
+        </blockquote>
+
+        <p>
+          这里的 <strong>Harness</strong>，就是包裹在大模型外部、负责将其与真实世界连接起来的整套脚手架工程。
+        </p>
+
+        <!-- 矢量架构图 3: Agent 等于模型与 Harness 的组合解耦架构 -->
+        <div class="diagram-container">
+          <svg class="arch-svg" viewBox="0 0 920 340" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="mh-arr" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+
+  <rect x="10" y="10" width="900" height="320" rx="14" fill="var(--bg-card)" stroke="var(--border)" stroke-width="1.2"/>
+
+  <rect x="30" y="25" width="860" height="42" rx="8" fill="var(--accent)" fill-opacity="0.1"/>
+  <text x="460" y="52" text-anchor="middle" font-size="16" font-weight="800" fill="var(--accent)" letter-spacing="1">核心架构公式：AGENT = MODEL + HARNESS</text>
+
+  <g transform="translate(40, 85)">
+    <rect x="0" y="0" width="250" height="225" rx="12" fill="var(--bg)" stroke="var(--c-teal)" stroke-width="1.8"/>
+    <rect x="0" y="0" width="250" height="36" rx="12" fill="var(--c-teal)" fill-opacity="0.15"/>
+    <text x="125" y="24" text-anchor="middle" font-size="14" font-weight="700" fill="var(--c-teal)">MODEL（认知模型）</text>
+    
+    <text x="20" y="65" font-size="12" font-weight="700" fill="var(--text-main)">本质属性：</text>
+    <text x="20" y="88" font-size="11" fill="var(--text-muted)">• 纯无状态语义推理引擎</text>
+    <text x="20" y="108" font-size="11" fill="var(--text-muted)">• 仅依赖单次 Prompt Token 输入</text>
+    <text x="20" y="128" font-size="11" fill="var(--text-muted)">• 缺乏跨时空持久记忆与外部感知</text>
+    
+    <rect x="15" y="145" width="220" height="65" rx="8" fill="var(--c-teal)" fill-opacity="0.08"/>
+    <text x="25" y="168" font-size="11" font-weight="700" fill="var(--c-teal)">认知边界约束：</text>
+    <text x="25" y="188" font-size="11" fill="var(--text-main)">“智能体的实际表现，取决于</text>
+    <text x="25" y="202" font-size="11" fill="var(--accent)" font-weight="700"> 提供给模型的上下文质量”</text>
+  </g>
+
+  <text x="320" y="205" font-size="36" font-weight="800" fill="var(--accent)" text-anchor="middle">+</text>
+
+  <g transform="translate(350, 85)">
+    <rect x="0" y="0" width="530" height="225" rx="12" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.8"/>
+    <rect x="0" y="0" width="530" height="36" rx="12" fill="var(--accent)" fill-opacity="0.15"/>
+    <text x="265" y="24" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent)">HARNESS（工程运行底座 / 脚手架）</text>
+
+    <text x="20" y="65" font-size="12" font-weight="700" fill="var(--text-main)">工程职责与核心组件：</text>
+
+    <g transform="translate(20, 80)">
+      <rect x="0" y="0" width="150" height="125" rx="8" fill="var(--bg-card)" stroke="var(--border)"/>
+      <text x="12" y="22" font-size="11" font-weight="700" fill="var(--accent)">上下文精密输送</text>
+      <text x="12" y="42" font-size="10" fill="var(--text-muted)">• 记忆动态装载</text>
+      <text x="12" y="60" font-size="10" fill="var(--text-muted)">• 历史滑动窗口压缩</text>
+      <text x="12" y="78" font-size="10" fill="var(--text-muted)">• 提示词动态自适应</text>
+      <text x="12" y="96" font-size="10" fill="var(--text-muted)">• Token 开销治理</text>
+    </g>
+
+    <g transform="translate(185, 80)">
+      <rect x="0" y="0" width="150" height="125" rx="8" fill="var(--bg-card)" stroke="var(--border)"/>
+      <text x="12" y="22" font-size="11" font-weight="700" fill="var(--c-teal)">执行与工具治理</text>
+      <text x="12" y="42" font-size="10" fill="var(--text-muted)">• 工具生命周期(Setup)</text>
+      <text x="12" y="60" font-size="10" fill="var(--text-muted)">• 退出与资源销毁</text>
+      <text x="12" y="78" font-size="10" fill="var(--text-muted)">• 瞬态故障重试退避</text>
+      <text x="12" y="96" font-size="10" fill="var(--text-muted)">• 模型回退容灾(Fallback)</text>
+    </g>
+
+    <g transform="translate(350, 80)">
+      <rect x="0" y="0" width="160" height="125" rx="8" fill="var(--bg-card)" stroke="var(--border)"/>
+      <text x="12" y="22" font-size="11" font-weight="700" fill="var(--c-gold)">合规与输出路由</text>
+      <text x="12" y="42" font-size="10" fill="var(--text-muted)">• PII 隐私脱敏拦截</text>
+      <text x="12" y="60" font-size="10" fill="var(--text-muted)">• 人在回路(HITL)审批</text>
+      <text x="12" y="78" font-size="10" fill="var(--text-muted)">• 流处理器分发(UI/Log)</text>
+      <text x="12" y="96" font-size="10" fill="var(--text-muted)">• 跨生命周期状态共享</text>
+    </g>
+  </g>
+</svg>
+          <div class="diagram-caption">图 3：Agent = Model + Harness 认知核心与工程底座解耦架构设计</div>
+        </div>
+
+        <p>这一架构认知建立在两项核心前提之上：</p>
+        <ol>
+          <li><strong>智能体的实际表现，取决于提供给模型的上下文质量</strong>（An agent is only as good as the context provided to the model）；</li>
+          <li><strong>Harness 的核心职责，就是在循环的每一步为模型精准提供所需的上下文</strong>（The job of a harness is to provide context to the model at every step）。</li>
+        </ol>
+
+        <p>
+          因此，要构建出真正可用的智能体，就必须打造一套善于为特定任务按时、按需向模型输送正确上下文的 Harness。
+        </p>
+      </section>
+
+      <hr>
+
+      <!-- 第二章：极简原语与预组装底座的分水岭 -->
+      <section id="sec-primitives">
+        <h2>极简原语与预组装底座的分水岭：为什么选择 create_agent？</h2>
+
+        <p>
+          在 LangChain 体系中，构建自定义 Harness 的基础原语正是 <code>create_agent</code>。只需传入模型、工具集和系统提示词，就能得到一个正常运转的智能体：
+        </p>
+
+        <pre><code class="language-python">from langchain.agents import create_agent
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=tools,
+    system_prompt="you are a helpful assistant..."
+)</code></pre>
+
+        <p>在工程选型中，市面上存在两种截然不同的底座构建思路：</p>
+
+        <ul>
+          <li>
+            <strong>预组装 Harness（Pre-assembled Harnesses）</strong>：如 <a href="https://docs.langchain.com/oss/python/deepagents/overview" target="_blank" rel="noopener noreferrer">Deep Agents</a> 或 <a href="https://code.claude.com/docs/en/agent-sdk/overview" target="_blank" rel="noopener noreferrer">Claude Agent SDK</a>。它们出厂即带有一套有明确取向的中间件技术栈，包含记忆、上下文管理、沙箱等组件。这类底座旨在帮助团队快速得到生产可用的 Agent，适用于大多数通用场景。然而，许多企业级 Agent 仍需要比预装底座更细粒度的定制控制，例如专属动态提示词、特定业务规则以及强隔离安全护栏。
+          </li>
+          <li>
+            <strong>极简原语路线（Purposefully Minimalistic Primitive）</strong>：<code>create_agent</code> 采取了不同的方式，这一设计理念类似于高度可配置的代码智能体 Harness <a href="https://pi.dev/" target="_blank" rel="noopener noreferrer">Pi</a>。<code>create_agent</code> 只实现最核心的智能体循环，并把<strong>中间件（Middleware）</strong>暴露为定制原语，赋予团队对执行流的绝对支配权。
+          </li>
+        </ul>
+      </section>
+
+      <hr>
+
+      <!-- 第三章：中间件机制：四类工程杠杆 -->
+      <section id="sec-middleware">
+        <h2>中间件机制：如何通过四类杠杆精细定制 Harness？</h2>
+
+        <p>
+          中间件是深度定制 Harness 的核心手段。中间件能够直接挂载到 Agent 运行循环的各个拦截阶段：<strong>模型调用前后、工具调用前后，以及智能体启动和终止时</strong>。每个中间件独立处理单一关注点，并能与其他中间件自由组装拼装：
+        </p>
+
+        <!-- 矢量架构图 4: Harness 内部中间件拦截机制 -->
+        <div class="diagram-container">
+          <svg class="arch-svg" viewBox="0 0 940 380" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="hook-arr" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="hook-teal" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--c-teal)"/>
+    </marker>
+  </defs>
+
+  <rect x="10" y="10" width="920" height="360" rx="14" fill="var(--bg-card)" stroke="var(--border)" stroke-width="1.2"/>
+  
+  <text x="470" y="42" text-anchor="middle" font-size="15" font-weight="800" fill="var(--text-main)" letter-spacing="1">HARNESS 中间件生命周期拦截机制 (MIDDLEWARE HOOKS PIPELINE)</text>
+
+  <line x1="50" y1="190" x2="890" y2="190" stroke="var(--border-strong)" stroke-width="4"/>
+
+  <g transform="translate(60, 80)">
+    <rect x="0" y="0" width="115" height="75" rx="8" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.5"/>
+    <circle cx="57" cy="110" r="8" fill="var(--accent)"/>
+    <line x1="57" y1="75" x2="57" y2="110" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <text x="57" y="24" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">① on_start</text>
+    <text x="57" y="44" text-anchor="middle" font-size="10" fill="var(--text-main)">智能体启动初始化</text>
+    <text x="57" y="60" text-anchor="middle" font-size="9" fill="var(--text-muted)">加载记忆 / 注入提示词</text>
+  </g>
+
+  <g transform="translate(200, 220)">
+    <rect x="0" y="0" width="125" height="75" rx="8" fill="var(--bg)" stroke="var(--c-teal)" stroke-width="1.5"/>
+    <circle cx="62" cy="-30" r="8" fill="var(--c-teal)"/>
+    <line x1="62" y1="0" x2="62" y2="-30" stroke="var(--c-teal)" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <text x="62" y="24" text-anchor="middle" font-size="11" font-weight="700" fill="var(--c-teal)">② before_model</text>
+    <text x="62" y="44" text-anchor="middle" font-size="10" fill="var(--text-main)">模型调用前拦截</text>
+    <text x="62" y="60" text-anchor="middle" font-size="9" fill="var(--text-muted)">动态换模 / 上下文压缩</text>
+  </g>
+
+  <g transform="translate(350, 155)">
+    <rect x="0" y="0" width="80" height="70" rx="8" fill="var(--c-teal)" fill-opacity="0.2" stroke="var(--c-teal)" stroke-width="1.5"/>
+    <text x="40" y="32" text-anchor="middle" font-size="11" font-weight="700" fill="var(--c-teal)">LLM</text>
+    <text x="40" y="48" text-anchor="middle" font-size="10" fill="var(--text-main)">推理执行</text>
+  </g>
+
+  <g transform="translate(450, 80)">
+    <rect x="0" y="0" width="125" height="75" rx="8" fill="var(--bg)" stroke="var(--c-teal)" stroke-width="1.5"/>
+    <circle cx="62" cy="110" r="8" fill="var(--c-teal)"/>
+    <line x1="62" y1="75" x2="62" y2="110" stroke="var(--c-teal)" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <text x="62" y="24" text-anchor="middle" font-size="11" font-weight="700" fill="var(--c-teal)">③ after_model</text>
+    <text x="62" y="44" text-anchor="middle" font-size="10" fill="var(--text-main)">模型输出后拦截</text>
+    <text x="62" y="60" text-anchor="middle" font-size="9" fill="var(--text-muted)">流式分发 / PII过滤</text>
+  </g>
+
+  <g transform="translate(595, 220)">
+    <rect x="0" y="0" width="125" height="75" rx="8" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.5"/>
+    <circle cx="62" cy="-30" r="8" fill="var(--accent)"/>
+    <line x1="62" y1="0" x2="62" y2="-30" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <text x="62" y="24" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">④ before_tool</text>
+    <text x="62" y="44" text-anchor="middle" font-size="10" fill="var(--text-main)">工具执行前拦截</text>
+    <text x="62" y="60" text-anchor="middle" font-size="9" fill="var(--text-muted)">人在回路 / 鉴权注入</text>
+  </g>
+
+  <g transform="translate(735, 155)">
+    <rect x="0" y="0" width="80" height="70" rx="8" fill="var(--accent)" fill-opacity="0.2" stroke="var(--accent)" stroke-width="1.5"/>
+    <text x="40" y="32" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">TOOLS</text>
+    <text x="40" y="48" text-anchor="middle" font-size="10" fill="var(--text-main)">工具调用</text>
+  </g>
+
+  <g transform="translate(680, 80)">
+    <rect x="0" y="0" width="120" height="75" rx="8" fill="var(--bg)" stroke="var(--c-gold)" stroke-width="1.5"/>
+    <circle cx="60" cy="110" r="8" fill="var(--c-gold)"/>
+    <line x1="60" y1="75" x2="60" y2="110" stroke="var(--c-gold)" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <text x="60" y="24" text-anchor="middle" font-size="11" font-weight="700" fill="var(--c-gold)">⑤ after_tool</text>
+    <text x="60" y="44" text-anchor="middle" font-size="10" fill="var(--text-main)">工具执行后拦截</text>
+    <text x="60" y="60" text-anchor="middle" font-size="9" fill="var(--text-muted)">异常重试 / 结果清洗</text>
+  </g>
+
+  <g transform="translate(815, 220)">
+    <rect x="0" y="0" width="105" height="75" rx="8" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.5"/>
+    <circle cx="52" cy="-30" r="8" fill="var(--accent)"/>
+    <line x1="52" y1="0" x2="52" y2="-30" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3,3"/>
+    <text x="52" y="24" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">⑥ on_end</text>
+    <text x="52" y="44" text-anchor="middle" font-size="10" fill="var(--text-main)">智能体结束清理</text>
+    <text x="52" y="60" text-anchor="middle" font-size="9" fill="var(--text-muted)">写回持久记忆 / 释放</text>
+  </g>
+</svg>
+          <div class="diagram-caption">图 4：Harness 内部中间件六大生命周期拦截点与执行管道 (Hooks Pipeline)</div>
+        </div>
+
+        <p>
+          通过中间件，开发者可以借助以下四类常常协同起效的“工程杠杆”按业务需求精细定制底座：
+        </p>
+
+        <div id="sec-mw-deterministic">
+          <h3>1. 确定性逻辑（Deterministic Logic）</h3>
+          <ul>
+            <li><strong>解决的设计问题</strong>：业务规则、策略强制执行以及动态运行时控制，需要在运行循环的特定节点触发，不适合完全塞进提示词（Prompt）中，避免模型产生幻觉或遗漏。</li>
+            <li><strong>机制与原文示例</strong>：用于在循环特定节点触发的确定性代码。原文明确指出的关键场景是对智能体运行时的动态控制：<strong>根据任务复杂度动态切换模型（swapping the model based on task complexity）</strong>、<strong>动态调整提示词（adjusting the prompt）</strong>，以及<strong>在上下文压缩时更新消息历史（updating the agent's message history, during compaction, for example）</strong>。凡是不能或不应写在提示词里的逻辑，都属于此类。</li>
+          </ul>
+        </div>
+
+        <div id="sec-mw-tools">
+          <h3>2. 工具生命周期治理（Tools Lifecycle）</h3>
+          <ul>
+            <li><strong>解决的设计问题</strong>：当工具带有外部依赖、需要复杂初始化或结束时执行资源回收清理时，仅仅把工具直接注册到 Agent 上，会让治理逻辑分散在代码库各处。</li>
+            <li><strong>机制与原文示例</strong>：不再将工具生硬地直接注册在智能体上，而是由中间件全权接管工具的完整生命周期——<strong>初始化设置（setup）</strong>、<strong>运行结束清理与卸载（teardown）</strong>以及<strong>动态注册（registration）</strong>，并妥善管理工具依赖，最终交付给智能体一套干净规整的可用工具集。这保证了工具配置与其背后的控制逻辑紧密内聚，避免状态遗漏泄漏。</li>
+          </ul>
+        </div>
+
+        <div id="sec-mw-state">
+          <h3>3. 自定义状态（Custom State）</h3>
+          <ul>
+            <li><strong>解决的设计问题</strong>：中间件需要在不同生命周期钩子（如 <code>before_model</code> 与 <code>after_tool</code>）之间持续记录、传递并共享业务状态。</li>
+            <li><strong>机制与原文示例</strong>：通过自定义属性扩展智能体的状态对象（extend the agent's state with custom properties）。原文明确指出，这使得中间件能够在整个执行周期内<strong>维护计数器（counters）</strong>、<strong>状态标志（flags）</strong>或其他持久值，并在不同的钩子之间无缝共享数据。</li>
+          </ul>
+        </div>
+
+        <div id="sec-mw-stream">
+          <h3>4. 流处理器（Stream Handlers）</h3>
+          <ul>
+            <li><strong>解决的设计问题</strong>：智能体输出流中的不同事件，需要分别交给前端界面、合规审计系统和时延监控系统等不同下游消费者处理。</li>
+            <li><strong>机制与原文示例</strong>：中间件可以拦截并重塑输出流——<strong>过滤事件（filtering events）</strong>、<strong>注入元数据（injecting metadata）</strong>，并将不同类型的事件路由给不同的消费者。原文给出的典型业务场景包括：<strong>前端 UI 消费 Token 增量（token deltas）</strong>实现实时打字渲染、<strong>审计日志系统捕获工具调用（tool calls）</strong>完成合规留痕、<strong>监控系统追踪延迟（latency）</strong>保障服务高可用。</li>
+          </ul>
+        </div>
+
+        <p>中间件机制的核心工程价值在于：</p>
+        <ol>
+          <li><strong>允许在智能体生命周期的任意拦截点进行无缝定制</strong>；</li>
+          <li><strong>将关联工程逻辑封装为独立解耦、可自由组装并在多项目间复用的代码单元</strong>。</li>
+        </ol>
+
+        <p>
+          LangChain 提供了覆盖常见模式的<a href="https://docs.langchain.com/oss/python/langchain/middleware/built-in" target="_blank" rel="noopener noreferrer">预置中间件（Prebuilt Middleware）</a>；若存在专有需求，也可以编写<a href="https://docs.langchain.com/oss/python/langchain/middleware/custom" target="_blank" rel="noopener noreferrer">自定义中间件（Custom Middleware）</a>。由于每个中间件彼此隔离，同一个中间件可以在组织内复用，使新 Agent 继承已经验证过的稳健行为。
+        </p>
+      </section>
+
+      <hr>
+
+      <!-- 第四章：从业务任务倒推 Harness：八大能力映射 -->
+      <section id="sec-capabilities">
+        <h2>从业务任务倒推 Harness：八大能力需求与中间件映射</h2>
+
+        <p>
+          Harness 的终极使命，是在循环的每一步为模型递送精准匹配当前任务的上下文。
+        </p>
+
+        <p>
+          构建 Harness 不是把所有中间件全量装上。原文明确指出，智能体最终采用哪些中间件组合，取决于具体任务的核心需求：<strong>是否需要长周期运行（is it long running?）</strong>、<strong>任务本身有多复杂（how complex are the tasks?）</strong>，以及<strong>智能体执行动作的敏感程度如何（how sensitive are the agent's actions?）</strong>。一个客服 Agent 与一个长运行编程 Agent 所需的 Harness 会明显不同，但原文没有替这两类业务规定固定组合。
+        </p>
+
+        <h3>业务设计方法：从任务需求倒推 Harness 装配</h3>
+        <p>
+          围绕“如何设计和构建基于你自己业务的自定义 Harness”，把原文关于 Task-Harness Fit 的四个维度与官方能力映射表结合起来，可以提炼出一套面向业务开发者的倒推设计方法（<strong>注：这是把原文的 Task-Harness Fit 考量与能力表合并后的读者用法，而非 LangChain 官方给出的固定四步规范</strong>）：
+        </p>
+
+        <ol>
+          <li><strong>写清任务使命（Mission）</strong>：先明确智能体要完成的核心业务目标、执行边界与期望交付物。</li>
+          <li><strong>按四大维度盘点特征（Context / Failures / Policies / Environment）</strong>：
+            <ul>
+              <li><strong>上下文（Context）</strong>：会话是多轮长交互还是一次性问答？需不需要记忆模块在启动时加载外部知识、在结束时沉淀经验？</li>
+              <li><strong>潜在故障（Failures）</strong>：模型或工具会遇到哪些不可预测的瞬态失败？</li>
+              <li><strong>策略红线（Policies）</strong>：是否存在用户隐私脱敏（PII）、合规检查，或者哪些高敏感操作必须获得人工审批批准？</li>
+              <li><strong>运行环境（Environment）</strong>：智能体是在受限数据环境还是需要获得文件系统、命令行或代码解释器等更广阔的执行环境？</li>
+            </ul>
+          </li>
+          <li><strong>从八项核心能力中按需筛选</strong>：根据盘点出的特征，在下方八项能力中挑出当前业务真正需要的项，避免无谓堆砌。</li>
+          <li><strong>映射到具体中间件组合</strong>：将选定的能力直接对应到 LangChain 预置中间件或编写自定义中间件，组合挂载到 <code>create_agent</code> 的循环中。</li>
+        </ol>
+
+        <!-- 交互式装配沙盘 component:harness-builder -->
+        <div class="sandbox-card" id="sec-sandbox">
+          <div class="sandbox-header">
+            <div class="sandbox-title">
+              <span>🛠️</span>
+              <span>业务自定义 Harness 装配沙盘与代码生成器</span>
+            </div>
+            <div class="preset-selector">
+              <button class="preset-btn active" id="btn-preset-support" type="button">客服问答 Agent</button>
+              <button class="preset-btn" id="btn-preset-coder" type="button">长程编码 Agent</button>
+              <button class="preset-btn" id="btn-preset-analyst" type="button">数据分析 Agent</button>
+              <button class="preset-btn" id="btn-preset-audit" type="button">风控审批 Agent</button>
+            </div>
+          </div>
+
+          <div class="sandbox-body">
+            <!-- 左侧：参数与能力勾选 -->
+            <div class="sandbox-ctrl-panel">
+              <div class="ctrl-group">
+                <div class="ctrl-group-title">
+                  <span>1. 任务特征配置 (Task Traits)</span>
+                  <span id="stat-traits-summary" style="color:var(--accent);font-family:var(--font-mono)">1 维已定义</span>
+                </div>
+                <div class="checkbox-grid">
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-trait-longrun">
+                    <span>长周期多轮会话（Long-running Session）</span>
+                  </label>
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-trait-complex">
+                    <span>高复杂度任务拆解（Complex Sub-tasks）</span>
+                  </label>
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-trait-sensitive" checked>
+                    <span>高敏敏感动作 / 真实资产操作（Sensitive Action）</span>
+                  </label>
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-trait-env">
+                    <span>需要宿主环境执行权（Filesystem / Shell / Python）</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="ctrl-group">
+                <div class="ctrl-group-title">
+                  <span>2. 所需中间件能力勾选 (Capabilities)</span>
+                  <span id="stat-cap-count" style="color:var(--c-teal);font-family:var(--font-mono)">4/8 项已启用</span>
+                </div>
+                <div class="checkbox-grid">
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-cap-overflow">
+                    <span>防止上下文溢出（Summarization, ContextEditing）</span>
+                  </label>
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-cap-memory" checked>
+                    <span>访问与更新记忆（Memory, Skills, Filesystem）</span>
+                  </label>
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-cap-action">
+                    <span>在环境中执行动作（ShellTool, CodeInterpreter）</span>
+                  </label>
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-cap-delegate">
+                    <span>委托任务与子代理（SubAgent, TodoList）</span>
+                  </label>
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-cap-retry" checked>
+                    <span>处理瞬态故障（ToolRetry, ModelFallback）</span>
+                  </label>
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-cap-policy" checked>
+                    <span>执行策略与合规（PIIMiddleware, Guardrails）</span>
+                  </label>
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-cap-steer">
+                    <span>引导与人工控制（HumanInTheLoopMiddleware）</span>
+                  </label>
+                  <label class="cb-label">
+                    <input type="checkbox" id="cb-cap-cost" checked>
+                    <span>控制运行成本（PromptCaching, CallLimits）</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- 右侧：实时指标与组装好的代码 -->
+            <div class="sandbox-view-panel">
+              <div class="score-banner">
+                <div>
+                  <div class="score-item-title">Task-Harness Fit 契合度</div>
+                  <div class="score-item-val" id="stat-score-fit">80%</div>
+                </div>
+                <div>
+                  <div class="score-item-title">中间件管道层数</div>
+                  <div class="score-item-val" id="stat-pipe-count">4 层</div>
+                </div>
+                <div>
+                  <div class="score-item-title">预估系统可靠性</div>
+                  <div class="score-item-val" id="stat-robust-level">充沛</div>
+                </div>
+              </div>
+
+              <!-- 装配的管道芯片流水 -->
+              <div class="ctrl-group">
+                <div class="ctrl-group-title">
+                  <span>组装的中间件栈流水 (Pipeline)</span>
+                  <span id="stat-active-profile" style="color:var(--text-dim);font-size:11px">客服问答模式</span>
+                </div>
+                <div class="pipe-chip-container" id="stat-chips-box">
+                  <span class="pipe-chip">MemoryMiddleware</span>
+                  <span class="pipe-chip">SkillsMiddleware</span>
+                  <span class="pipe-chip">ToolRetryMiddleware</span>
+                  <span class="pipe-chip">ModelFallbackMiddleware</span>
+                  <span class="pipe-chip">PIIMiddleware</span>
+                  <span class="pipe-chip">PromptCachingMiddleware</span>
+                  <span class="pipe-chip">ModelCallLimitMiddleware</span>
+                </div>
+              </div>
+
+              <!-- 动态生成的 Python 代码 -->
+              <div class="code-preview-box">
+                <div class="code-box-header">
+                  <span class="code-box-title">动态装配生成 Python 代码 (create_agent)</span>
+                  <button class="copy-btn" id="btn-copy-code" type="button">复制代码</button>
+                </div>
+                <pre><code class="language-python" id="stat-python-code">from langchain.agents import create_agent
+from langchain.middleware import (
+    MemoryMiddleware,
+    SkillsMiddleware,
+    ToolRetryMiddleware,
+    ModelFallbackMiddleware,
+    PIIMiddleware,
+    PromptCachingMiddleware,
+    ModelCallLimitMiddleware,
+)
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-4-6",
+    tools=tools,
+    system_prompt="You are a professional customer support agent...",
+    middleware=[
+        MemoryMiddleware(store=customer_profile_store),
+        SkillsMiddleware(repo='business_skills_v1'),
+        ToolRetryMiddleware(max_retries=3, backoff='exponential'),
+        ModelFallbackMiddleware(fallback='openai:gpt-4o-mini'),
+        PIIMiddleware(rules=['credit_card', 'phone', 'id_card']),
+        PromptCachingMiddleware(cache_system_prompt=True),
+        ModelCallLimitMiddleware(max_calls=25),
+    ]
+)
+</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="sec-table">
+          <p>
+            下表展示了原文梳理的八项核心生产能力需求、其背后的关键价值，以及官方对应的预置中间件映射关系：
+          </p>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 25%;">能力维度（Capability）</th>
+                  <th style="width: 45%;">为什么重要（Why it Matters）</th>
+                  <th style="width: 30%;">对应中间件（Middleware）</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>防止上下文溢出<br><span style="font-size:11px;color:var(--text-dim)">Prevent context overflow</span></strong></td>
+                  <td>长时间运行的会话会迅速积累消息历史。若不加干预，将导致上下文窗口溢出。</td>
+                  <td><code>SummarizationMiddleware</code><br><code>ContextEditingMiddleware</code></td>
+                </tr>
+                <tr>
+                  <td><strong>访问与更新记忆<br><span style="font-size:11px;color:var(--text-dim)">Access and update memory</span></strong></td>
+                  <td>在启动时加载相关知识，在运行结束时写回更新。使智能体能够从真实使用中随时间持续进化。</td>
+                  <td><code>FilesystemMiddleware</code><br><code>MemoryMiddleware</code><br><code>SkillsMiddleware</code></td>
+                </tr>
+                <tr>
+                  <td><strong>在环境中执行动作<br><span style="font-size:11px;color:var(--text-dim)">Take actions in an environment</span></strong></td>
+                  <td>固定的工具集限制了智能体的能力边界。获得文件系统和执行环境的访问权限，能解锁更具创造性的解决方案，且往往具备更高的 Token 效率。</td>
+                  <td><code>ShellToolMiddleware</code><br><code>FilesystemMiddleware</code><br><code>CodeInterpreterMiddleware</code></td>
+                </tr>
+                <tr>
+                  <td><strong>委托任务<br><span style="font-size:11px;color:var(--text-dim)">Delegate tasks</span></strong></td>
+                  <td>子智能体（Subagents）使用独立的干净上下文窗口处理复杂子任务。待办清单（Todo list）则用于追踪长运行周期中的整体任务进度。</td>
+                  <td><code>SubAgentMiddleware</code><br><code>AsyncSubAgentMiddleware</code><br><code>TodoListMiddleware</code></td>
+                </tr>
+                <tr>
+                  <td><strong>处理瞬态故障<br><span style="font-size:11px;color:var(--text-dim)">Handle transient failures</span></strong></td>
+                  <td>模型与工具的调用故障具有不可预测性。生产级智能体需要具备退避重试逻辑，并在主模型不可用时自动启用回退方案。</td>
+                  <td><code>ToolRetryMiddleware</code><br><code>ModelRetryMiddleware</code><br><code>ModelFallbackMiddleware</code></td>
+                </tr>
+                <tr>
+                  <td><strong>执行策略与合规<br><span style="font-size:11px;color:var(--text-dim)">Enforce policies</span></strong></td>
+                  <td>PII（个人身份信息）脱敏、合规检查、审批关卡——无论模型输出什么内容，这些检查都必须在每次调用时强制触发，它们绝不能只写在提示词里。</td>
+                  <td><code>PIIMiddleware</code><br><code>HumanInTheLoopMiddleware</code></td>
+                </tr>
+                <tr>
+                  <td><strong>引导与控制智能体<br><span style="font-size:11px;color:var(--text-dim)">Steer the agent</span></strong></td>
+                  <td>完全自主并不总是合适。在执行具有重大影响的动作前暂停执行，等待人类审核批准、拒绝或重定向指令。</td>
+                  <td><code>HumanInTheLoopMiddleware</code></td>
+                </tr>
+                <tr>
+                  <td><strong>控制运行成本<br><span style="font-size:11px;color:var(--text-dim)">Control costs</span></strong></td>
+                  <td>提示词缓存（Prompt caching）能降低长运行任务的 Token 开销。调用上限控制则能防止成本无节制累积。</td>
+                  <td><code>ModelCallLimitMiddleware</code><br><code>ToolCallLimitMiddleware</code><br><code>PromptCachingMiddleware</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <blockquote>
+            完整的预置中间件定义与说明可查阅官方的 <a href="https://docs.langchain.com/oss/python/langchain/middleware/built-in" target="_blank" rel="noopener noreferrer">Prebuilt Middleware 参考文档</a>。
+          </blockquote>
+        </div>
+      </section>
+
+      <hr>
+
+      <!-- 第五章：任务与底座适配度 (Task-Harness Fit) -->
+      <section id="sec-fit">
+        <h2>任务与底座适配（Task-Harness Fit）：检验你的自定义 Harness</h2>
+
+        <p>
+          <strong>Task-harness fit（任务与底座适配度）</strong>，衡量的是 Harness 对业务任务真实需求的匹配程度：它需要的具体上下文（the context it needs）、可能遭遇的故障类型（the failures it'll encounter）、必须强制执行的安全合规策略（the policies it must enforce），以及它赖以运转的宿主环境（the environment it operates in）。正如前文所述，一个客服 Agent 与一个长周期运行的编程 Agent，其 Harness 构造截然不同。
+        </p>
+
+        <p>LangChain 在文章中列举的三个自建 Agent，都基于 <code>create_agent</code> 并为各自任务装配中间件栈：</p>
+
+        <ul>
+          <li><a href="https://www.langchain.com/blog/how-we-built-langchains-gtm-agent" target="_blank" rel="noopener noreferrer">GTM agent</a>：面向市场与销售线索转化的高内聚智能体；</li>
+          <li><a href="https://github.com/langchain-ai/open-swe" target="_blank" rel="noopener noreferrer">Open-SWE</a>：异步代码智能体（Asynchronous coding agent），深度装配了文件系统与代码执行中间件；</li>
+          <li><a href="https://www.langchain.com/langsmith/fleet" target="_blank" rel="noopener noreferrer">Fleet</a>：无代码智能体构建器（No-code agent builder），高度依赖动态提示词与模型路由中间件。</li>
+        </ul>
+
+        <p>
+          好的智能体不只依赖能力强大的模型，也依赖与具体任务高度契合的 Harness。LangChain 给出的直接做法，是使用 <code>create_agent</code> 配合中间件打造这种自定义底座。
+        </p>
+
+        <!-- 自查清单互动模块 -->
+        <div class="checklist-container" id="sec-checklist">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;font-size:16px;color:var(--text-main);">📋 自定义 Harness 最小设计自查清单</h3>
+            <span id="stat-check-percent" style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--accent);">自查完成率: 0/8 (0%)</span>
+          </div>
+
+          <div class="checklist-progress-bar">
+            <div class="checklist-progress-fill" id="stat-check-progress"></div>
+          </div>
+
+          <div class="checklist-group">
+            <div class="checklist-group-title">1. 上下文与记忆（Context &amp; Memory）</div>
+            <ul class="checklist-items">
+              <li>
+                <label class="check-item">
+                  <input type="checkbox" class="audit-cb" id="cb-chk-1">
+                  <span>任务是否涉及长运行会话？是否需要配置上下文总结或编辑中间件防止窗口溢出？</span>
+                </label>
+              </li>
+              <li>
+                <label class="check-item">
+                  <input type="checkbox" class="audit-cb" id="cb-chk-2">
+                  <span>智能体是否需要在启动时加载外部知识/技能，并在运行结束时将新经验写回记忆？</span>
+                </label>
+              </li>
+            </ul>
+          </div>
+
+          <div class="checklist-group">
+            <div class="checklist-group-title">2. 故障容错与成本（Failures &amp; Costs）</div>
+            <ul class="checklist-items">
+              <li>
+                <label class="check-item">
+                  <input type="checkbox" class="audit-cb" id="cb-chk-3">
+                  <span>当外部模型或工具发生不可预测的瞬态故障时，是否配有退避重试与回退模型中间件？</span>
+                </label>
+              </li>
+              <li>
+                <label class="check-item">
+                  <input type="checkbox" class="audit-cb" id="cb-chk-4">
+                  <span>是否配置了提示词缓存以降低长任务 Token 成本？是否设置了模型与工具的调用次数限制？</span>
+                </label>
+              </li>
+            </ul>
+          </div>
+
+          <div class="checklist-group">
+            <div class="checklist-group-title">3. 策略约束与人工控制（Policies &amp; Steering）</div>
+            <ul class="checklist-items">
+              <li>
+                <label class="check-item">
+                  <input type="checkbox" class="audit-cb" id="cb-chk-5">
+                  <span>业务中是否有 PII 脱敏或合规审查等规则？它们是否已通过中间件在每次调用中强制执行？</span>
+                </label>
+              </li>
+              <li>
+                <label class="check-item">
+                  <input type="checkbox" class="audit-cb" id="cb-chk-6">
+                  <span>面对高影响或敏感动作，是否配置了暂停并等待人类批准、拒绝或重定向的人在回路机制？</span>
+                </label>
+              </li>
+            </ul>
+          </div>
+
+          <div class="checklist-group">
+            <div class="checklist-group-title">4. 运行环境与任务协同（Environment &amp; Delegation）</div>
+            <ul class="checklist-items">
+              <li>
+                <label class="check-item">
+                  <input type="checkbox" class="audit-cb" id="cb-chk-7">
+                  <span>智能体是否需要突破固定工具集，接入文件系统、命令行或代码解释器环境以提高行动效率？</span>
+                </label>
+              </li>
+              <li>
+                <label class="check-item">
+                  <input type="checkbox" class="audit-cb" id="cb-chk-8">
+                  <span>复杂的长任务是否拆解并委托给独立子智能体？工具依赖治理与流处理器是否已就绪？</span>
+                </label>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <hr>
+
+      <!-- 第六章：拓展资源与参考链接 -->
+      <section id="sec-resources" style="margin-bottom: 40px;">
+        <h2>拓展资源与参考链接</h2>
+        
+        <h3>官方指南与文档</h3>
+        <ul>
+          <li><a href="https://docs.langchain.com/oss/python/langchain/quickstart" target="_blank" rel="noopener noreferrer">快速入门：使用 <code>create_agent</code> 构建首个智能体</a></li>
+          <li><a href="https://docs.langchain.com/oss/python/langchain/agents" target="_blank" rel="noopener noreferrer"><code>create_agent</code> 核心开发指南</a></li>
+          <li><a href="https://docs.langchain.com/oss/python/langchain/middleware/built-in" target="_blank" rel="noopener noreferrer">预置中间件参考列表（Built-in Middleware）</a></li>
+          <li><a href="https://docs.langchain.com/oss/python/langchain/middleware/custom" target="_blank" rel="noopener noreferrer">自定义中间件开发指南（Custom Middleware）</a></li>
+          <li><a href="https://docs.langchain.com/oss/python/deepagents/overview" target="_blank" rel="noopener noreferrer">Deep Agents：基于 <code>create_agent</code> 搭建的生产级预组装 Harness</a></li>
+        </ul>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- 内联 JavaScript 逻辑：主题切换、目录高亮、装配沙盘联动、自查清单 -->
+  <script>
+    (function() {
+      // DOM 辅助获取函数
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // 1. 阅读进度与目录滚动监听 (Scroll & TOC)
+      var progressBar = byId("reading-progress-bar");
+
+      function updateProgress() {
+        var total = document.documentElement.scrollHeight - window.innerHeight;
+        if (total > 0 && progressBar) {
+          var p = (window.scrollY / total) * 100;
+          progressBar.style.width = Math.min(100, Math.max(0, p)) + "%";
+        }
+      }
+
+      window.addEventListener("scroll", function() {
+        updateProgress();
+      });
+      updateProgress();
+
+      // 2. 主题切换 (Theme Toggle)
+      var themeBtn = byId("ctrl-theme-toggle");
+      var themeText = byId("stat-theme-text");
+
+      function syncThemeUi(theme) {
+        if (theme === "dark") {
+          document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.classList.add("dark");
+          document.documentElement.classList.remove("light");
+          if (themeText) themeText.textContent = "切换明亮";
+        } else {
+          document.documentElement.setAttribute("data-theme", "light");
+          document.documentElement.classList.add("light");
+          document.documentElement.classList.remove("dark");
+          if (themeText) themeText.textContent = "切换深色";
+        }
+      }
+
+      if (themeBtn) {
+        themeBtn.addEventListener("click", function() {
+          var current = document.documentElement.getAttribute("data-theme") || "dark";
+          var next = (current === "dark") ? "light" : "dark";
+          syncThemeUi(next);
+          try {
+            if (window.localStorage) {
+              window.localStorage.setItem("user-theme", next);
+            }
+          } catch (e) {}
+        });
+      }
+
+      // 初始主题检测
+      try {
+        if (window.localStorage) {
+          var saved = window.localStorage.getItem("user-theme");
+          if (saved) syncThemeUi(saved);
+        }
+      } catch (e) {}
+
+      // 3. 业务自定义 Harness 装配沙盘逻辑 (Harness Assembler)
+      var cbLongrun = byId("cb-trait-longrun");
+      var cbComplex = byId("cb-trait-complex");
+      var cbSensitive = byId("cb-trait-sensitive");
+      var cbEnv = byId("cb-trait-env");
+
+      var cbOverflow = byId("cb-cap-overflow");
+      var cbMemory = byId("cb-cap-memory");
+      var cbAction = byId("cb-cap-action");
+      var cbDelegate = byId("cb-cap-delegate");
+      var cbRetry = byId("cb-cap-retry");
+      var cbPolicy = byId("cb-cap-policy");
+      var cbSteer = byId("cb-cap-steer");
+      var cbCost = byId("cb-cap-cost");
+
+      var statScoreFit = byId("stat-score-fit");
+      var statPipeCount = byId("stat-pipe-count");
+      var statRobustLevel = byId("stat-robust-level");
+      var statTraitsSummary = byId("stat-traits-summary");
+      var statCapCount = byId("stat-cap-count");
+      var statActiveProfile = byId("stat-active-profile");
+      var statChipsBox = byId("stat-chips-box");
+      var statPythonCode = byId("stat-python-code");
+
+      var btnSupport = byId("btn-preset-support");
+      var btnCoder = byId("btn-preset-coder");
+      var btnAnalyst = byId("btn-preset-analyst");
+      var btnAudit = byId("btn-preset-audit");
+      var btnCopyCode = byId("btn-copy-code");
+
+      var currentPreset = "support";
+
+      var presets = {
+        support: {
+          name: "客服问答模式",
+          traits: [false, false, true, false],
+          caps: [false, true, false, false, true, true, false, true],
+          model: "anthropic:claude-sonnet-4-6",
+          systemPrompt: "You are a professional customer support agent..."
+        },
+        coder: {
+          name: "长程编码模式",
+          traits: [true, true, false, true],
+          caps: [true, true, true, true, true, false, false, true],
+          model: "anthropic:claude-opus-4-6",
+          systemPrompt: "You are an autonomous senior software engineer agent..."
+        },
+        analyst: {
+          name: "数据分析模式",
+          traits: [false, true, false, true],
+          caps: [false, true, true, false, true, false, false, false],
+          model: "openai:gpt-4o",
+          systemPrompt: "You are a senior data analyst with Python code execution tools..."
+        },
+        audit: {
+          name: "风控审批模式",
+          traits: [true, false, true, false],
+          caps: [false, true, false, false, true, true, true, false],
+          model: "anthropic:claude-sonnet-4-6",
+          systemPrompt: "You are a strict compliance and financial audit agent..."
+        }
+      };
+
+      function applyPreset(key) {
+        currentPreset = key;
+        var p = presets[key];
+        if (!p) return;
+
+        [btnSupport, btnCoder, btnAnalyst, btnAudit].forEach(function(b) {
+          if (b) b.classList.remove("active");
+        });
+        if (key === "support" && btnSupport) btnSupport.classList.add("active");
+        if (key === "coder" && btnCoder) btnCoder.classList.add("active");
+        if (key === "analyst" && btnAnalyst) btnAnalyst.classList.add("active");
+        if (key === "audit" && btnAudit) btnAudit.classList.add("active");
+
+        if (cbLongrun) cbLongrun.checked = p.traits[0];
+        if (cbComplex) cbComplex.checked = p.traits[1];
+        if (cbSensitive) cbSensitive.checked = p.traits[2];
+        if (cbEnv) cbEnv.checked = p.traits[3];
+
+        if (cbOverflow) cbOverflow.checked = p.caps[0];
+        if (cbMemory) cbMemory.checked = p.caps[1];
+        if (cbAction) cbAction.checked = p.caps[2];
+        if (cbDelegate) cbDelegate.checked = p.caps[3];
+        if (cbRetry) cbRetry.checked = p.caps[4];
+        if (cbPolicy) cbPolicy.checked = p.caps[5];
+        if (cbSteer) cbSteer.checked = p.caps[6];
+        if (cbCost) cbCost.checked = p.caps[7];
+
+        if (statActiveProfile) statActiveProfile.textContent = p.name;
+        recalcHarness();
+      }
+
+      function recalcHarness() {
+        var tLong = cbLongrun ? cbLongrun.checked : false;
+        var tComp = cbComplex ? cbComplex.checked : false;
+        var tSens = cbSensitive ? cbSensitive.checked : false;
+        var tEnv = cbEnv ? cbEnv.checked : false;
+
+        var cOver = cbOverflow ? cbOverflow.checked : false;
+        var cMem = cbMemory ? cbMemory.checked : false;
+        var cAct = cbAction ? cbAction.checked : false;
+        var cDel = cbDelegate ? cbDelegate.checked : false;
+        var cRet = cbRetry ? cbRetry.checked : false;
+        var cPol = cbPolicy ? cbPolicy.checked : false;
+        var cStr = cbSteer ? cbSteer.checked : false;
+        var cCost = cbCost ? cbCost.checked : false;
+
+        var activeTraits = (tLong ? 1 : 0) + (tComp ? 1 : 0) + (tSens ? 1 : 0) + (tEnv ? 1 : 0);
+        var activeCaps = (cOver ? 1 : 0) + (cMem ? 1 : 0) + (cAct ? 1 : 0) + (cDel ? 1 : 0) +
+                         (cRet ? 1 : 0) + (cPol ? 1 : 0) + (cStr ? 1 : 0) + (cCost ? 1 : 0);
+
+        if (statTraitsSummary) statTraitsSummary.textContent = activeTraits + " 维已定义";
+        if (statCapCount) statCapCount.textContent = activeCaps + "/8 项已启用";
+
+        // 计算 Task-Harness Fit 契合度与惩罚
+        var score = 70;
+        if (tLong) {
+          if (cOver) score += 8; else score -= 15;
+          if (cCost) score += 6;
+        }
+        if (tComp) {
+          if (cDel) score += 10; else score -= 10;
+        }
+        if (tSens) {
+          if (cPol) score += 8; else score -= 15;
+          if (cStr) score += 6; else score -= 10;
+        }
+        if (tEnv) {
+          if (cAct) score += 10; else score -= 12;
+        }
+        if (cRet) score += 6;
+        if (cMem) score += 6;
+
+        score = Math.min(99, Math.max(45, score));
+
+        if (statScoreFit) statScoreFit.textContent = score + "%";
+        if (statPipeCount) statPipeCount.textContent = activeCaps + " 层";
+
+        var level = "良好";
+        if (score >= 90) level = "极高";
+        else if (score >= 75) level = "充沛";
+        else level = "存在缺口";
+        if (statRobustLevel) statRobustLevel.textContent = level;
+
+        // 生成 Middleware 芯片与 Python 代码
+        var chips = [];
+        var mwImports = [];
+        var mwInits = [];
+
+        if (cOver) {
+          chips.push("SummarizationMiddleware");
+          chips.push("ContextEditingMiddleware");
+          mwImports.push("SummarizationMiddleware", "ContextEditingMiddleware");
+          mwInits.push("        SummarizationMiddleware(max_tokens=8000),", "        ContextEditingMiddleware(),");
+        }
+        if (cMem) {
+          chips.push("MemoryMiddleware");
+          chips.push("SkillsMiddleware");
+          mwImports.push("MemoryMiddleware", "SkillsMiddleware");
+          mwInits.push("        MemoryMiddleware(store=customer_profile_store),", "        SkillsMiddleware(repo='business_skills_v1'),");
+        }
+        if (cAct) {
+          chips.push("ShellToolMiddleware");
+          chips.push("CodeInterpreterMiddleware");
+          mwImports.push("ShellToolMiddleware", "CodeInterpreterMiddleware");
+          mwInits.push("        ShellToolMiddleware(workspace_dir='/sandbox'),", "        CodeInterpreterMiddleware(),");
+        }
+        if (cDel) {
+          chips.push("SubAgentMiddleware");
+          chips.push("TodoListMiddleware");
+          mwImports.push("SubAgentMiddleware", "TodoListMiddleware");
+          mwInits.push("        SubAgentMiddleware(),", "        TodoListMiddleware(),");
+        }
+        if (cRet) {
+          chips.push("ToolRetryMiddleware");
+          chips.push("ModelFallbackMiddleware");
+          mwImports.push("ToolRetryMiddleware", "ModelFallbackMiddleware");
+          mwInits.push("        ToolRetryMiddleware(max_retries=3, backoff='exponential'),", "        ModelFallbackMiddleware(fallback='openai:gpt-4o-mini'),");
+        }
+        if (cPol) {
+          chips.push("PIIMiddleware");
+          mwImports.push("PIIMiddleware");
+          mwInits.push("        PIIMiddleware(rules=['credit_card', 'phone', 'id_card']),");
+        }
+        if (cStr) {
+          chips.push("HumanInTheLoopMiddleware");
+          mwImports.push("HumanInTheLoopMiddleware");
+          mwInits.push("        HumanInTheLoopMiddleware(interrupt_on=['transfer_funds', 'delete_db']),");
+        }
+        if (cCost) {
+          chips.push("PromptCachingMiddleware");
+          chips.push("ModelCallLimitMiddleware");
+          mwImports.push("PromptCachingMiddleware", "ModelCallLimitMiddleware");
+          mwInits.push("        PromptCachingMiddleware(cache_system_prompt=True),", "        ModelCallLimitMiddleware(max_calls=25),");
+        }
+
+        // 渲染芯片
+        if (statChipsBox) {
+          if (chips.length === 0) {
+            statChipsBox.innerHTML = "<span class='pipe-chip' style='color:var(--text-dim);border-color:var(--border)'>未挂载任何中间件（裸核心循环）</span>";
+          } else {
+            statChipsBox.innerHTML = chips.map(function(c) {
+              return "<span class='pipe-chip'>" + c + "</span>";
+            }).join(" ");
+          }
+        }
+
+        // 渲染代码
+        var currentP = presets[currentPreset] || presets.support;
+        var codeStr = "from langchain.agents import create_agent\n";
+        if (mwImports.length > 0) {
+          codeStr += "from langchain.middleware import (\n    " + mwImports.join(",\n    ") + ",\n)\n\n";
+        } else {
+          codeStr += "\n";
+        }
+
+        codeStr += "agent = create_agent(\n";
+        codeStr += "    model=\"" + currentP.model + "\",\n";
+        codeStr += "    tools=tools,\n";
+        codeStr += "    system_prompt=\"" + currentP.systemPrompt + "\",\n";
+        if (mwInits.length > 0) {
+          codeStr += "    middleware=[\n" + mwInits.join("\n") + "\n    ]\n";
+        } else {
+          codeStr += "    middleware=[]\n";
+        }
+        codeStr += ")\n";
+
+        if (statPythonCode) {
+          statPythonCode.textContent = codeStr;
+        }
+      }
+
+      // 绑定控件事件
+      var allCheckboxes = [
+        cbLongrun, cbComplex, cbSensitive, cbEnv,
+        cbOverflow, cbMemory, cbAction, cbDelegate,
+        cbRetry, cbPolicy, cbSteer, cbCost
+      ];
+      allCheckboxes.forEach(function(cb) {
+        if (cb) cb.addEventListener("change", recalcHarness);
+      });
+
+      if (btnSupport) btnSupport.addEventListener("click", function() { applyPreset("support"); });
+      if (btnCoder) btnCoder.addEventListener("click", function() { applyPreset("coder"); });
+      if (btnAnalyst) btnAnalyst.addEventListener("click", function() { applyPreset("analyst"); });
+      if (btnAudit) btnAudit.addEventListener("click", function() { applyPreset("audit"); });
+
+      if (btnCopyCode) {
+        btnCopyCode.addEventListener("click", function() {
+          if (statPythonCode && navigator.clipboard) {
+            navigator.clipboard.writeText(statPythonCode.textContent).then(function() {
+              btnCopyCode.textContent = "已复制！";
+              setTimeout(function() { btnCopyCode.textContent = "复制代码"; }, 2000);
+            });
+          }
+        });
+      }
+
+      // 初始化沙盘
+      applyPreset("support");
+
+      // 4. 自查清单进度与交互 (Audit Checklist)
+      // 显式引用所有自查复选框 ID，闭环接线验证
+      var chk1 = byId("cb-chk-1");
+      var chk2 = byId("cb-chk-2");
+      var chk3 = byId("cb-chk-3");
+      var chk4 = byId("cb-chk-4");
+      var chk5 = byId("cb-chk-5");
+      var chk6 = byId("cb-chk-6");
+      var chk7 = byId("cb-chk-7");
+      var chk8 = byId("cb-chk-8");
+
+      var auditCheckboxes = [chk1, chk2, chk3, chk4, chk5, chk6, chk7, chk8].filter(Boolean);
+      var statCheckPercent = byId("stat-check-percent");
+      var statCheckProgress = byId("stat-check-progress");
+
+      function updateChecklist() {
+        var total = auditCheckboxes.length;
+        var checked = 0;
+        auditCheckboxes.forEach(function(c) {
+          if (c && c.checked) checked++;
+        });
+        var pct = Math.round((checked / total) * 100);
+        if (statCheckPercent) {
+          statCheckPercent.textContent = "自查完成率: " + checked + "/" + total + " (" + pct + "%)";
+        }
+        if (statCheckProgress) {
+          statCheckProgress.style.width = pct + "%";
+        }
+      }
+
+      auditCheckboxes.forEach(function(c) {
+        if (c) c.addEventListener("change", updateChecklist);
+      });
+      updateChecklist();
+
+    })();
+  </script>
+</body>
+</html>

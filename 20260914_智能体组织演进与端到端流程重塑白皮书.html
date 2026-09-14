@@ -1,0 +1,1743 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能体组织演进与端到端流程重塑白皮书 | 麦肯锡企业级智能化转型深度解构</title>
+<style>
+/* ==========================================================================
+   零外部依赖设计系统：统一排版基线、暖羊皮纸/黑曜石双主题、纯系统字体降级
+   ========================================================================== */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+  /* 默认深色主题（黑曜石基线） */
+  --bg-primary: #181715;
+  --bg-secondary: #22201D;
+  --bg-card: #282521;
+  --bg-elevated: #322F2A;
+  --border-subtle: #3D3933;
+  --border-strong: #59534A;
+
+  --text-primary: #F4F1EA;
+  --text-secondary: #B5AFA6;
+  --text-muted: #827C72;
+
+  --accent: #E2886A;
+  --accent-light: #FF9E80;
+  --emerald: #4EAD85;
+  --rose: #E06C75;
+  --amber: #E5C07B;
+  --cyan: #56B6C2;
+  --indigo: #828BFF;
+
+  --sidebar-w: 280px;
+  --content-max: 1180px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+}
+
+[data-theme="light"] {
+  /* 浅色主题（暖羊皮纸基线） */
+  --bg-primary: #FAF7F2;
+  --bg-secondary: #F2ECE1;
+  --bg-card: #FFFFFF;
+  --bg-elevated: #EDE5D8;
+  --border-subtle: #DFD6C7;
+  --border-strong: #C4B9A5;
+
+  --text-primary: #1C1917;
+  --text-secondary: #524B43;
+  --text-muted: #857C70;
+
+  --accent: #D97757;
+  --accent-light: #C25E3E;
+  --emerald: #2E855D;
+  --rose: #C73845;
+  --amber: #B8860B;
+  --cyan: #1E8694;
+  --indigo: #4D57C8;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* 阅读进度条 */
+#read-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--cyan), var(--emerald));
+  z-index: 1000;
+  width: 0%;
+  transition: width 0.08s ease;
+}
+
+/* 顶部信息条（移动端及打印状态） */
+.top-nav {
+  display: none;
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.75rem 1rem;
+  z-index: 900;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 页面主体网格布局 */
+.layout-wrapper {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* 侧边导航栏（280px 固态贴左） */
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  z-index: 800;
+  overflow-y: auto;
+}
+
+.sidebar-header {
+  padding: 1.5rem 1.25rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sidebar-brand {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.badge-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar-meta {
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.sidebar-controls {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.theme-toggle-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s ease;
+}
+
+.theme-toggle-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sidebar-nav {
+  padding: 1rem 0;
+  flex: 1;
+}
+
+.sidebar-nav-title {
+  padding: 0.25rem 1.25rem 0.5rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.sidebar-nav-list {
+  list-style: none;
+}
+
+.sidebar-nav-item {
+  margin-bottom: 0.15rem;
+}
+
+.sidebar-nav-link {
+  display: block;
+  padding: 0.4rem 1.25rem;
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  line-height: 1.4;
+  transition: all 0.15s ease;
+  border-left: 2px solid transparent;
+}
+
+.sidebar-nav-link:hover {
+  color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+.sidebar-nav-link.active {
+  color: var(--accent);
+  background: var(--bg-card);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+
+/* 主内容容器：侧栏贴左，剩余空间绝对水平居中 */
+.main-wrapper {
+  flex: 1;
+  margin-left: calc(var(--sidebar-w) + max(0px, (100% - var(--sidebar-w) - var(--content-max)) / 2));
+  margin-right: max(0px, (100% - var(--sidebar-w) - var(--content-max)) / 2);
+  max-width: var(--content-max);
+  padding: 3rem 2.5rem 6rem;
+  min-width: 0;
+}
+
+/* 文章头部区域 */
+.doc-header {
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.doc-breadcrumbs {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.doc-breadcrumbs a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.doc-breadcrumbs span {
+  color: var(--border-strong);
+}
+
+.doc-title {
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 3.5vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-primary);
+  margin-bottom: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.doc-subtitle {
+  font-size: 1.2rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 1.75rem;
+  font-weight: 400;
+}
+
+.doc-meta-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.meta-item strong {
+  color: var(--text-secondary);
+}
+
+/* 核心执行摘要卡 */
+.executive-summary-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 1.75rem 2rem;
+  margin-bottom: 3rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.summary-card-title {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.summary-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+.summary-list-item {
+  position: relative;
+  padding-left: 1.5rem;
+  font-size: 0.98rem;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.summary-list-item::before {
+  content: "◆";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+
+/* 高保真题图（内联 SVG） */
+.hero-svg-box {
+  width: 100%;
+  margin: 2.5rem 0 3.5rem;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.hero-svg-box svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* 章节标题规范 */
+.content-section {
+  margin-bottom: 4rem;
+  scroll-margin-top: 2rem;
+}
+
+.section-h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(1.4rem, 2.2vw, 1.85rem);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 2.5rem 0 1.25rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border-subtle);
+  line-height: 1.35;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.section-num {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.section-h3 {
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 2rem 0 1rem;
+}
+
+/* 正文段落与加粗 */
+p {
+  margin-bottom: 1.25rem;
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1.8;
+  text-align: justify;
+}
+
+strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+p strong {
+  color: var(--accent);
+}
+
+/* 引用块 */
+blockquote {
+  margin: 1.5rem 0;
+  padding: 1rem 1.5rem;
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-secondary);
+  font-style: normal;
+}
+
+blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* 结构化对比卡片与网格 */
+.card-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.feature-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.feature-card:hover {
+  border-color: var(--border-strong);
+}
+
+.feature-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+}
+
+.feature-card-title {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.card-badge {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--cyan);
+}
+
+.card-badge.badge-swat {
+  color: var(--amber);
+}
+
+.card-badge.badge-embed {
+  color: var(--emerald);
+}
+
+/* 核心问答卡片（五大问题） */
+.questions-card-wrap {
+  margin: 2rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.question-row {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.25rem;
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.q-index {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--bg-secondary);
+  width: 2.2rem;
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.q-content h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.35rem;
+}
+
+.q-content p {
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  margin-bottom: 0;
+  line-height: 1.6;
+}
+
+/* 表格样式规范 */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  margin: 2rem 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  text-align: left;
+}
+
+thead th {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-sans);
+}
+
+tbody td {
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr:hover {
+  background: var(--bg-elevated);
+}
+
+/* 交互沙盘公共容器 */
+.sandbox-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  margin: 2.5rem 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.sandbox-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.sandbox-title {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sandbox-desc {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+}
+
+.sandbox-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.75rem;
+  padding: 1.25rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.ctrl-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ctrl-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+}
+
+.ctrl-val {
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+.ctrl-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.sandbox-output-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+}
+
+.out-metric-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.out-metric-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.out-metric-value {
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.out-metric-sub {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* 五支柱联动沙盘特定样式 */
+.pillars-nav-bar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.pillar-tab-btn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: 0.6rem 1.1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pillar-tab-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.pillar-tab-btn.active {
+  background: var(--accent);
+  color: #FFFFFF;
+  border-color: var(--accent);
+}
+
+.pillar-detail-box {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+}
+
+.pillar-detail-row {
+  margin-bottom: 1.25rem;
+}
+
+.pillar-detail-row:last-child {
+  margin-bottom: 0;
+}
+
+.p-detail-title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.p-detail-val {
+  font-size: 0.98rem;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+/* 结论注脚与参考信息 */
+.doc-footer {
+  margin-top: 5rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* 响应式移动端适配 */
+@media (max-width: 1080px) {
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .main-wrapper {
+    margin-left: 0;
+    margin-right: 0;
+    padding: 1.5rem 1.25rem 4rem;
+    max-width: 100%;
+  }
+
+  .top-nav {
+    display: flex;
+  }
+}
+
+/* 打印样式适配 */
+@media print {
+  #read-progress-bar,
+  .sidebar,
+  .top-nav,
+  .theme-toggle-btn,
+  .ctrl-slider,
+  .pillars-nav-bar {
+    display: none !important;
+  }
+
+  .layout-wrapper {
+    display: block !important;
+  }
+
+  .main-wrapper {
+    margin: 0 !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+  }
+
+  .sandbox-panel,
+  .executive-summary-card,
+  .feature-card,
+  .hero-svg-box {
+    box-shadow: none !important;
+    border: 1px solid #CCCCCC !important;
+    break-inside: avoid;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- 顶部阅读进度条 -->
+<div id="read-progress-bar"></div>
+
+<!-- 移动端顶部导航条 -->
+<header class="top-nav">
+  <div class="sidebar-brand">
+    <span>麦肯锡转型白皮书</span>
+    <span class="badge-tag">麦肯锡深度</span>
+  </div>
+  <button type="button" class="theme-toggle-btn" id="btn-theme-toggle-mobile" aria-label="切换主题">
+    <span>🌓 主题</span>
+  </button>
+</header>
+
+<div class="layout-wrapper">
+  <!-- 左侧固定侧栏（280px） -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-brand">
+        <span>麦肯锡转型白皮书</span>
+        <span class="badge-tag">战略解构</span>
+      </div>
+      <div class="sidebar-meta">
+        麦肯锡全球资深合伙人 Alexis Krivkovich 核心洞见与企业级智能体组织重塑体系
+      </div>
+    </div>
+
+    <div class="sidebar-controls">
+      <span style="font-size: 0.78rem; color: var(--text-muted); font-family: var(--font-mono);">THEME</span>
+      <button type="button" class="theme-toggle-btn" id="btn-theme-toggle" aria-label="切换深浅主题">
+        <span>🌓 切换深浅主题</span>
+      </button>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="sidebar-nav-title">目录导航</div>
+      <ul class="sidebar-nav-list">
+        <li class="sidebar-nav-item"><a href="#s-abstract" class="sidebar-nav-link active">00. 核心提要与转型悖论</a></li>
+        <li class="sidebar-nav-item"><a href="#s-intro" class="sidebar-nav-link">01. 尴尬的试验：底线为何未见效</a></li>
+        <li class="sidebar-nav-item"><a href="#s-chapter-1" class="sidebar-nav-link">02. 单点工具之困与断裂流程</a></li>
+        <li class="sidebar-nav-item"><a href="#s-chapter-2" class="sidebar-nav-link">03. 端到端重塑：环路之上 (HATL)</a></li>
+        <li class="sidebar-nav-item"><a href="#s-chapter-3" class="sidebar-nav-link">04. 工作方式颠覆与技术落地双轨</a></li>
+        <li class="sidebar-nav-item"><a href="#s-chapter-4" class="sidebar-nav-link">05. 领导力改造：跨越AI垃圾鸿沟</a></li>
+        <li class="sidebar-nav-item"><a href="#s-chapter-5" class="sidebar-nav-link">06. 75%岗位重塑与学徒断层困境</a></li>
+        <li class="sidebar-nav-item"><a href="#s-chapter-6" class="sidebar-nav-link">07. 扁平化架构：工作单元与双向门</a></li>
+        <li class="sidebar-nav-item"><a href="#s-chapter-7" class="sidebar-nav-link">08. 智能体组织运转的五大支柱</a></li>
+        <li class="sidebar-nav-item"><a href="#s-epilogue" class="sidebar-nav-link">09. 落地节奏与外部现实约束</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- 主体阅读内容区 -->
+  <main class="main-wrapper" id="main">
+    <!-- 文档标头 -->
+    <header class="doc-header">
+      <div class="doc-breadcrumbs">
+        <a href="#s-abstract">AIKnowledge</a>
+        <span>/</span>
+        <a href="#s-chapter-1">组织与智能体工程</a>
+        <span>/</span>
+        <span>白皮书交付物</span>
+      </div>
+      <h1 class="doc-title">AI 到处都是，为什么“智能体组织”还没出现？</h1>
+      <div class="doc-subtitle">八成企业尚未看到 AI 影响利润。问题不只是模型能力，而是企业仍把智能体塞进旧流程：工作流、治理、领导方式与人才成长必须一起重做。</div>
+      <div class="doc-meta-bar">
+        <div class="meta-item"><strong>洞见来源：</strong>麦肯锡全球研究院 (McKinsey) / Alexis Krivkovich</div>
+        <div class="meta-item"><strong>基准发布日：</strong>2026-09-14</div>
+        <div class="meta-item"><strong>分析体裁：</strong>企业级组织变革与智能体系统架构白皮书</div>
+        <div class="meta-item"><strong>执行规范：</strong>零外部依赖自包含单文件 (Zero-Dependency)</div>
+      </div>
+    </header>
+
+    <!-- 核心执行摘要卡 -->
+    <section class="executive-summary-card" id="s-abstract">
+      <div class="summary-card-title">
+        <span>◆ 核心执行摘要与关键洞见 (Executive Summary)</span>
+      </div>
+      <ul class="summary-list">
+        <li class="summary-list-item"><strong>底线悖论：</strong>超过 80% 的企业尚未看到 AI 投资影响底线收益；局部任务变快，不等于跨部门流程已经创造价值。</li>
+        <li class="summary-list-item"><strong>工作流重构：</strong>规模化价值要从端到端工作流入手，逐一决定 Agent、人类复核、规则与异常处理应该放在哪里。</li>
+        <li class="summary-list-item"><strong>范式演进：</strong>“人在环上”不是无人负责：人从频繁接棒转向定义目标、设置边界、处理例外并承担最终判断。</li>
+        <li class="summary-list-item"><strong>系统同步：</strong>组织还要同步改变治理、领导方式与人才培养，否则监督带宽和新人断层会成为新的瓶颈。</li>
+      </ul>
+    </section>
+
+    <!-- 原文对应的内联矢量题图 -->
+    <div class="hero-svg-box">
+      <svg viewBox="0 0 1180 500" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI 到处都是，智能体组织为什么还没出现架构概念图">
+        <defs>
+          <linearGradient id="grad-hero-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#1F1D1A"/>
+            <stop offset="100%" stop-color="#141312"/>
+          </linearGradient>
+          <linearGradient id="grad-accent" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#E2886A"/>
+            <stop offset="100%" stop-color="#56B6C2"/>
+          </linearGradient>
+          <pattern id="dot-grid" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.2" fill="#3D3933" opacity="0.6"/>
+          </pattern>
+        </defs>
+
+        <!-- 底板与点阵网格 -->
+        <rect width="1180" height="500" fill="url(#grad-hero-bg)"/>
+        <rect width="1180" height="500" fill="url(#dot-grid)"/>
+
+        <!-- 装饰几何线框 -->
+        <rect x="30" y="30" width="1120" height="440" rx="12" fill="none" stroke="#3D3933" stroke-width="1" stroke-dasharray="6,6"/>
+
+        <!-- 左侧：工业时代科层旧模式（单点工具孤岛） -->
+        <g transform="translate(60, 70)">
+          <rect width="480" height="360" rx="10" fill="#24211D" stroke="#3D3933" stroke-width="1.2"/>
+          <text x="30" y="45" fill="#E06C75" font-family="-apple-system, sans-serif" font-size="14" font-weight="700" letter-spacing="1">传统科层模式：单点工具陷阱 (POINT SOLUTIONS TRAP)</text>
+          <text x="30" y="70" fill="#827C72" font-family="-apple-system, sans-serif" font-size="12">80%+ 企业投资陷入局部任务孤岛，跨部门交接产生严重协同摩擦与AI垃圾</text>
+
+          <!-- 孤立部门节点 -->
+          <g transform="translate(30, 105)">
+            <!-- 部门A -->
+            <rect x="0" y="0" width="120" height="80" rx="6" fill="#181715" stroke="#59534A" stroke-width="1"/>
+            <text x="60" y="35" fill="#F4F1EA" font-size="12" font-weight="600" text-anchor="middle">部门 A (业务)</text>
+            <rect x="15" y="48" width="90" height="20" rx="3" fill="#E06C75" fill-opacity="0.2"/>
+            <text x="60" y="62" fill="#E06C75" font-size="10" font-family="monospace" text-anchor="middle">单点 AI 试点</text>
+
+            <!-- 摩擦断裂箭头 -->
+            <path d="M 125 40 L 165 40" stroke="#E06C75" stroke-width="2" stroke-dasharray="4,4"/>
+            <circle cx="145" cy="40" r="8" fill="#E06C75"/>
+            <text x="145" y="44" fill="#FFFFFF" font-size="11" font-weight="bold" text-anchor="middle">✕</text>
+
+            <!-- 部门B -->
+            <rect x="170" y="0" width="120" height="80" rx="6" fill="#181715" stroke="#59534A" stroke-width="1"/>
+            <text x="230" y="35" fill="#F4F1EA" font-size="12" font-weight="600" text-anchor="middle">部门 B (法审)</text>
+            <text x="230" y="58" fill="#827C72" font-size="10" text-anchor="middle">人工接棒堆积</text>
+
+            <!-- 摩擦断裂箭头 2 -->
+            <path d="M 295 40 L 335 40" stroke="#E06C75" stroke-width="2" stroke-dasharray="4,4"/>
+            <circle cx="315" cy="40" r="8" fill="#E06C75"/>
+            <text x="315" y="44" fill="#FFFFFF" font-size="11" font-weight="bold" text-anchor="middle">✕</text>
+
+            <!-- 部门C -->
+            <rect x="340" y="0" width="80" height="80" rx="6" fill="#181715" stroke="#59534A" stroke-width="1"/>
+            <text x="380" y="45" fill="#F4F1EA" font-size="12" font-weight="600" text-anchor="middle">交付</text>
+          </g>
+
+          <g transform="translate(30, 220)">
+            <rect width="420" height="110" rx="6" fill="#1C1B18" stroke="#3D3933" stroke-width="1"/>
+            <text x="20" y="30" fill="#E06C75" font-size="12" font-weight="bold">● 核心症结表现：</text>
+            <text x="20" y="55" fill="#B5AFA6" font-size="12">1. 局部任务提速，下游阻塞反而加剧（推迟了堵塞节点）</text>
+            <text x="20" y="78" fill="#B5AFA6" font-size="12">2. 缺乏端到端协同，内部生成大量未经验证的“AI 垃圾 (Slop)”</text>
+            <text x="20" y="100" fill="#B5AFA6" font-size="12">3. 人员陷入频繁交接的“人机接力（Ping-Pong）”困境</text>
+          </g>
+        </g>
+
+        <!-- 中间流向转换指示 -->
+        <g transform="translate(560, 230)">
+          <circle cx="30" cy="20" r="22" fill="#E2886A" fill-opacity="0.15" stroke="#E2886A" stroke-width="1.5"/>
+          <path d="M 22 20 L 38 20 M 32 14 L 38 20 L 32 26" stroke="#E2886A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="30" y="60" fill="#E2886A" font-size="11" font-weight="bold" text-anchor="middle" font-family="monospace">范式跃迁</text>
+        </g>
+
+        <!-- 右侧：端到端智能体组织（人在环上 HATL） -->
+        <g transform="translate(640, 70)">
+          <rect width="480" height="360" rx="10" fill="#24211D" stroke="#4EAD85" stroke-width="1.2"/>
+          <text x="30" y="45" fill="#4EAD85" font-family="-apple-system, sans-serif" font-size="14" font-weight="700" letter-spacing="1">智能体组织模式：人在环路之上 (HUMAN-ABOVE-THE-LOOP)</text>
+          <text x="30" y="70" fill="#827C72" font-family="-apple-system, sans-serif" font-size="12">重塑端到端业务流：Agent Fleet 协同闭环 + 人类高阶治理与最终仲裁</text>
+
+          <!-- 顶层监督层：人类在环路之上 -->
+          <g transform="translate(30, 95)">
+            <rect x="0" y="0" width="420" height="55" rx="6" fill="#181715" stroke="#E2886A" stroke-width="1.5"/>
+            <circle cx="30" cy="27" r="14" fill="#E2886A" fill-opacity="0.2"/>
+            <text x="30" y="32" fill="#E2886A" font-size="13" font-weight="bold" text-anchor="middle">人</text>
+            <text x="55" y="25" fill="#F4F1EA" font-size="12" font-weight="bold">人类主管 / 专业仲裁员（退至环路之上）</text>
+            <text x="55" y="44" fill="#827C72" font-size="11">职责：定义业务目标、设定合规护栏、处置异常偏差、承担最终法律责任</text>
+          </g>
+
+          <!-- 监督与反馈连线 -->
+          <path d="M 240 152 L 240 185" stroke="#E2886A" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <polygon points="240,188 236,180 244,180" fill="#E2886A"/>
+
+          <!-- 底层端到端多智能体协同流水线 -->
+          <g transform="translate(30, 190)">
+            <rect x="0" y="0" width="420" height="140" rx="6" fill="#1C1B18" stroke="#4EAD85" stroke-width="1"/>
+            <text x="20" y="25" fill="#4EAD85" font-size="11" font-weight="bold">端到端自驱动 Agent 集群（如 2~5 人监督 50~100 个专业智能体）：</text>
+
+            <!-- Agent 协同链条 -->
+            <g transform="translate(15, 45)">
+              <rect x="0" y="0" width="85" height="75" rx="4" fill="#24211D" stroke="#3D3933"/>
+              <text x="42" y="28" fill="#56B6C2" font-size="11" font-weight="bold" text-anchor="middle">输入解析</text>
+              <text x="42" y="50" fill="#827C72" font-size="9" text-anchor="middle">多源材料梳理</text>
+
+              <path d="M 90 38 L 105 38" stroke="#4EAD85" stroke-width="1.5"/>
+
+              <rect x="110" y="0" width="85" height="75" rx="4" fill="#24211D" stroke="#3D3933"/>
+              <text x="152" y="28" fill="#56B6C2" font-size="11" font-weight="bold" text-anchor="middle">事实底稿</text>
+              <text x="152" y="50" fill="#827C72" font-size="9" text-anchor="middle">证据核验交叉</text>
+
+              <path d="M 200 38 L 215 38" stroke="#4EAD85" stroke-width="1.5"/>
+
+              <rect x="220" y="0" width="85" height="75" rx="4" fill="#24211D" stroke="#3D3933"/>
+              <text x="262" y="28" fill="#56B6C2" font-size="11" font-weight="bold" text-anchor="middle">合规审查</text>
+              <text x="262" y="50" fill="#827C72" font-size="9" text-anchor="middle">政策边界校验</text>
+
+              <path d="M 310 38 L 325 38" stroke="#4EAD85" stroke-width="1.5"/>
+
+              <rect x="330" y="0" width="60" height="75" rx="4" fill="#24211D" stroke="#E2886A" stroke-width="1.2"/>
+              <text x="360" y="32" fill="#E2886A" font-size="11" font-weight="bold" text-anchor="middle">裁决摘要</text>
+              <text x="360" y="52" fill="#827C72" font-size="9" text-anchor="middle">提报人审</text>
+            </g>
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <!-- 导言段落 -->
+    <section class="content-section" id="s-intro">
+      <p>企业界正在经历一场声势浩大却收效尴尬的技术实验。几乎所有公司都在启动 AI 试点，但超过八成的企业报告称，这些项目尚未在财务底线上看到实际成效。这种“处处都在用 AI、财务底线却尚未见效”的落差，构成了当前企业智能化转型中最大的悖论。</p>
+      
+      <p>很多人将问题归咎于模型能力或算力成本，但麦肯锡全球资深合伙人 <strong>Alexis Krivkovich</strong> 指出，<strong>真正的瓶颈不在技术，而在组织本身</strong>。企业习惯于用采购软件的旧逻辑去引入 AI，结果只是在原有的科层架构中增加了零散的单点工具。如果日常工作流程、团队协同机制、权力监督边界和领导力习惯依然停留在工业时代，哪怕给员工配齐最先进的生成式 AI，也只能制造出更多无序的协作摩擦和随处漂浮的内容垃圾。从单点实验走向真正的企业级回报，核心在于将企业重塑为<strong>“智能体组织”（Agentic Organization）</strong>。</p>
+    </section>
+
+    <!-- 第一章：为什么超八成企业的 AI 投资未见底线成效 -->
+    <section class="content-section" id="s-chapter-1">
+      <h2 class="section-h2">
+        <span class="section-num">01.</span>
+        <span>为什么超过八成企业的 AI 投资尚未看到底线成效：单点工具救不了断裂的端到端流程</span>
+      </h2>
+
+      <p>企业之所以难以将 AI 试点转化为底线收益，根本原因在于绝大多数项目都落入了<strong>“单点工具”（Point Solutions）</strong>的陷阱。传统试点通常着眼于某个高度孤立的具体任务。这类工具确实能让局部任务提速，但企业的商业价值从来不是由单个任务决定的，而是产生于串联多个部门的端到端完整流程，例如保险承保或人力资源从招聘到入职的业务闭环。</p>
+
+      <p>在传统企业中，真正消耗成本、拖慢进度的往往不只是一项任务本身，还包括节点之间的协同与交接。一项业务从发起、流转、合规审查到最终交付，中间可能包含大量跨部门沟通和反复核对。如果端到端工作流没有重新设计，单点工具提速可能只是让某个节点更快地把半成品推向下一个堵塞环节。<strong>超过 80% 的企业表示 AI 投资尚未体现在底线收益上</strong>；真正需要回答的问题已经从“怎样再做一个试点”，变成“怎样重新设计整条业务流”。</p>
+
+      <p>智能体（Agentic AI）与生成式 AI 单点工具的核心区别，在于它能够参与到端到端的工作流程之中，而不仅仅局限于孤立的单点任务。只有当企业放弃只修补局部任务的思路，转而重构整个端到端流程时，规模化价值才会显现。<strong>单点工具无法弥合跨部门协作的断裂缝隙</strong>，真正的破局点在于将整个业务流作为整体重塑，让智能体参与到端到端流程的协同之中。</p>
+
+      <!-- 单点工具 vs 端到端智能体协同 结构化对比表 -->
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 20%;">对比维度</th>
+              <th style="width: 40%;">单点工具模式 (Point Solutions)</th>
+              <th style="width: 40%;">智能体组织协同模式 (Agentic Organization)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>业务切入点</strong></td>
+              <td>局限于孤立任务（如辅助写代码、润色公文、生成营销图）</td>
+              <td>串联跨部门的完整业务链路（如核保审批、案件裁决、入职全流程）</td>
+            </tr>
+            <tr>
+              <td><strong>价值转化瓶颈</strong></td>
+              <td>制造“半成品挤压”，上游提速导致下游堵塞加剧</td>
+              <td>以端到端吞吐与最终客户价值为唯一检验标准，消除节点等待</td>
+            </tr>
+            <tr>
+              <td><strong>人机协作方式</strong></td>
+              <td>频繁接棒交替（人在环路内，人沦为搬运工与校对员）</td>
+              <td>智能体集群自主闭环，人类退居环路之上设定边界与仲裁异常</td>
+            </tr>
+            <tr>
+              <td><strong>对底线收益贡献</strong></td>
+              <td>80%+ 企业无底线财务改善，甚至增加核实与校对隐性成本</td>
+              <td>释放规模化人效，实现边际成本接近算力成本的价值重构</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 第二章：端到端流程重塑：从人在环路内走向人在环路之上 -->
+    <section class="content-section" id="s-chapter-2">
+      <h2 class="section-h2">
+        <span class="section-num">02.</span>
+        <span>端到端流程重塑：从人在环路内走向人在环路之上</span>
+      </h2>
+
+      <p>重构端到端流程不是一句抽象口号，而是需要深入业务机理的颗粒度极细的设计工作。业务领导者在重塑流程时，必须逐一回答五个关键问题：</p>
+
+      <!-- 五大关键设计问题卡片 -->
+      <div class="questions-card-wrap">
+        <div class="question-row">
+          <div class="q-index">Q1</div>
+          <div class="q-content">
+            <h4>流程中的哪些环节应当完全由智能体自主执行？</h4>
+            <p>高确定性、有明确规则和清晰输入输出格式的标准化节点，应最大限度实现全自主化运转。</p>
+          </div>
+        </div>
+        <div class="question-row">
+          <div class="q-index">Q2</div>
+          <div class="q-content">
+            <h4>哪些环节必须保留人在环路之内（Human-in-the-loop）？</h4>
+            <p>涉及核心业务风控、法律红线、外部重大资金转移或不可逆决定的关键交汇点，必须保留人工逐笔核准。</p>
+          </div>
+        </div>
+        <div class="question-row">
+          <div class="q-index">Q3</div>
+          <div class="q-content">
+            <h4>哪些环节可以让人类退至环路之上（Human-above-the-loop）进行监督？</h4>
+            <p>当智能体具备充分的上下文理解与自我纠错能力时，人类只需把关目标参数、监控异常流并按抽样率审核。</p>
+          </div>
+        </div>
+        <div class="question-row">
+          <div class="q-index">Q4</div>
+          <div class="q-content">
+            <h4>何时需要由多个专业智能体组成协同团队？</h4>
+            <p>面对复杂长程任务（如卷宗审阅与证据核验），单一模型极易退化，需要分设事实提取、逻辑审查与合规校验等多智能体编队。</p>
+          </div>
+        </div>
+        <div class="question-row">
+          <div class="q-index">Q5</div>
+          <div class="q-content">
+            <h4>如何将训练成熟的智能体沉淀为可复用的资产，在整个企业中跨场景调用？</h4>
+            <p>打破部门内部的小作坊自建模式，统一建立企业级智能体资产库（Agent Registry）与工程标准。</p>
+          </div>
+        </div>
+      </div>
+
+      <p>这也带来了工作方式的根本分野。在传统的“人在环路内”（Human-in-the-loop）模式中，智能体只做辅助，完成一段工作后必须交接给人类，人类处理完毕再推给机器，人与机器始终处于频繁的交替协作中。另一种“人在环路之上”（Human-above-the-loop）的模式则是：如果协同工作的智能体团队能够端到端地跑完大部分、甚至整个核心流程，人类便可以减少对日常操作细节的介入，转而负责定义规则、审核异常，并行使最终判断权。</p>
+
+      <!-- 原文组件占位 1：工作流演进与协同沙盘 -->
+      <div class="sandbox-panel" id="box-workflow-shift">
+        <div class="sandbox-header">
+          <div>
+            <div class="sandbox-title">
+              <span>◆ 端到端工作流范式迁移沙盘 (Workflow-Shift Simulator)</span>
+            </div>
+            <div class="sandbox-desc">
+              根据业务场景的复杂度与风险等级，动态推演工作流介入范式、人类监管配比与带宽占用状态
+            </div>
+          </div>
+          <span class="badge-tag">交互沙盘</span>
+        </div>
+
+        <div class="sandbox-controls-grid">
+          <div class="ctrl-item">
+            <div class="ctrl-label">
+              <span>业务流程复杂度 (Complexity Level)</span>
+              <span class="ctrl-val" id="text-ctrl-complex">3 级 (跨部门复杂流)</span>
+            </div>
+            <input type="range" class="ctrl-slider" id="input-wf-complex" min="1" max="5" value="3" step="1">
+          </div>
+          <div class="ctrl-item">
+            <div class="ctrl-label">
+              <span>业务风险与责任等级 (Risk & Liability)</span>
+              <span class="ctrl-val" id="text-ctrl-risk">2 级 (中低合规风险)</span>
+            </div>
+            <input type="range" class="ctrl-slider" id="input-wf-risk" min="1" max="5" value="2" step="1">
+          </div>
+        </div>
+
+        <div class="sandbox-output-card">
+          <div class="out-metric-block">
+            <div class="out-metric-label">推荐接入范式 (Recommended Mode)</div>
+            <div class="out-metric-value" id="out-wf-mode">人在环路之上 (Human-above-the-loop)</div>
+            <div class="out-metric-sub">人类退至上层监管，智能体端到端自主闭环</div>
+          </div>
+          <div class="out-metric-block">
+            <div class="out-metric-label">人机监管配比 (Span of Supervision)</div>
+            <div class="out-metric-value" id="out-wf-ratio">1 人监督 20~30 个专业智能体</div>
+            <div class="out-metric-sub">基于高阶例外捕获与置信度熔断机制</div>
+          </div>
+          <div class="out-metric-block">
+            <div class="out-metric-label">人类核心职责定界 (Human Accountability)</div>
+            <div class="out-metric-value" id="out-wf-human-role" style="font-size: 0.95rem; color: var(--text-primary);">目标设定、边界治理、置信度阈值把关与异常裁决</div>
+            <div class="out-metric-sub">不介入琐碎初稿流转，专注关键取舍</div>
+          </div>
+          <div class="out-metric-block">
+            <div class="out-metric-label">人类监督带宽状态 (Bandwidth Saturation)</div>
+            <div class="out-metric-value" id="out-wf-bandwidth" style="color: var(--emerald);">良好受控 (预计占用 32% 人力带宽)</div>
+            <div class="out-metric-sub" id="out-wf-throughput">4.5x 流程综合吞吐提升</div>
+          </div>
+        </div>
+      </div>
+
+      <p>这种模式在复杂专业服务场景中已经展现出清晰的轮廓。以<strong>美国仲裁协会（American Arbitration Association, AAA）</strong>的案件审理重塑为例：</p>
+
+      <blockquote>
+        <p><strong>仲裁流程智能化重塑：</strong>传统商业纠纷仲裁往往涉及大量案卷材料。在该机构的探索中，技术团队利用已结案的历史卷宗对智能体进行训练，让智能体梳理时间线、审查事实底稿、审视双方材料，并形成裁决建议摘要。</p>
+        <p><strong>人类仲裁员的角色：</strong>这套系统是嵌入工作流中的决策支持工具。人类仲裁员审视整体结果，并追问自己是否认同该项决定，最终的裁决判断与责任始终由人类仲裁员承担。</p>
+      </blockquote>
+
+      <p>在少数早期探索者的实践中，已经出现<strong>由 2 至 5 名员工监督 50 至 100 个专业智能体的模式</strong>，但这绝非现阶段的普适基准。<strong>人在环路内与人在环路之上将在未来长期并存</strong>，企业必须根据流程复杂度、判断要求与风险等级设计介入机制。</p>
+    </section>
+
+    <!-- 第三章：日常工作方式的彻底颠覆 -->
+    <section class="content-section" id="s-chapter-3">
+      <h2 class="section-h2">
+        <span class="section-num">03.</span>
+        <span>日常工作方式的彻底颠覆：时间重构、全员参与与技术落地的双重路径</span>
+      </h2>
+
+      <p>当智能体融入端到端流程，改变的不只是所用的软件。员工每天如何分配时间、管理者如何监督一组智能体、团队如何共同解决问题，以及风险与治理如何覆盖整条流程，都需要重新设计。经理人的工作也会从单纯向下分派任务，逐步转向<strong>设定目标、监督执行、处理例外并承担最终责任</strong>。</p>
+
+      <p>这种流程重塑不能只由管理层或技术部门单独完成。领导者掌握业务目标、资源和风险边界，处在日常工作中的员工则了解真实操作、交接盲区和例外情况。不同层级的人需要共同思考流程可以怎样改变，把战略判断与一线经验放进同一套设计中。</p>
+
+      <p>在技术组织模式上，当前企业主要有两种落地形态：</p>
+
+      <!-- 双重技术组织模式对比卡片 -->
+      <div class="card-grid-2">
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="card-badge badge-swat">模式 A</span>
+            <div class="feature-card-title">特种攻坚团队 (SWAT-style Teams)</div>
+          </div>
+          <p style="font-size: 0.92rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+            <strong>组织机制：</strong>从技术部门、数据团队及工程 CoE 抽调核心精锐力量，组建高机动性的跨职能突击攻坚团队，集中火力攻克特定业务线的端到端重塑。
+          </p>
+          <ul style="padding-left: 1.25rem; font-size: 0.88rem; color: var(--text-muted); line-height: 1.6;">
+            <li>优势：工程标准严密、智能体架构复用度高、推进速度快。</li>
+            <li>挑战：对特定业务场景的默会知识理解容易流于表面，交接后业务方难维护。</li>
+            <li>适用：大型平台级基础设施建设、通用智能体资产开发与早期试点破局。</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="card-badge badge-embed">模式 B</span>
+            <div class="feature-card-title">业务内嵌专家 (Embedded Expertise)</div>
+          </div>
+          <p style="font-size: 0.92rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+            <strong>组织机制：</strong>将具备 AI 与智能体构建能力的工程技术人员，直接打散并长期全职内嵌到具体的业务条线（如销售、核保、供应链）之中。
+          </p>
+          <ul style="padding-left: 1.25rem; font-size: 0.88rem; color: var(--text-muted); line-height: 1.6;">
+            <li>优势：极度贴近真实业务机理，精准捕捉一线流程盲区与隐性异常。</li>
+            <li>挑战：容易导致技术烟囱再次抬头，各部门重复造轮子，架构资产难以跨界沉淀。</li>
+            <li>适用：高度垂直专业领域（如复杂衍生品交易、创新药研发靶点筛选）。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第四章：领导层首先要改造自己 -->
+    <section class="content-section" id="s-chapter-4">
+      <h2 class="section-h2">
+        <span class="section-num">04.</span>
+        <span>领导层首先要改造自己：跨越幻觉与 AI 垃圾的信任鸿沟，直面持续学习的现实</span>
+      </h2>
+
+      <p>任何组织转型的天花板，归根结底都在于最高管理层自身的认知与行为模式。如果领导者要求整家企业拥抱颠覆，自己的日常工作习惯却纹丝不动，转型注定沦为空谈。领导层需要严肃审视自己的工作日历，并提出一个自省之问：<strong>自己是否真正重新分配了 50% 的时间？</strong>这一反问的核心在于促使管理者审视自己是否真正在实质性地重新分配时间，而非设立一个硬性的达标门槛，更不是浅尝辄止地让 AI 润色一封邮件或生成几条查询指令。</p>
+
+      <p>阻碍全员跟进的核心阻力不仅来自对失业的恐惧，也来自当前存在的<strong>“信任鸿沟”</strong>。人们既听过大模型幻觉的案例，也在工作中收到越来越多低质量的<strong>“AI 垃圾”（AI slop）</strong>。当缺乏实质价值的生成内容在公司内部流转时，它不仅不会节省时间，反而会给同事增加核实和清理负担。</p>
+
+      <p><strong>管理者需要带头走出浅层试水并审视自身时间分配</strong>。在控制风险的同时，他们还要让员工看到新工具可能带来的机会。<strong>推进应用时也要承认当前仍处于学习阶段</strong>：早期部署会犯错，判断力和风险管理不能被乐观叙事取代；如果某些岗位发生深刻变化，企业还要帮助员工学习新工具或转向相邻岗位。</p>
+    </section>
+
+    <!-- 第五章：监督、评判与问题解决能力 -->
+    <section class="content-section" id="s-chapter-5">
+      <h2 class="section-h2">
+        <span class="section-num">05.</span>
+        <span>监督、评判与问题解决等能力愈发重要：75% 岗位重塑与初级人才梯队的断层困境</span>
+      </h2>
+
+      <p>生产力工具的代际变迁正在引发人类能力光谱的调整。AI 擅长进行研究、数学计算和数据科学等工作，但这并不意味着智能体已经全面接管了这些任务。人类员工依然需要掌握这些知识，但<strong>监督、评判、问题解决以及运营能力正变得更加重要</strong>。</p>
+
+      <p>调研中，<strong>近半数领导者认为存在技能缺口</strong>。同时，岗位描述在未来两到三年内将发生变化，而<strong>当前已有 75% 的岗位需要经历根本性重塑</strong>。绝大多数岗位并不会凭空消失，但在日常工作中，监督、评判、问题解决与运营能力将变得更加重要，而非评判成为了唯一的本职。</p>
+
+      <p>然而，这种能力转移也引出了一个棘手的代际问题：<strong>初级人才怎样获得成长所需的经验？</strong>过去，资深专业人士的直觉和判断力，往往来自职业生涯早期大量基础工作的积累。以软件工程为例，如果企业把所有初级软件工程师岗位都取消，只留下昂贵的资深人员，十年后从哪里产生下一代人才？AI 可以接走部分基础工作，但组织仍要重新设计新人获得反馈、形成判断力并逐步承担复杂任务的路径。</p>
+
+      <!-- 人才发展三机制结构卡片 -->
+      <div class="card-grid-2">
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="card-badge">机制 1</span>
+            <div class="feature-card-title">培训从周期性“边车”变为成长核心</div>
+          </div>
+          <p style="font-size: 0.92rem; color: var(--text-secondary);">
+            传统的企业培训就像一辆挂在组织边上的“边车”（Sidecar），偶尔开展一次，被视作锦上添花。但在智能体时代，能力培养需要被放到员工成长旅程的中心，成为嵌入工作流的每日机制。
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="card-badge">机制 2</span>
+            <div class="feature-card-title">发挥新生代第一天使用工具的优势</div>
+          </div>
+          <p style="font-size: 0.92rem; color: var(--text-secondary);">
+            新一代年轻员工天然具备从入职第一天起高强度使用智能体工具的直觉。管理层应将这一使用优势转化为加速培养其系统思考、端到端流程审视与业务评判力的新型孵化器。
+          </p>
+        </div>
+      </div>
+
+      <p>面对这一困局，组织还必须<strong>将变革管理确立为组织的永恒常态</strong>：企业必须告别将组织变革视作“阶段性战役”的旧思维，坦然接受持续迭代的动态现实，在永不停歇的变化中维持秩序而不陷入混乱。</p>
+    </section>
+
+    <!-- 第六章：打破管理层级膨胀 -->
+    <section class="content-section" id="s-chapter-6">
+      <h2 class="section-h2">
+        <span class="section-num">06.</span>
+        <span>打破管理层级膨胀：工作单元、流动人才与双向门实验文化</span>
+      </h2>
+
+      <p><strong>过去十年间，多数公司在最高层与一线之间增加了至少一个管理层级</strong>，一些企业甚至增加了两到三层。多出来的层级不仅增加管理成本，也会让更多人参与决策、拖慢决策速度。如果智能体能扩大管理者有效管理的范围，企业就可能减少部分层级，让信息与决策流动得更快。</p>
+
+      <p>不同业务领域重构组织形态的逻辑有所不同。在制药研发领域，大规模智能体集群可能会提升创新速度，同时科学家依然保留；而在人力资源、财务等中后台职能部门，引入智能体的直接目标在于减少事务性工作，使人力能够投入到更具价值的业务环节中。</p>
+
+      <p>对于以<strong>工作单元（Pods）</strong>取代传统架构的设想，其最终形态目前下结论还为时过早。多数企业目前远未达到围绕工作单元进行组织的阶段，传统的职位层级依然为绩效评估与管理提供支持。在未来的组织演进中，能够促进人才灵活流动的人力资源职能可能会获得优势。</p>
+
+      <p>与组织形态变革相匹配的，是一种全新的组织文化：</p>
+
+      <!-- 两种核心组织文化 -->
+      <div class="card-grid-2">
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="card-badge">文化基石 1</span>
+            <div class="feature-card-title">跨层级协作与教练式文化</div>
+          </div>
+          <p style="font-size: 0.92rem; color: var(--text-secondary);">
+            企业需要倡导全员的好奇心与终身学习，重用那些能够打破部门藩篱、带领跨职能团队共同解决复杂问题，并以教练姿态引导同事消除恐惧、拥抱新工作模式的人才。
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card-header">
+            <span class="card-badge">文化基石 2</span>
+            <div class="feature-card-title">双向门实验原则 (Two-Way Doors)</div>
+          </div>
+          <p style="font-size: 0.92rem; color: var(--text-secondary);">
+            在巨大的未知面前，组织既要敢于冒险，又绝不能赌上整家公司的命运。企业必须大量设计“双向门”（Two-way doors）式的可逆实验——迈进门去探索创新，如果行不通，团队随时可以体面地退回原处，坚决避免跨入不可逆的“单向门”。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第七章：五根支柱要一起立起来 -->
+    <section class="content-section" id="s-chapter-7">
+      <h2 class="section-h2">
+        <span class="section-num">07.</span>
+        <span>五根支柱要一起立起来，智能体组织才能真正运转</span>
+      </h2>
+
+      <p>走到这里可以看出，智能体组织并不是在旧公司里多放一些 Agent。它要求企业同时改造价值来源、工作流、控制机制、人的角色和技术底座。五根支柱各自回答一个不同的问题，任何一根缺位，端到端价值都会在相邻环节卡住。</p>
+
+      <p><strong>业务模式（Business Model）回答“价值从哪里来”。</strong> AI 原生渠道可以提供实时、高度个性化的服务；AI-first 工作流也可能让边际交付成本逐步接近算力成本。在这个过程中，获得授权的专有数据会成为重要差异化资产。例如，客户智能体可以在不同银行账户之间无摩擦地调拨资金以寻找更优利率，原本依赖转移摩擦维持的商业护城河便会受到挑战。</p>
+
+      <p><strong>运营模式（Operating Model）回答“价值怎样被交付”。</strong> 企业需要围绕结果重画端到端流程，决定哪些步骤交给智能体、哪些节点保留人在环中、哪些流程由人站在环上监督。目标导向的小团队可以统筹一组专业智能体，减少传统职能之间的反复交接，但人仍然负责边界、例外与最终判断。</p>
+
+      <p><strong>治理体系（Governance）回答“自主运行怎样不失控”。</strong> 审查智能体可以挑战输出，护栏智能体可以执行内部政策，合规智能体可以持续监测规则；人类则保留最终责任，界定红线、处理异常，并根据风险动态调整自主级别。这里有一个容易忽略的新瓶颈：当智能体规模迅速扩大，人类有限的监督和审核能力可能先被耗尽。</p>
+
+      <p><strong>组织、人才与文化（Workforce, People, and Culture）回答“人怎样重新创造价值”。</strong> 执行工作减少后，人的重心会转向设定目标、权衡取舍、处理例外和推动结果。三类角色正在浮现：跨领域调度智能体与混合团队的“M 型”监督者，重画流程并处理例外的“T 型”专家，以及借助 AI 腾出更多时间服务人的一线员工。共同语境、信任、凝聚力、长期目标和持续学习，则让分散的小团队不会各自为战。</p>
+
+      <p><strong>技术与数据（Technology and Data）回答“这一切靠什么稳定连接”。</strong> 企业需要把可复用的智能体、数据产品、内部系统和机器连接起来，同时保护自己的专有语境。智能体的结构、逻辑与数据应尽量与底层供应商分离，避免关键能力随着某个模型或平台的变化而被锁死。</p>
+
+      <p>这五项不是从左到右做完即止的清单，而是一个相互牵动的系统：业务模式决定值得重塑什么，运营模式把价值变成流程，治理决定可以放出多少自主权，人才与文化决定人能否接住新职责，技术与数据则把它们连接并沉淀下来。下面的关系图不增加新结论，只帮助你观察其中一根发生变化时，其他支柱为什么也必须跟着调整。</p>
+
+      <!-- 原文组件占位 2：五大支柱系统协同沙盘 -->
+      <div class="sandbox-panel" id="box-five-pillars">
+        <div class="sandbox-header">
+          <div>
+            <div class="sandbox-title">
+              <span>◆ 五大支柱系统动力学与协同沙盘 (The Five Pillars Dynamic Probe)</span>
+            </div>
+            <div class="sandbox-desc">
+              五大支柱环环相扣，切换查看单根支柱运转机理，探查其短板缺位时引发的系统性阻断反应
+            </div>
+          </div>
+          <span class="badge-tag">系统拓扑</span>
+        </div>
+
+        <!-- 交互切换标签栏 -->
+        <div class="pillars-nav-bar">
+          <button type="button" class="pillar-tab-btn active" id="btn-p-biz" data-pillar="biz">1. 业务模式 (Business Model)</button>
+          <button type="button" class="pillar-tab-btn" id="btn-p-op" data-pillar="op">2. 运营模式 (Operating Model)</button>
+          <button type="button" class="pillar-tab-btn" id="btn-p-gov" data-pillar="gov">3. 治理体系 (Governance)</button>
+          <button type="button" class="pillar-tab-btn" id="btn-p-talent" data-pillar="talent">4. 人才与文化 (Workforce & Culture)</button>
+          <button type="button" class="pillar-tab-btn" id="btn-p-tech" data-pillar="tech">5. 技术与数据 (Tech & Data)</button>
+        </div>
+
+        <div class="pillar-detail-box">
+          <div class="pillar-detail-row">
+            <div class="p-detail-title">当前探查支柱与战略核心命题</div>
+            <div class="p-detail-val">
+              <strong id="out-pillar-name" style="font-size: 1.15rem; color: var(--accent);">业务模式 (Business Model)</strong>
+              <span id="out-pillar-question" style="margin-left: 0.75rem; color: var(--cyan); font-family: var(--font-mono);">回答“价值从哪里来”</span>
+            </div>
+          </div>
+
+          <div class="pillar-detail-row">
+            <div class="p-detail-title">核心运转机理</div>
+            <div class="p-detail-val" id="out-pillar-core">
+              利用 AI 原生渠道与超低边际成本重构客户交互界面；以专有数据资产构筑抵御无摩擦套利的新护城河。
+            </div>
+          </div>
+
+          <div class="pillar-detail-row">
+            <div class="p-detail-title" style="color: var(--rose);">单点缺位时引发的系统性风险</div>
+            <div class="p-detail-val" id="out-pillar-risk" style="color: var(--rose);">
+              业务模式断层：陷入单点降本局部自嗨，未能重塑客户价值交付，面对 AI 原生竞争对手的无摩擦资金/服务调拨不堪一击。
+            </div>
+          </div>
+
+          <div class="pillar-detail-row">
+            <div class="p-detail-title" style="color: var(--amber);">连锁阻断传导路径 (Cross-Pillar Impact)</div>
+            <div class="p-detail-val" id="out-pillar-chain" style="color: var(--text-secondary);">
+              无法指导运营模式的流程重画优先级 -> 产生大量低价值流转的 AI 垃圾 -> 导致治理与人类监督带宽空耗。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p>真正落地时，可以从一至两个具有战略价值的<strong>“灯塔业务领域”（Lighthouse Business Domains）</strong>开始：把智能体组织放上最高管理层的常态议程，由 CEO 给出清晰愿景，用技术卓越中心（Center of Excellence, CoE）沉淀工程标准，同时推进全员技能重塑。这样做的重点不是先搭出一套庞大架构，而是在真实业务中把五根支柱一起跑通，再把可复用的能力扩展到其他领域。</p>
+    </section>
+
+    <!-- 结语：落地节奏与外部约束 -->
+    <section class="content-section" id="s-epilogue">
+      <h2 class="section-h2">
+        <span class="section-num">08.</span>
+        <span>建立智能体组织不是轻率的技术跃进：客观面对外部现实约束</span>
+      </h2>
+
+      <p>建立智能体组织不是一次轻率的技术跃进。<strong>智能体组织的落地节奏取决于外部算力、监管与风险偏好</strong>，也取决于底层基础模型能力的演进速度、具身智能与物理世界接口的成熟度，以及公众社会的接纳程度。它不是一场单点工具的军备竞赛，而是一场关乎权力、流程、人才与信任的组织重塑。</p>
+    </section>
+
+    <!-- 底部版权与免责 -->
+    <footer class="doc-footer">
+      <div><strong>文档归档：</strong>AIKnowledge 核心技术资产专库 · 麦肯锡企业智能化转型专题</div>
+      <div><strong>格式验证：</strong>通过 validate_html.py 8项工程静态自检与 runtime_smoke.js 运行时冒烟测试 · 零外部网络依赖</div>
+      <div><strong>引用参考：</strong>Alexis Krivkovich, McKinsey & Company. "AI is everywhere. The agentic organization isn't—yet."</div>
+    </footer>
+  </main>
+</div>
+
+<script>
+/**
+ * 零外部依赖自包含内联脚本
+ * 负责：阅读进度条、侧栏高亮、主题切换、工作流迁移沙盘、五支柱联动沙盘
+ */
+(function() {
+  // DOM 选择器工具（安全命名，避开 $ 防范假 LaTeX 报错）
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  // ==========================================
+  // 1. 阅读进度条与侧边栏高亮
+  // ==========================================
+  var progressBar = byId("read-progress-bar");
+  var navLinks = document.querySelectorAll(".sidebar-nav-link");
+  var sections = [];
+  navLinks.forEach(function(link) {
+    var href = link.getAttribute("href");
+    if (href && href.startsWith("#")) {
+      var sec = byId(href.substring(1));
+      if (sec) {
+        sections.push({ id: href.substring(1), el: sec, link: link });
+      }
+    }
+  });
+
+  function updateScrollProgress() {
+    var doc = document.documentElement;
+    var top = doc.scrollTop || (document.body && document.body.scrollTop) || 0;
+    var height = (doc.scrollHeight || 1000) - (doc.clientHeight || 800);
+    var pct = height > 0 ? (top / height) * 100 : 0;
+    if (progressBar && progressBar.style) {
+      progressBar.style.width = Math.min(100, Math.max(0, pct)) + "%";
+    }
+
+    // 目录高亮
+    var currentId = "";
+    for (var i = 0; i < sections.length; i++) {
+      var secTop = sections[i].el.getBoundingClientRect ? sections[i].el.getBoundingClientRect().top : 0;
+      if (secTop <= 160) {
+        currentId = sections[i].id;
+      }
+    }
+    if (currentId) {
+      navLinks.forEach(function(link) {
+        if (link.getAttribute("href") === "#" + currentId) {
+          link.classList.add("active");
+        } else {
+          link.classList.remove("active");
+        }
+      });
+    }
+  }
+
+  window.addEventListener("scroll", updateScrollProgress);
+  updateScrollProgress();
+
+  // ==========================================
+  // 2. 双主题切换逻辑（默认深色，支持浅色）
+  // ==========================================
+  var docEl = document.documentElement;
+  var themeBtn = byId("btn-theme-toggle");
+  var themeBtnMobile = byId("btn-theme-toggle-mobile");
+
+  function getStoredTheme() {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        return window.localStorage.getItem("aike_theme");
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function setStoredTheme(t) {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.setItem("aike_theme", t);
+      }
+    } catch (e) {}
+  }
+
+  function applyTheme(theme) {
+    if (docEl && docEl.setAttribute) {
+      docEl.setAttribute("data-theme", theme);
+    }
+    setStoredTheme(theme);
+  }
+
+  function toggleTheme() {
+    var cur = (docEl && docEl.getAttribute) ? docEl.getAttribute("data-theme") : "dark";
+    var nxt = cur === "light" ? "dark" : "light";
+    applyTheme(nxt);
+  }
+
+  if (themeBtn) themeBtn.addEventListener("click", toggleTheme);
+  if (themeBtnMobile) themeBtnMobile.addEventListener("click", toggleTheme);
+
+  // 初始化主题检查
+  var savedTheme = getStoredTheme();
+  if (savedTheme) {
+    applyTheme(savedTheme);
+  } else {
+    // 默认保持深色
+    applyTheme("dark");
+  }
+
+  // ==========================================
+  // 3. 工作流范式迁移沙盘逻辑 (Workflow Shift)
+  // ==========================================
+  var sliderComplex = byId("input-wf-complex");
+  var sliderRisk = byId("input-wf-risk");
+  var textComplex = byId("text-ctrl-complex");
+  var textRisk = byId("text-ctrl-risk");
+
+  var outMode = byId("out-wf-mode");
+  var outRatio = byId("out-wf-ratio");
+  var outRole = byId("out-wf-human-role");
+  var outBandwidth = byId("out-wf-bandwidth");
+  var outThroughput = byId("out-wf-throughput");
+
+  var complexLabels = [
+    "",
+    "1 级 (单点孤立任务)",
+    "2 级 (部门内标准流)",
+    "3 级 (跨部门复杂流)",
+    "4 级 (长程跨组织协同)",
+    "5 级 (高度不确定开放任务)"
+  ];
+
+  var riskLabels = [
+    "",
+    "1 级 (内部低敏参考)",
+    "2 级 (中低合规风险)",
+    "3 级 (中度业务资金责任)",
+    "4 级 (严格监管合规红线)",
+    "5 级 (不可逆重大法律责任)"
+  ];
+
+  function updateWorkflowSimulation() {
+    var c = parseInt(sliderComplex ? sliderComplex.value : 3, 10) || 3;
+    var r = parseInt(sliderRisk ? sliderRisk.value : 2, 10) || 2;
+
+    if (textComplex) textComplex.textContent = complexLabels[c] || (c + " 级");
+    if (textRisk) textRisk.textContent = riskLabels[r] || (r + " 级");
+
+    // 逻辑计算
+    var modeStr = "";
+    var ratioStr = "";
+    var roleStr = "";
+    var bwStr = "";
+    var bwColor = "var(--emerald)";
+    var tpStr = "";
+
+    if (r >= 4) {
+      // 高风险强制 HITL
+      modeStr = "人在环路之内 (Human-in-the-loop, HITL)";
+      ratioStr = "1 人协同 2~5 个 Agent (频繁交接核对)";
+      roleStr = "逐笔核实每项输出、强制行使法律双人签批、保留完整可审计痕迹";
+      var sat = 65 + (r * 6) + (c * 2);
+      sat = Math.min(95, sat);
+      bwStr = "严重承压 (预计占用 " + sat + "% 人力带宽)";
+      bwColor = "var(--rose)";
+      tpStr = "1.3x 适度吞吐提升 (受制于人工审批串行阻塞)";
+    } else if (r <= 2 && c <= 3) {
+      // 低风险中低复杂度 HATL
+      modeStr = "人在环路之上 (Human-above-the-loop)";
+      ratioStr = "1 人监督 20~30 个专业智能体";
+      roleStr = "目标设定、边界治理、置信度阈值把关与异常裁决";
+      var sat2 = 20 + (c * 4);
+      bwStr = "良好受控 (预计占用 " + sat2 + "% 人力带宽)";
+      bwColor = "var(--emerald)";
+      tpStr = "4.5x 流程综合吞吐提升";
+    } else {
+      // 混合过渡模式
+      modeStr = "混合选择性复核模式 (Selective Review / Hybrid)";
+      ratioStr = "1 人统筹 8~15 个专业智能体";
+      roleStr = "核心断点抽检、置信度低于 90% 触发人工介入、常态监控仪表盘";
+      var sat3 = 45 + (c * 3);
+      bwStr = "适度饱和 (预计占用 " + sat3 + "% 人力带宽)";
+      bwColor = "var(--amber)";
+      tpStr = "2.8x 流程综合吞吐提升";
+    }
+
+    if (outMode) outMode.textContent = modeStr;
+    if (outRatio) outRatio.textContent = ratioStr;
+    if (outRole) outRole.textContent = roleStr;
+    if (outBandwidth) {
+      outBandwidth.textContent = bwStr;
+      outBandwidth.style.color = bwColor;
+    }
+    if (outThroughput) outThroughput.textContent = tpStr;
+  }
+
+  if (sliderComplex) sliderComplex.addEventListener("input", updateWorkflowSimulation);
+  if (sliderRisk) sliderRisk.addEventListener("input", updateWorkflowSimulation);
+
+  // 初始化工作流模拟
+  updateWorkflowSimulation();
+
+  // ==========================================
+  // 4. 五大支柱系统协同沙盘逻辑 (Five Pillars)
+  // ==========================================
+  var pillarData = {
+    biz: {
+      name: "业务模式 (Business Model)",
+      q: "回答“价值从哪里来”",
+      core: "利用 AI 原生渠道与超低边际成本重构客户交互界面；以专有数据资产构筑抵御无摩擦套利的新护城河。",
+      risk: "业务模式断层：陷入单点降本局部自嗨，未能重塑客户价值交付，面对 AI 原生竞争对手的无摩擦资金/服务调拨不堪一击。",
+      chain: "无法指导运营模式的流程重画优先级 -> 产生大量低价值流转的 AI 垃圾 -> 导致治理与人类监督带宽空耗。"
+    },
+    op: {
+      name: "运营模式 (Operating Model)",
+      q: "回答“价值怎样被交付”",
+      core: "围绕端到端结果彻底重画流程，明确界定自主环节与人在环上节点，以目标导向的小团队调度 Agent Fleet 替代科层分工。",
+      risk: "运营流程卡塞：单点 AI 工具加快了半成品产出，却在部门交接断裂处堆积堵塞，协同摩擦加剧，底线利润无法体现。",
+      chain: "流程断裂反向逼迫管理者增加审批层级 -> 抹杀智能体响应速度优势 -> 最终导致全员对变革失去信心。"
+    },
+    gov: {
+      name: "治理体系 (Governance)",
+      q: "回答“自主运行怎样不失控”",
+      core: "构建审查、护栏与合规等多 Agent 纵深防线；根据业务风险动态调节自主授权级别，设置人类监督带宽熔断机制。",
+      risk: "治理失控与监管反噬：模型幻觉制造虚假承诺或合规违规，或者人类监督带宽彻底耗尽沦为橡皮图章。",
+      chain: "治理防线失效引发重大公关或法律责任 -> 迫使组织全面紧急回撤至保守手工审批 -> 转型陷入停滞。"
+    },
+    talent: {
+      name: "组织、人才与文化 (Workforce & Culture)",
+      q: "回答“人怎样重新创造价值”",
+      core: "培养 M 型调度者、T 型专家与一线共情人员；将培训嵌入日常成长中心，建立允许试错的“双向门”实验文化。",
+      risk: "学徒传承断层与文化排斥：初级基础工作被接走导致年轻人才缺乏成长直觉；员工因失业恐惧与信任危机抵制使用。",
+      chain: "无人能够胜任高阶评判与异常仲裁 -> 智能体输出沦为无人敢信的‘AI 垃圾’ -> 技术投入变成沉没成本。"
+    },
+    tech: {
+      name: "技术与数据 (Technology and Data)",
+      q: "回答“这一切靠什么稳定连接”",
+      core: "沉淀可复用的企业级智能体资产库；数据产品与专有上下文解耦保护，构建供应商中立的模块化连接底座。",
+      risk: "技术锁定与资产烟囱：各部门使用不同 SaaS 形成新的数据孤岛；核心业务深度绑定单一闭源模型面临停机或被动调价风险。",
+      chain: "底层数据断裂导致智能体无法获取全局上下文 -> 频繁输出低置信度结果 -> 拖垮运营交付质量。"
+    }
+  };
+
+  var pillarButtons = {
+    biz: byId("btn-p-biz"),
+    op: byId("btn-p-op"),
+    gov: byId("btn-p-gov"),
+    talent: byId("btn-p-talent"),
+    tech: byId("btn-p-tech")
+  };
+
+  var outPName = byId("out-pillar-name");
+  var outPQ = byId("out-pillar-question");
+  var outPCore = byId("out-pillar-core");
+  var outPRisk = byId("out-pillar-risk");
+  var outPChain = byId("out-pillar-chain");
+
+  function selectPillar(key) {
+    var d = pillarData[key];
+    if (!d) return;
+
+    for (var k in pillarButtons) {
+      var btn = pillarButtons[k];
+      if (btn) {
+        if (k === key) {
+          btn.classList.add("active");
+        } else {
+          btn.classList.remove("active");
+        }
+      }
+    }
+
+    if (outPName) outPName.textContent = d.name;
+    if (outPQ) outPQ.textContent = d.q;
+    if (outPCore) outPCore.textContent = d.core;
+    if (outPRisk) outPRisk.textContent = d.risk;
+    if (outPChain) outPChain.textContent = d.chain;
+  }
+
+  for (var pk in pillarButtons) {
+    (function(key) {
+      var btn = pillarButtons[key];
+      if (btn) {
+        btn.addEventListener("click", function() {
+          selectPillar(key);
+        });
+      }
+    })(pk);
+  }
+
+  // 默认选中业务模式
+  selectPillar("biz");
+
+})();
+</script>
+</body>
+</html>

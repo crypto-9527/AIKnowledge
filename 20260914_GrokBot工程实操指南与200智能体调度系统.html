@@ -1,0 +1,2396 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>从「监工」到「调度系统」：带队 200+ 编码智能体的 Grok Bot 工程实操指南 · 技术白皮书</title>
+<meta name="description" content="从第一个领域 Bot 开始，手把手搭建 Cloud Agent 委派、Proof 验收、Notion 巡检、分级合并、Jenny 复盘与 P0 响应闭环。完整收录 SpaceXAI 研发前线实战全流程规范与可计算工程沙盘。">
+<meta name="author" content="WorkBuddy 架构实务深度消化">
+<style>
+/* ==========================================================================
+   统一排版基线与主题变量系统 (Unified Layout Baseline)
+   视觉语言：暖羊皮纸 #FAF7F2 (浅) / 黑曜石 #181715 (深) + 陶土强调色 #D97757
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg-app: #FAF7F2;
+  --bg-surface: #FFFFFF;
+  --bg-raised: #F5F1EA;
+  --bg-subtle: #EFE9DE;
+  --bg-muted: #E5DED1;
+  --bg-glass: rgba(250, 247, 242, 0.92);
+
+  --accent: #D97757;
+  --accent-hover: #C86545;
+  --accent-subtle: rgba(217, 119, 87, 0.12);
+  --accent-border: rgba(217, 119, 87, 0.35);
+
+  --bull: #2D8A5E;
+  --bull-subtle: rgba(45, 138, 94, 0.10);
+  --bull-border: rgba(45, 138, 94, 0.30);
+
+  --bear: #C94A4A;
+  --bear-subtle: rgba(201, 74, 74, 0.10);
+  --bear-border: rgba(201, 74, 74, 0.30);
+
+  --warn: #C2801E;
+  --warn-subtle: rgba(194, 128, 30, 0.10);
+  --warn-border: rgba(194, 128, 30, 0.30);
+
+  --info: #3E7BA8;
+  --info-subtle: rgba(62, 123, 168, 0.10);
+  --info-border: rgba(62, 123, 168, 0.30);
+
+  --violet: #7C5CBF;
+  --violet-subtle: rgba(124, 92, 191, 0.10);
+  --violet-border: rgba(124, 92, 191, 0.30);
+
+  --tx1: #1F1E1B;
+  --tx2: #524E48;
+  --tx3: #7D786F;
+  --tx4: #ABA496;
+
+  --bd-hair: rgba(31, 30, 27, 0.08);
+  --bd: #E3DCCF;
+  --bd-md: #D0C6B5;
+
+  --shadow-sm: 0 1px 2px rgba(31, 30, 27, 0.04), 0 1px 3px rgba(31, 30, 27, 0.02);
+  --shadow-md: 0 4px 14px -2px rgba(31, 30, 27, 0.06), 0 2px 6px -1px rgba(31, 30, 27, 0.03);
+  --shadow-lg: 0 10px 25px -4px rgba(31, 30, 27, 0.08), 0 4px 10px -2px rgba(31, 30, 27, 0.04);
+
+  --font-serif: "Songti SC", "SimSun", "Noto Serif SC", "Source Han Serif SC", "Newsreader", Georgia, serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-full: 9999px;
+
+  --aike-sidebar-w: 280px;
+  --aike-content-max: 1180px;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html[data-theme="dark"] {
+  --bg-app: #181715;
+  --bg-surface: #22201D;
+  --bg-raised: #2A2723;
+  --bg-subtle: #1D1B19;
+  --bg-muted: #33302B;
+  --bg-glass: rgba(24, 23, 21, 0.92);
+
+  --accent: #E2886A;
+  --accent-hover: #EB9A80;
+  --accent-subtle: rgba(226, 136, 106, 0.14);
+  --accent-border: rgba(226, 136, 106, 0.40);
+
+  --bull: #48BB78;
+  --bull-subtle: rgba(72, 187, 120, 0.12);
+  --bull-border: rgba(72, 187, 120, 0.32);
+
+  --bear: #F56565;
+  --bear-subtle: rgba(245, 101, 101, 0.12);
+  --bear-border: rgba(245, 101, 101, 0.32);
+
+  --warn: #ECC94B;
+  --warn-subtle: rgba(236, 201, 75, 0.12);
+  --warn-border: rgba(236, 201, 75, 0.32);
+
+  --info: #63B3ED;
+  --info-subtle: rgba(99, 179, 237, 0.12);
+  --info-border: rgba(99, 179, 237, 0.32);
+
+  --violet: #B794F4;
+  --violet-subtle: rgba(183, 148, 244, 0.12);
+  --violet-border: rgba(183, 148, 244, 0.32);
+
+  --tx1: #F5F2EB;
+  --tx2: #C5BFB4;
+  --tx3: #8C867B;
+  --tx4: #605B52;
+
+  --bd-hair: rgba(255, 255, 255, 0.06);
+  --bd: #302D27;
+  --bd-md: #403C34;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--tx2);
+  background-color: var(--bg-app);
+  line-height: 1.78;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.25s var(--ease), color 0.25s var(--ease);
+  position: relative;
+  min-height: 100vh;
+}
+
+/* 顶部固定阅读进度条 */
+.read-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), #F6AD55);
+  z-index: 1000;
+  transition: width 0.1s linear;
+}
+
+/* 顶部导航栏 */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--bd);
+  height: 60px;
+}
+
+.header-inner {
+  max-width: 1520px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-badge {
+  width: 34px;
+  height: 34px;
+  background: var(--accent);
+  color: #FFF;
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 2px 8px var(--accent-subtle);
+}
+
+.brand-text-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-title {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tx1);
+  letter-spacing: 0.02em;
+}
+
+.brand-subtitle {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--r-full);
+  background: var(--bg-surface);
+  border: 1px solid var(--bd);
+  color: var(--tx2);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  font-family: inherit;
+  transition: all 0.2s var(--ease);
+}
+
+.theme-toggle-btn:hover {
+  border-color: var(--bd-md);
+  color: var(--tx1);
+  transform: translateY(-1px);
+}
+
+.theme-icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+/* ==========================================================================
+   主布局：侧边栏绝对贴左，正文在剩余空间完美对称居中
+   ========================================================================== */
+.layout-wrapper {
+  display: block;
+  position: relative;
+  width: 100%;
+}
+
+/* 侧边栏导航 */
+.app-sidebar {
+  position: fixed;
+  top: 60px;
+  left: 0;
+  width: var(--aike-sidebar-w);
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+  padding: 28px 16px 40px 24px;
+  border-right: 1px solid var(--bd);
+  background: var(--bg-app);
+  scrollbar-width: thin;
+  scrollbar-color: var(--bd) transparent;
+  z-index: 800;
+}
+
+.sidebar-heading {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tx3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 14px;
+  padding-left: 8px;
+}
+
+.sidebar-nav-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sidebar-nav-item a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--tx2);
+  text-decoration: none;
+  line-height: 1.45;
+  border-left: 2px solid transparent;
+  transition: all 0.18s ease;
+}
+
+.sidebar-nav-item a:hover {
+  color: var(--tx1);
+  background: var(--bg-surface);
+  text-decoration: none;
+}
+
+.sidebar-nav-item a.active {
+  color: var(--accent);
+  background: var(--accent-subtle);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar-nav-item.level-2 a {
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--tx3);
+}
+
+/* 正文容器：剩余空间对称居中 */
+.main-content {
+  display: block;
+  max-width: var(--aike-content-max);
+  width: auto;
+  margin-left: calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+  margin-right: max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+  padding: 44px 36px 90px 36px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1180px) {
+  .app-sidebar {
+    display: none;
+  }
+  .main-content {
+    margin-left: auto;
+    margin-right: auto;
+    padding: 32px 20px 80px 20px;
+    max-width: 900px;
+  }
+}
+
+/* ==========================================================================
+   排版细则与文章组件
+   ========================================================================== */
+.hero-header {
+  margin-bottom: 36px;
+  border-bottom: 1px solid var(--bd);
+  padding-bottom: 30px;
+}
+
+.doc-meta-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--bg-surface);
+  border: 1px solid var(--bd);
+  color: var(--tx3);
+}
+
+.meta-pill.accent {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.meta-pill.bull {
+  background: var(--bull-subtle);
+  border-color: var(--bull-border);
+  color: var(--bull);
+}
+
+.hero-title {
+  font-family: var(--font-serif);
+  font-size: clamp(28px, 3.4vw, 40px);
+  font-weight: 700;
+  color: var(--tx1);
+  line-height: 1.28;
+  margin-bottom: 16px;
+  letter-spacing: -0.01em;
+}
+
+.hero-lead {
+  font-size: 17.5px;
+  color: var(--tx2);
+  line-height: 1.68;
+  margin-bottom: 24px;
+}
+
+/* 核心要点高亮卡片 */
+.executive-summary-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--bd);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--r-md);
+  padding: 20px 24px;
+  margin: 28px 0 36px 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.summary-card-title {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--tx1);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.summary-list li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 15px;
+  color: var(--tx2);
+  line-height: 1.65;
+}
+
+.summary-list li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 10px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* 标题样式 */
+h2.sec-heading {
+  font-family: var(--font-serif);
+  font-size: clamp(21px, 2.2vw, 26px);
+  font-weight: 700;
+  color: var(--tx1);
+  margin: 52px 0 20px 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--bd-hair);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  line-height: 1.35;
+}
+
+h2.sec-heading::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 22px;
+  background: var(--accent);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+h3.sub-heading {
+  font-family: var(--font-serif);
+  font-size: 18.5px;
+  font-weight: 600;
+  color: var(--tx1);
+  margin: 32px 0 14px 0;
+  line-height: 1.4;
+}
+
+p {
+  margin-bottom: 18px;
+  color: var(--tx2);
+  font-size: 15.5px;
+}
+
+strong {
+  color: var(--tx1);
+  font-weight: 600;
+}
+
+em {
+  font-style: italic;
+  color: var(--tx2);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+/* 引用块 / Callout */
+.callout-box {
+  border-radius: var(--r-md);
+  padding: 16px 20px;
+  margin: 22px 0;
+  border: 1px solid var(--bd);
+  background: var(--bg-surface);
+  font-size: 14.5px;
+  line-height: 1.7;
+  position: relative;
+}
+
+.callout-box.warn {
+  border-left: 4px solid var(--warn);
+  background: var(--warn-subtle);
+  border-color: var(--warn-border);
+}
+
+.callout-box.info {
+  border-left: 4px solid var(--info);
+  background: var(--info-subtle);
+  border-color: var(--info-border);
+}
+
+.callout-box.bull {
+  border-left: 4px solid var(--bull);
+  background: var(--bull-subtle);
+  border-color: var(--bull-border);
+}
+
+.callout-box.bear {
+  border-left: 4px solid var(--bear);
+  background: var(--bear-subtle);
+  border-color: var(--bear-border);
+}
+
+.callout-title {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--tx1);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 列表样式 */
+ul.bullet-list, ol.num-list {
+  margin: 16px 0 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+ul.bullet-list li, ol.num-list li {
+  font-size: 15px;
+  color: var(--tx2);
+  line-height: 1.68;
+}
+
+/* 代码块容器与高亮 */
+.code-container {
+  position: relative;
+  margin: 22px 0 28px 0;
+  border-radius: var(--r-md);
+  border: 1px solid var(--bd);
+  background: var(--bg-subtle);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--bd);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--tx3);
+}
+
+.code-title {
+  font-weight: 600;
+  color: var(--tx2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copy-code-btn {
+  background: transparent;
+  border: 1px solid var(--bd);
+  border-radius: var(--r-xs);
+  padding: 3px 8px;
+  color: var(--tx3);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--font-mono);
+}
+
+.copy-code-btn:hover {
+  color: var(--tx1);
+  border-color: var(--bd-md);
+  background: var(--bg-raised);
+}
+
+pre.code-block {
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.62;
+  color: var(--tx1);
+  background: transparent;
+  margin: 0;
+  tab-size: 2;
+}
+
+code.inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 2px 6px;
+  border-radius: var(--r-xs);
+  background: var(--bg-surface);
+  border: 1px solid var(--bd);
+  color: var(--accent);
+}
+
+/* 数据表格响应式容器 */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin: 24px 0 30px 0;
+  border: 1px solid var(--bd);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  background: var(--bg-surface);
+}
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  text-align: left;
+}
+
+table.data-table th {
+  background: var(--bg-raised);
+  color: var(--tx1);
+  font-weight: 600;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--bd-md);
+  font-family: var(--font-sans);
+}
+
+table.data-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--bd-hair);
+  color: var(--tx2);
+  vertical-align: top;
+}
+
+table.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+table.data-table tr:hover td {
+  background: var(--bg-subtle);
+}
+
+/* 交付验收清单卡片 */
+.checklist-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--bd);
+  border-radius: var(--r-md);
+  padding: 22px 24px;
+  margin: 26px 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 14.5px;
+}
+
+.check-item:last-child {
+  margin-bottom: 0;
+}
+
+.check-box-indicator {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid var(--accent);
+  background: var(--accent-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--accent);
+}
+
+.check-box-indicator svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+/* ==========================================================================
+   矢量图与架构图卡片 (Figure / SVG Framework)
+   ========================================================================== */
+figure.fig-frame {
+  margin: 32px 0 38px 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--bd);
+  border-radius: var(--r-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fig-canvas-box {
+  width: 100%;
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+  background: var(--bg-subtle);
+  border-radius: var(--r-md);
+  padding: 16px;
+  border: 1px solid var(--bd-hair);
+}
+
+.fig-canvas-box svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+figcaption.fig-caption {
+  font-size: 13.5px;
+  color: var(--tx3);
+  text-align: center;
+  font-family: var(--font-sans);
+  line-height: 1.55;
+}
+
+figcaption.fig-caption strong {
+  color: var(--tx1);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   动态交互沙盘容器与控件 (Interactive Sandboxes)
+   ========================================================================== */
+.sandbox-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--bd-md);
+  border-radius: var(--r-lg);
+  padding: 24px;
+  margin: 36px 0 44px 0;
+  box-shadow: var(--shadow-md);
+  position: relative;
+}
+
+.sandbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--bd);
+  padding-bottom: 14px;
+}
+
+.sandbox-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  background: var(--violet-subtle);
+  border: 1px solid var(--violet-border);
+  color: var(--violet);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sandbox-title {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--tx1);
+}
+
+.sandbox-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 860px) {
+  .sandbox-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sandbox-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--bg-raised);
+  padding: 18px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--bd);
+}
+
+.control-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.control-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--tx1);
+  font-weight: 500;
+}
+
+.control-val-tag {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+input[type="range"].custom-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+select.custom-select {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--bd);
+  color: var(--tx1);
+  font-family: inherit;
+  font-size: 13.5px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--tx1);
+  cursor: pointer;
+}
+
+.sandbox-display-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--bg-subtle);
+  padding: 18px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--bd);
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--bd-hair);
+}
+
+.metric-label {
+  font-size: 13px;
+  color: var(--tx3);
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--tx1);
+}
+
+.metric-value.accent {
+  color: var(--accent);
+}
+
+.metric-value.bull {
+  color: var(--bull);
+}
+
+.metric-value.bear {
+  color: var(--bear);
+}
+
+.metric-value.warn {
+  color: var(--warn);
+}
+
+.status-verdict-box {
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--bd);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--tx2);
+}
+
+/* 打印与响应式优化 */
+@media print {
+  .app-sidebar, .site-header, .read-progress, .theme-toggle-btn {
+    display: none !important;
+  }
+  .main-content {
+    margin: 0 !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="read-progress" id="readProgress"></div>
+
+<!-- 顶部导航条 -->
+<header class="site-header">
+  <div class="header-inner">
+    <div class="brand-group">
+      <div class="brand-badge">GB</div>
+      <div class="brand-text-wrap">
+        <span class="brand-title">Grok Bot 工程实操指南</span>
+        <span class="brand-subtitle">xAI Fleet Scheduling Architecture</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="切换浅色/深色主题">
+        <svg class="theme-icon" viewBox="0 0 24 24">
+          <path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>
+        </svg>
+        <span id="themeToggleText">浅色模式</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="layout-wrapper">
+  <!-- 侧边栏导航 -->
+  <aside class="app-sidebar" id="appSidebar">
+    <div class="sidebar-heading">目录导航 · TOC</div>
+    <ul class="sidebar-nav-list">
+      <li class="sidebar-nav-item"><a href="#sec-overview" class="active">前言与核心全景</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-prerequisites">落地前提：四项基建</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-step1">第一步：领域Bot与分工边界</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step1-action">读者操作</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step1-template">实施模板：Bot角色卡</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step1-delivery">交付产物与检查标准</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-step2">第二步：委派Cloud Agent与Proof</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step2-action">读者操作</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step2-template">实施模板：Proof与委派</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step2-delivery">交付产物与检查标准</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-step3">第三步：闭合反馈环与现场纠偏</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step3-action">读者操作</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step3-template">实施模板：纠偏与自愈</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step3-delivery">交付产物与检查标准</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-step4">第四步：Notion 30分钟巡检状态机</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step4-action">读者操作</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step4-template">实施模板：巡检Prompt</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step4-delivery">交付产物与检查标准</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-step5">第五步：分级放权与低爆炸半径</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step5-action">读者操作</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step5-template">实施模板：PR裁决规则</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step5-delivery">交付产物与检查标准</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-step6">第六步：运营主管Jenny与规则沉淀</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step6-action">读者操作</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step6-template">实施模板：晨会与Postmortem</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step6-delivery">交付产物与检查标准</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-step7">第七步：夜间审计与P0紧急响应</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step7-action">读者操作</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step7-template">实施模板：夜间与P0指令</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-step7-delivery">交付产物与检查标准</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-tips">核心经验与组织运行法则</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-resources">官方体验与工具资源</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-acceptance">体系验收清单</a></li>
+      <li class="sidebar-nav-item level-2"><a href="#sec-boundaries">原文没有告诉你的决策边界</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-sim-usl">工程沙盘：200+并发USL模拟</a></li>
+      <li class="sidebar-nav-item"><a href="#sec-sim-blast">工程沙盘：PR爆炸半径裁决器</a></li>
+    </ul>
+  </aside>
+
+  <!-- 正文阅读容器 -->
+  <main class="main-content" id="mainArticle">
+
+    <!-- 文章大标题与头注 -->
+    <header class="hero-header">
+      <div class="doc-meta-tags">
+        <span class="meta-pill accent">xAI 内部实战复盘</span>
+        <span class="meta-pill bull">200+ 并发 Fleet</span>
+        <span class="meta-pill">自动化闭环工程</span>
+        <span class="meta-pill">零外部依赖自包含</span>
+      </div>
+      <h1 class="hero-title">从「监工」到「调度系统」：带队 200+ 编码智能体的 Grok Bot 工程实操指南</h1>
+      <p class="hero-lead">从第一个领域 Bot 开始，手把手搭建 Cloud Agent 委派、Proof 验收、Notion 巡检、分级合并、Jenny 复盘与 P0 响应闭环。</p>
+    </header>
+
+    <!-- 核心摘要卡片 -->
+    <section class="executive-summary-card" id="sec-overview">
+      <div class="summary-card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--accent)"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        核心实操要点速览
+      </div>
+      <ul class="summary-list">
+        <li>先用一个职责清楚、反馈信号完整的领域 Bot 跑通最小闭环，再按 iOS、桌面、基础设施、Android 和 Harness 等领域扩展。</li>
+        <li>每次委派都要同时写清任务目标、执行环境、所需 Skills、Proof 证据、通过标准和升级人工的边界。</li>
+        <li>共享 Notion 看板每 30 分钟检查安全发现、CI 失败与合并冲突；只有高置信、低爆炸半径的变更才进入自动合并。</li>
+        <li>Jenny 的每日 1:1 与事故复盘负责把一次纠错沉淀为 Playbook；夜间审计和 P0 流程分别处理日常维护与真正紧急任务。</li>
+      </ul>
+    </section>
+
+    <!-- 引言正文 -->
+    <p>很多工程团队在引入 AI 编码智能体（Agent）之后，往往发现自己并没有真正解脱，反而陷入了一种更琐碎的消耗：工程师不再逐行编写业务代码，却变成了全职的「AI 监工」——在几个窗口之间来回切换，反复复制终端报错，手动提醒卡住的进度，人工肉眼核对每一段生成的差异。一旦本地出现偶发环境抖动，整个生成链路就彻底停滞。</p>
+
+    <p>SpaceXAI 工程师 Lingxi Li 结合内部研发 Grok Bot 的实战经历，给出了一种不同的组织方式：不再由人类一对一盯防执行终端，而是配置具备管理职能的 Grok Bot 担任工程经理与运营负责人，向下调度 Cursor Cloud Agent，配合明确的交付证据（Proof）、跨窗口的状态看板与闭环反馈机制，把偶发报错和流程推进交给智能体自愈。</p>
+
+    <!-- 图 1：Hero 架构全景图 -->
+    <figure class="fig-frame">
+      <div class="fig-canvas-box">
+        <svg viewBox="0 0 980 430" width="980" height="430" role="img" aria-label="Grok Bot 调度 200+ 智能体工程架构全景">
+          <rect x="0" y="0" width="980" height="430" rx="12" fill="var(--bg-surface)" stroke="var(--bd)" stroke-width="1.5"/>
+          <!-- 管理层 -->
+          <rect x="30" y="25" width="920" height="85" rx="8" fill="var(--accent-subtle)" stroke="var(--accent-border)" stroke-dasharray="4,4"/>
+          <text x="50" y="50" fill="var(--accent)" font-family="var(--font-mono)" font-size="12" font-weight="700">MANAGEMENT &amp; DISPATCH LAYER · 管理调度与状态中枢</text>
+          <rect x="50" y="60" width="220" height="38" rx="6" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="75" y="84" fill="var(--tx1)" font-family="var(--font-sans)" font-size="13" font-weight="600">Grok Bot 主控调度器</text>
+          <rect x="290" y="60" width="220" height="38" rx="6" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="315" y="84" fill="var(--tx1)" font-family="var(--font-sans)" font-size="13" font-weight="600">Notion 30min 巡检看板</text>
+          <rect x="530" y="60" width="200" height="38" rx="6" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="550" y="84" fill="var(--tx1)" font-family="var(--font-sans)" font-size="13" font-weight="600">运营主管 Jenny (1:1)</text>
+          <rect x="750" y="60" width="180" height="38" rx="6" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="770" y="84" fill="var(--accent)" font-family="var(--font-sans)" font-size="13" font-weight="600">人类工程师 (早会复核)</text>
+
+          <!-- 领域分工层 -->
+          <rect x="30" y="130" width="920" height="85" rx="8" fill="var(--info-subtle)" stroke="var(--info-border)"/>
+          <text x="50" y="155" fill="var(--info)" font-family="var(--font-mono)" font-size="12" font-weight="700">DOMAIN ENGINEER BOTS · 五大垂直领域责任矩阵</text>
+          <rect x="50" y="165" width="165" height="38" rx="6" fill="var(--bg-surface)" stroke="var(--bd)"/>
+          <text x="65" y="189" fill="var(--tx1)" font-family="var(--font-sans)" font-size="12.5" font-weight="600">Baltata (iOS/共享)</text>
+          <rect x="235" y="165" width="165" height="38" rx="6" fill="var(--bg-surface)" stroke="var(--bd)"/>
+          <text x="250" y="189" fill="var(--tx1)" font-family="var(--font-sans)" font-size="12.5" font-weight="600">Shaoruru (桌面/CI)</text>
+          <rect x="420" y="165" width="165" height="38" rx="6" fill="var(--bg-surface)" stroke="var(--bd)"/>
+          <text x="440" y="189" fill="var(--tx1)" font-family="var(--font-sans)" font-size="12.5" font-weight="600">Hogan (运维/缺陷)</text>
+          <rect x="605" y="165" width="165" height="38" rx="6" fill="var(--bg-surface)" stroke="var(--bd)"/>
+          <text x="625" y="189" fill="var(--tx1)" font-family="var(--font-sans)" font-size="12.5" font-weight="600">Craig (Android)</text>
+          <rect x="790" y="165" width="140" height="38" rx="6" fill="var(--bg-surface)" stroke="var(--bd)"/>
+          <text x="805" y="189" fill="var(--tx1)" font-family="var(--font-sans)" font-size="12.5" font-weight="600">Quill (Harness)</text>
+
+          <!-- 执行层算力 -->
+          <rect x="30" y="235" width="920" height="90" rx="8" fill="var(--bull-subtle)" stroke="var(--bull-border)"/>
+          <text x="50" y="260" fill="var(--bull)" font-family="var(--font-mono)" font-size="12" font-weight="700">EXECUTION FLEET (200+ CLOUD AGENTS) · 执行层并发算力</text>
+          <rect x="50" y="270" width="410" height="42" rx="6" fill="var(--bg-surface)" stroke="var(--bd)"/>
+          <text x="70" y="296" fill="var(--tx1)" font-family="var(--font-sans)" font-size="13">公共云 Worker (Cursor Cloud Agent 隔离容器)</text>
+          <rect x="480" y="270" width="450" height="42" rx="6" fill="var(--bg-surface)" stroke="var(--bd)"/>
+          <text x="500" y="296" fill="var(--tx1)" font-family="var(--font-sans)" font-size="13">私有 Mac mini Worker (企业 VPN + iOS 模拟器截图)</text>
+
+          <!-- 验证与放权闭环 -->
+          <rect x="30" y="345" width="920" height="65" rx="8" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="50" y="370" fill="var(--tx3)" font-family="var(--font-mono)" font-size="11" font-weight="700">VERIFICATION &amp; MERGE PIPELINE · 验收与分级放权</text>
+          <text x="50" y="394" fill="var(--accent)" font-family="var(--font-sans)" font-size="13" font-weight="600">Proof 多模态验收 (Before/After 对比图 + 单测日志) → 30min 看板红绿灯 → 低爆炸半径自动合入 / 核心逻辑单页复核</text>
+        </svg>
+      </div>
+      <figcaption class="fig-caption"><strong>图 1：Grok Bot for Engineering 调度 200+ 智能体工程架构全景</strong> · 对应原文 hero 插图，展示从管理调度层、五大领域 Bot、200+ 并发 Cloud Agent 到多模态 Proof 闭环与分级放权。</figcaption>
+    </figure>
+
+    <p>在这套体系支撑下，作者团队记录了数项内部实践数据：团队工程师 Lauren 在单月内交付了 2,000+ 个 PR；两位工程师 Balta 与 Shaoru 在四周内搭建起 Grok Bot 的基础核心；作者仅用三周完成了 Grok Bot iOS v0 版本的开发；团队成员从过去每几周才交付一项重大工作，变成几乎每天都有重大交付；作者本人的管理跨度也从最初同时盯 15 个云端智能体，扩展至由 Bot 舰队调度 <strong>200+ 个并发运行的 Cloud Agent</strong>。</p>
+
+    <div class="callout-box warn">
+      <div class="callout-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--warn)"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+        特定环境实践特例说明
+      </div>
+      <p>需要指出，这些产出指标属于高度特定环境下的工程特例，依赖内部完备的自动化管线与配套算力，不应视为任何团队无条件复现的普遍承诺。这套方案的真正参考价值，在于它提供了一套完整的工程执行框架，将碎片化的模型提示转变为可预测、可放权、可复盘的研发流水线。</p>
+    </div>
+
+    <!-- 落地前提：四项基建 -->
+    <h2 class="sec-heading" id="sec-prerequisites">落地前提：运行智能体舰队所需的四项基建</h2>
+
+    <p>在搭建自动化管理管线前，团队需要准备以下前置环境：</p>
+
+    <p><strong>管理层智能体：</strong>一个能够维持长程记忆、具备多模态核验能力且支持消息插队与中断的主控 Bot（如 Grok Bot 或同类高阶智能体平台）。</p>
+
+    <p><strong>执行层算力：</strong>可拉起隔离工作区的云端编码环境（如 Cursor Cloud Agent）。若涉及内网权限、私有仓库或特定硬件（如运行 iOS Simulator 抓取界面），则需准备接入企业 VPN 的独立设备（如闲置 Mac mini）并配置为 Cursor Cloud Private Worker。</p>
+
+    <p><strong>自动化验证信号：</strong>代码仓库必须具备无须人工弹窗的确定性检测手段，包括完备的单元测试、自动化构建脚本、Chrome DevTools 驱动接口、命令行回归测试或可抓取视觉差异的辅助功能接口。</p>
+
+    <p><strong>跨会话状态中枢：</strong>一个跨越单次对话上下文长度的看板工具（如 Notion 数据库），用于持久化记录任务进展、审查意见与合并状态。</p>
+
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>基建模块</th>
+            <th>核心职责与技术要求</th>
+            <th>实战推荐选型</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>管理层智能体</strong></td>
+            <td>维持长程记忆、具备多模态核验能力且支持消息插队与中断的主控中枢，能够感知全局进度。</td>
+            <td>Grok Bot 或具备长程持久化记忆的高阶调度平台</td>
+          </tr>
+          <tr>
+            <td><strong>执行层算力</strong></td>
+            <td>可批量拉起独立隔离工作区的编码环境；遇到内网 VPN、私有仓库或特定模拟器时接入自建 Worker。</td>
+            <td>Cursor Cloud Agent + 闲置 Mac mini (Private Worker)</td>
+          </tr>
+          <tr>
+            <td><strong>自动化验证信号</strong></td>
+            <td>代码库内必须具备无须人工弹窗交互的确定性检测手段，提供机器可判别的验收依据。</td>
+            <td>自动化单测、构建脚本、Chrome DevTools 驱动、无障碍视觉差异抓取</td>
+          </tr>
+          <tr>
+            <td><strong>跨会话状态中枢</strong></td>
+            <td>突破单个对话物理上下文限制，持久化记录任务状态、审查意见与合并分支流转。</td>
+            <td>共享 Notion 数据库（或具备同等 API 能力的项目管理表）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 第一步：领域 Bot -->
+    <h2 class="sec-heading" id="sec-step1">第一步：从单个领域 Bot 开始确立分工与边界</h2>
+
+    <p>初次落地的常见误区是一上来就建立庞大的智能体群。合理的做法是从一个痛点最明确、反馈信号最完备的垂直子域切入。</p>
+
+    <p>作者在体系成熟后将工程职责切分为五个领域 Bot：负责移动端共享层与 iOS 的 <strong>Baltata</strong>、负责桌面端与 CI/CD 构建的 <strong>Shaoruru</strong>、负责底层运维与无主缺陷排查的 <strong>Hogan</strong>、负责 Android 研发的 <strong>Craig</strong>，以及专注于评测运行框架（Harness）的 <strong>Quill</strong>。五个 Bot 并非互相封闭，它们都能跨领域工作；分域的价值在于让每个 Bot 的记忆、规格和设计原则长期聚焦于主责范围，在自己的领域里判断更准确。</p>
+
+    <!-- 图 2：五大领域 Bot 协同与边界矩阵 -->
+    <figure class="fig-frame">
+      <div class="fig-canvas-box">
+        <svg viewBox="0 0 940 380" width="940" height="380" role="img" aria-label="Engineer bots Quill, Baltata, Shaoruru, Craig, and Hogan">
+          <rect x="0" y="0" width="940" height="380" rx="10" fill="var(--bg-surface)" stroke="var(--bd)" stroke-width="1.5"/>
+          <text x="30" y="32" fill="var(--tx3)" font-family="var(--font-mono)" font-size="11" font-weight="700">FIVE DOMAIN SPECIALIST BOTS · 领域分工与边界矩阵</text>
+
+          <!-- Baltata -->
+          <rect x="30" y="55" width="270" height="135" rx="8" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <rect x="45" y="70" width="75" height="24" rx="4" fill="var(--accent-subtle)"/>
+          <text x="52" y="86" fill="var(--accent)" font-family="var(--font-mono)" font-size="11.5" font-weight="700">BALTATA</text>
+          <text x="130" y="86" fill="var(--tx1)" font-size="13" font-weight="600">移动端与 iOS</text>
+          <text x="45" y="112" fill="var(--tx3)" font-size="12">管辖范围：/src/client/ios, 共享层</text>
+          <text x="45" y="132" fill="var(--tx3)" font-size="12">挂载技能：/react-native-best-practices</text>
+          <text x="45" y="152" fill="var(--tx3)" font-size="12">验证通道：Mac mini + iOS Simulator</text>
+
+          <!-- Shaoruru -->
+          <rect x="335" y="55" width="270" height="135" rx="8" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <rect x="350" y="70" width="90" height="24" rx="4" fill="var(--info-subtle)"/>
+          <text x="356" y="86" fill="var(--info)" font-family="var(--font-mono)" font-size="11.5" font-weight="700">SHAORURU</text>
+          <text x="450" y="86" fill="var(--tx1)" font-size="13" font-weight="600">桌面端与 CI/CD</text>
+          <text x="350" y="112" fill="var(--tx3)" font-size="12">管辖范围：/src/desktop, 打包管线</text>
+          <text x="350" y="132" fill="var(--tx3)" font-size="12">挂载技能：/desktop-build-pipeline</text>
+          <text x="350" y="152" fill="var(--tx3)" font-size="12">验证通道：Electron / DevTools 驱动</text>
+
+          <!-- Hogan -->
+          <rect x="640" y="55" width="270" height="135" rx="8" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <rect x="655" y="70" width="70" height="24" rx="4" fill="var(--bull-subtle)"/>
+          <text x="664" y="86" fill="var(--bull)" font-family="var(--font-mono)" font-size="11.5" font-weight="700">HOGAN</text>
+          <text x="735" y="86" fill="var(--tx1)" font-size="13" font-weight="600">底座运维与缺陷</text>
+          <text x="655" y="112" fill="var(--tx3)" font-size="12">管辖范围：/infra, 无主 Crash 排查</text>
+          <text x="655" y="132" fill="var(--tx3)" font-size="12">挂载技能：/infra-sre-playbook</text>
+          <text x="655" y="152" fill="var(--tx3)" font-size="12">验证通道：自动化回归脚本集群</text>
+
+          <!-- Craig -->
+          <rect x="180" y="215" width="270" height="135" rx="8" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <rect x="195" y="230" width="70" height="24" rx="4" fill="var(--warn-subtle)"/>
+          <text x="206" y="246" fill="var(--warn)" font-family="var(--font-mono)" font-size="11.5" font-weight="700">CRAIG</text>
+          <text x="275" y="246" fill="var(--tx1)" font-size="13" font-weight="600">Android 研发</text>
+          <text x="195" y="272" fill="var(--tx3)" font-size="12">管辖范围：/src/client/android</text>
+          <text x="195" y="292" fill="var(--tx3)" font-size="12">挂载技能：/android-kotlin-specs</text>
+          <text x="195" y="312" fill="var(--tx3)" font-size="12">验证通道：Gradle 构建与无头模拟器</text>
+
+          <!-- Quill -->
+          <rect x="490" y="215" width="270" height="135" rx="8" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <rect x="505" y="230" width="70" height="24" rx="4" fill="var(--violet-subtle)"/>
+          <text x="518" y="246" fill="var(--violet)" font-family="var(--font-mono)" font-size="11.5" font-weight="700">QUILL</text>
+          <text x="585" y="246" fill="var(--tx1)" font-size="13" font-weight="600">Harness 评测框架</text>
+          <text x="505" y="272" fill="var(--tx3)" font-size="12">管辖范围：/harness, 评测沙盒</text>
+          <text x="505" y="292" fill="var(--tx3)" font-size="12">挂载技能：/eval-harness-rules</text>
+          <text x="505" y="312" fill="var(--tx3)" font-size="12">验证通道：确定性评分断言套件</text>
+        </svg>
+      </div>
+      <figcaption class="fig-caption"><strong>图 2：Engineer bots Quill, Baltata, Shaoruru, Craig, and Hogan</strong> · 原文五大领域 Bot 协同示意图，记忆与规格长期聚焦主责范围。</figcaption>
+    </figure>
+
+    <h3 class="sub-heading" id="sec-step1-action">读者操作</h3>
+    <p>选定一个具有稳定测试集或界面可验证的业务模块（例如前端组件库或独立服务），定义第一个领域工程 Bot。为其绑定该领域的专属代码规范（Skills），写清主要负责范围、允许协作的邻接领域与人工升级红线。</p>
+
+    <!-- 模板 1 -->
+    <h3 class="sub-heading" id="sec-step1-template">实施模板：领域工程 Bot 角色卡</h3>
+    <div class="callout-box info" style="margin-top:0;">
+      <p>注：本模板依据作者公开实践整理，供工程落地参考，非官方系统提示词。</p>
+    </div>
+    <div class="code-container">
+      <div class="code-header">
+        <span class="code-title">实施模板：领域工程 Bot 角色卡 (Client-Core-Engineer)</span>
+        <button class="copy-code-btn" type="button" onclick="copyCode(this)">复制模板</button>
+      </div>
+      <pre class="code-block"><code>角色名称：[领域名称] 工程负责 Bot（如：Client-Core-Engineer）
+管辖范围：
+1. 主要负责 [指定目录/仓库/平台，如 /src/client/shared 及 iOS 业务逻辑]。
+2. 负责向底层的 Cursor Cloud Agent 派发该范围内的开发与缺陷修复任务。
+3. 负责监控执行日志（Transcript）与交付物证明（Proof），推进 PR 直至达到合入标准。
+4. 可在明确收到跨域任务时协助邻接领域，但要先说明主责 Bot、依赖关系与交接方式。
+
+挂载技能库（Skills）：
+- 代码规范审查：[/react-native-best-practices 或团队自身代码规范]
+- 视觉与交互要求：[/team-design-tokens]
+- 架构审查规范：[/team-architecture-review]
+
+自主处理边界：
+- 允许自主解决环境抖动、临时依赖拉取失败、本地测试不通过等执行问题。
+- 允许在低风险区域进行自动化代码审查与格式修正。
+
+强制升级人工（Escalate to Human）边界：
+- 涉及核心鉴权、敏感凭证（Secrets）、支付流程的代码变更。
+- 涉及跨模块的破坏性架构重构。
+- 缺少必要权限导致底层环境连续卡死。</code></pre>
+    </div>
+
+    <h3 class="sub-heading" id="sec-step1-delivery">交付产物与检查标准</h3>
+    <div class="callout-box info">
+      <p><strong>交付产物：</strong>领域 Bot 的配置就绪确认，明确列出其所辖的仓库目录、挂载技能与升级红线。</p>
+      <p><strong>通过标准：</strong>向该 Bot 发送一条跨领域需求时，Bot 能识别涉及哪些主责领域，说明由谁牵头、谁协作，并避免在缺少领域上下文时自行作出高风险决定。</p>
+      <p><strong>交还给人的情况：</strong>涉及跨系统全局变更、企业级密钥权限配置，或业务归属权存在争议的需求。</p>
+    </div>
+
+    <!-- 第二步：委派 Cloud Agent 与 Proof -->
+    <h2 class="sec-heading" id="sec-step2">第二步：委派 Cloud Agent 并锁定 Proof 验收证据</h2>
+
+    <p>领域 Bot 本身不直接敲代码，其核心角色是调度者。无论任务来自负责人还是 Slack，Bot 接到需求后都会拉起一个独立的 Cursor Cloud Agent，下达上下文 Prompt，并强制要求提交验收凭据（Proof）。</p>
+
+    <p>在这一过程中，作者经常注入针对性的个人工程技能（Skills）：涉及界面改动时调用 <code class="inline-code">/lingxi-design</code> 注入视觉审美；遇到重构与代码审计时调用 <code class="inline-code">/react-native-best-practices</code>；涉及底层改动调用 <code class="inline-code">/lingxi-review</code>；面对摇摆不定的交互细节时调用 <code class="inline-code">/lingxi-product</code> 做出带有倾向性的产品决断。</p>
+
+    <!-- 图 3：Cloud Agent 任务委派与 Proof 双模态验收流 -->
+    <figure class="fig-frame">
+      <div class="fig-canvas-box">
+        <svg viewBox="0 0 940 320" width="940" height="320" role="img" aria-label="A bot starting a cloud agent and checking the result">
+          <rect x="0" y="0" width="940" height="320" rx="10" fill="var(--bg-surface)" stroke="var(--bd)" stroke-width="1.5"/>
+          <text x="30" y="32" fill="var(--tx3)" font-family="var(--font-mono)" font-size="11" font-weight="700">A BOT STARTING A CLOUD AGENT AND CHECKING THE RESULT</text>
+
+          <!-- 阶段 1 -->
+          <rect x="30" y="60" width="200" height="220" rx="8" fill="var(--accent-subtle)" stroke="var(--accent-border)"/>
+          <text x="45" y="85" fill="var(--accent)" font-family="var(--font-mono)" font-size="11.5" font-weight="700">01 · 委派与注入</text>
+          <text x="45" y="115" fill="var(--tx1)" font-size="13" font-weight="600">派发独立 Agent</text>
+          <text x="45" y="140" fill="var(--tx3)" font-size="12">下发目标 Prompt</text>
+          <text x="45" y="160" fill="var(--tx3)" font-size="12">动态绑定专属技能：</text>
+          <text x="55" y="180" fill="var(--accent)" font-family="var(--font-mono)" font-size="11">/lingxi-design</text>
+          <text x="55" y="200" fill="var(--accent)" font-family="var(--font-mono)" font-size="11">/react-native-best</text>
+          <text x="55" y="220" fill="var(--accent)" font-family="var(--font-mono)" font-size="11">/lingxi-review</text>
+          <text x="45" y="255" fill="var(--tx2)" font-size="12">环境：公共云 / Mac mini</text>
+
+          <!-- 箭头 1 -->
+          <path d="M 240 170 L 265 170" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4,4"/>
+
+          <!-- 阶段 2 -->
+          <rect x="275" y="60" width="200" height="220" rx="8" fill="var(--warn-subtle)" stroke="var(--warn-border)"/>
+          <text x="290" y="85" fill="var(--warn)" font-family="var(--font-mono)" font-size="11.5" font-weight="700">02 · 自愈与推进</text>
+          <text x="290" y="115" fill="var(--tx1)" font-size="13" font-weight="600">Push 10 Times 铁律</text>
+          <text x="290" y="140" fill="var(--tx3)" font-size="12">遇到环境偶发抖动</text>
+          <text x="290" y="160" fill="var(--tx3)" font-size="12">自主重试推进 10 次</text>
+          <text x="290" y="185" fill="var(--tx2)" font-size="12">拒绝遇错就交回人类</text>
+          <text x="290" y="210" fill="var(--tx3)" font-size="12">支持 Queue 消息排队</text>
+          <text x="290" y="235" fill="var(--tx3)" font-size="12">支持 Interrupt 强行打断</text>
+
+          <!-- 箭头 2 -->
+          <path d="M 485 170 L 510 170" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4,4"/>
+
+          <!-- 阶段 3 -->
+          <rect x="520" y="60" width="200" height="220" rx="8" fill="var(--info-subtle)" stroke="var(--info-border)"/>
+          <text x="535" y="85" fill="var(--info)" font-family="var(--font-mono)" font-size="11.5" font-weight="700">03 · Proof 证据锁定</text>
+          <text x="535" y="115" fill="var(--tx1)" font-size="13" font-weight="600">双模态交付证明</text>
+          <text x="535" y="140" fill="var(--tx3)" font-size="12">1. 视觉 Proof：</text>
+          <text x="545" y="160" fill="var(--tx2)" font-size="12">Before vs After 对比图</text>
+          <text x="535" y="185" fill="var(--tx3)" font-size="12">2. 功能 Proof：</text>
+          <text x="545" y="205" fill="var(--tx2)" font-size="12">本地单测 100% 通过日志</text>
+          <text x="535" y="230" fill="var(--tx3)" font-size="12">3. 端到端 Proof：</text>
+          <text x="545" y="250" fill="var(--tx2)" font-size="12">虚拟音频 I/O 回环记录</text>
+
+          <!-- 箭头 3 -->
+          <path d="M 730 170 L 755 170" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4,4"/>
+
+          <!-- 阶段 4 -->
+          <rect x="765" y="60" width="145" height="220" rx="8" fill="var(--bull-subtle)" stroke="var(--bull-border)"/>
+          <text x="780" y="85" fill="var(--bull)" font-family="var(--font-mono)" font-size="11.5" font-weight="700">04 · 闭环结论</text>
+          <text x="780" y="115" fill="var(--tx1)" font-size="13" font-weight="600">合格入看板</text>
+          <text x="780" y="140" fill="var(--tx3)" font-size="12">PR 自动创建</text>
+          <text x="780" y="165" fill="var(--tx2)" font-size="12">Proof 对比挂载</text>
+          <text x="780" y="195" fill="var(--bull)" font-size="12.5" font-weight="600">流转至 Working</text>
+          <text x="780" y="225" fill="var(--tx3)" font-size="11">等待 30min 轮巡</text>
+        </svg>
+      </div>
+      <figcaption class="fig-caption"><strong>图 3：A bot starting a cloud agent and checking the result</strong> · 原文智能体派发与 Proof 检查示意图，通过多模态证据锁定交付标准。</figcaption>
+    </figure>
+
+    <p>Cloud Agent 既可以运行在公共云，也可以由 Grok Bot 派到自有 Worker。原文的例子是一台闲置 Mac mini：需要 VPN、特殊机器配置或 iOS Simulator 时，把它设为 Cursor Cloud Private Worker，任务便可在对应环境中执行并把截图带回，无须让工程师自己的笔记本一直保持唤醒。</p>
+
+    <h3 class="sub-heading" id="sec-step2-action">读者操作</h3>
+    <p>在向领域 Bot 派发任务时，明确指出底层 Agent 所需调用的技能集、目标执行环境（公共云或私有 Mac mini Worker），并声明必须提交的 Proof 类型（如前后对比截图、测试覆盖率或集成日志）。当底层 Agent 停滞时，利用消息排队（Queue）或主动中断（Interrupt）施加控制。</p>
+
+    <!-- 模板 2 -->
+    <h3 class="sub-heading" id="sec-step2-template">实施模板：任务委派与 Proof 要求</h3>
+    <div class="callout-box info" style="margin-top:0;">
+      <p>注：本模板依据作者公开实践整理，可直接替换变量使用。</p>
+    </div>
+    <div class="code-container">
+      <div class="code-header">
+        <span class="code-title">实施模板：任务委派与 Proof 要求</span>
+        <button class="copy-code-btn" type="button" onclick="copyCode(this)">复制模板</button>
+      </div>
+      <pre class="code-block"><code>任务目标：在 [目标文件/组件路径] 中完成 [功能描述/缺陷修复，例如：适配深色模式切换异常]。
+执行环境：[Cursor Cloud 默认节点 / 私有 Worker: Mac-mini-01 (含 VPN 与 iOS 模拟器)]
+加载技能：[加载 /team-design 与 /team-best-practices]
+
+交付硬性要求（Proof Requirement）：
+1. 必须提供改动前与改动后的界面对比截图（Before vs. After Screenshot），用多模态证据证明修复完全符合视觉标准。
+2. 必须跑通本地单元测试并附带通过日志。
+3. 如果执行过程中遇到偶发环境抖动或单次测试中断，请自主重试并推进，最多连续排查推进 10 次再交回给我。
+（Push 10 times before handing off: You must verify the screenshot includes the changes I asked for, with proof showing before vs. after.）</code></pre>
+    </div>
+
+    <h3 class="sub-heading" id="sec-step2-delivery">交付产物与检查标准</h3>
+    <div class="callout-box info">
+      <p><strong>交付产物：</strong>Cloud Agent 生成的 Pull Request，包含完备的修改代码、完整的执行过程记录（Transcript），以及明确的 Before/After 对比图片或日志证据。</p>
+      <p><strong>通过标准：</strong>PR 描述中的 Proof 能够与修改目标严格对应，且所有自动化检查项全部通过。</p>
+      <p><strong>交还给人的情况：</strong>底层 Agent 因机器缺少 sudo 权限、密钥缺失导致依赖安装中断，或连续推进 10 次后仍无法建立可运行环境。</p>
+    </div>
+
+    <!-- 第三步：闭合反馈环与现场纠偏 -->
+    <h2 class="sec-heading" id="sec-step3">第三步：搭建闭合反馈环与现场纠偏机制</h2>
+
+    <p>如果智能体写完代码只能干等人工验收，流程就无法脱离对人的依赖。让系统持续自愈的核心，是为它提供一套<strong>无需人工介入的闭环反馈信号</strong>。</p>
+
+    <p>针对视觉还原，底层 Agent 在模拟器或真实环境截屏，主控 Bot 利用多模态能力核对截图；针对端到端交互，作者团队将语音 API 接入智能体宿主机的虚拟音频输入输出（Audio I/O），Agent 同时读取音频流与文本转录（Transcript），实现了语音对语音功能的端到端闭环验证；面对环境偶发抖动，Bot 担任现场监护人，主动跟进解卡，避免因单次网络异常打扰人类。</p>
+
+    <h3 class="sub-heading" id="sec-step3-action">读者操作</h3>
+    <p>为项目配置端到端信号通道（如 Headless 浏览器截图、无头模拟器驱动、测试日志解析管道）。为主控 Bot 编写纠偏指令，使其在比对产物不合规时，能够直接向执行队列追加反馈甚至中断当前运行。</p>
+
+    <!-- 模板 3 -->
+    <h3 class="sub-heading" id="sec-step3-template">实施模板：多模态截图纠偏与环境自愈指令</h3>
+    <div class="callout-box info" style="margin-top:0;">
+      <p>注：本模板依据作者公开实践整理，供 Bot 纠偏时调用。</p>
+    </div>
+    <div class="code-container">
+      <div class="code-header">
+        <span class="code-title">实施模板：多模态截图纠偏与环境自愈指令</span>
+        <button class="copy-code-btn" type="button" onclick="copyCode(this)">复制模板</button>
+      </div>
+      <pre class="code-block"><code># 视觉验证纠偏模板
+你已获取执行 Agent 提交的 Before 与 After 截图。请执行多模态比对：
+1. 检查修改后的截图是否准确反映了目标样式变更（如间距、字阶、边框色彩）。
+2. 如果截图未体现变更或样式出现劣化（Slop），直接中断当前合并流，向 Cloud Agent 队列追加具体修改意见：
+   "截图比对未通过：目标要求 [具体属性]，实际输出为 [截图现状]，请重新调整并重新生成对比图。"
+
+# 环境抖动自愈模板
+检测到执行链路停滞或测试偶发超时：
+1. 检查报错是否属于偶发网络波动或端口占用。
+2. 若属于一次性环境问题，执行环境清理命令并自动重新触发，避免将临时中断上报给工程师。
+3. 仅在遇到明确的权限不足（Security Permissions Lack）或凭据缺失时，暂停任务并标记人工介入。</code></pre>
+    </div>
+
+    <h3 class="sub-heading" id="sec-step3-delivery">交付产物与检查标准</h3>
+    <div class="callout-box info">
+      <p><strong>交付产物：</strong>包含机器比对结论的核验记录；自愈执行日志；完整跑通的双向数据流验证报告。</p>
+      <p><strong>通过标准：</strong>改动结果不仅代码语法正确，且视觉证据与功能信号在无人工介入下全部自闭环校验通过。</p>
+      <p><strong>交还给人的情况：</strong>需要物理设备授权确认、遭遇权限不足引发的指令阻塞，或现有证据不足以判断视觉结果是否达到设计标准。</p>
+    </div>
+
+    <!-- 第四步：Notion 看板与 30 分钟巡检 -->
+    <h2 class="sec-heading" id="sec-step4">第四步：用 Notion 看板建立 30 分钟自动化巡检状态机</h2>
+
+    <p>单次对话上下文具有物理上限。为了在几百个任务流转中保持全局清晰，同时免除人工翻阅冗长聊天记录的负担，团队引入了一张由工程 Bot 共同维护的共享 Notion 数据库。</p>
+
+    <p>负责各业务域的工程 Bot 每隔 30 分钟自动轮巡一次该数据库，对在途 PR 展开逐项扫描。</p>
+
+    <!-- 图 4：Notion 30 分钟自动化巡检状态机 -->
+    <figure class="fig-frame">
+      <div class="fig-canvas-box">
+        <svg viewBox="0 0 940 360" width="940" height="360" role="img" aria-label="A shared Notion database of pull requests the bots review">
+          <rect x="0" y="0" width="940" height="360" rx="10" fill="var(--bg-surface)" stroke="var(--bd)" stroke-width="1.5"/>
+          <text x="30" y="32" fill="var(--tx3)" font-family="var(--font-mono)" font-size="11" font-weight="700">A SHARED NOTION DATABASE OF PULL REQUESTS THE BOTS REVIEW</text>
+
+          <!-- 状态 1: Working -->
+          <rect x="40" y="110" width="160" height="120" rx="8" fill="var(--warn-subtle)" stroke="var(--warn-border)" stroke-width="2"/>
+          <text x="60" y="145" fill="var(--warn)" font-family="var(--font-mono)" font-size="13" font-weight="700">STATUS: WORKING</text>
+          <text x="60" y="175" fill="var(--tx1)" font-size="12.5" font-weight="600">新任务 / 修复中</text>
+          <text x="60" y="200" fill="var(--tx3)" font-size="11">Cloud Agent 执行</text>
+
+          <!-- 转换箭头向右 -->
+          <path d="M 200 170 L 250 170" stroke="var(--accent)" stroke-width="2"/>
+          <text x="205" y="160" fill="var(--accent)" font-family="var(--font-mono)" font-size="10">每 30 分钟</text>
+
+          <!-- 检查门禁 -->
+          <rect x="250" y="60" width="280" height="220" rx="8" fill="var(--bg-raised)" stroke="var(--bd)" stroke-width="1.5"/>
+          <text x="270" y="90" fill="var(--tx1)" font-family="var(--font-serif)" font-size="14" font-weight="700">30min 定时轮巡核心三检</text>
+
+          <rect x="270" y="110" width="240" height="40" rx="5" fill="var(--bg-surface)" stroke="var(--bd)"/>
+          <text x="285" y="135" fill="var(--tx2)" font-size="12">1. Bugbot / 安全意见鉴别</text>
+
+          <rect x="270" y="160" width="240" height="40" rx="5" fill="var(--bg-surface)" stroke="var(--bd)"/>
+          <text x="285" y="185" fill="var(--tx2)" font-size="12">2. CI 构建与单测日志状态</text>
+
+          <rect x="270" y="210" width="240" height="40" rx="5" fill="var(--bg-surface)" stroke="var(--bd)"/>
+          <text x="285" y="235" fill="var(--tx2)" font-size="12">3. 目标主分支合并冲突检测</text>
+
+          <!-- 失败回退回路 -->
+          <path d="M 390 280 L 390 320 L 120 320 L 120 230" stroke="var(--bear)" stroke-width="1.5" stroke-dasharray="4,4" fill="none"/>
+          <text x="180" y="312" fill="var(--bear)" font-family="var(--font-mono)" font-size="11">发现任一异常：派发修复并退回 Working</text>
+
+          <!-- 全绿向右 -->
+          <path d="M 530 170 L 590 170" stroke="var(--bull)" stroke-width="2.5"/>
+          <text x="535" y="160" fill="var(--bull)" font-family="var(--font-mono)" font-size="10.5" font-weight="700">三项全绿 PASS</text>
+
+          <!-- 状态 2: Ready for Review -->
+          <rect x="590" y="110" width="190" height="120" rx="8" fill="var(--bull-subtle)" stroke="var(--bull-border)" stroke-width="2"/>
+          <text x="605" y="145" fill="var(--bull)" font-family="var(--font-mono)" font-size="12.5" font-weight="700">READY FOR REVIEW</text>
+          <text x="605" y="175" fill="var(--tx1)" font-size="12" font-weight="600">启动自动化审查</text>
+          <text x="605" y="200" fill="var(--tx3)" font-size="11">核查置信度与爆炸半径</text>
+
+          <!-- 终态分流 -->
+          <path d="M 780 145 L 820 120" stroke="var(--accent)" stroke-width="2"/>
+          <rect x="820" y="90" width="105" height="50" rx="6" fill="var(--bull-subtle)" stroke="var(--bull-border)"/>
+          <text x="830" y="112" fill="var(--bull)" font-size="11.5" font-weight="700">自动合入</text>
+          <text x="830" y="128" fill="var(--tx3)" font-size="9.5">低爆炸半径</text>
+
+          <path d="M 780 195 L 820 220" stroke="var(--accent)" stroke-width="2"/>
+          <rect x="820" y="200" width="105" height="50" rx="6" fill="var(--warn-subtle)" stroke="var(--warn-border)"/>
+          <text x="830" y="222" fill="var(--warn)" font-size="11.5" font-weight="700">人工复核</text>
+          <text x="830" y="238" fill="var(--tx3)" font-size="9.5">核心/大改动</text>
+        </svg>
+      </div>
+      <figcaption class="fig-caption"><strong>图 4：A shared Notion database of pull requests the bots review</strong> · 原文共享 Notion 数据库巡检拓扑，经由定时轮巡、三检拦截与分级合入流转。</figcaption>
+    </figure>
+
+    <p>这套状态机按下面的顺序循环：</p>
+    <ol class="num-list">
+      <li>新任务进入看板，状态设为 <code class="inline-code">Working</code>。</li>
+      <li>每 30 分钟检查一次 Bugbot 或安全意见、CI 结果和合并冲突。</li>
+      <li>发现问题，就继续调用关联的 Cloud Agent 修复，并把任务保持或退回 <code class="inline-code">Working</code>，等待下一轮检查。</li>
+      <li>三项检查都通过，才把任务改为 <code class="inline-code">Ready for Review</code>，并自动启动代码审查。</li>
+      <li>审查结论高度可信且改动的爆炸半径低，允许自动合并；否则把代码与 Proof 留给人类复核。</li>
+    </ol>
+
+    <h3 class="sub-heading" id="sec-step4-action">读者操作</h3>
+    <p>建立一张轻量任务看板（Notion 或具备类似 API 的项目管理表），配置定时触发器（每 30 分钟一次），驱动各领域 Bot 检查本域所有在途 PR 的三项核心风险：Bugbot/安全工具意见审查（辨别真实缺陷与误报）、持续集成（CI）失败日志、目标分支合并冲突。</p>
+
+    <!-- 模板 4 -->
+    <h3 class="sub-heading" id="sec-step4-template">实施模板：30 分钟看板巡检审查 Prompt</h3>
+    <div class="callout-box info" style="margin-top:0;">
+      <p>注：本模板依据作者公开做法整理，供读者配置自动化巡检脚本时参考。</p>
+    </div>
+    <div class="code-container">
+      <div class="code-header">
+        <span class="code-title">实施模板：30 分钟看板巡检审查 Prompt</span>
+        <button class="copy-code-btn" type="button" onclick="copyCode(this)">复制模板</button>
+      </div>
+      <pre class="code-block"><code>定时任务：每 30 分钟轮巡 [Notion 看板名称] 中你管辖领域的所有记录。
+
+对每条在途 PR 执行以下三项检查：
+1. 安全与静态分析：检查 Bugbot 及安全扫描意见。判断各项指出的是真实逻辑问题还是误报。若属真实缺陷，组织修复；若属误报，记录忽略理由。
+2. CI 流水线状态：拉取最新构建日志，核查是否存在断言失败或打包错误。
+3. 合并冲突检测：检查目标主分支是否有冲突改动。
+
+状态流转逻辑：
+- 只要发现上述任一问题：立即向关联的 Cloud Agent 下发修复消息，将 Notion 记录状态置为「Working」。
+- 当且仅当所有 CI 绿灯、静态审查完成、无合并冲突时：将状态更新为「Ready for Review」，并主动发起一轮代码审查流程。</code></pre>
+    </div>
+
+    <h3 class="sub-heading" id="sec-step4-delivery">交付产物与检查标准</h3>
+    <div class="callout-box info">
+      <p><strong>交付产物：</strong>Notion 数据库中精准更新的任务状态；附带问题排查结论的 PR 评论；在发现异常时自动生成的修复分支。</p>
+      <p><strong>通过标准：</strong>处于「Ready for Review」状态的 PR，其 CI、静态检查与冲突检测全部呈现绿灯，无残留未决异常。</p>
+      <p><strong>交还给人的情况：</strong>与主干产生大规模不可自动合并的语义逻辑冲突，或安全工具报出高危合规漏洞。</p>
+    </div>
+
+    <!-- 第五步：分级放权 -->
+    <h2 class="sec-heading" id="sec-step5">第五步：分级放权——低爆炸半径自动合并与高风险人工复核</h2>
+
+    <p>信任的建立是一个<strong>渐进放权的过程</strong>。如果任何微小修改都需要人类点确认，系统就无法规模化并发；如果完全失控合并，主分支则面临崩溃风险。</p>
+
+    <p>作者采用的放权模型基于两个核心维度：审查结论的高度置信度，以及代码修改的<strong>低爆炸半径（Low Blast Radius）</strong>。按作者的描述，他几乎每天早上都会看到已经达到可合并状态的任务：代码质量、视觉结果和 Proof 已经整理好，人只需把注意力留给更难的性能、视觉和架构判断。</p>
+
+    <!-- 图 5：PR 分级放权决策漏斗与置信度-爆炸半径矩阵 -->
+    <figure class="fig-frame">
+      <div class="fig-canvas-box">
+        <svg viewBox="0 0 940 350" width="940" height="350" role="img" aria-label="Tasks marked ready for review">
+          <rect x="0" y="0" width="940" height="350" rx="10" fill="var(--bg-surface)" stroke="var(--bd)" stroke-width="1.5"/>
+          <text x="30" y="32" fill="var(--tx3)" font-family="var(--font-mono)" font-size="11" font-weight="700">TASKS MARKED READY FOR REVIEW · 置信度与低爆炸半径裁决矩阵</text>
+
+          <!-- 坐标轴 -->
+          <line x1="100" y1="280" x2="520" y2="280" stroke="var(--bd-md)" stroke-width="2"/>
+          <line x1="100" y1="280" x2="100" y2="70" stroke="var(--bd-md)" stroke-width="2"/>
+          <text x="260" y="310" fill="var(--tx2)" font-size="12" font-weight="600">审查置信度 (Review Confidence) →</text>
+          <text x="40" y="170" fill="var(--tx2)" font-size="12" font-weight="600" transform="rotate(-90 40 170)">爆炸半径 (Blast Radius) →</text>
+
+          <!-- 象限分割线 -->
+          <line x1="310" y1="70" x2="310" y2="280" stroke="var(--bd)" stroke-dasharray="4,4"/>
+          <line x1="100" y1="175" x2="520" y2="175" stroke="var(--bd)" stroke-dasharray="4,4"/>
+
+          <!-- 左上：高半径低置信 -->
+          <rect x="110" y="80" width="190" height="85" rx="6" fill="var(--bear-subtle)" stroke="var(--bear-border)"/>
+          <text x="125" y="110" fill="var(--bear)" font-size="12" font-weight="700">高危阻断区</text>
+          <text x="125" y="135" fill="var(--tx3)" font-size="11">严重缺陷 / 跨系统重构</text>
+          <text x="125" y="152" fill="var(--bear)" font-size="10.5" font-weight="600">禁止合入，人工全面介入</text>
+
+          <!-- 右上：高半径高置信 -->
+          <rect x="320" y="80" width="190" height="85" rx="6" fill="var(--warn-subtle)" stroke="var(--warn-border)"/>
+          <text x="335" y="110" fill="var(--warn)" font-size="12" font-weight="700">核心业务复核区</text>
+          <text x="335" y="135" fill="var(--tx3)" font-size="11">鉴权 / 计费 / 数据库迁移</text>
+          <text x="335" y="152" fill="var(--warn)" font-size="10.5" font-weight="600">生成单页卡片待人早会拍板</text>
+
+          <!-- 左下：低半径低置信 -->
+          <rect x="110" y="185" width="190" height="85" rx="6" fill="var(--bg-subtle)" stroke="var(--bd)"/>
+          <text x="125" y="215" fill="var(--tx2)" font-size="12" font-weight="700">待观察区</text>
+          <text x="125" y="240" fill="var(--tx3)" font-size="11">测试不全的小改动</text>
+          <text x="125" y="257" fill="var(--tx3)" font-size="10.5">派回 Agent 补齐单测</text>
+
+          <!-- 右下：低半径高置信（绿色） -->
+          <rect x="320" y="185" width="190" height="85" rx="6" fill="var(--bull-subtle)" stroke="var(--bull-border)" stroke-width="2"/>
+          <text x="335" y="215" fill="var(--bull)" font-size="13" font-weight="700">★ 自动合入区 (Auto-merge)</text>
+          <text x="335" y="240" fill="var(--tx1)" font-size="11">文案 / 国际化 / 独立样式</text>
+          <text x="335" y="257" fill="var(--bull)" font-size="11" font-weight="600">无缝合入主干，归档看板</text>
+
+          <!-- 右侧文字说明 -->
+          <rect x="550" y="80" width="360" height="200" rx="8" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="570" y="110" fill="var(--tx1)" font-family="var(--font-serif)" font-size="14" font-weight="700">分级放权实践判定基准</text>
+          <text x="570" y="140" fill="var(--tx2)" font-size="12.5">• 绝大多数日常 PR 应落在“低爆炸半径”范围。</text>
+          <text x="570" y="165" fill="var(--tx2)" font-size="12.5">• 人类工程师注意力从“全量巡视”收缩到“高价值决策”。</text>
+          <text x="570" y="190" fill="var(--tx2)" font-size="12.5">• 每天早晨上线，人仅需查阅 2~3 个核心复核卡片。</text>
+          <text x="570" y="215" fill="var(--accent)" font-size="12.5" font-weight="600">→ 释放 80%+ 的人类审查脑力消耗。</text>
+        </svg>
+      </div>
+      <figcaption class="fig-caption"><strong>图 5：Tasks marked ready for review</strong> · 原文任务复核状态示意图，通过低爆炸半径自动推进，核心逻辑保留单页 Proof 复核。</figcaption>
+    </figure>
+
+    <h3 class="sub-heading" id="sec-step5-action">读者操作</h3>
+    <p>明确界定团队内部的“低风险低爆炸半径”目录，赋予工程 Bot 在该区域内的自动合并权限；对于核心业务链路，则要求 Bot 汇总好测试结论与 Proof 对比图，等待人类早晨上线一键验收。</p>
+
+    <!-- 模板 5 -->
+    <h3 class="sub-heading" id="sec-step5-template">实施模板：PR 分级放权裁决规则</h3>
+    <div class="callout-box info" style="margin-top:0;">
+      <p>注：本模板依据作者公开实践整理，供团队制定代码合并策略。下面的风险分类只是实施示例，不是 xAI 公布的官方目录或阈值，团队需要按自己的系统边界替换。</p>
+    </div>
+    <div class="code-container">
+      <div class="code-header">
+        <span class="code-title">实施模板：PR 分级放权裁决规则</span>
+        <button class="copy-code-btn" type="button" onclick="copyCode(this)">复制模板</button>
+      </div>
+      <pre class="code-block"><code>针对进入「Ready for Review」的 PR，按照以下准则执行合并裁决：
+
+【允许自动合并（Auto-merge）的标准】：
+1. 审查置信度极高：所有测试用例覆盖全面，且没有遗留架构债务。
+2. 属于低爆炸半径区域：
+   - 纯文案与国际化字符串同步；
+   - 内部测试辅助脚本或 Harness 规则微调；
+   - 具有独立作用域的样式微调（且已有多模态 Proof 验证）；
+   - 已淘汰逻辑与 Dead Code 的独立清理。
+满足上述两点，直接执行主干合入，并在看板中归档。
+
+【必须保留人工复核（Human Review）的标准】：
+1. 涉及核心状态机、计费、鉴权或公共数据层变更。
+2. 代码改动跨越多个顶层目录，影响面广。
+3. 审查结果存在边界情况摇摆。
+处于此类场景时，在看板中置顶标记，附上精简的改动摘要与 Proof 链接，等待工程师决策。</code></pre>
+    </div>
+
+    <h3 class="sub-heading" id="sec-step5-delivery">交付产物与检查标准</h3>
+    <div class="callout-box info">
+      <p><strong>交付产物：</strong>安全合入主干的代码提交历史；针对高风险 PR 汇总好的单页复核卡片（包含改动理由、测试记录与 Before/After 截图）。</p>
+      <p><strong>通过标准：</strong>低风险改动平稳合入主干且未引发线上故障；高风险改动附带足够完整的代码摘要与 Proof，让人类无需重读全部执行记录即可作出合并决断。</p>
+      <p><strong>交还给人的情况：</strong>所有触碰高风险业务核心、大范围重构，或单次审查置信度未达标的变更。</p>
+    </div>
+
+    <!-- 第六步：运营主管 Jenny -->
+    <h2 class="sec-heading" id="sec-step6">第六步：运营主管 Jenny——1:1 站会、根因复盘与规则沉淀</h2>
+
+    <p>一个多智能体组织不仅需要写代码，同样需要团队对齐、文化继承与故障复盘。作者在团队中设立了唯一的非编码角色——运营负责人 <strong>Jenny</strong>。</p>
+
+    <!-- 图 6：Jenny 晨会 1:1 对齐与防漂移架构 -->
+    <figure class="fig-frame">
+      <div class="fig-canvas-box">
+        <svg viewBox="0 0 940 300" width="940" height="300" role="img" aria-label="Jenny's morning 1:1 with an engineer bot">
+          <rect x="0" y="0" width="940" height="300" rx="10" fill="var(--bg-surface)" stroke="var(--bd)" stroke-width="1.5"/>
+          <text x="30" y="32" fill="var(--tx3)" font-family="var(--font-mono)" font-size="11" font-weight="700">JENNY'S MORNING 1:1 WITH AN ENGINEER BOT</text>
+
+          <!-- Jenny 节点 -->
+          <circle cx="160" cy="165" r="55" fill="var(--violet-subtle)" stroke="var(--violet)" stroke-width="2.5"/>
+          <text x="135" y="160" fill="var(--violet)" font-family="var(--font-mono)" font-size="15" font-weight="700">JENNY</text>
+          <text x="115" y="180" fill="var(--tx2)" font-size="12">运营主管 (非编码)</text>
+          <text x="120" y="196" fill="var(--tx3)" font-size="10">每日清晨 5:00 轮巡</text>
+
+          <!-- 广播连线与辐射节点 -->
+          <path d="M 215 165 L 360 85" stroke="var(--violet)" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <path d="M 215 165 L 360 125" stroke="var(--violet)" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <path d="M 215 165 L 360 165" stroke="var(--violet)" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <path d="M 215 165 L 360 205" stroke="var(--violet)" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <path d="M 215 165 L 360 245" stroke="var(--violet)" stroke-width="1.5" stroke-dasharray="3,3"/>
+
+          <!-- 5 个领域 Bot -->
+          <rect x="360" y="70" width="180" height="30" rx="4" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="375" y="90" fill="var(--tx1)" font-size="12">1:1 对齐 Baltata (iOS)</text>
+
+          <rect x="360" y="110" width="180" height="30" rx="4" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="375" y="130" fill="var(--tx1)" font-size="12">1:1 对齐 Shaoruru (桌面)</text>
+
+          <rect x="360" y="150" width="180" height="30" rx="4" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="375" y="170" fill="var(--tx1)" font-size="12">1:1 对齐 Hogan (运维)</text>
+
+          <rect x="360" y="190" width="180" height="30" rx="4" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="375" y="210" fill="var(--tx1)" font-size="12">1:1 对齐 Craig (Android)</text>
+
+          <rect x="360" y="230" width="180" height="30" rx="4" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="375" y="250" fill="var(--tx1)" font-size="12">1:1 对齐 Quill (Harness)</text>
+
+          <!-- 右侧 1:1 三大目标 -->
+          <rect x="580" y="70" width="330" height="190" rx="8" fill="var(--bg-surface)" stroke="var(--bd-md)"/>
+          <text x="600" y="100" fill="var(--accent)" font-family="var(--font-serif)" font-size="14" font-weight="700">每日 1:1 站会的三大核心目标</text>
+
+          <text x="600" y="135" fill="var(--tx1)" font-size="12.5" font-weight="600">1. 排查依赖阻塞 (Unblock Dependencies)</text>
+          <text x="615" y="155" fill="var(--tx3)" font-size="11.5">检查是否因等待权限或邻接领域交付而卡死。</text>
+
+          <text x="600" y="180" fill="var(--tx1)" font-size="12.5" font-weight="600">2. 重申工程守则 (Reiterate Playbook)</text>
+          <text x="615" y="200" fill="var(--tx3)" font-size="11.5">界面必须附带 Proof、核心逻辑严禁越权合入。</text>
+
+          <text x="600" y="225" fill="var(--tx1)" font-size="12.5" font-weight="600">3. 校准设计调性 (Combat Context Drift)</text>
+          <text x="615" y="245" fill="var(--tx3)" font-size="11.5">对抗长程生成中因 Token 损耗带来的习惯性劣化。</text>
+        </svg>
+      </div>
+      <figcaption class="fig-caption"><strong>图 6：Jenny's morning 1:1 with an engineer bot</strong> · 原文运营主管 Jenny 晨会 1:1 对齐示意图，每日定期注入工程准则，防止习惯性漂移。</figcaption>
+    </figure>
+
+    <p>每天清晨 5:00，Jenny 会依次与每位工程 Bot 进行 1:1 站会，复习工程手册（Playbook），排查阻塞，并校准代码与设计调性。这种定期的规则输入，有效防止了模型在长期连续运行中发生习惯性漂移。</p>
+
+    <p>当某只 Bot 在任务中犯错（例如未深入探究代码改动的真实目标就草率提交）时，工程师会指派该 Bot 与 Jenny 一同进行根因分析（Postmortem）。Jenny 会反查产生错误的推理思考记录（Reasoning Trace），提取规则漏洞，更新团队 Playbook，并同步广播给其他工程 Bot。</p>
+
+    <!-- 图 7：故障 Postmortem 根因反查与 Playbook 广播工作流 -->
+    <figure class="fig-frame">
+      <div class="fig-canvas-box">
+        <svg viewBox="0 0 940 280" width="940" height="280" role="img" aria-label="Onboarding a new engineer bot">
+          <rect x="0" y="0" width="940" height="280" rx="10" fill="var(--bg-surface)" stroke="var(--bd)" stroke-width="1.5"/>
+          <text x="30" y="32" fill="var(--tx3)" font-family="var(--font-mono)" font-size="11" font-weight="700">ONBOARDING A NEW ENGINEER BOT &amp; POSTMORTEM CLOSED LOOP</text>
+
+          <rect x="30" y="65" width="180" height="175" rx="6" fill="var(--bear-subtle)" stroke="var(--bear-border)"/>
+          <text x="45" y="95" fill="var(--bear)" font-family="var(--font-mono)" font-size="12" font-weight="700">STEP 1: 故障发生</text>
+          <text x="45" y="125" fill="var(--tx1)" font-size="12.5" font-weight="600">任务误判 / 破坏性提交</text>
+          <text x="45" y="150" fill="var(--tx3)" font-size="11.5">例如：未核对意图草率提交</text>
+          <text x="45" y="170" fill="var(--tx3)" font-size="11.5">CI 挂掉或触发回滚</text>
+          <text x="45" y="205" fill="var(--bear)" font-size="11" font-weight="600">发起 Postmortem</text>
+
+          <path d="M 210 152 L 255 152" stroke="var(--accent)" stroke-width="2"/>
+
+          <rect x="255" y="65" width="200" height="175" rx="6" fill="var(--warn-subtle)" stroke="var(--warn-border)"/>
+          <text x="270" y="95" fill="var(--warn)" font-family="var(--font-mono)" font-size="12" font-weight="700">STEP 2: 反查思考轨迹</text>
+          <text x="270" y="125" fill="var(--tx1)" font-size="12.5" font-weight="600">Jenny 介入调查</text>
+          <text x="270" y="150" fill="var(--tx3)" font-size="11.5">调取 Reasoning Transcript</text>
+          <text x="270" y="170" fill="var(--tx3)" font-size="11.5">定位决策分叉点</text>
+          <text x="270" y="195" fill="var(--warn)" font-size="11" font-weight="600">识别现有规则漏洞</text>
+
+          <path d="M 455 152 L 500 152" stroke="var(--accent)" stroke-width="2"/>
+
+          <rect x="500" y="65" width="200" height="175" rx="6" fill="var(--info-subtle)" stroke="var(--info-border)"/>
+          <text x="515" y="95" fill="var(--info)" font-family="var(--font-mono)" font-size="12" font-weight="700">STEP 3: 沉淀 Playbook</text>
+          <text x="515" y="125" fill="var(--tx1)" font-size="12.5" font-weight="600">提炼防御新条款</text>
+          <text x="515" y="150" fill="var(--tx3)" font-size="11.5">更新《工程实战手册》</text>
+          <text x="515" y="170" fill="var(--tx3)" font-size="11.5">向全体 Bot 广播新规范</text>
+          <text x="515" y="195" fill="var(--info)" font-size="11" font-weight="600">历史错误永不复发</text>
+
+          <path d="M 700 152 L 745 152" stroke="var(--accent)" stroke-width="2"/>
+
+          <rect x="745" y="65" width="165" height="175" rx="6" fill="var(--bull-subtle)" stroke="var(--bull-border)"/>
+          <text x="760" y="95" fill="var(--bull)" font-family="var(--font-mono)" font-size="12" font-weight="700">STEP 4: 新Bot入职</text>
+          <text x="760" y="125" fill="var(--tx1)" font-size="12.5" font-weight="600">Jenny 主持入职</text>
+          <text x="760" y="150" fill="var(--tx3)" font-size="11.5">注入最新版 Playbook</text>
+          <text x="760" y="175" fill="var(--tx3)" font-size="11.5">老成员提供上下文</text>
+          <text x="760" y="205" fill="var(--bull)" font-size="11" font-weight="600">平滑无感扩容</text>
+        </svg>
+      </div>
+      <figcaption class="fig-caption"><strong>图 7：Onboarding a new engineer bot</strong> · 原文新 Bot 入职与故障复盘工作流，从思考痕迹提取教训固化为团队 Playbook。</figcaption>
+    </figure>
+
+    <p>当团队需要引入新 Bot 扩容时，也是由 Jenny 主持入职流程：创建新角色、注入全局守则，并协调老成员提供上下文支持。</p>
+
+    <h3 class="sub-heading" id="sec-step6-action">读者操作</h3>
+    <p>指定或配置一个不承担具体业务编写的独立运营 Bot，设定每日定时站会日程，用于强化工程规范；在遭遇偶发执行缺陷时，将其转化为工程规则并推送到团队全局知识库。</p>
+
+    <!-- 模板 6 -->
+    <h3 class="sub-heading" id="sec-step6-template">实施模板：5:00 晨会与事故复盘（Postmortem）指令</h3>
+    <div class="callout-box info" style="margin-top:0;">
+      <p>注：本模板依据作者公开做法整理，供组织管理与规则对齐使用。</p>
+    </div>
+    <div class="code-container">
+      <div class="code-header">
+        <span class="code-title">实施模板：5:00 晨会与事故复盘（Postmortem）指令</span>
+        <button class="copy-code-btn" type="button" onclick="copyCode(this)">复制模板</button>
+      </div>
+      <pre class="code-block"><code># 每日 5:00 晨会站会指令
+你是团队运营主管 Jenny。每天 5:00 依次与所有业务 Bot 开展 1:1：
+1. 检查各 Bot 当前是否存在未解决的依赖阻塞。
+2. 强调团队当前阶段的工程准则（如：UI 变更必须出具对比图、核心重构严禁擅自合入）。
+3. 强化设计与架构调性，抵消长程运行中的规则漂移。
+
+# 任务失误复盘指令（Postmortem）
+检测到 [某工程 Bot] 在 [PR 编号/任务] 中发生失误（例如：未充分核对目标意图导致漏测）：
+1. 调取该任务的完整思考轨迹（Thinking / Transcript），分析导致误判的决策分叉点。
+2. 形成根因分析报告（Root-Cause Analysis），明确指明现行规则的疏漏。
+3. 提炼出针对性的新条款，更新入团队《工程实战手册（Playbook）》，并向全体工程 Bot 广播更新。</code></pre>
+    </div>
+
+    <h3 class="sub-heading" id="sec-step6-delivery">交付产物与检查标准</h3>
+    <div class="callout-box info">
+      <p><strong>交付产物：</strong>每日晨会健康度摘要；针对故障编写的 Postmortem 报告；更新并广播生效的 Playbook 文档。</p>
+      <p><strong>通过标准：</strong>经历数周迭代后，工程 Bot 依然能准确执行复杂的流程规范，历史出现过的同类错误不再反复发生。</p>
+      <p><strong>交还给人的情况：</strong>团队整体产品战略转型、代码准则发生重大原则重构，或 Bot 之间出现不可协调的权责重叠。</p>
+    </div>
+
+    <!-- 第七步：进阶扩展：夜间例行审计与 P0 紧急响应 -->
+    <h2 class="sec-heading" id="sec-step7">第七步：进阶扩展——凌晨 3 点夜间例行审计与 P0 紧急响应</h2>
+
+    <p>在日常功能迭代之外，作者团队将两类极度消耗精力的工程任务交给了智能体管线：低风险的夜间例行代码维护，以及极度耗费注意力的突发事故处理。</p>
+
+    <p>每到凌晨 3:00，工程 Bot 会自动启动系统级清理：排查僵尸逻辑、压缩依赖体积、优化页面冷启动性能、清理冗余劣质代码。早上工程师上班时，收件箱中已经备好一组干净规范的优化 PR。这一模式可灵活扩展为五类典型审计：</p>
+
+    <p><strong>代码安全审计：</strong>检查团队可能在日常迭代中忽略的潜在安全漏洞与合规隐患。</p>
+    <p><strong>构建耗时审计：</strong>监控 CI/CD 流水线执行时长，针对逐渐膨胀的打包瓶颈提出优化方案。</p>
+    <p><strong>国际化同步审计：</strong>核对多语言资源键值，避免新功能在部分语种中出现文案缺失。</p>
+    <p><strong>双端对齐审计：</strong>在多端并行的架构中（如 iOS 端与桌面端），排查两端在业务逻辑与交互体验上的实现漂移。</p>
+    <p><strong>变更追踪审计：</strong>自动汇总过去 24 小时内并入相关领域的所有 PR，生成高层概览并标出需重点跟进的代码清单。</p>
+
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>审计类型</th>
+            <th>核心检查范围与动作</th>
+            <th>产出与验收形式</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>代码安全审计</strong></td>
+            <td>检查日常迭代中被忽略的潜在安全漏洞、依赖库 CVE 预警与合规隐患。</td>
+            <td>安全修复分支，附带漏洞扫描前后的对照报告</td>
+          </tr>
+          <tr>
+            <td><strong>构建耗时审计</strong></td>
+            <td>监控 CI/CD 流水线执行时长，针对逐渐膨胀的打包瓶颈提出按需编译优化。</td>
+            <td>构建耗时对比 PR，附带分阶段耗时图表</td>
+          </tr>
+          <tr>
+            <td><strong>国际化同步审计</strong></td>
+            <td>核对多语言多语种资源键值，避免新功能上线时缺失文案导致线上崩溃。</td>
+            <td>缺失键值补齐 PR，标明机器翻译与待校准标签</td>
+          </tr>
+          <tr>
+            <td><strong>双端对齐审计</strong></td>
+            <td>在多端架构中（如 iOS 与桌面端），排查两端在业务逻辑与交互细节上的实现漂移。</td>
+            <td>双端差异对比清单与对齐补丁</td>
+          </tr>
+          <tr>
+            <td><strong>变更追踪审计</strong></td>
+            <td>自动汇总过去 24 小时内并入相关领域的所有 PR，生成高层概览并标出需重点跟进的代码清单。</td>
+            <td>每日变更晨报，直发工程师邮件/Slack 频道</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>在常规清理之外，作者还分享了一条极具探索性的指令：“今晚你有六个小时，做任何你想做的东西。玩得开心！”（<em>You have six hours tonight. Build whatever you want. Have fun!</em>），许多未曾预料的代码重构与性能优化便由此诞生。</p>
+
+    <p>而针对生产环境的紧急故障，作者设计了专门的 <strong>P0 响应流程</strong>。一旦任务被赋予 P0 标签，工程 Bot 会进入一个临时的严密监管循环：每隔 5 分钟深度读取一次 Agent 的思考轨迹与执行记录，一旦发现 Agent 陷入死胡同或在非关键细节上空转，立即主动介入打断并校准路径。作者特别提醒：<strong>P0 流程会以极高速度消耗推理 Token</strong>，应严格限制在真正需要争分夺秒的紧急故障中使用。</p>
+
+    <h3 class="sub-heading" id="sec-step7-action">读者操作</h3>
+    <p>通过定时任务配置夜间 3:00 的无人值守审计流程，并准备好特定于突发事件的 P0 快速纠偏脚本。</p>
+
+    <!-- 模板 7 -->
+    <h3 class="sub-heading" id="sec-step7-template">实施模板：夜间维护与 P0 应急指令</h3>
+    <div class="callout-box info" style="margin-top:0;">
+      <p>注：本模板依据作者公开做法整理，供读者选择性启用。</p>
+    </div>
+    <div class="code-container">
+      <div class="code-header">
+        <span class="code-title">实施模板：夜间维护与 P0 应急指令</span>
+        <button class="copy-code-btn" type="button" onclick="copyCode(this)">复制模板</button>
+      </div>
+      <pre class="code-block"><code># 凌晨 3:00 例行代码维护任务
+当前时间为凌晨 3:00，启动夜间例行代码健康审计：
+1. 扫描 codebase，重点关注：未引用死代码（Dead code）、多余导入、冷启动潜在延迟与体积膨胀。
+2. 提出小步重构 PR，每一笔改动均需附带完整的自动化测试 Proof。
+3. 严格遵循低爆炸半径准则，严禁触碰核心业务状态流转逻辑。
+
+# P0 紧急故障响应模式
+注意：当前任务已标记为 [P0 紧急事故]！
+1. 启动 5 分钟高频轮巡，深度监控 Cloud Agent 的 Reasoning Transcript。
+2. 一旦从 Transcript 判断 Agent 持续在无关配置或非核心报错上打转，立即中断当前执行链并下发定向指令：
+   "聚焦于核心报错链路 [具体错误栈]，禁止展开无关重构，立即输出最小验证补丁。"
+3. 持续监控直至产出通过验证的 Hotfix 补丁。</code></pre>
+    </div>
+
+    <h3 class="sub-heading" id="sec-step7-delivery">交付产物与检查标准</h3>
+    <div class="callout-box info">
+      <p><strong>交付产物：</strong>清晨交付的一组小步优化 PR，附带构建耗时或包体积对比数据；P0 场景下的高频巡检干预日志与快速 Hotfix PR。</p>
+      <p><strong>通过标准：</strong>夜间 PR 保持小步、可验证、可安全复核；P0 任务在紧急处理窗口内产出可验证的最小修复，并留下高频监控带来的 Token 消耗记录。</p>
+      <p><strong>交还给人的情况：</strong>夜间审计触及深层架构不确定性；P0 故障属于第三方基础设施瘫痪，无法通过代码补丁恢复。</p>
+    </div>
+
+    <!-- 核心经验与官方实践起点 -->
+    <h2 class="sec-heading" id="sec-tips">核心经验与官方实践起点</h2>
+
+    <p>在经历整套体系的打磨后，指南总结了六条可直接借鉴的组织运行法则：</p>
+
+    <p><strong>打造完整的闭环反馈信号：</strong>让底层执行者能自主拉起环境并借助 CLI、DevTools 或无障碍接口端到端驱动流程；遇到未自动化的环节，优先将其沉淀为可复用的项目技能。</p>
+
+    <p><strong>像对待高潜实习生一样沟通：</strong>遇到复杂任务不必过分执着于设计繁复的提示词，直接用自然语言指明该补习哪部分前置知识、参考哪段工程实现。</p>
+
+    <p><strong>系统性消除重复劳动：</strong>只要某种工作模式在一天内重复出现两次以上且规律明确，就应将其封装移交给 Bot。</p>
+
+    <p><strong>坚持开展 Bot 每日站会：</strong>上下文窗口有限，每日定期的规则强调是防止执行漂移最经济的手段。</p>
+
+    <p><strong>建立类似自动驾驶的渐进放权机制：</strong>在低风险区大胆放权自动合入，在高风险区严加把关，切忌因个别失误而彻底退回人工操作。</p>
+
+    <p><strong>建立多智能体协同复盘机制：</strong>设立专门的运营角色深挖失败案例的思考轨迹，将教训沉淀为全局规范，避免团队踩重复的坑。</p>
+
+    <!-- 图 8：六条核心工程法则矩阵 -->
+    <figure class="fig-frame">
+      <div class="fig-canvas-box">
+        <svg viewBox="0 0 940 330" width="940" height="330" role="img" aria-label="Learnings and tips for running engineer bots">
+          <rect x="0" y="0" width="940" height="330" rx="10" fill="var(--bg-surface)" stroke="var(--bd)" stroke-width="1.5"/>
+          <text x="30" y="32" fill="var(--tx3)" font-family="var(--font-mono)" font-size="11" font-weight="700">LEARNINGS AND TIPS FOR RUNNING ENGINEER BOTS</text>
+
+          <!-- 规则 1 -->
+          <rect x="30" y="55" width="280" height="120" rx="6" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="45" y="80" fill="var(--accent)" font-family="var(--font-mono)" font-size="12" font-weight="700">01 · 打造闭环反馈信号</text>
+          <text x="45" y="105" fill="var(--tx1)" font-size="13" font-weight="600">自愈底座，拒绝遇错即停</text>
+          <text x="45" y="130" fill="var(--tx3)" font-size="11.5">借助 CLI、DevTools 或无障碍接口</text>
+          <text x="45" y="150" fill="var(--tx3)" font-size="11.5">未自动化的环节优先沉淀为项目 Skill</text>
+
+          <!-- 规则 2 -->
+          <rect x="330" y="55" width="280" height="120" rx="6" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="345" y="80" fill="var(--info)" font-family="var(--font-mono)" font-size="12" font-weight="700">02 · 像对待高潜实习生沟通</text>
+          <text x="345" y="105" fill="var(--tx1)" font-size="13" font-weight="600">自然语言，精准知识补齐</text>
+          <text x="345" y="130" fill="var(--tx3)" font-size="11.5">不必执着设计繁复 Prompt</text>
+          <text x="345" y="150" fill="var(--tx3)" font-size="11.5">指明补习前置知识、指明参考实现</text>
+
+          <!-- 规则 3 -->
+          <rect x="630" y="55" width="280" height="120" rx="6" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="645" y="80" fill="var(--bull)" font-family="var(--font-mono)" font-size="12" font-weight="700">03 · 系统性消除重复劳动</text>
+          <text x="645" y="105" fill="var(--tx1)" font-size="13" font-weight="600">出现两次，立即封装交接</text>
+          <text x="645" y="130" fill="var(--tx3)" font-size="11.5">只要某模式一天内重复出现两次以上</text>
+          <text x="645" y="150" fill="var(--tx3)" font-size="11.5">且规律明确，即刻封装移交 Bot</text>
+
+          <!-- 规则 4 -->
+          <rect x="30" y="190" width="280" height="120" rx="6" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="45" y="215" fill="var(--warn)" font-family="var(--font-mono)" font-size="12" font-weight="700">04 · 坚持开展 Bot 每日站会</text>
+          <text x="45" y="240" fill="var(--tx1)" font-size="13" font-weight="600">每日对齐，抵消规则漂移</text>
+          <text x="45" y="265" fill="var(--tx3)" font-size="11.5">上下文物理窗口有限</text>
+          <text x="45" y="285" fill="var(--tx3)" font-size="11.5">定期规则强调是最经济的防漂移手段</text>
+
+          <!-- 规则 5 -->
+          <rect x="330" y="190" width="280" height="120" rx="6" fill="var(--violet)" stroke="var(--bd)"/>
+          <text x="345" y="215" fill="var(--violet)" font-family="var(--font-mono)" font-size="12" font-weight="700">05 · 自动驾驶式渐进放权</text>
+          <text x="345" y="240" fill="var(--tx1)" font-size="13" font-weight="600">低区大胆合，高区严把关</text>
+          <text x="345" y="265" fill="var(--tx3)" font-size="11.5">按置信度与爆炸半径放权</text>
+          <text x="345" y="285" fill="var(--tx3)" font-size="11.5">切忌因个别失误而彻底退回纯人工</text>
+
+          <!-- 规则 6 -->
+          <rect x="630" y="190" width="280" height="120" rx="6" fill="var(--bg-raised)" stroke="var(--bd)"/>
+          <text x="645" y="215" fill="var(--accent)" font-family="var(--font-mono)" font-size="12" font-weight="700">06 · 多智能体协同复盘机制</text>
+          <text x="645" y="240" fill="var(--tx1)" font-size="13" font-weight="600">深挖思考链，沉淀 Playbook</text>
+          <text x="645" y="265" fill="var(--tx3)" font-size="11.5">运营角色深挖失误 Reasoning Trace</text>
+          <text x="645" y="285" fill="var(--tx3)" font-size="11.5">将教训更新入全局规范，不踩重复坑</text>
+        </svg>
+      </div>
+      <figcaption class="fig-caption"><strong>图 8：Learnings and tips for running engineer bots</strong> · 原文运行工程 Bot 的六大核心法则图解。</figcaption>
+    </figure>
+
+    <h3 class="sub-heading" id="sec-resources">官方体验与工具资源</h3>
+    <p>读者可基于官方开放的现成入口快速体验这一工作流，并在此基础上调整出符合团队特性的工程 Bot：</p>
+
+    <p><strong>官方工具与咨询：</strong>可在 macOS 平台下载客户端体验 <a href="https://api2.cursor.sh/updates/download/stable/darwin-arm64/grok-bot-bd824e1890d8b96f" target="_blank" rel="noopener noreferrer">Download for macOS</a>，或通过 <a href="https://cursor.com/contact-sales?product=grok-bot" target="_blank" rel="noopener noreferrer">Contact sales</a> 获取团队版本支持。</p>
+
+    <p><strong>体验官方工程 Bot：</strong>通过 <a href="https://x.ai/bot/fY1xWwCLzDDGVe3GwH78j" target="_blank" rel="noopener noreferrer">Engineer Bot</a> 体验能够分发任务与检查 Proof 的工程主控智能体。</p>
+
+    <p><strong>体验夜间审计 Bot：</strong>通过 <a href="https://x.ai/bot/hkGSHcqKjGc5dm3ugNc2U" target="_blank" rel="noopener noreferrer">Nightly Audit Engineer</a> 体验定时巡检代码异味、执行包体积优化的专项智能体。</p>
+
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>资源类别</th>
+            <th>名称与功能说明</th>
+            <th>官方入口直链</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>客户端下载</strong></td>
+            <td>macOS 平台官方桌面端客户端，开箱即用体验智能体调度。</td>
+            <td><a href="https://api2.cursor.sh/updates/download/stable/darwin-arm64/grok-bot-bd824e1890d8b96f" target="_blank" rel="noopener noreferrer">Download for macOS</a></td>
+          </tr>
+          <tr>
+            <td><strong>企业团队咨询</strong></td>
+            <td>获取企业级团队版支持、私有 Worker 配置与技术对接。</td>
+            <td><a href="https://cursor.com/contact-sales?product=grok-bot" target="_blank" rel="noopener noreferrer">Contact sales</a></td>
+          </tr>
+          <tr>
+            <td><strong>官方工程 Bot</strong></td>
+            <td>体验具备任务分发、技能加载与 Proof 验收能力的工程主控智能体。</td>
+            <td><a href="https://x.ai/bot/fY1xWwCLzDDGVe3GwH78j" target="_blank" rel="noopener noreferrer">Engineer Bot (xAI)</a></td>
+          </tr>
+          <tr>
+            <td><strong>夜间审计 Bot</strong></td>
+            <td>体验定时巡检代码异味、依赖精简与包体积优化的专项智能体。</td>
+            <td><a href="https://x.ai/bot/hkGSHcqKjGc5dm3ugNc2U" target="_blank" rel="noopener noreferrer">Nightly Audit Engineer (xAI)</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 体系验收清单与未透露的决策边界 -->
+    <h2 class="sec-heading" id="sec-acceptance">体系验收清单与原文未透露的边界</h2>
+
+    <p>在推进团队智能体工程化改造时，可使用以下清单检验系统是否真正成型：</p>
+
+    <div class="checklist-card">
+      <div class="check-item">
+        <div class="check-box-indicator"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+        <div><strong>领域划分：</strong>是否拥有聚焦明确子域的工程 Bot，而非用一个通用窗口承接所有模块？</div>
+      </div>
+      <div class="check-item">
+        <div class="check-box-indicator"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+        <div><strong>证据闭环：</strong>向底层派发任务时，是否将 Proof（对比截图/执行日志）作为不可或缺的交付标准？</div>
+      </div>
+      <div class="check-item">
+        <div class="check-box-indicator"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+        <div><strong>自愈机制：</strong>是否具备抗偶发环境抖动的能力，能够自主推进多轮而非遇错即停？</div>
+      </div>
+      <div class="check-item">
+        <div class="check-box-indicator"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+        <div><strong>状态中枢：</strong>是否建立起脱离单一会话限制的看板系统，并实现定时自动巡检？</div>
+      </div>
+      <div class="check-item">
+        <div class="check-box-indicator"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+        <div><strong>分级放权：</strong>是否对自动合入设立了清晰的低爆炸半径红线，让高危代码受到有效的人工把关？</div>
+      </div>
+      <div class="check-item">
+        <div class="check-box-indicator"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+        <div><strong>长效沉淀：</strong>是否具备定期的规范校准机制，并能从思考痕迹中提取教训、更新团队 Playbook？</div>
+      </div>
+    </div>
+
+    <h3 class="sub-heading" id="sec-boundaries">原文没有告诉你的决策边界</h3>
+    <p>作者分享的是高维度的组织工程实践，但在落地现实项目时，以下关键参数仍需工程负责人根据团队现状自行裁决：</p>
+
+    <p><strong>成本与算力预算：</strong>原文未披露 200+ 并发 Cloud Agent 与高频 P0 监控下的实际 Token 账单与私有机器开销，工程团队需自行设置单日消费熔断阈值。</p>
+
+    <p><strong>量化爆炸半径标准：</strong>原文提出了“高置信度 + 低爆炸半径”的合并原则，但未公开具体的数值界限（如修改行数上限、覆盖率百分比指标等），需由各团队根据自身代码库特点量化。</p>
+
+    <p><strong>网络与权限架构安全：</strong>在为私有节点（如 Mac mini）开放 VPN 访问权限与执行环境时，如何确保代码安全隔离与凭据生命周期受控，属于需要自建的工程底座。</p>
+
+    <p><strong>重试与熔断上限：</strong>除作者提及的推进 10 次与 P0 5 分钟巡检外，针对常规死循环的全局超时熔断与主动放弃机制，需要结合团队自身的 CI 负载与并发配额自行标定。</p>
+
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>决策边界</th>
+            <th>原文未披露的工程现实</th>
+            <th>工程化建议与落地防线</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>成本与算力预算</strong></td>
+            <td>200+ 并发 Cloud Agent 与高频 P0 监控下的实际 Token 账单与私有机器开销未公布。</td>
+            <td>必须设置单日消费硬熔断（如 $100/天/工程师），对持续超过 30 分钟未产出 Diff 的 Agent 执行死锁强杀。</td>
+          </tr>
+          <tr>
+            <td><strong>量化爆炸半径标准</strong></td>
+            <td>提出了“高置信度 + 低爆炸半径”的合并原则，但未公开具体数值界限。</td>
+            <td>量化指标建议：改动行数 LOC &le; 100 行、改动文件 &le; 3 个、单测覆盖率 100%、触碰敏感核心目录（鉴权/支付）得分为 0 且一票否决。</td>
+          </tr>
+          <tr>
+            <td><strong>网络与权限安全</strong></td>
+            <td>为私有节点（如 Mac mini）开放 VPN 访问权限与执行环境时的隔离机制未详述。</td>
+            <td>执行环境必须采用无特权容器沙盒（Non-root Container），只读挂载敏感凭证，严禁让 Agent 拥有 sudo 提权能力。</td>
+          </tr>
+          <tr>
+            <td><strong>重试与熔断上限</strong></td>
+            <td>除“推进 10 次”与“P0 5 分钟巡检”外，缺乏全局超时与死循环熔断设计。</td>
+            <td>统一设置单任务全局生命周期上限（如 45 分钟），单测连续挂死 3 次且错误栈相同时触发熔断，避免 Token 循环消耗。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ==========================================================================
+         交互沙盘 1：200+ 并发 Cloud Agent 调度与 USL 扩展性模拟器
+         ========================================================================== -->
+    <h2 class="sec-heading" id="sec-sim-usl">工程计算沙盘 1：200+ 并发 Cloud Agent 调度与 USL 扩展性模拟器</h2>
+    <p>面对作者提到的“200+ 并发 Cloud Agent”，很多工程团队误以为 Agent 越多总产出就越高。在真实的软件工厂中，受到<strong>人类审查瓶颈（串行争抢 &sigma;）</strong>与<strong>跨 Agent 语义写偏序（冲突协调开销 &kappa;）</strong>的约束，系统吞吐量严格服从通用可扩展性定律（USL: Universal Scalability Law）：</p>
+
+    <div class="callout-box info">
+      <div class="callout-title">通用可扩展性定律 (USL) 计算公式</div>
+      <p>相对吞吐能力：<code>C(N) = N / (1 + &sigma;&middot;(N - 1) + &kappa;&middot;N&middot;(N - 1))</code></p>
+      <p>峰值并发拐点：<code>N* = &radic;((1 - &sigma;) / &kappa;)</code> （当 N &gt; N* 时，由于冲突和重试激增，系统总有效产出发生逆向倒挂雪崩）。</p>
+    </div>
+
+    <section class="sandbox-card">
+      <div class="sandbox-header">
+        <span class="sandbox-badge">CONWIP &amp; USL 模型</span>
+        <span class="sandbox-title">200+ 并发 Fleet 扩展性计算器</span>
+      </div>
+      <div class="sandbox-grid">
+        <div class="sandbox-controls">
+          <div class="control-item">
+            <div class="control-label-row">
+              <span>并发 Agent 数量 (N)</span>
+              <span class="control-val-tag" id="label-usl-n">200</span>
+            </div>
+            <input type="range" class="custom-slider" id="input-usl-n" min="1" max="250" step="1" value="200">
+          </div>
+          <div class="control-item">
+            <div class="control-label-row">
+              <span>串行争抢系数 (&sigma;, 审查/锁)</span>
+              <span class="control-val-tag" id="label-usl-sig">0.015</span>
+            </div>
+            <input type="range" class="custom-slider" id="input-usl-sig" min="0.005" max="0.050" step="0.001" value="0.015">
+          </div>
+          <div class="control-item">
+            <div class="control-label-row">
+              <span>冲突开销系数 (&kappa;, 语义写冲突)</span>
+              <span class="control-val-tag" id="label-usl-kap">0.00018</span>
+            </div>
+            <input type="range" class="custom-slider" id="input-usl-kap" min="0.00005" max="0.00050" step="0.00001" value="0.00018">
+          </div>
+        </div>
+
+        <div class="sandbox-display-panel">
+          <div class="metric-row">
+            <span class="metric-label">理论峰值并发拐点 (N*)</span>
+            <span class="metric-value accent" id="out-usl-peak-n">74.0</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">极限有效加速比 (C*)</span>
+            <span class="metric-value" id="out-usl-peak-c">24.12x</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">当前并发吞吐量 C(N)</span>
+            <span class="metric-value" id="out-usl-curr-c">17.94x</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">单 Agent 边际产出效率</span>
+            <span class="metric-value warn" id="out-usl-eff">9.0%</span>
+          </div>
+          <div class="status-verdict-box" id="out-usl-status">
+            当前 N=200 已经显著超过峰值拐点 N* ≈ 74.0，系统进入收益倒挂区。200 个并发的产出反而低于峰值产出，说明必须通过 CONWIP 准入控制或进一步细分领域 Bot 隔离上下文，压低冲突系数 &kappa;。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         交互沙盘 2：PR 爆炸半径量化与自动放权裁决器
+         ========================================================================== -->
+    <h2 class="sec-heading" id="sec-sim-blast">工程计算沙盘 2：PR 爆炸半径量化与自动放权裁决器</h2>
+    <p>为解决原文中“低爆炸半径”缺乏客观量化标准的问题，本沙盘引入工业级代码合入风险加权评估模型，实时给出合入建议：</p>
+
+    <section class="sandbox-card">
+      <div class="sandbox-header">
+        <span class="sandbox-badge">GATE EVALUATOR</span>
+        <span class="sandbox-title">PR 爆炸半径量化裁决沙盘</span>
+      </div>
+      <div class="sandbox-grid">
+        <div class="sandbox-controls">
+          <div class="control-item">
+            <div class="control-label-row">
+              <span>变更代码行数 (LOC)</span>
+              <span class="control-val-tag" id="label-blast-loc">45 行</span>
+            </div>
+            <input type="range" class="custom-slider" id="input-blast-loc" min="5" max="600" step="5" value="45">
+          </div>
+
+          <div class="control-item">
+            <div class="control-label-row">
+              <span>涉及顶层模块目录跨度</span>
+            </div>
+            <select class="custom-select" id="input-blast-dirs">
+              <option value="1" selected>单一模块目录 (1个，如 /src/client/ios)</option>
+              <option value="2">跨邻接模块目录 (2个，如 shared + ios)</option>
+              <option value="3">全系统全局跨度 (3个及以上)</option>
+            </select>
+          </div>
+
+          <div class="control-item">
+            <div class="control-label-row">
+              <span>单测增量覆盖率 (Coverage)</span>
+              <span class="control-val-tag" id="label-blast-cov">95%</span>
+            </div>
+            <input type="range" class="custom-slider" id="input-blast-cov" min="40" max="100" step="1" value="95">
+          </div>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="input-blast-sens">
+            <span>触碰核心敏感路径 (鉴权 / 支付 / 状态机 / 数据库迁移)</span>
+          </label>
+        </div>
+
+        <div class="sandbox-display-panel">
+          <div class="metric-row">
+            <span class="metric-label">爆炸半径综合风险分 (0-100)</span>
+            <span class="metric-value bull" id="out-blast-score">12.2</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">风险等级评定</span>
+            <span class="metric-value bull" id="out-blast-level">极低爆炸半径 (Low Blast)</span>
+          </div>
+          <div class="status-verdict-box" id="out-blast-action">
+            <strong>裁决动作：允许直接自动合入 (Auto-merge)</strong>。改动集中在单一模块且单测覆盖完备，无敏感核心逻辑污染，系统自动合入主干并归档 Notion 看板。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 结语 -->
+    <div class="callout-box bull" style="margin-top: 40px;">
+      <div class="callout-title">工程总结</div>
+      <p>从「全职盯终端报错的 AI 监工」转型为「架构化编排舰队的系统调度者」，核心并不在于使用何种高阶模型，而在于<strong>确定性验证信号的建设、跨会话状态机的闭环驱动，以及基于数学边界的渐进放权</strong>。当自动化测试、视觉 Proof、定时巡检与反漂移站会构建起自愈回路，工程团队才真正进入了“由人类定边界、由智能体舰队高效交付”的次世代软件研发范式。</p>
+    </div>
+
+  </main>
+</div>
+
+<!-- ==========================================================================
+   原生 JavaScript 交互与事件接线
+   无外部依赖，包含双主题切换、阅读进度条、沙盘实时公式计算
+   ========================================================================== -->
+<script>
+(function() {
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  // 1. 阅读进度条
+  window.addEventListener("scroll", function() {
+    var winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+    var height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+    var scrolled = (height > 0) ? (winScroll / height) * 100 : 0;
+    var pBar = byId("readProgress");
+    if (pBar) {
+      pBar.style.width = scrolled + "%";
+    }
+  });
+
+  // 2. 主题切换
+  var themeBtn = byId("themeToggleBtn");
+  var themeText = byId("themeToggleText");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function() {
+      var curTheme = document.documentElement.getAttribute("data-theme") || "dark";
+      var nextTheme = (curTheme === "dark") ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", nextTheme);
+      if (themeText) {
+        themeText.textContent = (nextTheme === "dark") ? "浅色模式" : "深色模式";
+      }
+    });
+  }
+
+  // 3. 复制代码模板
+  window.copyCode = function(btn) {
+    var container = btn.closest(".code-container");
+    if (!container) return;
+    var codeEl = container.querySelector("pre code");
+    if (!codeEl) return;
+    var text = codeEl.textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() {
+        var orig = btn.textContent;
+        btn.textContent = "已复制 ✓";
+        setTimeout(function() { btn.textContent = orig; }, 1800);
+      });
+    } else {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      var orig2 = btn.textContent;
+      btn.textContent = "已复制 ✓";
+      setTimeout(function() { btn.textContent = orig2; }, 1800);
+    }
+  };
+
+  // 4. 沙盘 1：USL 扩展性模拟器
+  var inUslN = byId("input-usl-n");
+  var inUslSig = byId("input-usl-sig");
+  var inUslKap = byId("input-usl-kap");
+
+  var lblUslN = byId("label-usl-n");
+  var lblUslSig = byId("label-usl-sig");
+  var lblUslKap = byId("label-usl-kap");
+
+  var outUslPeakN = byId("out-usl-peak-n");
+  var outUslPeakC = byId("out-usl-peak-c");
+  var outUslCurrC = byId("out-usl-curr-c");
+  var outUslEff = byId("out-usl-eff");
+  var outUslStatus = byId("out-usl-status");
+
+  function updateUsl() {
+    if (!inUslN || !inUslSig || !inUslKap) return;
+    var n = parseFloat(inUslN.value);
+    var sig = parseFloat(inUslSig.value);
+    var kap = parseFloat(inUslKap.value);
+
+    if (lblUslN) lblUslN.textContent = n.toString();
+    if (lblUslSig) lblUslSig.textContent = sig.toFixed(3);
+    if (lblUslKap) lblUslKap.textContent = kap.toFixed(5);
+
+    var peakN = (kap > 0) ? Math.sqrt((1.0 - sig) / kap) : 999.0;
+    var denomPeak = 1.0 + sig * (peakN - 1.0) + kap * peakN * (peakN - 1.0);
+    var peakC = (denomPeak > 0) ? (peakN / denomPeak) : 0;
+
+    var denomCurr = 1.0 + sig * (n - 1.0) + kap * n * (n - 1.0);
+    var currC = (denomCurr > 0) ? (n / denomCurr) : 0;
+    var eff = (n > 0) ? (currC / n) * 100.0 : 0;
+
+    if (outUslPeakN) outUslPeakN.textContent = peakN.toFixed(1);
+    if (outUslPeakC) outUslPeakC.textContent = peakC.toFixed(2) + "x";
+    if (outUslCurrC) outUslCurrC.textContent = currC.toFixed(2) + "x";
+    if (outUslEff) outUslEff.textContent = eff.toFixed(1) + "%";
+
+    if (outUslStatus) {
+      if (n <= peakN * 0.85) {
+        outUslStatus.textContent = "当前系统处于高效线性扩展区 (N < 0.85 N*)。串行争抢与写冲突可控，增加 Agent 数量能带来显著的吞吐提升。";
+      } else if (n <= peakN * 1.15) {
+        outUslStatus.textContent = "当前系统逼近饱和拐点 (N ≈ N*)。边际产出急剧衰减，进一步增加并发将引发合并冲突和重试死锁，建议停止盲目加人。";
+      } else {
+        outUslStatus.textContent = "当前 N=" + n + " 已经显著超过峰值拐点 N* ≈ " + peakN.toFixed(1) + "，系统进入收益倒挂区。200 个并发的产出反而低于峰值产出，说明必须通过 CONWIP 准入控制或进一步细分领域 Bot 隔离上下文，压低冲突系数 σ/κ。";
+      }
+    }
+  }
+
+  if (inUslN) inUslN.addEventListener("input", updateUsl);
+  if (inUslSig) inUslSig.addEventListener("input", updateUsl);
+  if (inUslKap) inUslKap.addEventListener("input", updateUsl);
+
+  // 5. 沙盘 2：PR 爆炸半径评估器
+  var inBlastLoc = byId("input-blast-loc");
+  var inBlastDirs = byId("input-blast-dirs");
+  var inBlastCov = byId("input-blast-cov");
+  var inBlastSens = byId("input-blast-sens");
+
+  var lblBlastLoc = byId("label-blast-loc");
+  var lblBlastCov = byId("label-blast-cov");
+
+  var outBlastScore = byId("out-blast-score");
+  var outBlastLevel = byId("out-blast-level");
+  var outBlastAction = byId("out-blast-action");
+
+  function updateBlast() {
+    if (!inBlastLoc || !inBlastDirs || !inBlastCov || !inBlastSens) return;
+    var loc = parseFloat(inBlastLoc.value);
+    var dirs = parseInt(inBlastDirs.value, 10);
+    var cov = parseFloat(inBlastCov.value);
+    var sens = inBlastSens.checked;
+
+    if (lblBlastLoc) lblBlastLoc.textContent = loc + " 行";
+    if (lblBlastCov) lblBlastCov.textContent = cov + "%";
+
+    var locScore = (loc <= 300) ? ((loc / 300.0) * 35.0) : Math.min(50.0, 35.0 + Math.log10(loc / 300.0 + 1.0) * 15.0);
+    var dirsScore = (dirs === 1) ? 5.0 : ((dirs === 2) ? 15.0 : 30.0);
+    var covScore = Math.max(0.0, (100.0 - cov) * 0.4);
+    var sensScore = sens ? 40.0 : 0.0;
+    var total = Math.min(100.0, locScore + dirsScore + covScore + sensScore);
+
+    if (outBlastScore) outBlastScore.textContent = total.toFixed(1);
+
+    if (outBlastLevel && outBlastAction) {
+      if (sens) {
+        outBlastScore.className = "metric-value bear";
+        outBlastLevel.className = "metric-value bear";
+        outBlastLevel.textContent = "高危敏感拦截 (Security Block)";
+        outBlastAction.innerHTML = "<strong>裁决动作：严格禁止自动合入！</strong>触碰核心敏感路径（鉴权/支付/状态机），风险一票否决。必须生成包含全量 Proof 的评审专单，交由人类架构师严密复核。";
+      } else if (total < 25.0) {
+        outBlastScore.className = "metric-value bull";
+        outBlastLevel.className = "metric-value bull";
+        outBlastLevel.textContent = "极低爆炸半径 (Low Blast)";
+        outBlastAction.innerHTML = "<strong>裁决动作：允许直接自动合入 (Auto-merge)</strong>。改动集中在单一模块且单测覆盖完备，无敏感核心逻辑污染，系统自动合入主干并归档 Notion 看板。";
+      } else if (total < 50.0) {
+        outBlastScore.className = "metric-value warn";
+        outBlastLevel.className = "metric-value warn";
+        outBlastLevel.textContent = "中等可控风险 (Moderate Blast)";
+        outBlastAction.innerHTML = "<strong>裁决动作：生成单页卡片待人早会拍板</strong>。改动范围涉及跨模块或测试覆盖率一般，Bot 将测试记录与 Before/After 对比图整理为单页复核卡片，待工程师确认。";
+      } else {
+        outBlastScore.className = "metric-value bear";
+        outBlastLevel.className = "metric-value bear";
+        outBlastLevel.textContent = "高爆炸半径 (High Blast)";
+        outBlastAction.innerHTML = "<strong>裁决动作：强制人工全面审查</strong>。变更体量过大或覆盖率过低，禁止自动化流转，通知领域负责人介入重构拆分。";
+      }
+    }
+  }
+
+  if (inBlastLoc) inBlastLoc.addEventListener("input", updateBlast);
+  if (inBlastDirs) inBlastDirs.addEventListener("change", updateBlast);
+  if (inBlastCov) inBlastCov.addEventListener("input", updateBlast);
+  if (inBlastSens) inBlastSens.addEventListener("change", updateBlast);
+
+  // 6. 侧栏目录高亮监听
+  var navLinks = document.querySelectorAll(".sidebar-nav-item a");
+  var sections = [];
+  navLinks.forEach(function(link) {
+    var href = link.getAttribute("href");
+    if (href && href.indexOf("#") === 0) {
+      var target = byId(href.substring(1));
+      if (target) {
+        sections.push({ el: target, link: link });
+      }
+    }
+  });
+
+  window.addEventListener("scroll", function() {
+    var scrollPos = window.scrollY + 100;
+    for (var i = sections.length - 1; i >= 0; i--) {
+      if (sections[i].el.offsetTop <= scrollPos) {
+        navLinks.forEach(function(l) { l.classList.remove("active"); });
+        sections[i].link.classList.add("active");
+        break;
+      }
+    }
+  });
+
+  // 初始化计算
+  updateUsl();
+  updateBlast();
+})();
+</script>
+
+</body>
+</html>

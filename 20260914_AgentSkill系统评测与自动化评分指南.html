@@ -1,0 +1,2100 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>如何系统评测 Agent Skills：从触发用例到自动化评分的完整指南 —— 基于 OpenAI 实操与 Codex 的轻量端到端评测闭环</title>
+<style>
+/* ==========================================================================
+   1. AIKnowledge 统一排版基线与设计令牌系统 (Zero External Dependencies)
+   ========================================================================== */
+:root {
+  --aike-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --aike-font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --aike-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+  /* 版式尺度 */
+  --aike-sidebar-w: 280px;
+  --aike-container-max: 1360px;
+  --aike-content-max: 1180px;
+  --aike-radius-sm: 6px;
+  --aike-radius-md: 10px;
+  --aike-radius-lg: 16px;
+  --aike-transition-fast: 0.18s ease;
+  --aike-transition-normal: 0.28s ease;
+}
+
+/* 深色主题：黑曜石沉浸 (#181715) - 默认首选 */
+html[data-theme="dark"] {
+  --aike-bg: #181715;
+  --aike-bg-soft: #1F1D1A;
+  --aike-surface: #22201D;
+  --aike-surface-2: #2C2925;
+  --aike-surface-3: #38342F;
+  --aike-text: #EDEAE5;
+  --aike-text-muted: #A6A096;
+  --aike-text-faint: #706B63;
+  --aike-border: #36332E;
+  --aike-border-soft: #2F2C28;
+  --aike-border-strong: #544D42;
+
+  --aike-accent: #E2886A;
+  --aike-accent-hover: #F0A58C;
+  --aike-accent-soft: rgba(226, 136, 106, 0.18);
+  --aike-accent-contrast: #181715;
+
+  --aike-emerald: #34D399;
+  --aike-emerald-bg: #064E3B;
+  --aike-emerald-soft: rgba(52, 211, 153, 0.16);
+
+  --aike-rose: #F87171;
+  --aike-rose-bg: #450A0A;
+  --aike-rose-soft: rgba(248, 113, 113, 0.16);
+
+  --aike-amber: #FBBF24;
+  --aike-amber-bg: #451A03;
+  --aike-amber-soft: rgba(251, 191, 36, 0.16);
+
+  --aike-cyan: #38BDF8;
+  --aike-cyan-bg: #083344;
+  --aike-cyan-soft: rgba(56, 189, 248, 0.16);
+
+  --aike-code-bg: #14120F;
+  --aike-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --aike-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --aike-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.60);
+}
+
+/* 浅色主题：暖羊皮纸 (#FAF7F2) */
+html[data-theme="light"] {
+  --aike-bg: #FAF7F2;
+  --aike-bg-soft: #F3EFEA;
+  --aike-surface: #FFFFFF;
+  --aike-surface-2: #F8F5F0;
+  --aike-surface-3: #EAE5DE;
+  --aike-text: #2D2A26;
+  --aike-text-muted: #6B655E;
+  --aike-text-faint: #968F85;
+  --aike-border: #E5DFD5;
+  --aike-border-soft: #EFEBE4;
+  --aike-border-strong: #C7BEAF;
+
+  --aike-accent: #D97757;
+  --aike-accent-hover: #B55A3C;
+  --aike-accent-soft: rgba(217, 119, 87, 0.12);
+  --aike-accent-contrast: #FFFFFF;
+
+  --aike-emerald: #10B981;
+  --aike-emerald-bg: #ECFDF5;
+  --aike-emerald-soft: rgba(16, 185, 129, 0.12);
+
+  --aike-rose: #EF4444;
+  --aike-rose-bg: #FEF2F2;
+  --aike-rose-soft: rgba(239, 68, 68, 0.12);
+
+  --aike-amber: #F59E0B;
+  --aike-amber-bg: #FFFBEB;
+  --aike-amber-soft: rgba(245, 158, 11, 0.12);
+
+  --aike-cyan: #06B6D4;
+  --aike-cyan-bg: #ECFEFF;
+  --aike-cyan-soft: rgba(6, 182, 212, 0.12);
+
+  --aike-code-bg: #F2ECE2;
+  --aike-shadow-sm: 0 1px 3px rgba(90, 70, 50, 0.06);
+  --aike-shadow-md: 0 4px 12px rgba(90, 70, 50, 0.08);
+  --aike-shadow-lg: 0 12px 32px rgba(90, 70, 50, 0.12);
+}
+
+/* ==========================================================================
+   2. 全局重置与排版引擎
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--aike-font-sans);
+  background-color: var(--aike-bg);
+  color: var(--aike-text);
+  line-height: 1.78;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--aike-transition-normal), color var(--aike-transition-normal);
+}
+
+/* 顶部阅读进度指示条 */
+#read-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--aike-accent), var(--aike-cyan), var(--aike-emerald));
+  z-index: 1000;
+  width: 0%;
+  transition: width 0.08s linear;
+}
+
+/* 页面顶部固定工具栏 */
+.top-bar {
+  position: sticky;
+  top: 0;
+  height: 56px;
+  background: var(--aike-surface);
+  border-bottom: 1px solid var(--aike-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 990;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.top-bar-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--aike-text);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-bar-badge {
+  font-size: 0.72rem;
+  background: var(--aike-accent-soft);
+  color: var(--aike-accent);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  border: 1px solid var(--aike-accent);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.top-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-icon {
+  background: var(--aike-surface-2);
+  border: 1px solid var(--aike-border);
+  color: var(--aike-text);
+  border-radius: var(--aike-radius-sm);
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  transition: all var(--aike-transition-fast);
+}
+
+.btn-icon:hover {
+  border-color: var(--aike-accent);
+  color: var(--aike-accent);
+  background: var(--aike-accent-soft);
+}
+
+/* ==========================================================================
+   3. 布局体系：左侧栏固定 + 正文剩余区域绝对水平居中（消除右侧多余留白）
+   ========================================================================== */
+.sidebar {
+  position: fixed;
+  top: 76px;
+  left: 24px;
+  width: var(--aike-sidebar-w);
+  height: calc(100vh - 96px);
+  overflow-y: auto;
+  z-index: 100;
+  padding-right: 8px;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--aike-border-strong);
+  border-radius: 2px;
+}
+
+.toc-card {
+  background: var(--aike-surface);
+  border: 1px solid var(--aike-border);
+  border-radius: var(--aike-radius-md);
+  padding: 16px;
+  box-shadow: var(--aike-shadow-sm);
+}
+
+.toc-header {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--aike-text-faint);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--aike-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.toc-list {
+  list-style: none;
+  font-size: 0.84rem;
+}
+
+.toc-item {
+  margin-bottom: 3px;
+}
+
+.toc-link {
+  display: block;
+  color: var(--aike-text-muted);
+  text-decoration: none;
+  padding: 5px 8px;
+  border-radius: var(--aike-radius-sm);
+  transition: all var(--aike-transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-left: 2px solid transparent;
+}
+
+.toc-link:hover, .toc-link.active {
+  color: var(--aike-accent);
+  background: var(--aike-accent-soft);
+  border-left-color: var(--aike-accent);
+}
+
+/* 正文主体：剩余空间严格水平居中 */
+.main-content {
+  margin-left: calc(var(--aike-sidebar-w) + 24px + max(0px, (100% - var(--aike-sidebar-w) - 48px - var(--aike-content-max)) / 2));
+  margin-right: max(24px, calc((100% - var(--aike-sidebar-w) - 48px - var(--aike-content-max)) / 2));
+  max-width: var(--aike-content-max);
+  box-sizing: border-box;
+  padding-top: 28px;
+  padding-bottom: 96px;
+}
+
+@media (max-width: 1080px) {
+  .sidebar {
+    display: none;
+  }
+  .main-content {
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 20px;
+    padding-right: 20px;
+    max-width: 100%;
+  }
+}
+
+/* ==========================================================================
+   4. 文章正文排版：标题、段落、引用与卡片
+   ========================================================================== */
+.article-header {
+  margin-bottom: 36px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--aike-border);
+}
+
+.article-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--aike-accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.article-title {
+  font-family: var(--aike-font-serif);
+  font-size: clamp(2rem, 3.2vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--aike-text);
+  letter-spacing: -0.015em;
+  margin-bottom: 16px;
+}
+
+.article-subtitle {
+  font-size: 1.15rem;
+  color: var(--aike-text-muted);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.article-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  font-size: 0.85rem;
+  color: var(--aike-text-faint);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+h2 {
+  font-family: var(--aike-font-serif);
+  font-size: clamp(1.45rem, 2.2vw, 1.85rem);
+  font-weight: 700;
+  color: var(--aike-text);
+  margin-top: 56px;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--aike-border-soft);
+  position: relative;
+}
+
+h2::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 42px;
+  height: 2px;
+  background: var(--aike-accent);
+}
+
+h3 {
+  font-family: var(--aike-font-serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--aike-text);
+  margin-top: 32px;
+  margin-bottom: 14px;
+}
+
+p {
+  margin-bottom: 18px;
+  color: var(--aike-text);
+}
+
+ul, ol {
+  margin-bottom: 20px;
+  padding-left: 24px;
+}
+
+li {
+  margin-bottom: 8px;
+  color: var(--aike-text);
+}
+
+/* 核心要点高亮卡片 */
+.box-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 28px 0 36px 0;
+}
+
+.card-summary {
+  background: var(--aike-surface);
+  border: 1px solid var(--aike-border);
+  border-radius: var(--aike-radius-md);
+  padding: 18px 20px;
+  transition: all var(--aike-transition-fast);
+  box-shadow: var(--aike-shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.card-summary::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--aike-accent);
+}
+
+.card-summary:hover {
+  transform: translateY(-2px);
+  border-color: var(--aike-accent);
+  box-shadow: var(--aike-shadow-md);
+}
+
+.card-summary-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--aike-accent);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-summary-text {
+  font-size: 0.9rem;
+  color: var(--aike-text-muted);
+  line-height: 1.6;
+}
+
+/* 引用块 */
+blockquote {
+  margin: 24px 0;
+  padding: 16px 20px;
+  background: var(--aike-surface-2);
+  border-left: 4px solid var(--aike-accent);
+  border-radius: 0 var(--aike-radius-md) var(--aike-radius-md) 0;
+  font-size: 0.98rem;
+  color: var(--aike-text);
+}
+
+/* 代码排版 */
+code {
+  font-family: var(--aike-font-mono);
+  font-size: 0.88em;
+  background: var(--aike-code-bg);
+  color: var(--aike-accent);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--aike-border-soft);
+}
+
+pre {
+  background: var(--aike-code-bg);
+  border: 1px solid var(--aike-border);
+  border-radius: var(--aike-radius-md);
+  padding: 18px 20px;
+  overflow-x: auto;
+  margin: 24px 0;
+  box-shadow: var(--aike-shadow-sm);
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+  border: none;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: var(--aike-text);
+  display: block;
+}
+
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--aike-surface-3);
+  border: 1px solid var(--aike-border);
+  border-bottom: none;
+  border-radius: var(--aike-radius-md) var(--aike-radius-md) 0 0;
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  font-family: var(--aike-font-mono);
+  color: var(--aike-text-muted);
+  margin-top: 24px;
+}
+
+.code-header + pre {
+  margin-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* 图表容器与 SVG 自适应 */
+.box-diagram-wrapper {
+  margin: 32px 0;
+  background: var(--aike-surface);
+  border: 1px solid var(--aike-border);
+  border-radius: var(--aike-radius-lg);
+  padding: 24px;
+  box-shadow: var(--aike-shadow-md);
+}
+
+.box-diagram-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--aike-text);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.box-diagram-desc {
+  font-size: 0.86rem;
+  color: var(--aike-text-muted);
+  margin-bottom: 20px;
+}
+
+/* 对比表格 */
+.box-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  margin: 24px 0;
+  border: 1px solid var(--aike-border);
+  border-radius: var(--aike-radius-md);
+  box-shadow: var(--aike-shadow-sm);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+th {
+  background: var(--aike-surface-2);
+  color: var(--aike-text);
+  font-weight: 700;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--aike-border);
+  white-space: nowrap;
+}
+
+td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--aike-border-soft);
+  color: var(--aike-text);
+  vertical-align: top;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+tr:hover td {
+  background: var(--aike-surface-3);
+}
+
+/* ==========================================================================
+   5. 动态交互沙盘：Eval Planner 方案生成器与断言矩阵
+   ========================================================================== */
+.box-sandbox {
+  margin: 36px 0;
+  background: var(--aike-surface);
+  border: 2px solid var(--aike-accent);
+  border-radius: var(--aike-radius-lg);
+  padding: 28px;
+  box-shadow: var(--aike-shadow-lg);
+}
+
+.box-sandbox-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--aike-border);
+}
+
+.box-sandbox-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--aike-text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.box-sandbox-presets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-preset {
+  background: var(--aike-surface-2);
+  border: 1px solid var(--aike-border);
+  color: var(--aike-text-muted);
+  border-radius: var(--aike-radius-sm);
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--aike-transition-fast);
+}
+
+.btn-preset:hover, .btn-preset.active {
+  background: var(--aike-accent-soft);
+  color: var(--aike-accent);
+  border-color: var(--aike-accent);
+}
+
+.grid-inputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--aike-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.input-text {
+  background: var(--aike-surface-2);
+  border: 1px solid var(--aike-border);
+  border-radius: var(--aike-radius-sm);
+  color: var(--aike-text);
+  font-family: inherit;
+  font-size: 0.88rem;
+  padding: 8px 12px;
+  transition: border-color var(--aike-transition-fast);
+}
+
+.input-text:focus {
+  outline: none;
+  border-color: var(--aike-accent);
+  box-shadow: 0 0 0 2px var(--aike-accent-soft);
+}
+
+/* 动态生成的 Prompt 预览矩阵 */
+.grid-prompts-matrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.card-prompt-item {
+  background: var(--aike-surface-2);
+  border: 1px solid var(--aike-border);
+  border-radius: var(--aike-radius-md);
+  padding: 14px 16px;
+  position: relative;
+}
+
+.card-prompt-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  display: inline-block;
+  text-transform: uppercase;
+}
+
+.tag-explicit { background: var(--aike-accent-soft); color: var(--aike-accent); }
+.tag-implicit { background: var(--aike-cyan-soft); color: var(--aike-cyan); }
+.tag-contextual { background: var(--aike-amber-soft); color: var(--aike-amber); }
+.tag-negative { background: var(--aike-rose-soft); color: var(--aike-rose); }
+
+.card-prompt-body {
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--aike-text);
+  font-family: var(--aike-font-mono);
+  word-break: break-word;
+  min-height: 52px;
+}
+
+/* 模拟打分面板 */
+.box-simulation-panel {
+  background: var(--aike-surface-2);
+  border: 1px solid var(--aike-border);
+  border-radius: var(--aike-radius-md);
+  padding: 18px 20px;
+  margin-top: 20px;
+}
+
+.box-sim-checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.chk-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--aike-text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.chk-input {
+  cursor: pointer;
+  accent-color: var(--aike-accent);
+  width: 16px;
+  height: 16px;
+}
+
+.box-sim-verdict-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--aike-border);
+}
+
+.score-badge {
+  font-size: 1.4rem;
+  font-weight: 800;
+  font-family: var(--aike-font-mono);
+  color: var(--aike-emerald);
+}
+
+/* ==========================================================================
+   6. 打印与响应式优化 (@media print)
+   ========================================================================== */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .top-bar, .sidebar, #read-progress, .box-sandbox-presets, .box-sim-checklist, .btn-icon {
+    display: none !important;
+  }
+  .main-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+  .card-summary, .box-diagram-wrapper, .box-sandbox, pre, table {
+    border: 1px solid #cccccc !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+  a {
+    text-decoration: none !important;
+    color: #000000 !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- 阅读进度指示条 -->
+<div id="read-progress"></div>
+
+<!-- 页面顶栏 -->
+<header class="top-bar">
+  <div class="top-bar-title">
+    <span>AI 原生工程实操</span>
+    <span class="top-bar-badge">EVALS 架构指南</span>
+    <span style="font-size:0.85rem; color:var(--aike-text-muted); font-weight:400;">系统化评测 Agent Skills</span>
+  </div>
+  <div class="top-bar-actions">
+    <button class="btn-icon" id="btn-theme-toggle" title="切换暗黑/明亮主题">
+      <span>🌓 主题切换</span>
+    </button>
+    <button class="btn-icon" id="btn-print" title="打印或导出 PDF">
+      <span>🖨️ 打印报告</span>
+    </button>
+  </div>
+</header>
+
+<!-- 整体布局：侧边栏目录 + 正文内容 -->
+<div style="position:relative; width:100%;">
+
+  <!-- 侧边导航目录 (桌面宽屏贴左，移动端隐藏) -->
+  <aside class="sidebar">
+    <nav class="toc-card">
+      <div class="toc-header">
+        <span>文档大纲目录</span>
+        <span style="font-size:0.75rem; color:var(--aike-accent);">6 步闭环</span>
+      </div>
+      <ul class="toc-list">
+        <li class="toc-item"><a href="#sec-overview" class="toc-link">导读：摆脱凭感觉的困境</a></li>
+        <li class="toc-item"><a href="#sec-pipeline" class="toc-link">全景：双层 Grader 评测流水线</a></li>
+        <li class="toc-item"><a href="#sec-step1" class="toc-link">步骤 1：定义四维成功标准</a></li>
+        <li class="toc-item"><a href="#sec-step2" class="toc-link">步骤 2：编写可评测的 Skill</a></li>
+        <li class="toc-item"><a href="#sec-step3" class="toc-link">步骤 3：人工试跑与隐藏假设</a></li>
+        <li class="toc-item"><a href="#sec-step4" class="toc-link">步骤 4：正反样本微型评测集</a></li>
+        <li class="toc-item"><a href="#sec-planner" class="toc-link">沙盘：Eval 方案与断言生成器</a></li>
+        <li class="toc-item"><a href="#sec-step5" class="toc-link">步骤 5：JSONL 与确定性断言</a></li>
+        <li class="toc-item"><a href="#sec-step6" class="toc-link">步骤 6：只读 Codex Rubric 评分</a></li>
+        <li class="toc-item"><a href="#sec-advanced" class="toc-link">进阶：成熟体系的 6 大监控</a></li>
+        <li class="toc-item"><a href="#sec-conclusion" class="toc-link">结语：工程化迭代基座</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- 正文阅读容器 -->
+  <main class="main-content">
+
+    <!-- 标题与题头元数据 -->
+    <header class="article-header">
+      <div class="article-category">
+        <span>Agentic Engineering / Robust Evaluation</span>
+      </div>
+      <h1 class="article-title">如何系统评测 Agent Skills：从触发用例到自动化评分的完整指南</h1>
+      <p class="article-subtitle">
+        基于 OpenAI 官方实操指南的工程化提炼。用“四维标准定义、结构化 Front Matter、10–20 条正反样本微型集、确定性 JSONL 轨迹检查、只读 Codex Rubric 评分”六步搭出防回归测试闭环。
+      </p>
+      <div class="article-meta">
+        <div class="meta-item"><span>📅 基准定稿：2026-09-14</span></div>
+        <div class="meta-item"><span>🛠️ 执行底座：Codex Exec + JSONL Event Stream</span></div>
+        <div class="meta-item"><span>🎯 核心目标：阻断能力倒退 (Zero Regression)</span></div>
+        <div class="meta-item"><span>📊 交付形态：零依赖自包含工程专著</span></div>
+      </div>
+    </header>
+
+    <!-- 导读核心要点卡片网格 -->
+    <section id="sec-overview">
+      <h2>导读：摆脱凭感觉调整的经验陷阱</h2>
+      <p>
+        开发 Agent Skill 时，最普遍的困扰是改动往往凭感觉判断：换了一版提示词，某些用例看似更顺畅，但你很难确认改动是否真的变好，更难察觉倒退（Regression）——原本该触发的场景不再响应、关键执行步骤被遗漏，或者工作区残留了临时文件。摆脱这种主观推测的解决办法，是建立可比较的评测机制（Evals），用可重复执行、可横向比较的运行记录判断效果变化并及时发现回归。
+      </p>
+      <p>
+        Skill 本质上是一组组织有序的提示词与指令集（Prompts and Instructions）。针对 Skill 的评测，类似于面向智能体的轻量级端到端集成测试：<strong>输入目标 Prompt → 完整捕获 Agent 执行过程（Trace 轨迹与产生产物） → 运行针对性规则检查 → 输出可跨版本横向对比的分数。</strong>
+      </p>
+
+      <div class="box-summary-grid">
+        <div class="card-summary">
+          <div class="card-summary-title">四维成功标准</div>
+          <div class="card-summary-text">明确结果目标、过程目标、风格目标与效率目标，区分硬性必过项（Must-pass）与风格约束。</div>
+        </div>
+        <div class="card-summary">
+          <div class="card-summary-title">暴露隐藏假设</div>
+          <div class="card-summary-text">人工试跑重点排查触发假设、环境假设与执行假设，固化为 <code>codex exec --full-auto</code> 命令。</div>
+        </div>
+        <div class="card-summary">
+          <div class="card-summary-title">10–20 条微型评测集</div>
+          <div class="card-summary-text">正向覆盖显式调用、隐式触发与带噪声上下文；必须配置负向对照样本以防御误触发。</div>
+        </div>
+        <div class="card-summary">
+          <div class="card-summary-title">双层 Grader 漏斗</div>
+          <div class="card-summary-text">底层用 JSONL 事件流确定性断言命令与磁盘文件；上层用只读 Codex + JSON Schema 审查代码风格。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 全景双层流水线图表 -->
+    <section id="sec-pipeline">
+      <h2>全景架构：Agent Skill 自动化评测双层闭环流水线</h2>
+      <p>
+        将评测落到实处可以分为六个步骤：定义成功标准、写出可评测的 Skill、人工试跑并暴露隐藏假设、建立 10–20 条包含正反样本的微型评测集、用 JSONL 和确定性 grader 检查行为与产物，以及用只读 Codex 与 JSON Schema 做 rubric-based grading。
+      </p>
+
+      <div class="box-diagram-wrapper">
+        <div class="box-diagram-title">
+          <span>📐 架构图 1：端到端评测流水线与双层漏斗拦截机制</span>
+        </div>
+        <div class="box-diagram-desc">
+          输入层分发四类 Prompt；执行层通过 codex exec 输出结构化 JSONL 与磁盘工件；校验层先由轻量脚本执行确定性硬指标断言，通过后再由只读模型进行 Rubric 风格审查。
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 340" width="100%" height="auto" class="tech-diagram" role="img" aria-label="Agent Skill 自动化评测双层闭环流水线">
+  <defs>
+    <linearGradient id="grad-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2886A" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#D97757" stop-opacity="0.08"/>
+    </linearGradient>
+    <linearGradient id="grad-cyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06B6D4" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#38BDF8" stop-opacity="0.08"/>
+    </linearGradient>
+    <linearGradient id="grad-emerald" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#34D399" stop-opacity="0.08"/>
+    </linearGradient>
+    <marker id="arrow-flow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#D97757"/>
+    </marker>
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#06B6D4"/>
+    </marker>
+  </defs>
+
+  <!-- 阶段背景分栏底衬 -->
+  <rect x="15" y="20" width="210" height="295" rx="10" fill="var(--aike-surface-2)" stroke="var(--aike-border)" stroke-width="1"/>
+  <rect x="245" y="20" width="220" height="295" rx="10" fill="var(--aike-surface-2)" stroke="var(--aike-border)" stroke-width="1"/>
+  <rect x="485" y="20" width="225" height="295" rx="10" fill="var(--aike-surface-2)" stroke="var(--aike-border)" stroke-width="1"/>
+  <rect x="730" y="20" width="215" height="295" rx="10" fill="var(--aike-surface-2)" stroke="var(--aike-border)" stroke-width="1"/>
+
+  <!-- 顶部栏目题头 -->
+  <text x="120" y="48" fill="#E2886A" font-size="14" font-weight="700" text-anchor="middle" font-family="var(--aike-font-sans)">阶段 1: 用例输入注入</text>
+  <text x="355" y="48" fill="#06B6D4" font-size="14" font-weight="700" text-anchor="middle" font-family="var(--aike-font-sans)">阶段 2: 轨迹与产物捕获</text>
+  <text x="597" y="48" fill="#10B981" font-size="14" font-weight="700" text-anchor="middle" font-family="var(--aike-font-sans)">阶段 3: 双层检验漏斗</text>
+  <text x="837" y="48" fill="#F59E0B" font-size="14" font-weight="700" text-anchor="middle" font-family="var(--aike-font-sans)">阶段 4: 决策与持续监控</text>
+
+  <!-- 模块 1：用例设计矩阵 -->
+  <rect x="30" y="65" width="180" height="52" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border-soft)" stroke-width="1"/>
+  <text x="42" y="86" fill="var(--aike-text)" font-size="12" font-weight="600" font-family="var(--aike-font-sans)">显式指名 (Explicit)</text>
+  <text x="42" y="104" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">带 &#36;skill-name，验基础链路</text>
+
+  <rect x="30" y="125" width="180" height="52" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border-soft)" stroke-width="1"/>
+  <text x="42" y="146" fill="var(--aike-text)" font-size="12" font-weight="600" font-family="var(--aike-font-sans)">隐式触发 (Implicit)</text>
+  <text x="42" y="164" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">陈述标准需求，验 Description</text>
+
+  <rect x="30" y="185" width="180" height="52" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border-soft)" stroke-width="1"/>
+  <text x="42" y="206" fill="var(--aike-text)" font-size="12" font-weight="600" font-family="var(--aike-font-sans)">上下文干扰 (Contextual)</text>
+  <text x="42" y="224" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">带业务轻度噪声，验提取稳定性</text>
+
+  <rect x="30" y="245" width="180" height="52" rx="6" fill="var(--aike-surface)" stroke="#EF4444" stroke-width="1" stroke-dasharray="3,3"/>
+  <text x="42" y="266" fill="#EF4444" font-size="12" font-weight="600" font-family="var(--aike-font-sans)">负向控制 (Negative)</text>
+  <text x="42" y="284" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">近义已有项目，坚决防误触发</text>
+
+  <!-- 连线 1 -> 2 -->
+  <path d="M 210 155 L 245 155" stroke="#D97757" stroke-width="2" marker-end="url(#arrow-flow)" fill="none"/>
+
+  <!-- 模块 2：Codex Exec 执行引擎与产物 -->
+  <rect x="260" y="70" width="190" height="75" rx="8" fill="url(#grad-cyan)" stroke="#06B6D4" stroke-width="1.5"/>
+  <text x="272" y="94" fill="#06B6D4" font-size="13" font-weight="700" font-family="var(--aike-font-mono)">codex exec --json</text>
+  <text x="272" y="114" fill="var(--aike-text)" font-size="11" font-family="var(--aike-font-sans)">标准输出 (stdout) 结构化流</text>
+  <text x="272" y="132" fill="var(--aike-text-muted)" font-size="10" font-family="var(--aike-font-sans)">--full-auto 最小权限执行</text>
+
+  <!-- 分流为两路产物 -->
+  <rect x="260" y="165" width="190" height="60" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border)" stroke-width="1"/>
+  <text x="272" y="187" fill="var(--aike-text)" font-size="12" font-weight="600" font-family="var(--aike-font-sans)">📄 JSONL 事件轨迹流</text>
+  <text x="272" y="208" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-mono)">item.started / command_execution</text>
+
+  <rect x="260" y="238" width="190" height="60" rx="6" fill="var(--aike-surface)" stroke="var(--aike-border)" stroke-width="1"/>
+  <text x="272" y="260" fill="var(--aike-text)" font-size="12" font-weight="600" font-family="var(--aike-font-sans)">💾 磁盘真实构建工件</text>
+  <text x="272" y="281" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-mono)">package.json, src/*, vite.config</text>
+
+  <!-- 连线 2 -> 3 -->
+  <path d="M 450 195 L 485 140" stroke="#06B6D4" stroke-width="2" marker-end="url(#arrow-cyan)" fill="none"/>
+  <path d="M 450 268 L 485 240" stroke="#06B6D4" stroke-width="2" marker-end="url(#arrow-cyan)" fill="none"/>
+
+  <!-- 模块 3：两层漏斗 -->
+  <!-- Layer 1: 确定性 Grader -->
+  <rect x="500" y="65" width="195" height="110" rx="8" fill="url(#grad-emerald)" stroke="#10B981" stroke-width="1.5"/>
+  <text x="512" y="90" fill="#10B981" font-size="13" font-weight="700" font-family="var(--aike-font-sans)">Layer 1: 确定性断言</text>
+  <text x="512" y="112" fill="var(--aike-text)" font-size="11" font-family="var(--aike-font-sans)">• 检查是否真实调用 npm install</text>
+  <text x="512" y="132" fill="var(--aike-text)" font-size="11" font-family="var(--aike-font-sans)">• 检查关键产物 package.json 是否存在</text>
+  <text x="512" y="152" fill="#10B981" font-size="11" font-weight="600" font-family="var(--aike-font-sans)">硬性门禁：全 true 才能进入下层</text>
+
+  <!-- Layer 2: 模型审查 -->
+  <rect x="500" y="190" width="195" height="110" rx="8" fill="var(--aike-surface)" stroke="#D97757" stroke-width="1.5"/>
+  <text x="512" y="215" fill="#E2886A" font-size="13" font-weight="700" font-family="var(--aike-font-sans)">Layer 2: 只读 Codex 审查</text>
+  <text x="512" y="236" fill="var(--aike-text)" font-size="11" font-family="var(--aike-font-mono)">--output-schema rubric.json</text>
+  <text x="512" y="256" fill="var(--aike-text)" font-size="11" font-family="var(--aike-font-sans)">• 规范性：函数组件与目录架构</text>
+  <text x="512" y="276" fill="var(--aike-text)" font-size="11" font-family="var(--aike-font-sans)">• 样式约束：Tailwind 原生类</text>
+
+  <!-- 连线 3 -> 4 -->
+  <path d="M 695 120 L 730 120" stroke="#10B981" stroke-width="2" marker-end="url(#arrow-flow)" fill="none"/>
+  <path d="M 695 245 L 730 245" stroke="#D97757" stroke-width="2" marker-end="url(#arrow-flow)" fill="none"/>
+
+  <!-- 模块 4：决策输出与进阶监控 -->
+  <rect x="745" y="65" width="185" height="110" rx="8" fill="var(--aike-surface)" stroke="var(--aike-border)" stroke-width="1"/>
+  <text x="757" y="90" fill="var(--aike-text)" font-size="13" font-weight="700" font-family="var(--aike-font-sans)">结构化评分与 CI 门禁</text>
+  <text x="757" y="112" fill="var(--aike-text)" font-size="11" font-family="var(--aike-font-sans)">• overall_pass: true/false</text>
+  <text x="757" y="132" fill="var(--aike-text)" font-size="11" font-family="var(--aike-font-sans)">• score: 0 ~ 100 分量化追踪</text>
+  <text x="757" y="152" fill="#10B981" font-size="11" font-weight="600" font-family="var(--aike-font-sans)">✅ 拦截倒退 (Regression)</text>
+
+  <rect x="745" y="190" width="185" height="110" rx="8" fill="var(--aike-surface)" stroke="var(--aike-border)" stroke-width="1"/>
+  <text x="757" y="215" fill="#F59E0B" font-size="13" font-weight="700" font-family="var(--aike-font-sans)">进阶监控体系 (6大方向)</text>
+  <text x="757" y="236" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">1. 命令抖动与循环内耗</text>
+  <text x="757" y="254" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">2. Token 上下文膨胀追踪</text>
+  <text x="757" y="272" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">3. 编译校验与纯净度检查</text>
+</svg>
+      </div>
+    </section>
+
+    <!-- 步骤 1：定义成功标准 -->
+    <section id="sec-step1">
+      <h2>步骤 1：定义成功标准</h2>
+      <p>
+        很多 Skill 难以评测的根源，在于一开始没有明确界定何为“执行成功”。如果只有模糊的期望，最终验收往往只能依赖随意的人工肉眼观察。第一步要做的是把成功标准清晰定义下来，拆解为聚焦在必过项（Must-pass）上的具体维度。
+      </p>
+      <p>
+        具体做法是在动笔编写或重构前，列出一份精简的检查清单，明确区分四个目标维度：
+      </p>
+
+      <div class="box-table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 20%;">目标维度</th>
+              <th style="width: 40%;">核心关注点与审查提问</th>
+              <th style="width: 40%;">实战脚手架示例 (setup-demo-app)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>结果目标<br>(Outcome goals)</strong></td>
+              <td>任务是否最终完成？构建的应用能否正常跑起来？产物是否完整落地在预期路径？</td>
+              <td><code>package.json</code> 存在；<code>npm run dev</code> 能够无报错成功启动并提供预览。</td>
+            </tr>
+            <tr>
+              <td><strong>过程目标<br>(Process goals)</strong></td>
+              <td>Agent 是否真正调用了对应的 Skill？是否按照预期顺序执行了指定工具和命令？</td>
+              <td>底层必须真正调用 <code>npm install</code> 安装依赖，并在配置 Tailwind 前完成 Vite 初始化。</td>
+            </tr>
+            <tr>
+              <td><strong>风格目标<br>(Style goals)</strong></td>
+              <td>生成的文件结构、组件写法、样式方案是否符合既定技术规范与整洁标准？</td>
+              <td>仅使用 TypeScript 函数式组件；严格采用 Tailwind 原子工具类，禁止引入额外 CSS Modules。</td>
+            </tr>
+            <tr>
+              <td><strong>效率目标<br>(Efficiency goals)</strong></td>
+              <td>执行过程中是否存在无效重试（比如反复尝试同类错误命令，或者消耗了异常庞大的 Token）？</td>
+              <td>无死循环报错；单次任务 Token 消耗在合理基线内；避免重复调用多次 <code>npm install</code>。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        判断通过的标准在于硬性指标是否全部达标。例如在脚手架场景中，“是否执行了 <code>npm install</code>”和“是否生成了 <code>package.json</code>”属于过程与结果层面的硬性检查，必须严格通过；而“目录结构是否规整”“样式是否遵循约束”则作为风格标准逐项核对。
+      </p>
+      <p>
+        完成这步后，你会得到一份涵盖四个维度的结构化验收检查清单（Checklist）。它为后续编写测试断言提供了明确的靶心，评测的核心目的就是在早期暴露具体的回归信号，而不是给出一个模棱两可的综合合格率。
+      </p>
+    </section>
+
+    <!-- 步骤 2：写出可评测的 Skill -->
+    <section id="sec-step2">
+      <h2>步骤 2：写出可评测的 Skill</h2>
+      <p>
+        要让评测能够运行，前提是 Skill 本身具有清晰可检验的行为边界。第二步要做的是编写出符合规范、包含明确验收条件的 Skill 骨架。
+      </p>
+      <p>
+        在 Codex 体系中，一个 Skill 本质上是一个包含 <code>SKILL.md</code> 文件的独立目录。文件开头必须包含由 <code>name</code> 和 <code>description</code> 组成的 YAML Front Matter，其后则是规范 Agent 行为的 Markdown 指令，以及可选的配套脚本或资源。
+      </p>
+      <blockquote>
+        <strong>触发中枢：</strong>这里的 <code>name</code> 和 <code>description</code> 是整个 Skill 最核心的触发信号。Codex 正是依据这两项元数据，来判断当前任务是否应当调用该 Skill，并决定何时将 <code>SKILL.md</code> 中的完整正文注入到上下文窗口中。如果命名与描述过于宽泛或语义过载，Skill 就无法稳定激活。
+      </blockquote>
+      <p>
+        如果从零开始，可以直接在终端调用官方提供的脚手架技能：
+      </p>
+      <pre><code>&#36;skill-creator</code></pre>
+      <p>
+        脚手架会通过交互引导你明确 Skill 的职责、触发时机，以及属于纯指令型（Instruction-only）还是脚本辅助型（Script-backed）。这里的默认建议是优先采用纯指令型设计。
+      </p>
+
+      <h3>实战示例：统一规范的 Demo 搭建技能 (setup-demo-app)</h3>
+      <p>
+        我们以一个名为 <code>setup-demo-app</code> 的最小化实战 Skill 为例。它的职责是在统一的规范下，稳定初始化一个轻量 React 演示项目：采用 Vite 的 React + TypeScript 模板，通过官方 Vite 插件配置 Tailwind CSS，遵循精简的目录架构，并给出可直接核验的完成定义（Definition of Done）。
+      </p>
+      <p>
+        根据生效范围的不同，你可以将下方内容保存至两个路径之一：
+      </p>
+      <ul>
+        <li>仓库级（Repo-scoped）：<code>.codex/skills/setup-demo-app/SKILL.md</code></li>
+        <li>用户全局（User-scoped）：<code>~/.codex/skills/setup-demo-app/SKILL.md</code></li>
+      </ul>
+
+      <div class="code-header">
+        <span>SKILL.md (setup-demo-app 标准模板)</span>
+        <span>MARKDOWN / YAML</span>
+      </div>
+      <pre><code>---
+name: setup-demo-app
+description: Scaffold a Vite + React + Tailwind demo app with a small, consistent project structure.
+---
+
+## When to use this
+
+Use when you need a fresh demo app for quick UI experiments or reproductions.
+
+## What to build
+
+Create a Vite React TypeScript app and configure Tailwind. Keep it minimal.
+
+Project structure after setup:
+
+- src/
+  - main.tsx (entry)
+  - App.tsx (root UI)
+  - components/
+    - Header.tsx
+    - Card.tsx
+  - index.css (Tailwind import)
+- index.html
+- package.json
+
+Style requirements:
+
+- TypeScript components
+- Functional components only
+- Tailwind classes for styling (no CSS modules)
+- No extra UI libraries
+
+## Steps
+
+1. Scaffold with Vite using the React TS template:
+   npm create vite@latest demo-app -- --template react-ts
+
+2. Install dependencies:
+   cd demo-app
+   npm install
+
+3. Install and configure Tailwind using the Vite plugin.
+   - npm install tailwindcss @tailwindcss/vite
+   - Add the tailwind plugin to vite.config.ts
+   - In src/index.css, replace contents with:
+     @import "tailwindcss";
+
+4. Implement the minimal UI:
+   - Header: app title and short subtitle
+   - Card: reusable card container
+   - App: render Header + 2 Cards with placeholder text
+
+## Definition of done
+
+- npm run dev starts successfully
+- package.json exists
+- src/components/Header.tsx and src/components/Card.tsx exist</code></pre>
+
+      <p>
+        通过明确的步骤拆解与完成定义（Definition of done），这一步产出了一份结构规范的 <code>SKILL.md</code> 文件。判断它是否合格，关键看输出边界与完成条件是否清晰可核验；如果规则模糊多变，后续的自动化评测就会失去判定依据。
+      </p>
+    </section>
+
+    <!-- 步骤 3：人工试跑并暴露隐藏假设 -->
+    <section id="sec-step3">
+      <h2>步骤 3：人工试跑并暴露隐藏假设</h2>
+      <p>
+        写好 <code>SKILL.md</code> 之后，不要急于编写大批量脚本，这一步要做的是在真实或临时沙盒环境中手动试跑，观察 Agent 在哪些环节偏离预期，从而暴露并修复 Skill 中未明说的隐藏假设。
+      </p>
+      <p>
+        你可以先在交互界面中通过 <code>/skills</code> 斜杠命令选择，或者直接在提示词中使用 <code>&#36;setup-demo-app</code> 显式引用该技能。这一阶段的重点是系统排查出三类常见的隐藏假设：
+      </p>
+
+      <div class="box-table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 24%;">隐藏假设分类</th>
+              <th style="width: 38%;">典型偏离表现 (Failure Mode)</th>
+              <th style="width: 38%;">修复方案与提示词加固</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>触发假设<br>(Triggering Assumptions)</strong></td>
+              <td>本该触发的通用提问（如“帮我搭一个快速 React demo”）未能命中；或临近场景（如已有项目“帮我配个 Tailwind”）被误触发。</td>
+              <td>优化 Front Matter 中的 <code>description</code>，清晰划定使用边界，在 <code>When to use this</code> 中明确区分新建与修改。</td>
+            </tr>
+            <tr>
+              <td><strong>环境假设<br>(Environment Assumptions)</strong></td>
+              <td>Skill 默认当前处于完全干净的空目录，或者默认操作系统必然安装了 <code>npm</code> 且比其他包管理器更优先。</td>
+              <td>在步骤中增加前置校验，或明确指示使用指定包管理器；对目标工作区目录结构做存在性检测。</td>
+            </tr>
+            <tr>
+              <td><strong>执行假设<br>(Execution Assumptions)</strong></td>
+              <td>Agent 误以为依赖已经在全局装好而直接跳过了 <code>npm install</code>，或者在 Vite 项目还没初始化完成前就急着去配 Tailwind。</td>
+              <td>将关键步骤编号并声明依赖关系，在 <code>Definition of done</code> 中将命令执行结果列为硬性验收条件。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        当你准备把这些排查过程固化下来时，应当从交互式界面切换到无界面的自动化命令行工具 <code>codex exec</code>。该命令将执行进度流式输出到标准错误（<code>stderr</code>），而仅将最终产出输出到标准输出（<code>stdout</code>），适合脚本调度与 CI 集成。
+      </p>
+      <p>
+        由于脚手架搭建任务涉及磁盘文件的写入与创建，执行时需要显式附加 <code>--full-auto</code> 权限标识：
+      </p>
+      <pre><code>codex exec --full-auto   'Use the $setup-demo-app skill to create the project in this directory.'</code></pre>
+      <p>
+        在自动化调用时，应遵循最小权限原则，仅授予完成任务所需的最低权限范围，并检查是否出现超出预期的权限升级。这一步不是要求首次试跑就无报错，而是要把偏离预期的地方记录下来。完成排查后，你会得到一组边界问题与可重复执行的调用命令，它们构成下一步评测集的核心来源。
+      </p>
+    </section>
+
+    <!-- 步骤 4：建立 10–20 条包含正反样本的微型评测集 -->
+    <section id="sec-step4">
+      <h2>步骤 4：建立 10–20 条包含正反样本的微型评测集</h2>
+      <p>
+        评测 Agent 不需要一上来就堆砌几百上千条庞大基准。对于单个独立 Skill，维持一套包含 10 到 20 条代表性用例的微型评测集，就足以在早期发现有价值的回归信号。
+      </p>
+      <p>
+        这一步要做的是把前期排查到的边界沉淀为测试用例。我们可以创建一个精简的 CSV 文件（例如 <code>evals/setup-demo-app.prompts.csv</code>），用表格来维护触发预期与具体 Prompt，后续遇到新问题时持续追加新行：
+      </p>
+
+      <div class="code-header">
+        <span>evals/setup-demo-app.prompts.csv</span>
+        <span>CSV DATASET</span>
+      </div>
+      <pre><code>id,should_trigger,prompt
+test-01,true,"Create a demo app named `devday-demo` using the $setup-demo-app skill"
+test-02,true,"Set up a minimal React demo app with Tailwind for quick UI experiments"
+test-03,true,"Create a small demo app to showcase the Responses API"
+test-04,false,"Add Tailwind styling to my existing React app"</code></pre>
+
+      <p>这四条用例分别代表了不可或缺的四类测试意图：</p>
+      <ul>
+        <li><strong>显式调用（Explicit invocation，如 <code>test-01</code>）：</strong>提示词中明确带上了 <code>&#36;setup-demo-app</code>。它用于验证在用户明确指名时，底层调用链路是否畅通，确保后续修改配置时没有破坏基本激活能力。</li>
+        <li><strong>隐式触发（Implicit invocation，如 <code>test-02</code>）：</strong>完全不提 Skill 名称，只陈述该技能针对的标准使用场景。它用于验证 Front Matter 中的 <code>name</code> 和 <code>description</code> 是否足够清晰，能让模型在日常对话中自主选择该技能。</li>
+        <li><strong>带上下文的复杂触发（Contextual invocation，如 <code>test-03</code>）：</strong>加入了具体业务场景（例如接入 Responses API），引入现实世界中的轻度噪声。它用于验证在存在额外干扰信息时，模型能否依然准确提取脚手架需求并保持统一的代码结构。</li>
+        <li><strong>负向控制样本（Negative control，如 <code>test-04</code>）：</strong>用于防御误触发（False Positives）。用户询问的是“给已有项目添加 Tailwind 样式”，语义上与 Skill 描述高度相近，但此时绝不能触发新建脚手架动作。缺少负向控制用例，往往会导致 Agent 在用户修改既有代码时误覆盖整个工程。</li>
+      </ul>
+
+      <div class="box-diagram-wrapper">
+        <div class="box-diagram-title">
+          <span>📐 架构图 2：评测样本四象限设计矩阵 (4-Quadrant Eval Matrix)</span>
+        </div>
+        <div class="box-diagram-desc">
+          横轴为触发预期（Should Trigger：False vs True），纵轴为指名方式（Implicit vs Explicit）。四象限协同形成严密的触发与防误触防护网。
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" width="100%" height="auto" class="tech-diagram" role="img" aria-label="评测用例四象限设计矩阵">
+  <defs>
+    <marker id="matrix-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--aike-text-muted)"/>
+    </marker>
+  </defs>
+
+  <!-- 坐标系背景 -->
+  <rect x="30" y="20" width="900" height="320" rx="10" fill="var(--aike-surface-2)" stroke="var(--aike-border)" stroke-width="1"/>
+
+  <!-- 坐标轴 -->
+  <line x1="100" y1="180" x2="860" y2="180" stroke="var(--aike-border-strong)" stroke-width="2" marker-end="url(#matrix-arrow)"/>
+  <text x="870" y="185" fill="var(--aike-text-muted)" font-size="12" font-weight="600" font-family="var(--aike-font-sans)">触发预期 (Should Trigger)</text>
+  <text x="130" y="172" fill="#EF4444" font-size="12" font-weight="700" font-family="var(--aike-font-sans)">← 负向拦截 (False)</text>
+  <text x="730" y="172" fill="#10B981" font-size="12" font-weight="700" font-family="var(--aike-font-sans)">正向激活 (True) →</text>
+
+  <!-- Y 轴 -->
+  <line x1="480" y1="310" x2="480" y2="45" stroke="var(--aike-border-strong)" stroke-width="2" marker-end="url(#matrix-arrow)"/>
+  <text x="490" y="42" fill="var(--aike-text-muted)" font-size="12" font-weight="600" font-family="var(--aike-font-sans)">指名程度 ↑ 显式指名 (Explicit)</text>
+  <text x="490" y="325" fill="var(--aike-text-muted)" font-size="12" font-weight="600" font-family="var(--aike-font-sans)">↓ 隐式陈述 (Implicit)</text>
+
+  <!-- 象限 I：右上角 - 显式正向调用 -->
+  <rect x="520" y="45" width="370" height="115" rx="8" fill="var(--aike-surface)" stroke="#E2886A" stroke-width="1.5"/>
+  <text x="535" y="70" fill="#E2886A" font-size="14" font-weight="700" font-family="var(--aike-font-sans)">象限 I: 显式调用 (Explicit Invocation)</text>
+  <text x="535" y="92" fill="var(--aike-text)" font-size="12" font-family="var(--aike-font-sans)">• 典型用例：Create a demo app using &#36;setup-demo-app</text>
+  <text x="535" y="112" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">• 检验靶心：验证用户明确指定时，底层执行链路是否畅通</text>
+  <text x="535" y="132" fill="#10B981" font-size="11" font-weight="600" font-family="var(--aike-font-sans)">• 验收标准：Skill 被无损加载，全流程命令顺畅执行</text>
+
+  <!-- 象限 II：右下角 - 隐式触发与上下文用例 -->
+  <rect x="520" y="195" width="370" height="120" rx="8" fill="var(--aike-surface)" stroke="#06B6D4" stroke-width="1.5"/>
+  <text x="535" y="220" fill="#06B6D4" font-size="14" font-weight="700" font-family="var(--aike-font-sans)">象限 II: 隐式触发与带噪声上下文</text>
+  <text x="535" y="242" fill="var(--aike-text)" font-size="12" font-family="var(--aike-font-sans)">• 典型用例：Set up a minimal React demo app with Tailwind</text>
+  <text x="535" y="262" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">• 检验靶心：验证 name 与 description 的自然语义匹配召回力</text>
+  <text x="535" y="282" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">• 复杂用例：引入 Responses API 等业务上下文，测试抗噪韧性</text>
+  <text x="535" y="302" fill="#10B981" font-size="11" font-weight="600" font-family="var(--aike-font-sans)">• 验收标准：无指名下自主命中，在业务噪声中保持规范骨架</text>
+
+  <!-- 象限 III：左下角 - 核心防线：负向控制样本 -->
+  <rect x="70" y="195" width="370" height="120" rx="8" fill="var(--aike-surface)" stroke="#EF4444" stroke-width="2"/>
+  <text x="85" y="220" fill="#EF4444" font-size="14" font-weight="700" font-family="var(--aike-font-sans)">象限 III: 负向控制样本 (Negative Control)</text>
+  <text x="85" y="242" fill="var(--aike-text)" font-size="12" font-family="var(--aike-font-sans)">• 典型用例：Add Tailwind styling to my existing React app</text>
+  <text x="85" y="262" fill="#EF4444" font-size="11" font-weight="600" font-family="var(--aike-font-sans)">• 防御重点：防御假阳性（False Positives），防止意外覆盖</text>
+  <text x="85" y="282" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">• 核心机制：词义高度贴近（React/Tailwind），但绝不可脚手架重建</text>
+  <text x="85" y="302" fill="#EF4444" font-size="11" font-weight="600" font-family="var(--aike-font-sans)">• 验收标准：断言 Agent 坚决不激活 setup-demo-app</text>
+
+  <!-- 象限 IV：左上角 - 显式否定与越界边界 -->
+  <rect x="70" y="45" width="370" height="115" rx="8" fill="var(--aike-surface)" stroke="var(--aike-border)" stroke-width="1.5"/>
+  <text x="85" y="70" fill="var(--aike-text-muted)" font-size="14" font-weight="700" font-family="var(--aike-font-sans)">象限 IV: 显式否定与边界控制</text>
+  <text x="85" y="92" fill="var(--aike-text)" font-size="12" font-family="var(--aike-font-sans)">• 典型用例：Do NOT use &#36;setup-demo-app, configure pure HTML</text>
+  <text x="85" y="112" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">• 检验靶心：验证 Agent 遵循用户明确排除性约束的能力</text>
+  <text x="85" y="132" fill="var(--aike-text-muted)" font-size="11" font-family="var(--aike-font-sans)">• 验收标准：指令优先级正确覆盖，杜绝硬编码强行插入</text>
+</svg>
+      </div>
+
+      <p>
+        将正向隐式调用与负向控制对照结合，判断通过的标准就是正向场景稳定激活且步骤完整，负向场景坚决不误触发。完成这步后，你会得到一份结构化的评测数据集文件（<code>evals/setup-demo-app.prompts.csv</code>）。
+      </p>
+    </section>
+
+    <!-- 交互沙盘：Eval Planner -->
+    <section id="sec-planner">
+      <h2>交互实战沙盘：Eval 评测方案生成器与断言矩阵</h2>
+      <p>
+        填入你的 Skill 名称、目标任务、必须执行的关键命令和必须生成的文件产物，沙盘将实时为你生成四类测试 Prompt 矩阵、确定性 Node.js 检验断言与评分 Schema，并支持动态模拟评测判定：
+      </p>
+
+      <div class="box-sandbox">
+        <div class="box-sandbox-header">
+          <div class="box-sandbox-title">
+            <span>⚙️ Eval Planner 自动化规划器</span>
+            <span class="top-bar-badge">INTERACTIVE COMPONENT</span>
+          </div>
+          <div class="box-sandbox-presets">
+            <span style="font-size:0.8rem; color:var(--aike-text-faint);">快速预设：</span>
+            <button class="btn-preset active" id="btn-preset-demo">React脚手架</button>
+            <button class="btn-preset" id="btn-preset-git">Git提交规范</button>
+            <button class="btn-preset" id="btn-preset-data">数据清洗工具</button>
+          </div>
+        </div>
+
+        <!-- 输入表单 -->
+        <div class="grid-inputs">
+          <div class="field-group">
+            <label class="field-label" for="ipt-skill-name">Skill 名称 (Front Matter name)</label>
+            <input type="text" class="input-text" id="ipt-skill-name" value="setup-demo-app">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="ipt-skill-desc">核心目标场景 (description)</label>
+            <input type="text" class="input-text" id="ipt-skill-desc" value="Scaffold a Vite + React + Tailwind demo app with a small, consistent project structure.">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="ipt-skill-cmd">必须执行的关键命令 (逗号分隔)</label>
+            <input type="text" class="input-text" id="ipt-skill-cmd" value="npm install, npm run dev">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="ipt-skill-file">必须生成的关键产物文件 (逗号分隔)</label>
+            <input type="text" class="input-text" id="ipt-skill-file" value="package.json, src/App.tsx, src/components/Header.tsx">
+          </div>
+        </div>
+
+        <!-- 动态生成的四类 Prompt 矩阵 -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3 style="margin:0; font-size:1.05rem;">🎯 生成的四类测试 Prompt 矩阵</h3>
+          <button class="btn-icon" id="btn-copy-prompts" title="复制所有生成的提示词">📋 复制四类 Prompts</button>
+        </div>
+
+        <div class="grid-prompts-matrix">
+          <div class="card-prompt-item">
+            <span class="card-prompt-tag tag-explicit">1. 显式指名调用 (Explicit)</span>
+            <div class="card-prompt-body" id="out-prompt-explicit">Create a demo app named `devday-demo` using the $setup-demo-app skill</div>
+          </div>
+          <div class="card-prompt-item">
+            <span class="card-prompt-tag tag-implicit">2. 隐式场景触发 (Implicit)</span>
+            <div class="card-prompt-body" id="out-prompt-implicit">Execute task: Scaffold a Vite + React + Tailwind demo app with a small, consistent project structure.</div>
+          </div>
+          <div class="card-prompt-item">
+            <span class="card-prompt-tag tag-contextual">3. 复杂带噪触发 (Contextual)</span>
+            <div class="card-prompt-body" id="out-prompt-contextual">In the current workspace context, execute Scaffold a Vite + React + Tailwind demo app with a small, consistent project structure. with production grade requirements</div>
+          </div>
+          <div class="card-prompt-item">
+            <span class="card-prompt-tag tag-negative">4. 负向控制样本 (Negative)</span>
+            <div class="card-prompt-body" id="out-prompt-negative">Configure environment or existing legacy module without invoking $setup-demo-app</div>
+          </div>
+        </div>
+
+        <!-- 确定性断言代码预览 -->
+        <h3 style="margin-top:20px; font-size:1.05rem;">💻 自动化 Grader 脚本断言预览 (Node.js)</h3>
+        <pre><code id="out-deterministic-code">// evals/run-setup-demo-app-evals.mjs
+import { spawnSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import path from "node:path";
+
+function runCodex(prompt, outJsonlPath) {
+  const res = spawnSync(
+    "codex",
+    ["exec", "--json", "--full-auto", prompt],
+    { encoding: "utf8" }
+  );
+  mkdirSync(path.dirname(outJsonlPath), { recursive: true });
+  writeFileSync(outJsonlPath, res.stdout, "utf8");
+  return { exitCode: res.status ?? 1, stderr: res.stderr };
+}
+
+// 确定性规则 1：检查是否执行了关键命令 (npm install)
+function checkRanCommand(events) {
+  return events.some(
+    (e) =>
+      (e.type === "item.started" || e.type === "item.completed") &&
+      e.item?.type === "command_execution" &&
+      typeof e.item?.command === "string" &&
+      e.item.command.includes("npm install")
+  );
+}
+
+// 确定性规则 2：检查关键文件是否已创建 (package.json)
+function checkFileExists(projectDir) {
+  return existsSync(path.join(projectDir, "package.json"));
+}
+
+// 执行测试与断言校验
+const projectDir = process.cwd();
+const tracePath = path.join(projectDir, "evals", "artifacts", "test-01.jsonl");
+const prompt = "Execute task using the $setup-demo-app skill";
+
+runCodex(prompt, tracePath);
+const events = readFileSync(tracePath, "utf8").split("\n").filter(Boolean).map(JSON.parse);
+
+console.log({
+  ranCommand: checkRanCommand(events),
+  hasFile: checkFileExists(projectDir)
+});</code></pre>
+
+        <!-- Schema 规则预览 -->
+        <h3 style="margin-top:20px; font-size:1.05rem;">📋 Rubric 评审 Schema 契约 (style-rubric.schema.json)</h3>
+        <pre><code id="out-schema-preview">{
+  "type": "object",
+  "properties": {
+    "overall_pass": {
+      "type": "boolean"
+    },
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "pass": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "pass",
+          "notes"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "overall_pass",
+    "score",
+    "checks"
+  ],
+  "additionalProperties": false
+}</code></pre>
+
+        <!-- 模拟评测执行 -->
+        <div class="box-simulation-panel">
+          <h4 style="font-size:0.95rem; margin-bottom:12px; color:var(--aike-text);">🧪 评测执行模拟演练器 (双层漏斗联动)</h4>
+          <div class="box-sim-checklist">
+            <label class="chk-label">
+              <input type="checkbox" class="chk-input" id="chk-sim-cmd" checked>
+              <span>关键命令已执行 (Layer 1 确定性)</span>
+            </label>
+            <label class="chk-label">
+              <input type="checkbox" class="chk-input" id="chk-sim-file" checked>
+              <span>关键文件已落地 (Layer 1 确定性)</span>
+            </label>
+            <label class="chk-label">
+              <input type="checkbox" class="chk-input" id="chk-sim-style" checked>
+              <span>代码结构符合 Rubric (Layer 2 模型审查)</span>
+            </label>
+            <label class="chk-label">
+              <input type="checkbox" class="chk-input" id="chk-sim-neg" checked>
+              <span>负向用例未误触发 (防御假阳性)</span>
+            </label>
+          </div>
+
+          <div class="box-sim-verdict-row">
+            <div>
+              <span style="font-size:0.85rem; color:var(--aike-text-muted);">综合裁决状态：</span>
+              <strong id="out-sim-verdict" style="font-size:1rem; color:var(--aike-emerald);">ALL PASS (通过)</strong>
+            </div>
+            <div>
+              <span style="font-size:0.85rem; color:var(--aike-text-muted);">综合量化评分：</span>
+              <span class="score-badge" id="out-sim-score">100</span>
+              <span style="font-size:0.85rem; color:var(--aike-text-faint);"> / 100 分</span>
+            </div>
+          </div>
+          <div style="font-size:0.84rem; color:var(--aike-text-muted); margin-top:8px;" id="out-sim-detail">4/4 项检查通过：确定性命令已执行、产物文件已生成、代码风格符合 Rubric 标准、负向控制样本未误触发。</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 步骤 5：用 JSONL 和确定性 grader 检查行为与产物 -->
+    <section id="sec-step5">
+      <h2>步骤 5：用 JSONL 和确定性 grader 检查行为与产物</h2>
+      <p>
+        要确凿验证 Agent 真的执行了底层步骤，而不是仅仅碰巧交出一份看似可用的代码，不能依赖主观推测。这一步要做的是通过确定性 grader 直接检验命令轨迹与磁盘产物。
+      </p>
+      <p>
+        实现这一点的关键是在运行 <code>codex exec</code> 时开启 <code>--json</code> 参数，标准输出（<code>stdout</code>）会转为按行分隔的 JSONL 结构化事件流。每一次底层 Shell 命令的调用，都会以 <code>item.started</code> 和 <code>item.completed</code> 事件清晰记录，且其 <code>item.type</code> 均为 <code>command_execution</code>。
+      </p>
+
+      <h3>自动化执行与检测脚本 (run-setup-demo-app-evals.mjs)</h3>
+      <p>
+        借助这一机制，我们可以编写一个轻量的 Node.js 脚本 <code>evals/run-setup-demo-app-evals.mjs</code>。运行该脚本会依次执行 Agent、捕获轨迹、解析 JSONL 事件，并直接断言命令记录与磁盘文件是否存在：
+      </p>
+
+      <div class="code-header">
+        <span>evals/run-setup-demo-app-evals.mjs</span>
+        <span>NODE.JS ES MODULE</span>
+      </div>
+      <pre><code>// evals/run-setup-demo-app-evals.mjs
+import { spawnSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import path from "node:path";
+
+function runCodex(prompt, outJsonlPath) {
+  const res = spawnSync(
+    "codex",
+    [
+      "exec",
+      "--json", // 核心参数：输出结构化 JSONL 事件流
+      "--full-auto", // 授予必要的文件系统修改权限
+      prompt,
+    ],
+    { encoding: "utf8" }
+  );
+
+  mkdirSync(path.dirname(outJsonlPath), { recursive: true });
+
+  // --json 模式下 stdout 即为标准的 JSONL 格式内容
+  writeFileSync(outJsonlPath, res.stdout, "utf8");
+
+  return { exitCode: res.status ?? 1, stderr: res.stderr };
+}
+
+function parseJsonl(jsonlText) {
+  return jsonlText
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+// 确定性规则 1：Agent 是否真正执行过包含 npm install 的命令？
+function checkRanNpmInstall(events) {
+  return events.some(
+    (e) =>
+      (e.type === "item.started" || e.type === "item.completed") &&
+      e.item?.type === "command_execution" &&
+      typeof e.item?.command === "string" &&
+      e.item.command.includes("npm install")
+  );
+}
+
+// 确定性规则 2：磁盘上是否真正创建了 package.json 文件？
+function checkPackageJsonExists(projectDir) {
+  return existsSync(path.join(projectDir, "package.json"));
+}
+
+// 单用例测试流程示例
+const projectDir = process.cwd();
+const tracePath = path.join(projectDir, "evals", "artifacts", "test-01.jsonl");
+
+const prompt =
+  "Create a demo app named demo-app using the $setup-demo-app skill";
+
+// 步骤 1：调用 CLI 执行任务，并将轨迹固化到磁盘
+runCodex(prompt, tracePath);
+
+// 步骤 2：读取轨迹事件并执行断言
+const events = parseJsonl(readFileSync(tracePath, "utf8"));
+
+console.log({
+  ranNpmInstall: checkRanNpmInstall(events),
+  hasPackageJson: checkPackageJsonExists(path.join(projectDir, "demo-app")),
+});</code></pre>
+
+      <p>
+        这套确定性检查的判断标准很直接：脚本输出中的 <code>ranNpmInstall</code> 与 <code>hasPackageJson</code> 等断言必须全部返回 <code>true</code>。运行后，你会得到一份保存在 <code>evals/artifacts/test-01.jsonl</code> 的完整轨迹产物以及清晰的布尔检验结果。如果某项检查失败，开发者无需猜测，可以直接打开 <code>.jsonl</code> 跟踪日志，按时间顺序查看记录下来的命令执行事件。
+      </p>
+    </section>
+
+    <!-- 步骤 6：用只读 Codex 与 JSON Schema 做 rubric-based grading -->
+    <section id="sec-step6">
+      <h2>步骤 6：用只读 Codex 与 JSON Schema 做 rubric-based grading</h2>
+      <p>
+        确定性代码断言能有效确认基础动作是否完成，但难以评估生成内容是否符合代码风格规范。例如：代码是否全部采用了函数式组件？Tailwind 是否严格使用了原子类而不是混入了 CSS Modules？组件目录结构划分是否严谨？
+      </p>
+      <p>
+        这一步要做的是在确定性检查后，引入第二道基于预定义标准的只读模型审查环节。具体做法是使用 <code>codex exec</code> 的 <code>--output-schema</code> 参数，强制模型输出符合特定 JSON Schema 的结构化评审数据，做到只读审查而不修改代码。
+      </p>
+
+      <h3>定义评审标准契约 Schema (style-rubric.schema.json)</h3>
+      <p>
+        我们先创建一份评分标准契约文件 <code>evals/style-rubric.schema.json</code>。在这份 Schema 中，顶层包含总体是否通过（<code>overall_pass</code>）与总体量化分值（<code>score</code>），具体检查维度则由逐项的通过判定（<code>pass</code>）与评审说明（`notes`）组成：
+      </p>
+
+      <div class="code-header">
+        <span>evals/style-rubric.schema.json</span>
+        <span>JSON SCHEMA 契约</span>
+      </div>
+      <pre><code>{
+  "type": "object",
+  "properties": {
+    "overall_pass": { "type": "boolean" },
+    "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "pass": { "type": "boolean" },
+          "notes": { "type": "string" }
+        },
+        "required": ["id", "pass", "notes"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["overall_pass", "score", "checks"],
+  "additionalProperties": false
+}</code></pre>
+
+      <h3>执行只读代码审查命令</h3>
+      <p>
+        脚手架生成完成后，再次调用 <code>codex exec</code> 指向该目录。此时不传 <code>--full-auto</code> 权限，只提供检查提示词与 Schema 路径，并将评分 JSON 存储到产物目录：
+      </p>
+      <pre><code>codex exec   "Evaluate the demo-app repository against these requirements:
+   - Vite + React + TypeScript project exists
+   - Tailwind is configured via @tailwindcss/vite and CSS imports tailwindcss
+   - src/components contains Header.tsx and Card.tsx
+   - Components are functional and styled with Tailwind utility classes (no CSS modules)
+   Return a rubric result as JSON with check ids: vite, tailwind, structure, style."   --output-schema ./evals/style-rubric.schema.json   -o ./evals/artifacts/test-01.style.json</code></pre>
+
+      <p>
+        审查结果会写入结构化 JSON：<code>overall_pass</code> 表示总体是否通过，<code>score</code> 用于跨版本比较，每个检查项则提供 <code>pass</code> 与 <code>notes</code>。如果团队另行设定分数阈值，可以在评测脚本中增加对应判断；原文示例本身没有规定统一阈值。这一步会输出评审报告文件 <code>evals/artifacts/test-01.style.json</code>。
+      </p>
+      <p>
+        通过 <code>--output-schema</code> 约定的输出不再是难以自动化解析的自然语言，而是可直接在 CI 或自动化评测流水线中合并、对比和追踪的结构化数据。如果在 GitHub Actions 中运行，官方提供的 Codex Action 原生支持在 <code>codex-args</code> 中透传该参数。
+      </p>
+    </section>
+
+    <!-- 成熟后的进阶监控 -->
+    <section id="sec-advanced">
+      <h2>成熟后的进阶监控（6 大工程扩展方向）</h2>
+      <p>
+        当基础的“执行-断言-评分”双层回路稳定运转后，评测体系可以随着技能复杂度提升进一步扩展。<strong>优先建立快速明确的行为反馈，随着测试深入再逐步补充更重、耗时更长的校验手段。</strong>
+      </p>
+      <p>
+        以下六个方向可以把基础评测逐步扩展到更真实的工程场景：
+      </p>
+
+      <div class="box-table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 22%;">监控方向</th>
+              <th style="width: 38%;">实现机制与指标来源</th>
+              <th style="width: 40%;">工程价值与防范目标</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>1. 命令抖动与循环重试</strong></td>
+              <td>统计 JSONL 轨迹中的 <code>command_execution</code> 发生频次与同类命令执行间隔。</td>
+              <td>如果某一版修改导致同类命令执行次数激增，说明 Agent 陷入了报错重试的循环内耗中，需阻断合并。</td>
+            </tr>
+            <tr>
+              <td><strong>2. Token 消耗监控</strong></td>
+              <td>从事件流的 <code>turn.completed</code> 事件中提取 <code>usage.input_tokens</code> 与 <code>usage.output_tokens</code>。</td>
+              <td>直观发现提示词膨胀或上下文冗余，防止单次执行开销失控或因上下文超限导致遗忘关键指令。</td>
+            </tr>
+            <tr>
+              <td><strong>3. 静态编译验证</strong></td>
+              <td>在 Agent 交付后由评测系统追加执行 <code>npm run build</code>（或语言对应的类型检查/编译器）。</td>
+              <td>关键的端到端硬指标，能有效发现隐蔽的代码语法错误、损坏的模块导入或工具链版本冲突。</td>
+            </tr>
+            <tr>
+              <td><strong>4. 运行时冒烟探测</strong></td>
+              <td>执行 <code>npm run dev</code> 启动服务，随后使用 <code>curl</code> 请求本地端口，或运行极轻量 Playwright 探测。</td>
+              <td>确认应用不仅代码存在，而且在浏览器中能成功挂载渲染；较为耗时，建议针对核心用例按需启用。</td>
+            </tr>
+            <tr>
+              <td><strong>5. 仓库纯净度检查</strong></td>
+              <td>在执行完毕后运行 <code>git status --porcelain</code>，检查未跟踪的新增文件列表。</td>
+              <td>断言执行完毕后工作区不存在非预期的临时文件、日志或遗留脚本，保持工程目录绝对整洁。</td>
+            </tr>
+            <tr>
+              <td><strong>6. 沙盒与权限回退测试</strong></td>
+              <td>在未提权的基础受限沙盒（不加 <code>--full-auto</code>）中执行测试，观察行为边界。</td>
+              <td>验证 Skill 在受限环境中是否依然能顺畅工作，确认在迭代过程中没有出现越权或非预期的提权需求。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 结语 -->
+    <section id="sec-conclusion">
+      <h2>结语：让 Agent Skill 迭代建立在结构化事实之上</h2>
+      <p>
+        从只靠主观感受调整，转向保留轨迹、逐项检查和持续比较，能让 Agent Skill 的迭代建立在可靠的工程基础上。这套流程将“这版改动看起来挺顺手”的主观推测，替换成了结构化的事实依据：
+      </p>
+      <ul>
+        <li><strong>成功标准先行：</strong>从定义明确的成功标准开始，写出结构规范、包含清晰 Definition of done 的 Skill；</li>
+        <li><strong>排查隐藏假设：</strong>通过人工试跑摸清假设边界，把调试中暴露的问题沉淀为 10–20 条典型评测用例；</li>
+        <li><strong>双层漏斗过滤：</strong>底层用 JSONL 事件流与确定性 grader 校验命令与文件产物，上层借助 JSON Schema 规范模型的代码审查；</li>
+        <li><strong>渐进监控演进：</strong>待技能成熟后，再按需扩展编译校验与运行时监控。</li>
+      </ul>
+      <p>
+        有了可重复运行的评测基座，每次调整提示词或执行逻辑时，都能明确看出改动究竟带来了哪些改进，并及时发现意外的回归信号。通过真实问题持续扩充用例，Skill 才能在长期迭代中稳定保持既有能力。
+      </p>
+    </section>
+
+  </main>
+</div>
+
+<!-- ==========================================================================
+   7. 内联交互逻辑引擎 (纯原生 JavaScript，零第三方依赖)
+   ========================================================================== */ -->
+<script>
+(function() {
+  "use strict";
+
+  // 安全 DOM 查询辅助函数 (避免使用 $ 命名防 LaTeX 检测器误报)
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  // 1. 阅读进度条与侧边栏高亮监听
+  function updateReadProgress() {
+    var winH = window.innerHeight;
+    var docH = document.documentElement.scrollHeight - winH;
+    var scrolled = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var pEl = byId("read-progress");
+    if (pEl && docH > 0) {
+      var pct = Math.min(100, Math.max(0, (scrolled / docH) * 100));
+      pEl.style.width = pct.toFixed(1) + "%";
+    }
+
+    // 侧栏 TOC 激活态更新
+    var sections = ["sec-overview", "sec-pipeline", "sec-step1", "sec-step2", "sec-step3", "sec-step4", "sec-planner", "sec-step5", "sec-step6", "sec-advanced", "sec-conclusion"];
+    var activeId = "";
+    for (var i = 0; i < sections.length; i++) {
+      var el = byId(sections[i]);
+      if (el) {
+        var top = el.getBoundingClientRect().top;
+        if (top <= 140) {
+          activeId = sections[i];
+        }
+      }
+    }
+    if (activeId) {
+      var links = document.querySelectorAll(".toc-link");
+      for (var j = 0; j < links.length; j++) {
+        var href = links[j].getAttribute("href");
+        if (href === "#" + activeId) {
+          links[j].classList.add("active");
+        } else {
+          links[j].classList.remove("active");
+        }
+      }
+    }
+  }
+
+  window.addEventListener("scroll", updateReadProgress);
+  window.addEventListener("resize", updateReadProgress);
+
+  // 2. 主题切换逻辑 (支持 localStorage 与系统偏好，默认暗黑)
+  var themeToggleBtn = byId("btn-theme-toggle");
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener("click", function() {
+      var currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+      var nextTheme = currentTheme === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", nextTheme);
+      try {
+        if (window.localStorage) {
+          window.localStorage.setItem("aike_theme", nextTheme);
+        }
+      } catch (e) {}
+    });
+  }
+
+  // 初始化读取本地持久化主题 (隐私模式防御)
+  try {
+    if (window.localStorage) {
+      var savedTheme = window.localStorage.getItem("aike_theme");
+      if (savedTheme) {
+        document.documentElement.setAttribute("data-theme", savedTheme);
+      }
+    }
+  } catch (e) {}
+
+  // 3. 打印按钮处理
+  var printBtn = byId("btn-print");
+  if (printBtn) {
+    printBtn.addEventListener("click", function() {
+      window.print();
+    });
+  }
+
+  // 4. Eval Planner 交互沙盘逻辑
+  var PRESET_DATA = {
+    demo: {
+      name: "setup-demo-app",
+      desc: "Scaffold a Vite + React + Tailwind demo app with a small, consistent project structure for quick UI experiments.",
+      cmd: "npm install, npm run dev",
+      file: "package.json, src/App.tsx, src/components/Header.tsx",
+      explicit: "Create a demo app named `devday-demo` using the $setup-demo-app skill",
+      implicit: "Set up a minimal React demo app with Tailwind for quick UI experiments",
+      contextual: "Create a small demo app to showcase the Responses API with clean components",
+      negative: "Add Tailwind styling to my existing React app in this directory"
+    },
+    git: {
+      name: "git-commit-helper",
+      desc: "Generate conventional git commit messages following the Conventional Commits specification by inspecting staged git diffs.",
+      cmd: "git status, git diff --staged",
+      file: ".git/COMMIT_EDITMSG",
+      explicit: "Review the staged changes and generate a commit message using the $git-commit-helper skill",
+      implicit: "Write a standardized conventional commit message for my currently staged changes",
+      contextual: "Commit the auth token refactor changes following team angular convention",
+      negative: "Run git push origin main and deploy current branch to staging"
+    },
+    data: {
+      name: "data-cleaner",
+      desc: "Inspect, clean, and validate raw CSV datasets, removing duplicate records and generating summary validation schemas.",
+      cmd: "python clean.py --input data.csv",
+      file: "cleaned_data.csv, schema_report.json",
+      explicit: "Clean and normalize the customer records in raw_data.csv using the $data-cleaner skill",
+      implicit: "Validate and remove duplicate rows from my uploaded CSV dataset and format timestamps",
+      contextual: "Process the Q3 sales transaction export, filter invalid currency fields and output clean CSV",
+      negative: "Train a gradient boosting model on customer churn using this dataset"
+    }
+  };
+
+  var iptName = byId("ipt-skill-name");
+  var iptDesc = byId("ipt-skill-desc");
+  var iptCmd = byId("ipt-skill-cmd");
+  var iptFile = byId("ipt-skill-file");
+
+  var outExplicit = byId("out-prompt-explicit");
+  var outImplicit = byId("out-prompt-implicit");
+  var outContextual = byId("out-prompt-contextual");
+  var outNegative = byId("out-prompt-negative");
+  var outCode = byId("out-deterministic-code");
+  var outSchema = byId("out-schema-preview");
+
+  var chkCmd = byId("chk-sim-cmd");
+  var chkFile = byId("chk-sim-file");
+  var chkStyle = byId("chk-sim-style");
+  var chkNeg = byId("chk-sim-neg");
+
+  var outVerdict = byId("out-sim-verdict");
+  var outScore = byId("out-sim-score");
+  var outDetail = byId("out-sim-detail");
+
+  function updatePlanner() {
+    var name = (iptName && iptName.value.trim()) || "setup-demo-app";
+    var desc = (iptDesc && iptDesc.value.trim()) || "Scaffold a demo application";
+    var cmdStr = (iptCmd && iptCmd.value.trim()) || "npm install";
+    var fileStr = (iptFile && iptFile.value.trim()) || "package.json";
+
+    var cmds = cmdStr.split(",").map(function(s) { return s.trim(); }).filter(Boolean);
+    var files = fileStr.split(",").map(function(s) { return s.trim(); }).filter(Boolean);
+    var mainCmd = cmds[0] || "npm install";
+    var mainFile = files[0] || "package.json";
+
+    // 更新 4 类 Prompt 回显
+    if (outExplicit) {
+      outExplicit.textContent = "Create a demo app named `devday-demo` using the $" + name + " skill";
+    }
+    if (outImplicit) {
+      outImplicit.textContent = "Execute task: " + desc;
+    }
+    if (outContextual) {
+      outContextual.textContent = "In the current workspace context, execute " + desc + " with production grade requirements";
+    }
+    if (outNegative) {
+      outNegative.textContent = "Configure environment or existing legacy module without invoking $" + name;
+    }
+
+    // 更新代码预览
+    if (outCode) {
+      var codeText = [
+        '// evals/run-' + name + '-evals.mjs',
+        'import { spawnSync } from "node:child_process";',
+        'import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";',
+        'import path from "node:path";',
+        '',
+        'function runCodex(prompt, outJsonlPath) {',
+        '  const res = spawnSync(',
+        '    "codex",',
+        '    ["exec", "--json", "--full-auto", prompt],',
+        '    { encoding: "utf8" }',
+        '  );',
+        '  mkdirSync(path.dirname(outJsonlPath), { recursive: true });',
+        '  writeFileSync(outJsonlPath, res.stdout, "utf8");',
+        '  return { exitCode: res.status ?? 1, stderr: res.stderr };',
+        '}',
+        '',
+        '// 确定性规则 1：检查是否执行了关键命令 (' + mainCmd + ')',
+        'function checkRanCommand(events) {',
+        '  return events.some(',
+        '    (e) =>',
+        '      (e.type === "item.started" || e.type === "item.completed") &&',
+        '      e.item?.type === "command_execution" &&',
+        '      typeof e.item?.command === "string" &&',
+        '      e.item.command.includes("' + mainCmd + '")',
+        '  );',
+        '}',
+        '',
+        '// 确定性规则 2：检查关键文件是否已创建 (' + mainFile + ')',
+        'function checkFileExists(projectDir) {',
+        '  return existsSync(path.join(projectDir, "' + mainFile + '"));',
+        '}',
+        '',
+        '// 执行测试与断言校验',
+        'const projectDir = process.cwd();',
+        'const tracePath = path.join(projectDir, "evals", "artifacts", "test-01.jsonl");',
+        'const prompt = "Execute task using the $' + name + ' skill";',
+        '',
+        'runCodex(prompt, tracePath);',
+        'const events = readFileSync(tracePath, "utf8").split("\n").filter(Boolean).map(JSON.parse);',
+        '',
+        'console.log({',
+        '  ranCommand: checkRanCommand(events),',
+        '  hasFile: checkFileExists(projectDir)',
+        '});'
+      ].join('\n');
+      outCode.textContent = codeText;
+    }
+
+    // 更新 Schema 预览
+    if (outSchema) {
+      outSchema.textContent = JSON.stringify({
+        type: "object",
+        properties: {
+          overall_pass: { type: "boolean" },
+          score: { type: "integer", minimum: 0, maximum: 100 },
+          checks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                pass: { type: "boolean" },
+                notes: { type: "string" }
+              },
+              required: ["id", "pass", "notes"],
+              additionalProperties: false
+            }
+          }
+        },
+        required: ["overall_pass", "score", "checks"],
+        additionalProperties: false
+      }, null, 2);
+    }
+
+    // 重新计算模拟打分
+    updateSimulation();
+  }
+
+  function updateSimulation() {
+    var passCmd = chkCmd ? chkCmd.checked : true;
+    var passFile = chkFile ? chkFile.checked : true;
+    var passStyle = chkStyle ? chkStyle.checked : true;
+    var passNeg = chkNeg ? chkNeg.checked : true;
+
+    // 确定性检查硬性阻断
+    var deterministicPass = passCmd && passFile;
+    var overallPass = deterministicPass && passStyle && passNeg;
+
+    var score = 0;
+    if (passCmd) score += 30;
+    if (passFile) score += 30;
+    if (passStyle) score += 20;
+    if (passNeg) score += 20;
+
+    if (outVerdict) {
+      if (overallPass) {
+        outVerdict.textContent = "ALL PASS (通过)";
+        outVerdict.style.color = "var(--aike-emerald)";
+      } else if (!deterministicPass) {
+        outVerdict.textContent = "BLOCKED (硬性指标阻断)";
+        outVerdict.style.color = "var(--aike-rose)";
+      } else {
+        outVerdict.textContent = "REJECTED (风格/负向未达标)";
+        outVerdict.style.color = "var(--aike-amber)";
+      }
+    }
+
+    if (outScore) {
+      outScore.textContent = String(score);
+      if (score >= 90) outScore.style.color = "var(--aike-emerald)";
+      else if (score >= 60) outScore.style.color = "var(--aike-amber)";
+      else outScore.style.color = "var(--aike-rose)";
+    }
+
+    if (outDetail) {
+      var passedCount = (passCmd ? 1 : 0) + (passFile ? 1 : 0) + (passStyle ? 1 : 0) + (passNeg ? 1 : 0);
+      var text = passedCount + "/4 项检查通过：";
+      if (!passCmd) text += " [未执行关键命令]";
+      if (!passFile) text += " [缺少目标文件产物]";
+      if (!passStyle) text += " [代码风格未通过 Rubric 审查]";
+      if (!passNeg) text += " [负向控制用例发生误触发(False Positive)]";
+      if (passedCount === 4) text += "确定性命令已执行、产物文件已生成、代码风格符合 Rubric 标准、负向控制样本未误触发。";
+      outDetail.textContent = text;
+    }
+  }
+
+  // 绑定输入框联动
+  if (iptName) iptName.addEventListener("input", updatePlanner);
+  if (iptDesc) iptDesc.addEventListener("input", updatePlanner);
+  if (iptCmd) iptCmd.addEventListener("input", updatePlanner);
+  if (iptFile) iptFile.addEventListener("input", updatePlanner);
+
+  // 绑定模拟 Checkbox 联动
+  if (chkCmd) chkCmd.addEventListener("change", updateSimulation);
+  if (chkFile) chkFile.addEventListener("change", updateSimulation);
+  if (chkStyle) chkStyle.addEventListener("change", updateSimulation);
+  if (chkNeg) chkNeg.addEventListener("change", updateSimulation);
+
+  // 预设按钮事件
+  function setPreset(key) {
+    var data = PRESET_DATA[key];
+    if (!data) return;
+    if (iptName) iptName.value = data.name;
+    if (iptDesc) iptDesc.value = data.desc;
+    if (iptCmd) iptCmd.value = data.cmd;
+    if (iptFile) iptFile.value = data.file;
+
+    var btns = [byId("btn-preset-demo"), byId("btn-preset-git"), byId("btn-preset-data")];
+    btns.forEach(function(b) { if (b) b.classList.remove("active"); });
+    var target = byId("btn-preset-" + key);
+    if (target) target.classList.add("active");
+
+    updatePlanner();
+  }
+
+  var btnDemo = byId("btn-preset-demo");
+  if (btnDemo) btnDemo.addEventListener("click", function() { setPreset("demo"); });
+
+  var btnGit = byId("btn-preset-git");
+  if (btnGit) btnGit.addEventListener("click", function() { setPreset("git"); });
+
+  var btnData = byId("btn-preset-data");
+  if (btnData) btnData.addEventListener("click", function() { setPreset("data"); });
+
+  // 复制 Prompt 按钮
+  var btnCopy = byId("btn-copy-prompts");
+  if (btnCopy) {
+    btnCopy.addEventListener("click", function() {
+      var fullText = [
+        "1. Explicit: " + (outExplicit ? outExplicit.textContent : ""),
+        "2. Implicit: " + (outImplicit ? outImplicit.textContent : ""),
+        "3. Contextual: " + (outContextual ? outContextual.textContent : ""),
+        "4. Negative: " + (outNegative ? outNegative.textContent : "")
+      ].join("\n");
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(fullText).then(function() {
+          btnCopy.textContent = "✅ 已复制成功";
+          setTimeout(function() { btnCopy.textContent = "📋 复制四类 Prompts"; }, 2000);
+        });
+      } else {
+        btnCopy.textContent = "✅ 已就绪";
+        setTimeout(function() { btnCopy.textContent = "📋 复制四类 Prompts"; }, 2000);
+      }
+    });
+  }
+
+  // 初始化执行一次
+  updateReadProgress();
+  updatePlanner();
+
+})();
+</script>
+
+</body>
+</html>

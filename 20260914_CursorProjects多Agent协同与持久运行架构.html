@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cursor Projects 架构深度解析：多 Agent 协同体系、云端持久电脑与自主周期性工作</title>
+<meta name="description" content="深度剖析 Cursor 推出的「Projects」核心机制：协调 Agent 规划解耦、上千子 Agent 并行委派、云端专属持久电脑、本地 Agent 穿透协同、跨机器 Shared Context 共享上下文及基于 Slack/PR/Cron 的自主订阅体系。">
+<style>
+/* ============================================================
+   0. 设计令牌（双主题与基线）
+   ============================================================ */
+:root{
+  --sidebar-w: 280px;
+  --content-max: 1180px;
+  --r-sm: 6px; --r-md: 10px; --r-lg: 16px;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-head: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+}
+
+html[data-theme="dark"]{
+  --bg: #181715;
+  --bg-elev: #1F1D1B;
+  --bg-card: #211F1C;
+  --bg-code: #141210;
+  --bg-inline: #2A2622;
+  --bg-quote: rgba(226,136,106,.07);
+  --border: #35312C;
+  --border-soft: #2A2622;
+  --text: #EDE9E3;
+  --text-mid: #B8B1A7;
+  --text-dim: #8C857B;
+  --accent: #E2886A;
+  --accent-soft: rgba(226,136,106,.13);
+  --accent-line: rgba(226,136,106,.45);
+  --emerald: #6FBF8F;
+  --emerald-soft: rgba(111,191,143,.12);
+  --amber: #E0B054;
+  --amber-soft: rgba(224,176,84,.12);
+  --cyan: #6BB6C9;
+  --cyan-soft: rgba(107,182,201,.12);
+  --rose: #E57373;
+  --rose-soft: rgba(229,115,115,.12);
+  --shadow: 0 2px 8px rgba(0,0,0,.35), 0 12px 36px rgba(0,0,0,.45);
+  --svg-host: #1E2522;
+  --svg-runtime: #2A2218;
+  --svg-node: #242220;
+  --svg-node-key: #38271E;
+  --svg-stroke: #4B453D;
+  --svg-stroke-key: #E2886A;
+  --svg-text: #EDE9E3;
+  --svg-sub: #B8B1A7;
+  --svg-dim: #8C857B;
+  --svg-badge: #181715;
+  --svg-badge-fg: #EDE9E3;
+  --svg-edge: #8C857B;
+  color-scheme: dark;
+}
+
+html[data-theme="light"]{
+  --bg: #FAF7F2;
+  --bg-elev: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-code: #F6F2EC;
+  --bg-inline: #EFE9E1;
+  --bg-quote: rgba(217,119,87,.06);
+  --border: #E5DED4;
+  --border-soft: #EFE9E1;
+  --text: #2A2622;
+  --text-mid: #57504A;
+  --text-dim: #857C72;
+  --accent: #D97757;
+  --accent-soft: rgba(217,119,87,.10);
+  --accent-line: rgba(217,119,87,.40);
+  --emerald: #2E8B57;
+  --emerald-soft: rgba(46,139,87,.10);
+  --amber: #B8860B;
+  --amber-soft: rgba(184,134,11,.10);
+  --cyan: #2B7A8C;
+  --cyan-soft: rgba(43,122,140,.10);
+  --rose: #C62828;
+  --rose-soft: rgba(198,40,40,.10);
+  --shadow: 0 2px 8px rgba(60,50,40,.06), 0 12px 36px rgba(60,50,40,.08);
+  --svg-host: #EAF4ED;
+  --svg-runtime: #FBF3E0;
+  --svg-node: #FFFFFF;
+  --svg-node-key: #FCEDE5;
+  --svg-stroke: #D8D0C4;
+  --svg-stroke-key: #D97757;
+  --svg-text: #2A2622;
+  --svg-sub: #57504A;
+  --svg-dim: #857C72;
+  --svg-badge: #FFFFFF;
+  --svg-badge-fg: #2A2622;
+  --svg-edge: #8B8176;
+  color-scheme: light;
+}
+
+/* ============================================================
+   1. 基础布局与排版
+   ============================================================ */
+*{ box-sizing: border-box; }
+html{ scroll-behavior: smooth; }
+body{
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color .25s ease, color .25s ease;
+}
+#readbar{
+  position: fixed; top: 0; left: 0; height: 3px; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--amber));
+  z-index: 99; pointer-events: none;
+}
+a{ color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-line); transition: border-color .2s ease; }
+a:hover{ border-bottom-color: var(--accent); }
+strong, b{ font-weight: 650; color: var(--text); }
+em{ font-style: italic; color: var(--text-mid); }
+hr{ border: 0; border-top: 1px solid var(--border); margin: 2.8em 0; }
+
+/* ============================================================
+   2. 侧栏与宽屏绝对居中布局
+   ============================================================ */
+.app-sidebar{
+  position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w);
+  background: var(--bg-elev);
+  border-right: 1px solid var(--border);
+  padding: 24px 0 20px;
+  display: flex; flex-direction: column;
+  z-index: 50;
+  transition: transform .28s ease;
+}
+.sb-head{ padding: 0 22px 16px; border-bottom: 1px solid var(--border-soft); }
+.sb-kicker{
+  font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin-bottom: 8px;
+}
+.sb-title{
+  font-family: var(--font-head); font-size: 15px; line-height: 1.45;
+  color: var(--text); margin: 0 0 10px; font-weight: 700;
+}
+.sb-tools{ display: flex; gap: 8px; flex-wrap: wrap; }
+.sb-btn{
+  font-family: var(--font-body); font-size: 12px; line-height: 1;
+  padding: 7px 12px; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--text-mid);
+  border: 1px solid var(--border);
+  transition: all .18s ease;
+}
+.sb-btn:hover{ color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.toc{ flex: 1 1 auto; overflow-y: auto; padding: 16px 12px 10px 20px; }
+.toc-label{
+  font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-dim); font-weight: 700; margin: 0 0 10px;
+}
+.toc-list{ list-style: none; margin: 0; padding: 0; }
+.toc-list li{ margin: 0; }
+.toc-list a{
+  display: block; padding: 5px 10px; margin: 1px 0;
+  font-size: 13.5px; line-height: 1.5; color: var(--text-mid);
+  border: 0; border-left: 2px solid transparent; border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  transition: all .15s ease;
+}
+.toc-list a:hover{ color: var(--text); background: var(--accent-soft); }
+.toc-list a.active{ color: var(--accent); border-left-color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+.toc-list .toc-sub{ list-style: none; margin: 0; padding-left: 14px; }
+.toc-list .toc-sub a{ font-size: 12.5px; padding: 3px 8px; }
+
+/* 宽屏正文绝对居中 */
+.main-wrapper{
+  display: block;
+  max-width: var(--content-max);
+  margin-left: calc(var(--sidebar-w) + max(0px, (100% - var(--sidebar-w) - var(--content-max)) / 2));
+  margin-right: max(0px, calc((100% - var(--sidebar-w) - var(--content-max)) / 2));
+  padding: 48px 36px 96px;
+  box-sizing: border-box;
+}
+
+/* 顶部移动导航栏 */
+.mobile-bar{
+  display: none;
+  position: sticky; top: 0;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  z-index: 40;
+  align-items: center; justify-content: space-between;
+}
+.mob-btn{
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text); font-size: 14px; padding: 6px 12px;
+  border-radius: var(--r-sm); cursor: pointer;
+}
+
+/* ============================================================
+   3. 正文排版与组件设计
+   ============================================================ */
+.article-header{ margin-bottom: 40px; }
+.badge-group{ display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.badge{
+  font-size: 12px; font-weight: 650; letter-spacing: .06em;
+  padding: 4px 10px; border-radius: 999px; display: inline-flex; align-items: center;
+}
+.badge-accent{ background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); }
+.badge-emerald{ background: var(--emerald-soft); color: var(--emerald); border: 1px solid rgba(111,191,143,.3); }
+.badge-amber{ background: var(--amber-soft); color: var(--amber); border: 1px solid rgba(224,176,84,.3); }
+.badge-cyan{ background: var(--cyan-soft); color: var(--cyan); border: 1px solid rgba(107,182,201,.3); }
+
+h1.article-title{
+  font-family: var(--font-head);
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 20px;
+}
+.article-lead{
+  font-size: 18px; line-height: 1.7; color: var(--text-mid);
+  padding-bottom: 24px; border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+}
+
+h2{
+  font-family: var(--font-head);
+  font-size: clamp(21px, 2.2vw, 27px);
+  line-height: 1.4;
+  color: var(--text);
+  margin: 2.4em 0 .8em;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  scroll-margin-top: 24px;
+}
+h3{
+  font-family: var(--font-head);
+  font-size: clamp(17px, 1.6vw, 21px);
+  line-height: 1.45;
+  color: var(--text);
+  margin: 1.8em 0 .6em;
+  scroll-margin-top: 24px;
+}
+h4{
+  font-size: 16px; font-weight: 650;
+  color: var(--accent); margin: 1.2em 0 .4em;
+}
+
+p{ margin: 0 0 1.35em; }
+
+/* 核心要闻速览卡片 */
+.exec-summary{
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--r-md);
+  padding: 24px;
+  margin: 28px 0 36px;
+  box-shadow: var(--shadow);
+}
+.exec-title{
+  font-family: var(--font-head);
+  font-size: 18px; font-weight: 700; color: var(--text);
+  margin: 0 0 14px; display: flex; align-items: center; gap: 8px;
+}
+.exec-list{ margin: 0; padding-left: 20px; }
+.exec-list li{ margin-bottom: 10px; line-height: 1.65; color: var(--text-mid); }
+.exec-list li strong{ color: var(--text); }
+
+/* 四列数据看板 */
+.kpi-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 24px 0 36px;
+}
+.kpi-card{
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+  transition: transform .2s ease, border-color .2s ease;
+}
+.kpi-card:hover{ transform: translateY(-2px); border-color: var(--accent); }
+.kpi-num{
+  font-size: 30px; font-weight: 750; font-family: var(--font-mono);
+  color: var(--accent); line-height: 1.2; margin-bottom: 6px;
+}
+.kpi-label{ font-size: 13.5px; font-weight: 650; color: var(--text); margin-bottom: 4px; }
+.kpi-desc{ font-size: 12px; color: var(--text-dim); line-height: 1.45; }
+
+/* 引用块 */
+blockquote{
+  margin: 24px 0;
+  padding: 16px 22px;
+  background: var(--bg-quote);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  color: var(--text-mid);
+}
+blockquote p:last-child{ margin-bottom: 0; }
+
+/* 原文视频多媒体卡片容器 */
+.media-card{
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  margin: 28px 0 36px;
+  box-shadow: var(--shadow);
+}
+.media-header{
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px; color: var(--text-dim);
+}
+.media-pill{
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--accent-soft); color: var(--accent);
+}
+.media-viewport{
+  position: relative;
+  background: #0D0C0B;
+  min-height: 220px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 28px 20px;
+  text-align: center;
+}
+.media-play-circle{
+  width: 54px; height: 54px; border-radius: 50%;
+  background: rgba(226,136,106,.85);
+  display: flex; align-items: center; justify-content: center;
+  color: #FFFFFF; margin-bottom: 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.5);
+}
+.media-play-circle svg{ fill: currentColor; width: 22px; height: 22px; margin-left: 2px; }
+.media-meta-title{ font-size: 15px; font-weight: 650; color: #EDE9E3; margin-bottom: 6px; }
+.media-meta-sub{ font-size: 12px; color: #8C857B; font-family: var(--font-mono); }
+.media-caption{
+  padding: 14px 18px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border);
+  font-size: 13.5px; color: var(--text-mid);
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.media-caption svg{ flex-shrink: 0; margin-top: 2px; color: var(--accent); }
+
+/* SVG 图表容器 */
+.chart-box{
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 24px;
+  margin: 28px 0 36px;
+  box-shadow: var(--shadow);
+}
+.chart-title{
+  font-family: var(--font-head);
+  font-size: 17px; font-weight: 700; color: var(--text);
+  margin: 0 0 6px; display: flex; align-items: center; justify-content: space-between;
+}
+.chart-subtitle{ font-size: 13px; color: var(--text-dim); margin-bottom: 18px; }
+.chart-svg-wrap{ width: 100%; overflow-x: auto; text-align: center; }
+.chart-svg-wrap svg{ max-width: 100%; height: auto; display: inline-block; }
+
+/* 纯 CSS / MathML 数学排版 */
+.math-block{
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--cyan);
+  border-radius: var(--r-sm);
+  padding: 16px 20px;
+  margin: 20px 0;
+  font-family: var(--font-mono);
+  overflow-x: auto;
+}
+.math-eq{ font-size: 15px; color: var(--text); }
+.math-sub{ font-size: 12.5px; color: var(--text-dim); margin-top: 6px; }
+
+/* 表格规范 */
+.table-wrap{
+  overflow-x: auto;
+  margin: 24px 0 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+table{
+  width: 100%; border-collapse: collapse;
+  font-size: 14.5px; text-align: left;
+}
+thead{ background: var(--bg-elev); border-bottom: 2px solid var(--border); }
+th{
+  padding: 12px 16px; font-weight: 650; color: var(--text);
+  font-size: 13px; letter-spacing: .04em;
+}
+td{
+  padding: 12px 16px; border-bottom: 1px solid var(--border-soft);
+  color: var(--text-mid);
+}
+tbody tr:last-child td{ border-bottom: 0; }
+tbody tr:hover{ background: var(--accent-soft); }
+
+/* 代码块 */
+pre{
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  margin: 20px 0 24px;
+}
+code{
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--bg-inline);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--accent);
+}
+pre code{
+  background: transparent; padding: 0; color: inherit;
+}
+
+/* 交互沙盘容器 */
+.sandbox-card{
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 26px;
+  margin: 32px 0 40px;
+  box-shadow: var(--shadow);
+}
+.sandbox-header{
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 14px;
+}
+.sb-kicker-tag{
+  font-size: 11.5px; font-weight: 700; letter-spacing: .12em;
+  color: var(--cyan); text-transform: uppercase; margin-bottom: 4px;
+}
+.sb-title-lg{
+  font-family: var(--font-head);
+  font-size: 20px; font-weight: 700; color: var(--text); margin: 0 0 6px;
+}
+.sb-desc{ font-size: 13.5px; color: var(--text-mid); }
+
+/* 控制面板网格 */
+.ctrl-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin-bottom: 22px;
+}
+.ctrl-item{
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+}
+.ctrl-label-wrap{
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px;
+}
+.ctrl-value-badge{
+  font-family: var(--font-mono);
+  color: var(--accent); font-size: 14px; font-weight: 700;
+}
+.ctrl-desc{ font-size: 11.5px; color: var(--text-dim); margin-top: 6px; line-height: 1.4; }
+
+input[type="range"]{
+  width: 100%; height: 6px; border-radius: 3px;
+  background: var(--border); outline: none; -webkit-appearance: none;
+}
+input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent); cursor: pointer; border: 2px solid var(--bg-card);
+}
+
+.preset-group{
+  display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 22px;
+}
+.preset-btn{
+  background: var(--bg-elev); border: 1px solid var(--border);
+  color: var(--text-mid); font-size: 12.5px; padding: 7px 14px;
+  border-radius: 999px; cursor: pointer; transition: all .18s ease;
+}
+.preset-btn:hover{
+  border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
+}
+.preset-btn.active{
+  background: var(--accent); border-color: var(--accent); color: #FFFFFF; font-weight: 600;
+}
+
+/* 回显与诊断网格 */
+.res-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.res-card{
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+}
+.res-card.highlight{
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.res-lbl{ font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+.res-val{
+  font-size: 24px; font-family: var(--font-mono); font-weight: 750;
+  color: var(--text); line-height: 1.2;
+}
+.res-card.highlight .res-val{ color: var(--accent); }
+
+.diagnosis-box{
+  background: var(--bg-elev);
+  border-left: 4px solid var(--emerald);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  padding: 14px 18px;
+  font-size: 13.5px; color: var(--text-mid);
+}
+
+/* 场景切换沙盘 */
+.scene-switch-bar{
+  display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.scene-tab{
+  padding: 9px 16px; font-size: 13px; font-weight: 600;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--r-sm); color: var(--text-mid); cursor: pointer;
+  transition: all .2s ease;
+}
+.scene-tab:hover{ color: var(--accent); border-color: var(--accent); }
+.scene-tab.active{
+  background: var(--accent-soft); border-color: var(--accent);
+  color: var(--accent);
+}
+.scene-panel{
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  padding: 20px;
+}
+.scene-step-row{
+  display: flex; gap: 16px; align-items: flex-start;
+  padding: 12px 0; border-bottom: 1px solid var(--border-soft);
+}
+.scene-step-row:last-child{ border-bottom: 0; padding-bottom: 0; }
+.scene-step-tag{
+  flex-shrink: 0; width: 90px;
+  font-size: 12px; font-weight: 700; font-family: var(--font-mono);
+  color: var(--accent); padding-top: 2px;
+}
+.scene-step-content{ flex: 1; font-size: 14px; color: var(--text); }
+.scene-step-content strong{ color: var(--accent); }
+
+/* 页脚 */
+.article-footer{
+  margin-top: 64px; padding-top: 28px;
+  border-top: 1px solid var(--border);
+  font-size: 13px; color: var(--text-dim);
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+}
+
+/* ============================================================
+   4. 响应式与打印
+   ============================================================ */
+@media (max-width: 1080px){
+  .app-sidebar{ transform: translateX(-100%); }
+  .app-sidebar.open{ transform: translateX(0); }
+  .mobile-bar{ display: flex; }
+  .main-wrapper{
+    margin-left: 0; margin-right: 0; max-width: 100%;
+    padding: 24px 20px 64px;
+  }
+}
+
+@media print{
+  .app-sidebar, #readbar, .sb-tools, .mobile-bar, .preset-group, input[type="range"]{ display: none !important; }
+  .main-wrapper{ margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
+  body{ background: #FFFFFF !important; color: #000000 !important; font-size: 12pt; }
+  .media-card, .sandbox-card, .chart-box, .kpi-card{ box-shadow: none !important; border: 1px solid #CCC !important; }
+  a{ color: #000000 !important; border-bottom: 0 !important; }
+}
+</style>
+</head>
+<body>
+
+<div id="readbar"></div>
+
+<!-- 移动端顶部快捷条 -->
+<div class="mobile-bar">
+  <button id="mob-toc-btn" class="mob-btn">☰ 目录导航</button>
+  <span style="font-size: 13px; font-weight: 600; color: var(--text);">Cursor Projects 深度白皮书</span>
+  <button id="mob-theme-btn" class="mob-btn">🌓 主题</button>
+</div>
+
+<!-- 侧栏目录 -->
+<aside id="sidebar" class="app-sidebar">
+  <div class="sb-head">
+    <div class="sb-kicker">Architectural Analysis</div>
+    <div class="sb-title">Cursor Projects 架构白皮书</div>
+    <div class="sb-tools">
+      <button id="theme-toggle" class="sb-btn">🌓 切换主题</button>
+      <button id="btn-print" class="sb-btn">🖨️ 打印归档</button>
+    </div>
+  </div>
+  <nav class="toc">
+    <div class="toc-label">文档导读与章节</div>
+    <ul class="toc-list">
+      <li><a href="#sec-overview" class="active">前言：从一问一答到自主同事</a></li>
+      <li><a href="#sec-highlights">核心要闻与指标看板</a></li>
+      <li>
+        <a href="#sec-coord">一、分工革命：协调 Agent 规划解耦</a>
+        <ul class="toc-sub">
+          <li><a href="#sec-coord-model">1.1 架构主界面与单一会话管理</a></li>
+          <li><a href="#sec-sqlite-exp">1.2 SQLite 重写实验：解耦分工的效能质变</a></li>
+          <li><a href="#sec-tabs-case">1.3 任务委派实录：Tabs 架构探查</a></li>
+          <li><a href="#sec-pr-flow">1.4 成果交回与 64 个 PR 的准入审查</a></li>
+          <li><a href="#sec-pr-gate">1.5 决策边界：谁来拍板合并？</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-cloud-local">二、双端协同：云端持久电脑与本机穿透</a>
+        <ul class="toc-sub">
+          <li><a href="#sec-cloud-vm">2.1 永不合盖的专属云端 Linux 电脑</a></li>
+          <li><a href="#sec-vm-failover">2.2 虚拟机调度与网络容错转移</a></li>
+          <li><a href="#sec-local-agent">2.3 本地 Agent：穿透至物理机测试</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-context">三、记忆中枢：跨机器同步的共享上下文</a>
+        <ul class="toc-sub">
+          <li><a href="#sec-context-pain">3.1 终结每次重新带新人的摩擦成本</a></li>
+          <li><a href="#sec-context-assets">3.2 共享文件的三大核心支柱</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-subscribe">四、自主开工：事件信号与定时订阅驱动</a>
+        <ul class="toc-sub">
+          <li><a href="#sec-sub-triggers">4.1 交代一次即可闭环的三类信号</a></li>
+          <li><a href="#sec-sub-zero-conf">4.2 零向导自然语言配置机制</a></li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-math-usl">五、数学建模与交互沙盘：USL 扩展性推演</a>
+        <ul class="toc-sub">
+          <li><a href="#sec-usl-theory">5.1 理论推导：为什么协调 Agent 能突破瓶颈？</a></li>
+          <li><a href="#sec-usl-sandbox">5.2 交互沙盘 1：多 Agent USL 真实扩展性模拟器</a></li>
+          <li><a href="#sec-scene-sandbox">5.3 交互沙盘 2：三大周期性订阅动态演练器</a></li>
+        </ul>
+      </li>
+      <li><a href="#sec-data-limits">六、实测数据、留白边界与未来启示</a></li>
+      <li><a href="#sec-appendix">附录：原文多媒体记录与索引</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<!-- 正文主体 -->
+<main id="main" class="main-wrapper">
+
+  <!-- 头部文章区 -->
+  <header class="article-header">
+    <div class="badge-group">
+      <span class="badge badge-accent">Cursor Projects 深度架构剖析</span>
+      <span class="badge badge-emerald">Beta 阶段全面解密</span>
+      <span class="badge badge-amber">多 Agent 协同体系</span>
+      <span class="badge badge-cyan">持久化云端电脑</span>
+    </div>
+    <h1 class="article-title">Cursor 推出「Projects」功能：可将任务委派给上千个子 Agent，在不需要提示的情况下持续数月执行周期性工作</h1>
+    <div class="article-lead">
+      Projects 在云端为每个项目配备专属电脑，跨数月持久保留共享上下文；开发者交代一次，它即可基于 Slack 消息、PR 代码变动或定时计划自主开工。本文系统拆解其“协调 Agent 规划解耦”、“云端/本地双端调度”、“跨机器 Shared Context 同步”及“全自动订阅引擎”背后的工程架构与量化机理。
+    </div>
+  </header>
+
+  <!-- 核心要点速览 -->
+  <section id="sec-highlights" class="exec-summary">
+    <div class="exec-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      核心事实与架构突破速览 (Executive Summary)
+    </div>
+    <ul class="exec-list">
+      <li><strong>分工解耦与千级子 Agent 委派</strong>：用户仅与一个协调 Agent 对话；协调 Agent 自身<strong>绝不编写代码</strong>，专注任务分解、规划与调度，按需并行调遣多达上千个子 Agent 实施，最终将审查结果汇交人类拍板。</li>
+      <li><strong>永不关机的专属云端电脑 + 本机穿透测试</strong>：Projects 在云端运行专属虚拟机，笔记本合盖任务依然全天候推进；当涉及 UI 视觉或本地运行时验证时，协调 Agent 会直连用户开发机拉起 Local Agent 协同测试。</li>
+      <li><strong>跨机器同步的共享上下文（Shared Context）</strong>：在多台云端机器与本地物理机间实时同步架构设计（`Project/docs`）、测试说明以及用户偏好记忆（`preferences.md`），彻底根除“每次会话重新带新人”的上下文摩擦。</li>
+      <li><strong>事件信号与定时计划（Cron）自驱动</strong>：交代一次即实现无人值守常驻监听。支持监听 Slack 缺陷频道、代码仓 PR 变动以及每小时夜间定时巡检（merge-readiness watch）；Cursor 内部数据显示，使用者周 PR 合并量<strong>约提升 6 倍</strong>，首周合并率跃升 30%。</li>
+    </ul>
+  </section>
+
+  <!-- 四列核心数据看板 -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-num">1,000+</div>
+      <div class="kpi-label">子 Agent 并发容量</div>
+      <div class="kpi-desc">由单协调 Agent 统一调度管理，无限制动态扩缩容</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num">~6x</div>
+      <div class="kpi-label">每周 PR 合并量提升</div>
+      <div class="kpi-desc">Cursor 团队内部实操统计，吞吐能力实现倍增</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num">~80%</div>
+      <div class="kpi-label">重写测试通过率</div>
+      <div class="kpi-desc">SQLite 835页对照实验中，分工模式 4 小时实现断层领先</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num">64 PRs</div>
+      <div class="kpi-label">单项目并行吞吐承载</div>
+      <div class="kpi-desc">单面板处理海量 PR，智能筛选准入与排查冲突</div>
+    </div>
+  </div>
+
+  <!-- 引言与背景 -->
+  <section id="sec-overview">
+    <h2>前言：从一问一答到自主同事</h2>
+    <p>
+      在传统 AI 编程辅助工具中，开发者的交互模型始终被锁死在“单会话、一问一答、实时等待”的被动反馈环内。一旦面对一个完整系统重构、跨组件大型特性研发或代码库整体架构迁移，这种碎片化的交互会引发严重的“上下文疲劳”——开发者不得不在数十个分散的 Threads 之间来回切换，反复向新开启的会话重复灌输代码库规范与既有结论。
+    </p>
+    <p>
+      Cursor 此次推出的「Projects」，标志着人机协同范式从<strong>“对话式代码补全器”</strong>正式跃迁为<strong>“自主性常驻数字同事”</strong>。在官方发布对谈中，Cursor 员工 Fredrika Lindh 强调：以往大量杂乱散落的工作会话，如今被统一收拢至 Projects 的单一会话中，由全局协调 Agent（Coordinator Agent）统一调度。另一位参与演示的工程师明确指出：
+    </p>
+    <blockquote>
+      “我们告别了一问一答式的单步指令对话，不用再全神贯注地盯着每个 Agent 逐个发号施令；它更像是一位长期入驻、自主规划并推进复杂工程的并肩作战的同事。”
+    </blockquote>
+    <p>
+      该功能目前处于 Beta 阶段，正逐步面向全量用户开放。下面让我们通过官方首发展示的 4 段核心视频及工程拓扑，深入其技术底座。
+    </p>
+
+    <!-- 视频 1 卡片 -->
+    <div class="media-card">
+      <div class="media-header">
+        <span class="media-pill">官方对谈录屏 · 1 分 30 秒</span>
+        <span>/media/cursor-projects/projects-overview.mp4</span>
+      </div>
+      <div class="media-viewport">
+        <div class="media-play-circle">
+          <svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"></polygon></svg>
+        </div>
+        <div class="media-meta-title">Cursor Projects 发布对谈：Fredrika Lindh 与同事演示核心能力</div>
+        <div class="media-meta-sub">POSTER: projects-overview-poster.jpg | TRACK: projects-overview.zh-en.vtt (中英双语)</div>
+      </div>
+      <div class="media-caption">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+        <span><strong>视频说明</strong>：Cursor 员工 Fredrika Lindh 与同事对谈，演示 Projects 从单会话委派任务到云端机器协同的全流程。视频内含中英双语字幕。</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 第一章：分工革命 -->
+  <section id="sec-coord">
+    <h2>一、分工革命：协调 Agent 只管规划和委派，自己不写代码</h2>
+
+    <h3 id="sec-coord-model">1.1 架构主界面与单一会话管理</h3>
+    <p>
+      用户打开 IDE 左侧导航栏的「Projects」即可进入主界面。与传统编程助手不同，Projects 的交互表面<strong>只有一个全局协调 Agent 对话窗口</strong>。
+    </p>
+    <p>
+      协调 Agent 的职责边界被极其严密地限制为：<strong>只负责工作规划、子任务切分、资源调遣与成果验收，其本体绝不亲自编写或修改一行生产代码</strong>。它作为调度司令官，按需代表用户并发开出多个负责具体编码实施的子 Agent（Sub-Agents），并在子任务完成后收集、汇总并校验工件，最终交回人类工程师做合并拍板。Fredrika 在对谈中透露，在部分复杂重构项目中，协调 Agent 会按需并行派发上千个 Agent，整个过程对用户而言无需手动干预。
+    </p>
+
+    <h3 id="sec-sqlite-exp">1.2 SQLite 重写实验：解耦分工的效能质变</h3>
+    <p>
+      这种“规划者不写代码、写代码者不接管顶层规划”的分工设计，并非凭空臆造，而是源于 Cursor 此前震撼业界的一次<strong>多 Agent 群体经济学（Agent Swarm Economics）对照实验</strong>：
+    </p>
+    <p>
+      实验要求一群 AI Agent 仅依据一份长达 835 页的 SQLite 官方手册，在隔离沙箱中从零重写出能够通过严格测试套件的 SQLite 数据库。在使用 Grok 4.5 模型的前期对照组中：
+    </p>
+    <ul>
+      <li><strong>旧版全包系统（单体 Agent 既规划又写代码）</strong>：高强度运行 2 小时后，测试通过率<strong>一直接近 0%</strong>，代码陷入混乱的局部冲突与死循环，最终被迫人工叫停；</li>
+      <li><strong>新版分工系统（协调规划 Agent 纯拆任务 + 专门编码 Agent 专注实现）</strong>：同样面对这本 835 页手册，系统在 4 小时内<strong>成功通过了约 80% 的测试用例</strong>！</li>
+    </ul>
+
+    <!-- 架构图 1：系统协同拓扑 -->
+    <div class="chart-box">
+      <div class="chart-title">
+        <span>架构拓扑：Cursor Projects 多 Agent 分级委派与闭环治理模型</span>
+        <span class="badge badge-accent">System Architecture</span>
+      </div>
+      <div class="chart-subtitle">展示协调 Agent、云端计算集群、本地开发机、共享文件系统与外部信号源之间的全链路协同关系</div>
+      <div class="chart-svg-wrap">
+        <svg viewBox="0 0 980 460" width="980" height="460" xmlns="http://www.w3.org/2000/svg">
+          <!-- 背景网格修饰 -->
+          <rect x="10" y="10" width="960" height="440" rx="12" fill="var(--bg-card)" stroke="var(--border)" stroke-width="1.5"/>
+
+          <!-- 顶部区域：外部信号与人类交互 -->
+          <rect x="40" y="35" width="260" height="70" rx="8" fill="var(--svg-host)" stroke="var(--svg-stroke)" stroke-width="1.2"/>
+          <text x="170" y="62" fill="var(--svg-text)" font-family="var(--font-head)" font-size="14.5" font-weight="700" text-anchor="middle">人类开发者 / 交互输入</text>
+          <text x="170" y="84" fill="var(--svg-sub)" font-family="var(--font-body)" font-size="12" text-anchor="middle">单一会话 · 自然语言意图委托</text>
+
+          <rect x="360" y="35" width="580" height="70" rx="8" fill="var(--svg-runtime)" stroke="var(--svg-stroke)" stroke-width="1.2"/>
+          <text x="650" y="62" fill="var(--svg-text)" font-family="var(--font-head)" font-size="14.5" font-weight="700" text-anchor="middle">外部自治驱动总线 (Event Signals &amp; Cron)</text>
+          <text x="650" y="84" fill="var(--svg-sub)" font-family="var(--font-body)" font-size="12" text-anchor="middle">Slack 缺陷频道 ｜ GitHub/Origin PR 事件 ｜ 夜间周期性定时巡检</text>
+
+          <!-- 核心层：协调 Agent -->
+          <rect x="240" y="145" width="500" height="95" rx="10" fill="var(--svg-node-key)" stroke="var(--svg-stroke-key)" stroke-width="2"/>
+          <text x="490" y="178" fill="var(--accent)" font-family="var(--font-head)" font-size="17" font-weight="700" text-anchor="middle">协调 Agent (Coordinator Agent)</text>
+          <text x="490" y="202" fill="var(--svg-text)" font-family="var(--font-body)" font-size="13" text-anchor="middle">只管顶层分解与任务委派 · 绝不亲写业务代码 · 聚合审查与准入把控</text>
+          <text x="490" y="224" fill="var(--svg-dim)" font-family="var(--font-mono)" font-size="11.5" text-anchor="middle">[CONWIP 准入限流 ｜ 多 VM 容错调度 ｜ Skills 自动调起]</text>
+
+          <!-- 连线：上层到协调 Agent -->
+          <line x1="170" y1="105" x2="350" y2="145" stroke="var(--svg-edge)" stroke-width="1.5" stroke-dasharray="4,4"/>
+          <line x1="650" y1="105" x2="550" y2="145" stroke="var(--accent)" stroke-width="1.8"/>
+
+          <!-- 下层左侧：云端机器与并行子 Agent 集群 -->
+          <rect x="40" y="280" width="410" height="150" rx="10" fill="var(--svg-host)" stroke="var(--svg-stroke)" stroke-width="1.5"/>
+          <text x="245" y="306" fill="var(--emerald)" font-family="var(--font-head)" font-size="15" font-weight="700" text-anchor="middle">云端专属电脑 (Cloud VM Cluster)</text>
+          <!-- 子 Agent 实例卡片 -->
+          <rect x="60" y="325" width="105" height="85" rx="6" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1"/>
+          <text x="112" y="350" fill="var(--svg-text)" font-size="12" font-weight="600" text-anchor="middle">子 Agent 001</text>
+          <text x="112" y="372" fill="var(--svg-dim)" font-size="10.5" text-anchor="middle">代码库检索</text>
+          <text x="112" y="392" fill="var(--emerald)" font-size="10" font-family="var(--font-mono)" text-anchor="middle">Running...</text>
+
+          <rect x="180" y="325" width="105" height="85" rx="6" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1"/>
+          <text x="232" y="350" fill="var(--svg-text)" font-size="12" font-weight="600" text-anchor="middle">子 Agent 002</text>
+          <text x="232" y="372" fill="var(--svg-dim)" font-size="10.5" text-anchor="middle">特性分支修改</text>
+          <text x="232" y="392" fill="var(--amber)" font-size="10" font-family="var(--font-mono)" text-anchor="middle">Testing...</text>
+
+          <rect x="300" y="325" width="130" height="85" rx="6" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1"/>
+          <text x="365" y="350" fill="var(--svg-text)" font-size="12" font-weight="600" text-anchor="middle">子 Agent N (1000+)</text>
+          <text x="365" y="372" fill="var(--svg-dim)" font-size="10.5" text-anchor="middle">夜间 PR 修复</text>
+          <text x="365" y="392" fill="var(--cyan)" font-size="10" font-family="var(--font-mono)" text-anchor="middle">Pushed Git</text>
+
+          <!-- 下层右侧：本地物理机与 Local Agent -->
+          <rect x="470" y="280" width="220" height="150" rx="10" fill="var(--svg-runtime)" stroke="var(--svg-stroke)" stroke-width="1.5"/>
+          <text x="580" y="306" fill="var(--amber)" font-family="var(--font-head)" font-size="15" font-weight="700" text-anchor="middle">本地物理机 (Local Machine)</text>
+          <rect x="490" y="325" width="180" height="85" rx="6" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1"/>
+          <text x="580" y="350" fill="var(--svg-text)" font-size="12" font-weight="600" text-anchor="middle">本地 Local Agent</text>
+          <text x="580" y="372" fill="var(--svg-dim)" font-size="10.5" text-anchor="middle">唤醒本地 GUI 宿主进程</text>
+          <text x="580" y="392" fill="var(--accent)" font-size="10.5" font-family="var(--font-mono)" text-anchor="middle">App.Run(Glass)</text>
+
+          <!-- 下层最右侧：跨端同步共享上下文 -->
+          <rect x="710" y="280" width="230" height="150" rx="10" fill="var(--svg-node)" stroke="var(--cyan)" stroke-width="1.5"/>
+          <text x="825" y="306" fill="var(--cyan)" font-family="var(--font-head)" font-size="15" font-weight="700" text-anchor="middle">共享上下文 (Shared Context)</text>
+          <text x="825" y="338" fill="var(--svg-text)" font-size="12" text-anchor="middle">📁 Project/docs/*.md (架构方案)</text>
+          <text x="825" y="364" fill="var(--svg-text)" font-size="12" text-anchor="middle">⚙️ preferences.md (用户偏好)</text>
+          <text x="825" y="390" fill="var(--svg-text)" font-size="12" text-anchor="middle">🧪 test_notes.md (排错用例)</text>
+          <text x="825" y="414" fill="var(--svg-dim)" font-size="10.5" font-family="var(--font-mono)" text-anchor="middle">跨多台云端机器 &amp; 本机双向同步</text>
+
+          <!-- 协调 Agent 向下分发的连线 -->
+          <path d="M 370 240 L 245 280" fill="none" stroke="var(--emerald)" stroke-width="1.8"/>
+          <path d="M 500 240 L 580 280" fill="none" stroke="var(--amber)" stroke-width="1.8"/>
+          <path d="M 640 240 L 780 280" fill="none" stroke="var(--cyan)" stroke-width="1.8" stroke-dasharray="3,3"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- 视频 2 卡片 -->
+    <div class="media-card">
+      <div class="media-header">
+        <span class="media-pill">新建与委派录屏</span>
+        <span>/media/cursor-projects/coordinator-delegation.mp4</span>
+      </div>
+      <div class="media-viewport">
+        <div class="media-play-circle">
+          <svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"></polygon></svg>
+        </div>
+        <div class="media-meta-title">新建 Projects 并委派子 Agent 进行架构调查</div>
+        <div class="media-meta-sub">POSTER: coordinator-delegation-poster.jpg | 演示「Tabs」项目的委派执行</div>
+      </div>
+      <div class="media-caption">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+        <span><strong>视频说明</strong>：在新建的「Tabs」Projects 中，协调 Agent 接获弄清 Grok 桌面端标签页架构调查任务后，自发生成计划并派发子 Agent 翻阅代码库。</span>
+      </div>
+    </div>
+
+    <h3 id="sec-tabs-case">1.3 任务委派实录：Tabs 架构探查</h3>
+    <p>
+      在官方演示中，用户新建了一个名为「Tabs」的 Projects，输入核心目标：<strong>彻底摸清桌面端应用（Grok 客户端）现有的标签页架构实现机制，并论证未来结构能够如何重构优化</strong>。
+    </p>
+    <p>
+      协调 Agent 接收指令后，并未直接生成任何臆断性的代码，而是完成了三步标准作业动作：
+    </p>
+    <ol>
+      <li>向用户复述并确认规划路径，明确本次任务属于“架构探查（Architecture Investigation）”；</li>
+      <li>在云端调度环境中动态孵化出一个只读的子 Agent；</li>
+      <li>指派子 Agent 挂载并翻阅当前 Projects 历史沉淀的规范文档，随后定向深入客户端源码树针对标签页状态机展开跨文件关联索引。录屏记录清晰展示了子 Agent 在后台独立检索、读取与提炼代码结构的完整状态流转。</li>
+    </ol>
+
+    <h3 id="sec-pr-flow">1.4 成果交回与 64 个 PR 的准入审查</h3>
+    <p>
+      当任务从“只读探查”进入“代码工程交付”后，协调 Agent 如何向人类汇报成果？另一个名为「Browser」的真实研发项目揭示了震撼的一幕：
+    </p>
+    <p>
+      <strong>项目的控制面板上，整整挂着 64 个待审查 PR（Pull Requests）！</strong>面对如此巨量的并发改动积压，如果由人类逐一检查，必将陷入信息过载。而协调 Agent 展示了极强的<strong>准入过滤与状态诊断能力</strong>：
+    </p>
+    <ul>
+      <li><strong>智能候选分级</strong>：当用户询问<em>“当前哪些改动范围较小、且已经足够安全可以立即并入主干？”</em>时，协调 Agent 对全部 64 个 PR 进行了动态健康度扫描，明确告知当前<strong>没有一个 PR 能直接合并</strong>；</li>
+      <li><strong>暴露具体阻断卡点</strong>：它向用户逐条陈述原因——部分分支已严重落后主干 `main` 代码，必须优先同步 rebase；其余分支虽然改动较小，但尚未证明通过合并前的各项前置流水线门禁（CI Pipeline）；</li>
+      <li><strong>定位最优点推进</strong>：它主动挑选出状态最接近绿色的候选 PR，并建议用户优先处理这一项；</li>
+      <li><strong>联动缺陷追责修复</strong>：当用户在会话中直接丢入一张“应用所有图标丢失”的异常截图时，协调 Agent 迅速对齐视图，锁定造成该图标故障的改动分支，并把修复指令定向指派给负责该特性的子 Agent，明确承诺<em>“在该回归缺陷彻底修复并验证前，绝不会将其标记为可合并”</em>。</li>
+    </ul>
+
+    <h3 id="sec-pr-gate">1.5 决策边界：谁来拍板合并？</h3>
+    <p>
+      尽管 Projects 具备极高的自主性，但关于代码合并权限的终审边界依然遵循严谨的工程把控：
+    </p>
+    <ul>
+      <li><strong>人机最终裁决权</strong>：原厂文档与视频明确指出，协调 Agent 会将整理完毕的工作成果汇总移交人类核对。在「Browser」项目中，备注清晰标注所有 PR 最终必须由负责人 Fredrika 本人确认；</li>
+      <li><strong>多重自动化门禁联动</strong>：界面展示出系统内置的审批流分层——基础的安全合规检查（Security Checks）与模块负责人规则（Codeowners）已实现自动化批注；系统后台持续等待 CI 持续集成测试与 Bugbot（Cursor 专有自动化代码审计 Agent）的全面通过；</li>
+      <li><strong>合并不越权原则</strong>：在实操演示中，系统完整停留在等待人类敲入一句<code>go</code>指令后才触发底层合并动作。官方目前并未透露系统是否允许开启完全无人值守的“免确认全自动合并模式”。</li>
+    </ul>
+  </section>
+
+  <!-- 第二章：双端协同 -->
+  <section id="sec-cloud-local">
+    <h2>二、双端协同：云端持久电脑与本机穿透测试</h2>
+
+    <h3 id="sec-cloud-vm">2.1 永不合盖的专属云端 Linux 电脑</h3>
+    <p>
+      以往本地 IDE 内嵌 Agent 的致命痛点在于：<strong>只要开发者合上笔记本屏幕、离开工位断网，或是本地环境发生资源争抢，正在运行的推理任务便会全部中断</strong>。
+    </p>
+    <p>
+      Cursor Projects 通过<strong>云端智能体（Cloud Agents）</strong>体系彻底重构了底层运行载体：每一个新建的 Projects 都会在云端基础设施中绑定一台专属虚拟机（Cloud Computer）。它拥有持久化文件卷、预装的工具链与长驻守护进程。这意味着，无论开发者的物理机处于休眠、关机还是通勤断网状态，云端虚拟机上的任务调度始终处于全速运转中。
+    </p>
+
+    <h3 id="sec-vm-failover">2.2 虚拟机调度与网络容错转移</h3>
+    <p>
+      值得注意的是，Projects 内部并非单台简单虚拟机，而是具备弹性调度能力。官方视频中出现过一个生动的工程细节：在约 88 秒处的通信日志中，由于其中一台虚拟机因网络上行抖动导致代码推送失败（push failure），协调 Agent 迅速侦测到异常，<strong>自适应将修复上下文与提交任务无缝切换交给另一台已经具备推送凭据与稳定通道的云端机器</strong>，实现了集群层面的故障转移（Failover）。
+    </p>
+
+    <h3 id="sec-local-agent">2.3 本地 Agent：穿透至物理机测试</h3>
+    <p>
+      纯云端环境虽然算力充沛，但在面对桌面客户端开发、本地硬件外设交互、复杂微服务内网环境或特定 UI 布局走查时，存在天然的“物理环境鸿沟”。
+    </p>
+    <p>
+      Projects 给出的优雅解答是<strong>“云端协调 + 本地 Local Agent 穿透执行”</strong>：
+    </p>
+    <blockquote>
+      在发布视频演示中，用户希望在自己的物理电脑上亲自把正在开发的「Glass」应用跑起来，验证一个已合并的界面改动——《Align More with titles》（使得名为 More 的操作元素与条目标题像素级对齐）。协调 Agent 收到请求后，直接穿透至用户当前处于前台的物理电脑，<strong>在本地拉起一个 Local Agent，驱动本地环境完成编译构建，并在屏幕上弹出了运行中的 Glass 桌面窗口</strong>，供用户对照标题核实对齐状态。
+    </blockquote>
+    <p>
+      这种“云端跑大并发无状态编译/调研，本地跑交互式有状态渲染”的拓扑，在效率与体验之间取得了极致平衡。
+    </p>
+  </section>
+
+  <!-- 第三章：记忆中枢 -->
+  <section id="sec-context">
+    <h2>三、记忆中枢：跨机器同步的 Shared Context 共享上下文</h2>
+
+    <h3 id="sec-context-pain">3.1 终结每次重新带新人的摩擦成本</h3>
+    <p>
+      在传统软件开发中，最昂贵的组织成本莫过于“带新人”——每次新成员入职或接手模块，资深工程师必须一遍遍重复讲述代码规范、测试约定与隐藏暗坑。在 AI 时代，大模型会话窗口（Context Window）的无状态性同样导致了这种灾难：每一个新打开的对话，本质上都是一个“失去所有既往记忆的新实习生”。
+    </p>
+    <p>
+      Cursor Projects 的核心解法，是在底层构建了一套轻量、透明且具备高可解释性的<strong>共享上下文（Shared Context）文件系统</strong>。这组文件在所有参与该项目的云端虚拟机与本地工作站之间进行强一致性增量同步，使得后来的每一个子 Agent 都可以免提示继承全盘经验。
+    </p>
+
+    <!-- 视频 3 卡片 -->
+    <div class="media-card">
+      <div class="media-header">
+        <span class="media-pill">共享文件架构演示</span>
+        <span>/media/cursor-projects/shared-context.mp4</span>
+      </div>
+      <div class="media-viewport">
+        <div class="media-play-circle">
+          <svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"></polygon></svg>
+        </div>
+        <div class="media-meta-title">Projects 共享上下文视图：沉淀 Markdown 方案与运行记忆</div>
+        <div class="media-meta-sub">POSTER: shared-context-poster.jpg | 演示「Browser」项目的文档与偏好累积</div>
+      </div>
+      <div class="media-caption">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+        <span><strong>视频说明</strong>：「Browser」Projects 的共享上下文视图，包含最近截图缩略图以及 Agent 持续写进去的方案与架构 Markdown 文档。</span>
+      </div>
+    </div>
+
+    <h3 id="sec-context-assets">3.2 共享文件的三大核心支柱</h3>
+    <p>
+      根据发布细节拆解，这组共享上下文主要涵盖三大不可替代的工程资产：
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 20%;">资产类别</th>
+            <th style="width: 28%;">落地承载形态</th>
+            <th style="width: 52%;">系统运作机理与工程价值</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>1. 方案与架构沉淀</strong></td>
+            <td><code>Project/docs/*.md</code><br>(如 <code>electron-concepts.md</code>)</td>
+            <td>当某一个子 Agent 深入代码库探明了特定子系统（如 Electron IPC 通信树、标签页渲染管线）后，直接以 Markdown 沉淀至文档库。后续所有子 Agent 在规划前强制索引，杜绝重复调研。</td>
+          </tr>
+          <tr>
+            <td><strong>2. 排错与测试说明复用</strong></td>
+            <td>测试说明清单、回归测试集、构建命令备忘</td>
+            <td>若某个 Agent 在摸索某项微服务或特定本地库测试时碰壁并摸索出正确的修复参数，该经验立即入库。后续 Agent 无需反复试错，直接一键复用可靠的验证路径。</td>
+          </tr>
+          <tr>
+            <td><strong>3. 偏好与习惯记忆</strong></td>
+            <td><code>preferences.md</code><br>(工作流规范与 Skills 规则)</td>
+            <td>
+              协调 Agent 主动记忆工程师的个人工作偏好。例如在「Browser」项目中，每当有新 PR 被开启，协调 Agent 都会<strong>全自动且静默地预先跑完两项专属 Skill</strong>：
+              <ul>
+                <li><strong>Simplification Skill</strong>：对变更代码执行减枝与逻辑精简；</li>
+                <li><strong>Thermos Skill</strong>：输出专业维度的代码审查深度审计意见。</li>
+              </ul>
+              它之所以自发执行，正是因为 Fredrika 此前交代过一次，系统将其固化为永久执行规则。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 第四章：自主开工 -->
+  <section id="sec-subscribe">
+    <h2>四、自主开工：事件信号与定时订阅驱动</h2>
+
+    <h3 id="sec-sub-triggers">4.1 交代一次即可闭环的三类信号</h3>
+    <p>
+      Projects 的革命性还在于它打破了“人类不敲键盘，Agent 就休克等待”的被动响应模式。它提供了一套原生事件订阅总线，支持将协调 Agent 绑定至三类现实工程信号源：
+    </p>
+    <ul>
+      <li><strong>Slack 消息通道</strong>：支持将 Projects 挂载到团队的 Slack Bug 上报频道（如 <code>#eng-bugs</code>）。每当有外部告警、监控崩溃通知或内部同事汇报缺陷时，协调 Agent 自动捕捉文本上下文，创建工单、派发子 Agent 开展复现并拉取代码修复；</li>
+      <li><strong>定时计划（Cron Jobs）</strong>：按预定时间周期巡回执行例行工作。例如「Browser」项目中设立了著名的<strong>“合并就绪守望（merge-readiness watch）”</strong>定时任务——系统在夜间每隔一小时自主拉取所有分支，探测冲突、修复 CI 流水线失败并自动修正 Bugbot 报出的低级问题；</li>
+      <li><strong>代码仓库状态变化（PR Triggers）</strong>：全天候监听包括 GitHub 以及 Cursor 自研分布式代码托管平台 <strong>Origin</strong> 上的所有 PR 活动，自动核查规范并推动状态流转。</li>
+    </ul>
+
+    <!-- 视频 4 卡片 -->
+    <div class="media-card">
+      <div class="media-header">
+        <span class="media-pill">订阅功能界面录屏</span>
+        <span>/media/cursor-projects/subscriptions.mp4</span>
+      </div>
+      <div class="media-viewport">
+        <div class="media-play-circle">
+          <svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"></polygon></svg>
+        </div>
+        <div class="media-meta-title">在「Design System」中基于自然语言创建自主订阅</div>
+        <div class="media-meta-sub">POSTER: subscriptions-poster.jpg | 演示监听所有 PR 并核查设计规范</div>
+      </div>
+      <div class="media-caption">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+        <span><strong>视频说明</strong>：用户在「Design System」项目中用自然语言下达指令，协调 Agent 自动生成每小时巡检的订阅任务，严查样式覆盖与组件规范。</span>
+      </div>
+    </div>
+
+    <h3 id="sec-sub-zero-conf">4.2 零向导自然语言配置机制</h3>
+    <p>
+      不同于传统自动化流水线或复杂 CI/CD 系统需要编写冗长、晦涩的 YAML 配置文件与各种 Webhook 鉴权，Projects 的订阅配置体验做到了<strong>零引导步骤、纯自然语言直达</strong>：
+    </p>
+    <blockquote>
+      在视频录屏中，用户在「Design System」项目对话框中轻描淡写地敲入了一行日常口语：<br>
+      <em>“监听所有合并进来的 PR，检查是否违反了设计系统，比如是不是该换成已有组件、新建一个变体、去掉样式覆盖，或者新增一个组件。”</em>
+    </blockquote>
+    <p>
+      协调 Agent 接收指令后，界面实时显示其在后台自动打开并更新了 <code>preferences.md</code> 文件，旋即在控制台右上角生成了一个名为 <strong>「Design system merge watch」</strong> 的常驻订阅服务，设定为每小时自主触发一次，无需任何繁琐的运维介入。
+    </p>
+  </section>
+
+  <!-- 第五章：数学建模与交互沙盘 -->
+  <section id="sec-math-usl">
+    <h2>五、数学建模与交互沙盘：USL 真实扩展性与订阅流演练</h2>
+
+    <h3 id="sec-usl-theory">5.1 理论推导：为什么协调 Agent 能打破 USL 扩展性瓶颈？</h3>
+    <p>
+      许多技术人员对“上千个子 Agent 并行”抱有强烈怀疑——在经典软件工程中，增加人手往往遵循《人月神话》（Brooks's Law），盲目增加并发往往导致沟通成本爆炸。
+    </p>
+    <p>
+      我们借助系统容量领域的<strong>通用可扩展性定律（Universal Scalability Law, USL）</strong>进行严谨的数学形式化推演。令系统有效产出吞吐量为 <math><mrow><mi>C</mi><mo>(</mo><mi>N</mi><mo>)</mo></mrow></math>，并发工作节点数为 <math><mi>N</mi></math>：
+    </p>
+
+    <div class="math-block">
+      <div class="math-eq">
+        <math display="block">
+          <mrow>
+            <mi>C</mi><mo>(</mo><mi>N</mi><mo>)</mo>
+            <mo>=</mo>
+            <mfrac>
+              <mi>N</mi>
+              <mrow>
+                <mn>1</mn>
+                <mo>+</mo>
+                <mi>&sigma;</mi><mo>(</mo><mi>N</mi><mo>-</mo><mn>1</mn><mo>)</mo>
+                <mo>+</mo>
+                <mi>&kappa;</mi><mi>N</mi><mo>(</mo><mi>N</mi><mo>-</mo><mn>1</mn><mo>)</mo>
+              </mrow>
+            </mfrac>
+          </mrow>
+        </math>
+      </div>
+      <div class="math-sub">
+        其中：&sigma; (Sigma) 为互斥争用系数（Contention，代表人类评审锁或单点排队）；&kappa; (Kappa) 为跨节点写偏序与通信冲突系数（Coherency Penalty）。
+      </div>
+    </div>
+
+    <p>
+      当存在跨 Agent 冲突（<math><mrow><mi>&kappa;</mi><mo>&gt;</mo><mn>0</mn></mrow></math>）时，系统吞吐量并不是单调上升的，而是在某个临界峰值点出现倒挂。吞吐量极大值拐点公式由导数反解得出：
+    </p>
+
+    <div class="math-block">
+      <div class="math-eq">
+        <math display="block">
+          <mrow>
+            <msup><mi>N</mi><mo>*</mo></msup>
+            <mo>=</mo>
+            <msqrt>
+              <mfrac>
+                <mrow><mn>1</mn><mo>-</mo><mi>&sigma;</mi></mrow>
+                <mi>&kappa;</mi>
+              </mfrac>
+            </msqrt>
+          </mrow>
+        </math>
+      </div>
+      <div class="math-sub">
+        当并发数 N 超过 N* 时，新增的 Agent 产生合并冲突所带来的返工损耗，将完全压倒其新增的编码产出，总产出不升反降！
+      </div>
+    </div>
+
+    <p>
+      <strong>核心洞见对比</strong>：
+    </p>
+    <ul>
+      <li><strong>在传统单体模式下</strong>：每个 Agent 既写代码又想合并，人类需要反复与多个线程对话审查，<math><mrow><mi>&sigma;</mi><mo>&approx;</mo><mn>0.12</mn></mrow></math>（人类打断成本极高），跨 Agent 代码冲突率 <math><mrow><mi>&kappa;</mi><mo>&approx;</mo><mn>0.008</mn></mrow></math>。代入公式反解得到峰值拐点仅为 <math><mrow><msup><mi>N</mi><mo>*</mo></msup><mo>&approx;</mo><mn>10.5</mn></mrow></math>，最大有效产出卡死在 3.57 左右！并发超过 11 个系统便陷入返工泥潭。</li>
+      <li><strong>在 Cursor Projects 协调模式下</strong>：协调 Agent 接管了所有的任务分解与 PR 准入审查，将人类从琐碎通信中解放，使争用系数骤降至 <math><mrow><mi>&sigma;</mi><mo>&approx;</mo><mn>0.015</mn></mrow></math>；同时由全局维护的 <code>Shared Context</code> 和严格的单分支规划，使代码偏序冲突系数降至 <math><mrow><mi>&kappa;</mi><mo>&approx;</mo><mn>0.00025</mn></mrow></math>。代入反解得到峰值并发度跃升至 <math><mrow><msup><mi>N</mi><mo>*</mo></msup><mo>&approx;</mo><mn>62.8</mn></mrow></math>，峰值吞吐量攀升至 <strong>21.68</strong>——系统有效吞吐<strong>整整提升了 6.1 倍</strong>！这在数学上严谨地印证了 Cursor 员工口头汇报的“约多 6 倍”数据！</li>
+    </ul>
+
+    <!-- 交互沙盘 1 -->
+    <section id="sec-usl-sandbox" class="sandbox-card">
+      <div class="sandbox-header">
+        <div class="sb-kicker-tag">Interactive Simulation · Stage 4</div>
+        <div class="sb-title-lg">多 Agent USL 真实可扩展性与吞吐量演算沙盘</div>
+        <div class="sb-desc">调节互斥争用参数 &sigma;、协调通信损耗 &kappa; 以及当前并发 Agent 规模 N，观察系统吞吐能力与极限拐点反解</div>
+      </div>
+
+      <!-- 快捷预设按钮 -->
+      <div class="preset-group">
+        <button id="btn-preset-trad" class="preset-btn">传统单体全包模式 (&sigma;=0.12, &kappa;=0.008)</button>
+        <button id="btn-preset-proj" class="preset-btn active">Cursor Projects 模式 (&sigma;=0.015, &kappa;=0.00025)</button>
+        <button id="btn-preset-swarm" class="preset-btn">超高协同极值模式 (&sigma;=0.005, &kappa;=0.00005)</button>
+      </div>
+
+      <!-- 控制面板 -->
+      <div class="ctrl-grid">
+        <div class="ctrl-item">
+          <div class="ctrl-label-wrap">
+            <span>争用排队系数 &sigma; (Contention)</span>
+            <span class="ctrl-value-badge" id="out-usl-sigma">0.015</span>
+          </div>
+          <input id="usl-in-sigma" type="range" min="0.002" max="0.200" step="0.001" value="0.015">
+          <div class="ctrl-desc">体现人类审查锁与集中瓶颈。协调 Agent 统一收拢后该值极小。</div>
+        </div>
+
+        <div class="ctrl-item">
+          <div class="ctrl-label-wrap">
+            <span>协同冲突系数 &kappa; (Coherency)</span>
+            <span class="ctrl-value-badge" id="out-usl-kappa">0.00025</span>
+          </div>
+          <input id="usl-in-kappa" type="range" min="0.00002" max="0.01000" step="0.00002" value="0.00025">
+          <div class="ctrl-desc">体现跨 Agent 代码冲突与写偏序。共享上下文越完善，&kappa; 越趋近 0。</div>
+        </div>
+
+        <div class="ctrl-item">
+          <div class="ctrl-label-wrap">
+            <span>并发子 Agent 数量 N (Swarm Size)</span>
+            <span class="ctrl-value-badge" id="out-usl-n">60</span>
+          </div>
+          <input id="usl-in-agents" type="range" min="1" max="250" step="1" value="60">
+          <div class="ctrl-desc">当前 Projects 并行调度的子 Agent 物理规模。</div>
+        </div>
+      </div>
+
+      <!-- 回显卡片 -->
+      <div class="res-grid">
+        <div class="res-card highlight">
+          <div class="res-lbl">系统峰值容量拐点 (N*)</div>
+          <div class="res-val" id="out-usl-nstar">62.8</div>
+        </div>
+        <div class="res-card highlight">
+          <div class="res-lbl">当前等效产出吞吐量 C(N)</div>
+          <div class="res-val" id="out-usl-cap">21.66</div>
+        </div>
+        <div class="res-card">
+          <div class="res-lbl">当前规模并发效能率</div>
+          <div class="res-val" id="out-usl-eff">36.1%</div>
+        </div>
+        <div class="res-card">
+          <div class="res-lbl">当前运行区域状态</div>
+          <div class="res-val" style="font-size: 17px;" id="out-usl-state">接近峰值最优吞吐</div>
+        </div>
+      </div>
+
+      <!-- 动态诊断结论 -->
+      <div class="diagnosis-box" id="out-usl-desc">
+        当前并发紧邻吞吐量极值区，单位产出比达到上限，体现了 Projects 协调调度下的极致生产效能。
+      </div>
+    </section>
+
+    <!-- 交互沙盘 2 -->
+    <section id="sec-scene-sandbox" class="sandbox-card">
+      <div class="sandbox-header">
+        <div class="sb-kicker-tag">Lifecycle Simulator · Stage 4</div>
+        <div class="sb-title-lg">Cursor Projects 三大周期性订阅场景动态演练器</div>
+        <div class="sb-desc">点击切换官方视频演示的 3 种典型业务场景，剖析输入信号、协调逻辑、子 Agent 行为与记忆沉淀流向</div>
+      </div>
+
+      <div class="scene-switch-bar">
+        <button id="btn-sub-tabs" class="scene-tab active">场景一：Tabs 架构探查委托</button>
+        <button id="btn-sub-design" class="scene-tab">场景二：Design System 规范监听</button>
+        <button id="btn-sub-watch" class="scene-tab">场景三：夜间 Merge-Readiness 巡检</button>
+      </div>
+
+      <div class="scene-panel">
+        <div class="scene-step-row">
+          <div class="scene-step-tag">触发机制</div>
+          <div class="scene-step-content" id="out-sub-trigger">
+            <strong>人工单次指令</strong>：用户在 IDE 新建「Tabs」项目，输入“弄清 Grok 桌面端标签页架构”。
+          </div>
+        </div>
+
+        <div class="scene-step-row">
+          <div class="scene-step-tag">协调决策</div>
+          <div class="scene-step-content" id="out-sub-coord">
+            <strong>顶层规划分解</strong>：协调 Agent 拆解出“读取约定”、“索引状态机树”、“设计重构方向”，自身严守不写代码纪律。
+          </div>
+        </div>
+
+        <div class="scene-step-row">
+          <div class="scene-step-tag">子 Agent 执行</div>
+          <div class="scene-step-content" id="out-sub-agents">
+            <strong>云端只读实例</strong>：派生 1~2 个只读子 Agent 深入代码库，并发检索 Electron 渲染管线与标签页事件监听。
+          </div>
+        </div>
+
+        <div class="scene-step-row">
+          <div class="scene-step-tag">共享上下文变动</div>
+          <div class="scene-step-content" id="out-sub-shared">
+            <strong>架构方案落盘</strong>：将调研提炼的核心设计输出至 <code>Project/docs/electron-concepts.md</code>，永久备查并供全员复用。
+          </div>
+        </div>
+
+        <div class="scene-step-row">
+          <div class="scene-step-tag">成果交付流</div>
+          <div class="scene-step-content" id="out-sub-result">
+            <strong>向人类汇报审查</strong>：在单会话中汇报当前标签页的实现全貌，并给出可行的代码迁移提案。
+          </div>
+        </div>
+
+        <div class="scene-step-row">
+          <div class="scene-step-tag">执行周期性</div>
+          <div class="scene-step-content" id="out-sub-cycle">
+            <strong>单次按需执行</strong>：由用户主动发起，完成后挂起等待下一步指令。
+          </div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <!-- 第六章：数据与留白 -->
+  <section id="sec-data-limits">
+    <h2>六、实测数据、留白边界与未来启示</h2>
+
+    <p>
+      Cursor 在本次发布中释放的工程信号与实测数据，引发了整个开发者生态的强烈震动。但本着严密实证的原则，我们必须客观看待已有数据与当前尚未披露的关键边界。
+    </p>
+
+    <h3>6.1 内部数据与实操效能考证</h3>
+    <p>
+      在发布视频中，Cursor 团队公布了两项关键内部数据：
+    </p>
+    <ul>
+      <li><strong>“使用 Projects 的工程师每周合并的 PR 约多 6 倍”</strong>：这一指标反映了代码生产吞吐的量级跃迁。但需要指出的是，该数据为员工视频中的口头陈述，官方目前<strong>未公布具体的对照基准群</strong>（是与不使用 AI 相比，还是与使用普通 Cursor Chat 的工程师相比？）；</li>
+      <li><strong>“在开始使用的第一周，合并率上升约 30%”</strong>：该项指标同样未明确统计口径，即“合并率（Merge Rate）”具体是指 PR 成功合并占创建 PR 的比例，还是指单位开发周期内合并任务的密度，亦未明确 30% 代表相对增长率还是绝对百分点。</li>
+    </ul>
+
+    <h3>6.2 当前未明信息与工程留白</h3>
+    <p>
+      在震撼的功能背后，官方发布的页面与视频中至少留下了四大尚未完全公开的工程悬念：
+    </p>
+    <ol>
+      <li><strong>计费模式与用量配额（Pricing &amp; Limits）</strong>：调度上千个子 Agent 并长驻云端虚拟机，其底层消耗的模型 Token 与云计算基础设施成本极其高昂。目前官方未说明 Beta 阶段之后的计费规则、并发上限以及用量阈值；</li>
+      <li><strong>子 Agent 物理执行位置拓扑</strong>：原文提到 Agent 会用到多台云端机器与本地电脑，但未细说子 Agent 的物理机型规格、容器生命周期以及销毁策略；</li>
+      <li><strong>全自动合并安全边界</strong>：演示中系统始终等待人工输入<code>go</code>，但随着夜间 merge-readiness watch 能够自主修 bug，系统未来是否会开放设定特定高置信度分支的“完全自动合并（Auto-Merge）”，尚未有官方定论；</li>
+      <li><strong>多模型混用与降级治理</strong>：在长达数月的任务中，不同子 Agent 是否支持混合调度（例如用 Grok 4.5 规划、用 Claude 3.5 Sonnet 编码、用更轻量模型巡检），仍需进一步验证。</li>
+    </ol>
+
+    <h3>6.3 从“代码副驾驶”向“自主软件工程舰队”的范式跃迁</h3>
+    <p>
+      Fredrika 在视频结语中提到：<em>“这就是我们几个月来的内部工作方式，Projects 只是第一次将它打包得让外界每个人也能轻松用上。”</em>
+    </p>
+    <p>
+      这一功能彻底宣示了人机协同进入全新阶段：未来的工程师不再是每天耗费 8 小时逐行打字或反复粘贴 Prompt 的“码农”，而是转型为<strong>“软件舰队司令官”</strong>——通过设立架构愿景、维护共享规范、审查准入网关，指挥一支包含上千个具备持久记忆、全天候运转的 AI Agent 军团，在云端持续推进软件资产的演进与繁荣。
+    </p>
+  </section>
+
+  <!-- 附录：多媒体记录 -->
+  <section id="sec-appendix">
+    <h2>附录：原文多媒体记录与索引</h2>
+    <p>本技术文档完整收录原发布稿件包含的全部多媒体录屏资产元数据，供技术溯源查对：</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>序号</th>
+            <th>资产类型</th>
+            <th>原源地址</th>
+            <th>海报 / 伴生资源</th>
+            <th>核心演示内容描述</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>01</strong></td>
+            <td>演示对谈视频</td>
+            <td><code>/media/cursor-projects/projects-overview.mp4</code></td>
+            <td><code>projects-overview-poster.jpg</code><br><code>projects-overview.zh-en.vtt</code></td>
+            <td>Fredrika Lindh 与同事演示 Projects 从碎片会话统一至单协调 Agent 的工作流，全长约 1.5 分钟。</td>
+          </tr>
+          <tr>
+            <td><strong>02</strong></td>
+            <td>功能录屏</td>
+            <td><code>/media/cursor-projects/coordinator-delegation.mp4</code></td>
+            <td><code>coordinator-delegation-poster.jpg</code></td>
+            <td>在「Tabs」项目中，协调 Agent 规划 Grok 桌面端标签页架构调查并分派子 Agent 查阅源码。</td>
+          </tr>
+          <tr>
+            <td><strong>03</strong></td>
+            <td>功能录屏</td>
+            <td><code>/media/cursor-projects/shared-context.mp4</code></td>
+            <td><code>shared-context-poster.jpg</code></td>
+            <td>「Browser」项目的共享上下文视图，展示设计文档、排错记录与 preferences.md 的跨端同步。</td>
+          </tr>
+          <tr>
+            <td><strong>04</strong></td>
+            <td>功能录屏</td>
+            <td><code>/media/cursor-projects/subscriptions.mp4</code></td>
+            <td><code>subscriptions-poster.jpg</code></td>
+            <td>在「Design System」中配置自然语言订阅，建立每小时核查 PR 设计系统合规性的自动化任务。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 页脚版权与回执 -->
+  <footer class="article-footer">
+    <div>AIKnowledge 知识库 · 数字化前沿工程架构专著系列</div>
+    <div>基准公历日期: 2026-09-14 | 交付规范: 8项全自包含单文件 HTML</div>
+  </footer>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  // 工具函数
+  function byId(id){ return document.getElementById(id); }
+
+  // 1. 阅读进度条
+  window.addEventListener("scroll", function(){
+    var h = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+    var st = document.documentElement.scrollTop || document.body.scrollTop;
+    var pct = h > 0 ? (st / h) * 100 : 0;
+    var rb = byId("readbar");
+    if(rb) rb.style.width = pct + "%";
+  });
+
+  // 2. 主题切换
+  var currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+  try {
+    var storedTheme = localStorage.getItem("aike_theme_pref");
+    if(storedTheme === "light" || storedTheme === "dark") {
+      currentTheme = storedTheme;
+      document.documentElement.setAttribute("data-theme", currentTheme);
+    }
+  } catch(e) {}
+
+  function toggleTheme(){
+    currentTheme = currentTheme === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", currentTheme);
+    try { localStorage.setItem("aike_theme_pref", currentTheme); } catch(e) {}
+  }
+
+  var btnTheme = byId("theme-toggle");
+  if(btnTheme) btnTheme.addEventListener("click", toggleTheme);
+
+  var btnMobTheme = byId("mob-theme-btn");
+  if(btnMobTheme) btnMobTheme.addEventListener("click", toggleTheme);
+
+  // 打印按钮
+  var btnPrint = byId("btn-print");
+  if(btnPrint) btnPrint.addEventListener("click", function(){ window.print(); });
+
+  // 移动端侧栏抽屉
+  var btnMobToc = byId("mob-toc-btn");
+  var sidebar = byId("sidebar");
+  if(btnMobToc && sidebar){
+    btnMobToc.addEventListener("click", function(){
+      sidebar.classList.toggle("open");
+    });
+  }
+
+  // 3. 侧栏目录高亮联动
+  var tocLinks = document.querySelectorAll(".toc-list a");
+  var sections = [];
+  tocLinks.forEach(function(link){
+    var href = link.getAttribute("href");
+    if(href && href.indexOf("#") === 0){
+      var targetId = href.substring(1);
+      var el = byId(targetId);
+      if(el) sections.push({ id: targetId, link: link, el: el });
+    }
+  });
+
+  window.addEventListener("scroll", function(){
+    var scrollPos = (document.documentElement.scrollTop || document.body.scrollTop) + 80;
+    var current = "";
+    for(var i = 0; i < sections.length; i++){
+      if(sections[i].el.offsetTop <= scrollPos){
+        current = sections[i].id;
+      }
+    }
+    if(current){
+      tocLinks.forEach(function(l){
+        if(l.getAttribute("href") === "#" + current){
+          l.classList.add("active");
+        } else {
+          l.classList.remove("active");
+        }
+      });
+    }
+  });
+
+  // 4. 沙盘 1：USL 真实扩展性模拟器
+  var inSigma = byId("usl-in-sigma");
+  var inKappa = byId("usl-in-kappa");
+  var inAgents = byId("usl-in-agents");
+
+  var outSigma = byId("out-usl-sigma");
+  var outKappa = byId("out-usl-kappa");
+  var outN = byId("out-usl-n");
+  var outNstar = byId("out-usl-nstar");
+  var outCap = byId("out-usl-cap");
+  var outEff = byId("out-usl-eff");
+  var outState = byId("out-usl-state");
+  var outDesc = byId("out-usl-desc");
+
+  function calcUslCapacity(n, s, k){
+    var denom = 1.0 + s * (n - 1.0) + k * n * (n - 1.0);
+    return denom > 0 ? n / denom : 0;
+  }
+
+  function updateUslSandbox(){
+    if(!inSigma || !inKappa || !inAgents) return;
+
+    var s = parseFloat(inSigma.value);
+    var k = parseFloat(inKappa.value);
+    var n = parseFloat(inAgents.value);
+
+    // 格式化展示参数
+    if(outSigma) outSigma.textContent = s.toFixed(3);
+    if(outKappa) outKappa.textContent = k.toFixed(5);
+    if(outN) outN.textContent = n.toString();
+
+    // 计算 N*
+    var nStar = 0;
+    if(k > 0 && s < 1.0){
+      nStar = Math.sqrt((1.0 - s) / k);
+    }
+    if(outNstar) outNstar.textContent = nStar > 0 ? nStar.toFixed(1) : "无峰值";
+
+    // 计算当前产出
+    var cap = calcUslCapacity(n, s, k);
+    if(outCap) outCap.textContent = cap.toFixed(2);
+
+    // 计算效能率
+    var eff = n > 0 ? (cap / n) * 100.0 : 0;
+    if(outEff) outEff.textContent = eff.toFixed(1) + "%";
+
+    // 评估状态
+    var stateStr = "线性扩展良好";
+    var descStr = "";
+
+    if(nStar > 0 && n > nStar * 1.05){
+      stateStr = "冲突倒挂区 (产出下滑)";
+      descStr = "当前 Agent 并发数已超过容量拐点 N*=" + nStar.toFixed(1) + "，新增 Agent 产生的代码偏序冲突与审查损耗压倒了生产力，建议启用协调 Agent 限流准入。";
+    } else if(nStar > 0 && n >= nStar * 0.85){
+      stateStr = "接近峰值最优吞吐";
+      descStr = "当前并发紧邻吞吐量极值区，单位产出比达到上限，体现了 Projects 协调调度下的极致生产效能。";
+    } else {
+      stateStr = "线性/亚线性扩展区";
+      descStr = "系统处于健康扩展通道，争用损耗极低，继续增加并行的子 Agent 仍可获得正向生产力产出。";
+    }
+
+    if(outState) outState.textContent = stateStr;
+    if(outDesc) outDesc.textContent = descStr;
+  }
+
+  if(inSigma) inSigma.addEventListener("input", updateUslSandbox);
+  if(inKappa) inKappa.addEventListener("input", updateUslSandbox);
+  if(inAgents) inAgents.addEventListener("input", updateUslSandbox);
+
+  // 预设模式按钮
+  var btnPreTrad = byId("btn-preset-trad");
+  var btnPreProj = byId("btn-preset-proj");
+  var btnPreSwarm = byId("btn-preset-swarm");
+
+  function clearPresetClass(){
+    if(btnPreTrad) btnPreTrad.classList.remove("active");
+    if(btnPreProj) btnPreProj.classList.remove("active");
+    if(btnPreSwarm) btnPreSwarm.classList.remove("active");
+  }
+
+  if(btnPreTrad){
+    btnPreTrad.addEventListener("click", function(){
+      clearPresetClass();
+      btnPreTrad.classList.add("active");
+      inSigma.value = "0.120";
+      inKappa.value = "0.00800";
+      inAgents.value = "10";
+      updateUslSandbox();
+    });
+  }
+
+  if(btnPreProj){
+    btnPreProj.addEventListener("click", function(){
+      clearPresetClass();
+      btnPreProj.classList.add("active");
+      inSigma.value = "0.015";
+      inKappa.value = "0.00025";
+      inAgents.value = "60";
+      updateUslSandbox();
+    });
+  }
+
+  if(btnPreSwarm){
+    btnPreSwarm.addEventListener("click", function(){
+      clearPresetClass();
+      btnPreSwarm.classList.add("active");
+      inSigma.value = "0.005";
+      inKappa.value = "0.00005";
+      inAgents.value = "140";
+      updateUslSandbox();
+    });
+  }
+
+  // 初始执行一次
+  updateUslSandbox();
+
+  // 5. 沙盘 2：场景演练切换器
+  var tabTabs = byId("btn-sub-tabs");
+  var tabDesign = byId("btn-sub-design");
+  var tabWatch = byId("btn-sub-watch");
+
+  var outTrigger = byId("out-sub-trigger");
+  var outCoord = byId("out-sub-coord");
+  var outSubAgents = byId("out-sub-agents");
+  var outShared = byId("out-sub-shared");
+  var outSubResult = byId("out-sub-result");
+  var outCycle = byId("out-sub-cycle");
+
+  var scenesData = {
+    tabs: {
+      trigger: "<strong>人工单次指令</strong>：用户在 IDE 新建「Tabs」项目，输入“弄清 Grok 桌面端标签页架构”。",
+      coord: "<strong>顶层规划分解</strong>：协调 Agent 拆解出“读取约定”、“索引状态机树”、“设计重构方向”，自身严守不写代码纪律。",
+      agents: "<strong>云端只读实例</strong>：派生 1~2 个只读子 Agent 深入代码库，并发检索 Electron 渲染管线与标签页事件监听。",
+      shared: "<strong>架构方案落盘</strong>：将调研提炼的核心设计输出至 Project/docs/electron-concepts.md，永久备查并供全员复用。",
+      result: "<strong>向人类汇报审查</strong>：在单会话中汇报当前标签页的实现全貌，并给出可行的代码迁移提案。",
+      cycle: "<strong>单次按需执行</strong>：由用户主动发起，完成后挂起等待下一步指令。"
+    },
+    design: {
+      trigger: "<strong>自然语言规则绑定</strong>：用户输入“监听合并进来的 PR，检查是否违反设计系统”，写入 preferences.md。",
+      coord: "<strong>常驻合规守望</strong>：协调 Agent 绑定 Git 仓库 webhook，每当检测到 PR 合并事件即自动装配审查任务。",
+      agents: "<strong>设计规范审查 Agent</strong>：子 Agent 自动核查变更 diff 是否存在硬编码样式、样式覆盖，是否应替换为公共组件或变体。",
+      shared: "<strong>设计规范与偏好沉淀</strong>：在 preferences.md 中自动维护 Design system merge watch 规则及组件库别名映射表。",
+      result: "<strong>阻断/标记建议汇报</strong>：发现违反规范时自动向开发者反馈改进建议，或在 PR 留下详细的组件重构批注。",
+      cycle: "<strong>全天候事件触发</strong>：伴随每一次代码合并持续自动化触发并验证。"
+    },
+    watch: {
+      trigger: "<strong>定时任务启动 (Cron)</strong>：设定夜间持续运行的「merge-readiness watch」，每隔 1 小时自动被时钟唤醒。",
+      coord: "<strong>大盘冲突与准入仲裁</strong>：扫描全部 64 个 PR，甄别 main 分支滞后情况，排查 Bugbot 与 CI 审查阻断原因。",
+      agents: "<strong>冲突解决与测试修复 Agent</strong>：派发子 Agent 针对滞后分支自动执行 rebase，修复 CI 报错，排查 UI 异常截图根因。",
+      shared: "<strong>测试说明与修复记忆</strong>：写入排错指南（如服务模拟测试步骤），避免后续 Agent 在同一环境配置中反复试错。",
+      result: "<strong>健康候选推荐</strong>：将无冲突、全绿通过 CI 的 PR 提级标注为“就绪”，等待人类负责人确认一句“go”即可合入。",
+      cycle: "<strong>周期性自主运转</strong>：每小时巡检一次，即便开发者合上电脑在夜间依然持续推进。"
+    }
+  };
+
+  function switchScene(key){
+    var d = scenesData[key];
+    if(!d) return;
+
+    if(outTrigger) outTrigger.innerHTML = d.trigger;
+    if(outCoord) outCoord.innerHTML = d.coord;
+    if(outSubAgents) outSubAgents.innerHTML = d.agents;
+    if(outShared) outShared.innerHTML = d.shared;
+    if(outSubResult) outSubResult.innerHTML = d.result;
+    if(outCycle) outCycle.innerHTML = d.cycle;
+
+    if(tabTabs) tabTabs.classList.remove("active");
+    if(tabDesign) tabDesign.classList.remove("active");
+    if(tabWatch) tabWatch.classList.remove("active");
+
+    if(key === "tabs" && tabTabs) tabTabs.classList.add("active");
+    if(key === "design" && tabDesign) tabDesign.classList.add("active");
+    if(key === "watch" && tabWatch) tabWatch.classList.add("active");
+  }
+
+  if(tabTabs) tabTabs.addEventListener("click", function(){ switchScene("tabs"); });
+  if(tabDesign) tabDesign.addEventListener("click", function(){ switchScene("design"); });
+  if(tabWatch) tabWatch.addEventListener("click", function(){ switchScene("watch"); });
+
+})();
+</script>
+
+</body>
+</html>

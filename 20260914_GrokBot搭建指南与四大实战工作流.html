@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grok Bot 101：如何搭建一个专属 Bot 以及真正派上用场的四个实战工作流</title>
+<meta name="description" content="Matt Palmer 撰写的 Grok Bot 101 实战指南深度消化：从聊天窗口到云端持久化电脑的范式跃迁，三字段极简 Bot 定义法，三维驱动引擎与多智能体协作，自然语言权限与 Review Agent 安全体系，以及个人社交 CRM、健身教练 Arnold、代码双环架构、跨平台企业检索四大实战工作流。">
+<style>
+:root{
+  --sidebar-w:280px;
+  --content-max:1180px;
+  --radius-s:6px; --radius-m:10px; --radius-l:16px;
+  --bg:#FAF7F2; --bg-elev:#FFFFFF; --bg-sunk:#F2EDE4;
+  --text:#2A2724; --text-dim:#6B6560; --text-faint:#928B83;
+  --border:#E5DED4; --border-strong:#D5CBBE;
+  --accent:#D97757; --accent-soft:#F6E7E0;
+  --emerald:#2E8B6F; --emerald-soft:#E3F0EA;
+  --rose:#C9503F; --rose-soft:#F8E5E1;
+  --amber:#B8862F; --amber-soft:#F8EED9;
+  --cyan:#3D7F96; --cyan-soft:#E2EFF3;
+  --shadow:0 1px 2px rgba(42,39,36,.05),0 4px 16px rgba(42,39,36,.05);
+  --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --font-head:"Songti SC","SimSun",Newsreader,Georgia,serif;
+  --font-code:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+}
+html[data-theme="dark"]{
+  --bg:#181715; --bg-elev:#201E1B; --bg-sunk:#141311;
+  --text:#E8E3DC; --text-dim:#A7A099; --text-faint:#7C756E;
+  --border:#35322D; --border-strong:#463F39;
+  --accent:#E2886A; --accent-soft:#33241D;
+  --emerald:#5FB99A; --emerald-soft:#1D2B26;
+  --rose:#E0796A; --rose-soft:#33201D;
+  --amber:#D9A94E; --amber-soft:#2E2718;
+  --cyan:#6FB0C6; --cyan-soft:#1B2A30;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-body); font-size:16px; line-height:1.75;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+/* ---------- 阅读进度 ---------- */
+#progress-track{position:fixed;top:0;left:0;right:0;height:3px;background:transparent;z-index:60}
+#progress-bar{height:3px;width:0;background:var(--accent);transition:width .1s linear}
+/* ---------- 侧栏目录 ---------- */
+#sidebar{
+  position:fixed; top:0; left:0; bottom:0; width:var(--sidebar-w);
+  background:var(--bg-elev); border-right:1px solid var(--border);
+  overflow-y:auto; z-index:50; padding:22px 0 40px;
+}
+#sidebar::-webkit-scrollbar{width:6px}
+#sidebar::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+.sb-head{padding:0 20px 14px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.sb-title{font-family:var(--font-head);font-size:15px;font-weight:700;line-height:1.4;margin:0 0 6px}
+.sb-sub{font-size:11.5px;color:var(--text-faint);letter-spacing:.04em}
+.sb-nav{padding:0 12px}
+.sb-link{
+  display:block; padding:6px 10px; border-radius:var(--radius-s);
+  color:var(--text-dim); text-decoration:none; font-size:13px; line-height:1.5;
+  border-left:2px solid transparent;
+}
+.sb-link:hover{background:var(--bg-sunk);color:var(--text)}
+.sb-link.active{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.sb-link.lv2{padding-left:22px;font-size:12.5px}
+.sb-sep{height:1px;background:var(--border);margin:10px 10px}
+/* ---------- 主体 ---------- */
+#main{
+  display:block; max-width:var(--content-max);
+  margin-left:calc(var(--sidebar-w) + max(0px,(100% - var(--sidebar-w) - var(--content-max))/2));
+  margin-right:max(0px,calc((100% - var(--sidebar-w) - var(--content-max))/2));
+  padding:56px 48px 120px;
+}
+/* ---------- 顶部工具条 ---------- */
+#topbar{position:fixed; top:12px; right:20px; z-index:70; display:flex; gap:8px}
+.tb-btn{
+  background:var(--bg-elev); color:var(--text-dim); border:1px solid var(--border);
+  border-radius:var(--radius-s); padding:6px 12px; font-size:12px; cursor:pointer;
+  font-family:var(--font-body); box-shadow:var(--shadow); transition:all .15s ease;
+}
+.tb-btn:hover{color:var(--accent);border-color:var(--accent)}
+#toc-toggle{display:none}
+/* ---------- 标题 ---------- */
+h1,h2,h3,h4{font-family:var(--font-head);line-height:1.35;color:var(--text)}
+h1{font-size:clamp(28px,3.8vw,40px);margin:0 0 18px;letter-spacing:-.01em}
+h2{font-size:clamp(21px,2.5vw,28px);margin:60px 0 20px;padding-bottom:12px;border-bottom:2px solid var(--border)}
+h3{font-size:clamp(17px,1.9vw,22px);margin:38px 0 14px}
+h4{font-size:16.5px;margin:26px 0 10px}
+p{margin:0 0 16px}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent;transition:border-color .15s ease}
+a:hover{border-bottom-color:var(--accent)}
+strong{font-weight:650;color:var(--text)}
+em{font-style:normal;color:var(--text-dim)}
+code{
+  font-family:var(--font-code); font-size:.88em; background:var(--bg-sunk);
+  border:1px solid var(--border); border-radius:4px; padding:2px 6px; color:var(--accent);
+}
+pre{
+  background:var(--bg-sunk); border:1px solid var(--border); border-radius:var(--radius-m);
+  padding:16px 20px; overflow-x:auto; font-family:var(--font-code); font-size:13.5px; line-height:1.65;
+  margin:18px 0; position:relative;
+}
+pre code{background:none;border:none;padding:0;color:inherit;font-size:inherit}
+/* ---------- 首屏 ---------- */
+.hero{
+  border:1px solid var(--border); border-radius:var(--radius-l);
+  background:var(--bg-elev); padding:40px 42px; margin-bottom:28px; box-shadow:var(--shadow);
+}
+.hero-kicker{
+  display:inline-block; font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); border:1px solid var(--accent); border-radius:999px;
+  padding:3px 12px; margin-bottom:18px; font-weight:600;
+}
+.hero-lede{font-size:17.5px;line-height:1.8;color:var(--text-dim);margin-bottom:0}
+.hero-meta{
+  display:flex; flex-wrap:wrap; gap:10px; margin-top:24px; padding-top:20px;
+  border-top:1px solid var(--border); font-size:12.5px; color:var(--text-faint);
+}
+.hero-meta span{background:var(--bg-sunk);border-radius:var(--radius-s);padding:4px 10px}
+/* ---------- 摘要卡 ---------- */
+.tldr{
+  border:1px solid var(--border); border-left:4px solid var(--accent);
+  background:var(--bg-elev); border-radius:var(--radius-m);
+  padding:22px 26px; margin:28px 0; box-shadow:var(--shadow);
+}
+.tldr h3{margin:0 0 12px;font-size:16px;color:var(--accent);font-family:var(--font-body);letter-spacing:.02em}
+.tldr ul{margin:0;padding-left:20px}
+.tldr li{margin-bottom:9px;font-size:15px;line-height:1.7}
+.tldr li:last-child{margin-bottom:0}
+/* ---------- 通用卡片与区块 ---------- */
+.card{
+  border:1px solid var(--border); border-radius:var(--radius-m);
+  background:var(--bg-elev); padding:24px 28px; margin:24px 0; box-shadow:var(--shadow);
+}
+.callout{
+  border:1px solid var(--border); border-left:3px solid var(--cyan);
+  background:var(--bg-elev); border-radius:0 var(--radius-m) var(--radius-m) 0;
+  padding:16px 22px; margin:22px 0; font-size:14.5px; color:var(--text-dim); line-height:1.75;
+}
+.callout strong{color:var(--cyan)}
+.callout.amber{border-left-color:var(--amber)}
+.callout.amber strong{color:var(--amber)}
+.callout.emerald{border-left-color:var(--emerald)}
+.callout.emerald strong{color:var(--emerald)}
+.callout p:last-child{margin-bottom:0}
+/* ---------- 图解展示卡 ---------- */
+.fig-box{
+  border:1px solid var(--border); border-radius:var(--radius-l);
+  background:var(--bg-elev); padding:20px 24px; margin:32px 0; box-shadow:var(--shadow);
+}
+.fig-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.fig-badge{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:3px 10px;border-radius:999px;font-weight:600}
+.fig-label{font-size:13px;color:var(--text-faint);font-family:var(--font-code)}
+.fig-canvas{background:var(--bg-sunk);border:1px solid var(--border);border-radius:var(--radius-m);padding:16px;overflow-x:auto}
+.fig-canvas svg{display:block;width:100%;height:auto;min-width:620px}
+.fig-caption{margin-top:12px;font-size:13px;color:var(--text-dim);line-height:1.65;text-align:center}
+/* ---------- 表格 ---------- */
+table.grid{width:100%;border-collapse:collapse;font-size:14px;margin:18px 0;border-radius:var(--radius-m);overflow:hidden;border:1px solid var(--border)}
+table.grid th,table.grid td{border:1px solid var(--border);padding:10px 14px;text-align:left;vertical-align:top;line-height:1.6}
+table.grid th{background:var(--bg-sunk);font-weight:650;font-size:13px;color:var(--text)}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.tag.ok{background:var(--emerald-soft);color:var(--emerald)}
+.tag.warn{background:var(--amber-soft);color:var(--amber)}
+.tag.acc{background:var(--accent-soft);color:var(--accent)}
+.tag.cy{background:var(--cyan-soft);color:var(--cyan)}
+/* ---------- 交互沙盘 ---------- */
+.box-sandbox{
+  border:1px solid var(--border); border-radius:var(--radius-l);
+  background:var(--bg-elev); padding:28px 32px; margin:36px 0; box-shadow:var(--shadow);
+}
+.box-sandbox-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.box-sandbox-head h3{margin:0;font-size:20px}
+.box-sandbox-kicker{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 10px}
+.box-sandbox-desc{font-size:14px;color:var(--text-dim);margin:8px 0 20px;line-height:1.7}
+.wf-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+.wf-tab{
+  background:var(--bg-sunk); border:1px solid var(--border); border-radius:999px;
+  padding:7px 16px; font-size:13.5px; color:var(--text-dim); cursor:pointer; font-family:var(--font-body);
+  transition:all .15s ease;
+}
+.wf-tab:hover{color:var(--accent);border-color:var(--accent)}
+.wf-tab.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);font-weight:600}
+.wf-panel{border:1px solid var(--border);border-radius:var(--radius-m);background:var(--bg-sunk);padding:22px 24px}
+.wf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:18px}
+.wf-item{border:1px solid var(--border);border-radius:var(--radius-s);background:var(--bg-elev);padding:14px 16px}
+.wf-item .k{font-size:11.5px;color:var(--text-faint);letter-spacing:.04em;display:block;margin-bottom:4px}
+.wf-item .v{font-size:14px;color:var(--text);line-height:1.6}
+.wf-code-wrap{position:relative;margin-top:14px}
+.copy-btn{
+  position:absolute; top:10px; right:12px;
+  background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius-s);
+  padding:4px 10px; font-size:11.5px; color:var(--text-dim); cursor:pointer; font-family:var(--font-body);
+}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent)}
+/* ---------- 资源链接列表 ---------- */
+.res-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:20px 0}
+.res-item{
+  border:1px solid var(--border); border-radius:var(--radius-m); background:var(--bg-elev);
+  padding:16px 20px; display:flex; flex-direction:column; justify-content:space-between;
+  box-shadow:var(--shadow); transition:transform .15s ease, border-color .15s ease;
+}
+.res-item:hover{border-color:var(--accent);transform:translateY(-2px)}
+.res-item .t{font-weight:650;font-size:15px;color:var(--text);margin-bottom:6px}
+.res-item .d{font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:14px}
+.res-item a.action{
+  align-self:flex-start; font-size:12.5px; color:var(--accent); font-weight:600;
+  display:inline-flex; align-items:center; gap:4px;
+}
+/* ---------- 页脚 ---------- */
+.footer{margin-top:70px;padding-top:24px;border-top:1px solid var(--border);font-size:13px;color:var(--text-faint);line-height:1.9}
+/* ---------- 响应式 ---------- */
+@media (max-width:1080px){
+  #main{margin-left:0;margin-right:0;max-width:100%;width:100%;padding:32px 20px 90px}
+  #sidebar{transform:translateX(-100%);transition:transform .22s ease}
+  #sidebar.open{transform:translateX(0)}
+  #toc-toggle{display:inline-block}
+  .hero{padding:28px 24px}
+  .box-sandbox{padding:20px 18px}
+}
+@media print{
+  #sidebar,#topbar,#progress-track{display:none}
+  #main{margin:0;max-width:100%;padding:0}
+  body{background:#fff;color:#000;font-size:11.5pt}
+  .box-sandbox,.card,.fig-box{break-inside:avoid;box-shadow:none}
+  h2{break-after:avoid}
+}
+</style>
+</head>
+<body>
+<div id="progress-track"><div id="progress-bar"></div></div>
+
+<div id="topbar">
+  <button class="tb-btn" id="toc-toggle" type="button">目录</button>
+  <button class="tb-btn" id="theme-toggle" type="button">切换主题</button>
+</div>
+
+<aside id="sidebar">
+  <div class="sb-head">
+    <div class="sb-title">Grok Bot 101 指南</div>
+    <div class="sb-sub">搭建专属 Bot 与四大实战工作流</div>
+  </div>
+  <nav class="sb-nav" id="sb-nav">
+    <a class="sb-link" href="#hero">首屏 · 核心逻辑</a>
+    <a class="sb-link" href="#summary">核心速览 · 四大事实</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#sec-cloud-computer">一 · 持久化云端电脑</a>
+    <a class="sb-link lv2" href="#sub-computer-changes">1.1 两项关键改变</a>
+    <a class="sb-link lv2" href="#sub-computer-handoff">1.2 人机协作交接机制</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#sec-anatomy">二 · 三字段定义专属 Bot</a>
+    <a class="sb-link lv2" href="#sub-three-fields">2.1 三核心要素解析</a>
+    <a class="sb-link lv2" href="#sub-devrel-case">2.2 搭建原则与 DevRel 案例</a>
+    <a class="sb-link lv2" href="#sub-ecosystem">2.3 MCP 与多账户扩展</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#sec-collaboration">三 · 交互、例程与多 Agent</a>
+    <a class="sb-link lv2" href="#sub-triggers">3.1 三维驱动引擎</a>
+    <a class="sb-link lv2" href="#sub-multi-bot">3.2 垂直专长与群聊接力</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#sec-security">四 · 权限控制与安全保障</a>
+    <a class="sb-link lv2" href="#sub-security-rules">4.1 自然语言防线与 Review Agent</a>
+    <a class="sb-link lv2" href="#sub-security-facts">4.2 安全机制四大核心事实</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#sec-workflows">五 · 四大实战工作流</a>
+    <a class="sb-link lv2" href="#wf-crm">5.1 个人社交 CRM</a>
+    <a class="sb-link lv2" href="#wf-arnold">5.2 健身助手 Arnold</a>
+    <a class="sb-link lv2" href="#wf-outerloop">5.3 编程“双环架构”</a>
+    <a class="sb-link lv2" href="#wf-search">5.4 跨平台聚合搜索</a>
+    <a class="sb-link lv2" href="#sec-sandbox">5.5 交互沙盘 · 工作流装配</a>
+    <div class="sb-sep"></div>
+    <a class="sb-link" href="#sec-conclusion">六 · 从胶水脚本到给 AI 一台电脑</a>
+    <a class="sb-link" href="#sec-resources">附录 · 官方资源与延伸渠道</a>
+  </nav>
+</aside>
+
+<main id="main">
+
+<header class="hero" id="hero">
+  <span class="hero-kicker">Agentic Automation Architecture · User Guide</span>
+  <h1>Grok Bot 101：如何搭建一个专属 Bot 以及真正派上用场的四个实战工作流</h1>
+  <p class="hero-lede">
+    Grok Bot 是什么，如何用三个字段定义一个 Bot，怎样通过聊天、例程和其他 Bot 触发任务，以及如何管理共享电脑的权限风险。
+  </p>
+  <div class="hero-meta">
+    <span>原作者：Matt Palmer</span>
+    <span>整理消化：AIKnowledge 技术库</span>
+    <span>基准日期：2026-09-14</span>
+    <span>核心范式：Cloud-Persistent Virtual Workstation</span>
+    <span>交付标准：自包含单文件 / 零外部依赖</span>
+  </div>
+</header>
+
+<section class="tldr" id="summary">
+  <h3>核心速览（TL;DR）</h3>
+  <ul>
+    <li><strong>云端电脑本质</strong>：Grok Bot 的核心不是多一个聊天框，而是让 Agent 使用一台带桌面、文件系统、终端和应用的云端电脑。</li>
+    <li><strong>三维任务触发</strong>：任务可以由聊天、例程与外部事件、其他 Bot 三种方式触发；遇到 CAPTCHA、2FA 或敏感信息时，人可以接管。</li>
+    <li><strong>混合权限防线</strong>：权限依赖自然语言规则、独立审查 Agent 与允许/阻止列表；一个 Bot 登录的网站，其他 Bot 也能访问。</li>
+    <li><strong>四大实战工作流</strong>：作者展示了个人 CRM、健身教练、代码外环和跨 Slack、Notion、GitHub 检索四类实际工作流。</li>
+  </ul>
+</section>
+
+<p class="lead">
+  把大模型当作网页对话框使用时，任务通常停留在“提问—回答—复制结果”的短会话里。需要跨应用操作、定时检查或在合上笔记本后继续运行的工作，往往还得另写脚本或拼接自动化工具。
+</p>
+
+<p>
+  Matt Palmer 写的《Grok Bot 101》是一份使用者视角的入门指南：先解释 Grok Bot 是什么，再介绍怎样定义一个 Bot、怎样触发任务、怎样设置权限和串联多个专长 Bot，最后拆解四套他实际在用的工作流。Grok Bot 的核心逻辑很直接：<strong>给软件智能体分配一台运行在云端的电脑</strong>。这台电脑拥有桌面、文件系统、终端和应用，能浏览网页、操作应用、编写并运行代码；你合上自己的电脑后，它仍可继续推进任务。
+</p>
+
+<!-- 图解 1：Grok Bot 核心概览架构图 -->
+<div class="fig-box">
+  <div class="fig-header">
+    <span class="fig-badge">图解 1</span>
+    <span class="fig-label">Architecture Diagram · Hero Overview</span>
+  </div>
+  <div class="fig-canvas">
+    <svg viewBox="0 0 780 260" role="img" aria-label="Grok Bot 核心概览：从对话框跃迁至云端持久化电脑">
+      <defs>
+        <linearGradient id="grad-accent" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.03"/>
+        </linearGradient>
+      </defs>
+      <!-- 背景区 1：传统局限 -->
+      <rect x="20" y="25" width="220" height="210" rx="10" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1.2"/>
+      <text x="130" y="52" text-anchor="middle" font-size="13" font-weight="700" fill="var(--text)">传统模式：网页对话框</text>
+      <rect x="40" y="70" width="180" height="36" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+      <text x="130" y="93" text-anchor="middle" font-size="12" fill="var(--text-dim)">短会话提问 / 回答</text>
+      <rect x="40" y="118" width="180" height="36" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+      <text x="130" y="141" text-anchor="middle" font-size="12" fill="var(--text-dim)">合上电脑即刻中断</text>
+      <rect x="40" y="166" width="180" height="50" rx="6" fill="var(--rose-soft)" stroke="var(--rose)" stroke-dasharray="3 3"/>
+      <text x="130" y="187" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--rose)">无桌面 / 无法持久留存</text>
+      <text x="130" y="205" text-anchor="middle" font-size="11" fill="var(--text-faint)">需手工写胶水脚本维系</text>
+
+      <!-- 转换箭头 -->
+      <path d="M 252 130 L 288 130" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <polygon points="296,130 286,124 286,136" fill="var(--accent)"/>
+      <text x="274" y="118" text-anchor="middle" font-size="11" font-weight="600" fill="var(--accent)">跃迁</text>
+
+      <!-- 背景区 2：Grok Bot 云端电脑 -->
+      <rect x="306" y="25" width="454" height="210" rx="10" fill="url(#grad-accent)" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="533" y="52" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent)">Grok Bot 核心：云端持久化虚拟工作站</text>
+      
+      <!-- 四大核心支柱卡片 -->
+      <g transform="translate(324, 70)">
+        <rect x="0" y="0" width="96" height="74" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="48" y="28" text-anchor="middle" font-size="12" font-weight="650" fill="var(--text)">图形桌面</text>
+        <text x="48" y="48" text-anchor="middle" font-size="10.5" fill="var(--text-dim)">GUI 完整视窗</text>
+        <text x="48" y="62" text-anchor="middle" font-size="10.5" fill="var(--text-faint)">人机协同交接</text>
+      </g>
+      <g transform="translate(430, 70)">
+        <rect x="0" y="0" width="96" height="74" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="48" y="28" text-anchor="middle" font-size="12" font-weight="650" fill="var(--text)">文件系统</text>
+        <text x="48" y="48" text-anchor="middle" font-size="10.5" fill="var(--text-dim)">完整持久存储</text>
+        <text x="48" y="62" text-anchor="middle" font-size="10.5" fill="var(--text-faint)">跨会话读写</text>
+      </g>
+      <g transform="translate(536, 70)">
+        <rect x="0" y="0" width="96" height="74" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="48" y="28" text-anchor="middle" font-size="12" font-weight="650" fill="var(--text)">终端环境</text>
+        <text x="48" y="48" text-anchor="middle" font-size="10.5" fill="var(--text-dim)">Bash/Shell 执行</text>
+        <text x="48" y="62" text-anchor="middle" font-size="10.5" fill="var(--text-faint)">代码自动构建</text>
+      </g>
+      <g transform="translate(642, 70)">
+        <rect x="0" y="0" width="102" height="74" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="51" y="28" text-anchor="middle" font-size="12" font-weight="650" fill="var(--text)">应用与网络</text>
+        <text x="51" y="48" text-anchor="middle" font-size="10.5" fill="var(--text-dim)">真实 Chrome 登录</text>
+        <text x="51" y="62" text-anchor="middle" font-size="10.5" fill="var(--text-faint)">会话状态保持</text>
+      </g>
+
+      <!-- 底部状态带 -->
+      <rect x="324" y="158" width="420" height="60" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+      <circle cx="344" cy="188" r="5" fill="var(--emerald)"/>
+      <text x="358" y="184" font-size="12" font-weight="600" fill="var(--emerald)">全天候持久运行 (24/7 Persistent)</text>
+      <text x="358" y="202" font-size="11.5" fill="var(--text-dim)">用户笔记本合上后在云端后台自主推进 · 手机随时远程查看接管</text>
+    </svg>
+  </div>
+  <div class="fig-caption">图解 1：Grok Bot 架构概览 —— 从传统短会话对话框跃迁至拥有桌面、终端、文件系统和应用的云端持久化电脑</div>
+</div>
+
+<hr class="divider">
+
+<!-- 第一章 -->
+<section id="sec-cloud-computer">
+  <h2>它不是聊天窗口，而是一台给 AI 用的持久化电脑</h2>
+
+  <p>
+    理解 Grok Bot 的关键，在于摆脱“聊天机器人”的思维定势。它本质上是一个常驻云端的虚拟工作站，配备了完整的桌面图形界面、文件系统、应用软件以及可执行命令的终端。
+  </p>
+
+  <p>
+    当你点击 Bot 的操作窗口时，体验就像打开了一台远程桌面。<strong>你在这台机器上拥有什么权限，Bot 就拥有完全相同的操作能力</strong>。
+  </p>
+
+  <!-- 图解 2：Grok Bot 云端电脑界面与人机协作交接机制 -->
+  <div class="fig-box">
+    <div class="fig-header">
+      <span class="fig-badge">图解 2</span>
+      <span class="fig-label">Interface &amp; Handoff Protocol</span>
+    </div>
+    <div class="fig-canvas">
+      <svg viewBox="0 0 780 280" role="img" aria-label="Grok Bot 云端电脑界面与人机协作交接机制">
+        <!-- 窗口外框 -->
+        <rect x="20" y="20" width="740" height="240" rx="8" fill="var(--bg-elev)" stroke="var(--border-strong)" stroke-width="1.5"/>
+        <!-- 窗口标题栏 -->
+        <rect x="20" y="20" width="740" height="30" rx="8" fill="var(--bg-sunk)"/>
+        <circle cx="38" cy="35" r="4" fill="var(--rose)"/>
+        <circle cx="52" cy="35" r="4" fill="var(--amber)"/>
+        <circle cx="66" cy="35" r="4" fill="var(--emerald)"/>
+        <text x="390" y="39" text-anchor="middle" font-size="11.5" font-family="var(--font-code)" fill="var(--text-faint)">grok-cloud-desktop [Ubuntu 24.04 LTS · 1920x1080 · Session Active]</text>
+
+        <!-- 左侧应用区：真实浏览器与终端 -->
+        <rect x="36" y="62" width="440" height="182" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+        <!-- 模拟浏览器顶部导航 -->
+        <rect x="46" y="72" width="420" height="24" rx="4" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="56" y="88" font-size="10" font-family="var(--font-code)" fill="var(--accent)">https://amazon.com &amp; https://costco.com [Cart Sync Active]</text>
+        <!-- 终端行 -->
+        <rect x="46" y="106" width="420" height="126" rx="4" fill="var(--bg)" stroke="var(--border)"/>
+        <text x="56" y="126" font-size="11" font-family="var(--font-code)" fill="var(--emerald)">$ agent-worker --job=compare-prices</text>
+        <text x="56" y="146" font-size="11" font-family="var(--font-code)" fill="var(--text-dim)">[DOM Observer] Opening Costco tab... Cart total: $148.50</text>
+        <text x="56" y="166" font-size="11" font-family="var(--font-code)" fill="var(--text-dim)">[DOM Observer] Opening Amazon tab... Cart total: $139.20</text>
+        <text x="56" y="186" font-size="11" font-family="var(--font-code)" fill="var(--amber)">[Security Intercept] 2FA / CAPTCHA Challenge detected at checkout</text>
+        <text x="56" y="206" font-size="11" font-family="var(--font-code)" fill="var(--cyan)">&gt;&gt; Yielding control to human operator...</text>
+
+        <!-- 右侧：人机协作交接面板 -->
+        <rect x="494" y="62" width="250" height="182" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/>
+        <text x="619" y="88" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">人机协作交接协议 (Handoff)</text>
+        
+        <rect x="508" y="102" width="222" height="42" rx="4" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="518" y="119" font-size="11.5" font-weight="600" fill="var(--text)">触发验证：CAPTCHA / 2FA</text>
+        <text x="518" y="135" font-size="10.5" fill="var(--text-dim)">Bot 暂停操作，桌面控制权切还给人</text>
+
+        <rect x="508" y="152" width="222" height="42" rx="4" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="518" y="169" font-size="11.5" font-weight="600" fill="var(--text)">敏感凭据：安全表单</text>
+        <text x="518" y="185" font-size="10.5" fill="var(--text-dim)">弹出安全密文表单，用户自行输入密码</text>
+
+        <rect x="508" y="202" width="222" height="30" rx="4" fill="var(--emerald)" opacity="0.9"/>
+        <text x="619" y="222" text-anchor="middle" font-size="11.5" font-weight="650" fill="#FFFFFF">验证完成一键继续 (Resume Bot)</text>
+      </svg>
+    </div>
+    <div class="fig-caption">图解 2：Grok Bot 云端电脑远程桌面与人机协作交接（Handoff）机制 —— 遇到 CAPTCHA/2FA 时的双向控制切换</div>
+  </div>
+
+  <h3 id="sub-computer-changes">这种完整计算环境带来了两项关键改变</h3>
+
+  <p>
+    <strong>第一，教会它的方式极其自然。</strong> 你既可以直接用文字描述工作流程，也可以在屏幕上录制一段自己的真实操作演示。例如，让它同时打开 Costco 和亚马逊，将指定商品加入购物车，随后比较两边的商品价格、运费和预计送达时间。
+  </p>
+
+  <p id="sub-computer-handoff">
+    <strong>第二，它具备人机协作的交接机制。</strong> 当流程需要人工处理 CAPTCHA 或双重认证（2FA）时，Bot 可以像远程电脑一样把桌面交还给你；遇到需要账号密码或 API Key 的环节，它也可以发送安全表单让你填写。
+  </p>
+
+  <p>
+    因为这台电脑始终在线，你从手机或笔记本电脑接入看到的都是同一台设备。在一个 Bot 里登录过 Facebook 账号，后续让淘货 Bot 去搜索稀有的斑锦龟背竹（Monstera Albo）时，便无需重复登录，随时随地都能触发执行。
+  </p>
+</section>
+
+<hr class="divider">
+
+<!-- 第二章 -->
+<section id="sec-anatomy">
+  <h2>搭建一个专属 Bot，背后其实只有三个字段</h2>
+
+  <p>
+    在传统开发中，配置一个能够跑通业务逻辑的自动化 Agent 通常需要写很多胶水代码或配置文件。Matt Palmer 说，他喜欢从一段语音备忘录开始，并能在 10 到 15 分钟内搭好一个 Bot。
+  </p>
+
+  <p id="sub-three-fields">在其设置后台，核心字段只有三个：</p>
+
+  <ul>
+    <li><strong>名称（Name）</strong>：Bot 的调用标识（例如 <code>Tech Demos</code>）。</li>
+    <li><strong>身份（Title）</strong>：该 Bot 的职能定位（例如 <code>Daily X tech scout</code>）。</li>
+    <li><strong>描述（Description）</strong>：具体的工作流规则（例如：工作日浏览我的 X 书签，挑选一项值得做 Demo 的新技术，按我的风格起草一段 Prompt，等待我确认或拒绝，随后启动 Cursor 云端代理）。</li>
+  </ul>
+
+  <p>原文给出的可直接复制示例如下：</p>
+
+  <pre><code>Name: Tech Demos
+Title: Daily X tech scout
+Description: Look at my bookmarks each weekday, pick one technology worth demoing, draft a prompt in my style, wait for approve or deny, then kick a Cursor cloud agent.</code></pre>
+
+  <p>你可以随时在对话中微调这些要求，也可以在右上角的设置面板中修改。</p>
+
+  <!-- 图解 3：Bot 的三要素配置示例 -->
+  <div class="fig-box">
+    <div class="fig-header">
+      <span class="fig-badge">图解 3</span>
+      <span class="fig-label">Configuration Anatomy · Three Core Fields</span>
+    </div>
+    <div class="fig-canvas">
+      <svg viewBox="0 0 780 240" role="img" aria-label="Bot 三要素架构：Name, Title, Description 映射至底层自动化执行">
+        <!-- Name 卡片 -->
+        <g transform="translate(20, 25)">
+          <rect x="0" y="0" width="230" height="190" rx="8" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1.2"/>
+          <rect x="14" y="14" width="70" height="24" rx="4" fill="var(--accent-soft)"/>
+          <text x="49" y="30" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--accent)">1. Name</text>
+          <text x="14" y="64" font-size="14" font-weight="650" fill="var(--text)">名称 / 标识</text>
+          <text x="14" y="88" font-size="12" fill="var(--text-dim)">在群聊、例程与智能体互调中的寻址与唤醒句柄。</text>
+          <rect x="14" y="112" width="202" height="60" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+          <text x="24" y="132" font-size="11" font-family="var(--font-code)" fill="var(--text-faint)">示例值：</text>
+          <text x="24" y="152" font-size="13" font-family="var(--font-code)" font-weight="600" fill="var(--accent)">Tech Demos</text>
+        </g>
+
+        <!-- Title 卡片 -->
+        <g transform="translate(275, 25)">
+          <rect x="0" y="0" width="230" height="190" rx="8" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1.2"/>
+          <rect x="14" y="14" width="70" height="24" rx="4" fill="var(--cyan-soft)"/>
+          <text x="49" y="30" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--cyan)">2. Title</text>
+          <text x="14" y="64" font-size="14" font-weight="650" fill="var(--text)">身份 / 职能</text>
+          <text x="14" y="88" font-size="12" fill="var(--text-dim)">智能体的角色锚点，约束行为风格与心智定位。</text>
+          <rect x="14" y="112" width="202" height="60" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+          <text x="24" y="132" font-size="11" font-family="var(--font-code)" fill="var(--text-faint)">示例值：</text>
+          <text x="24" y="152" font-size="12" font-family="var(--font-code)" font-weight="600" fill="var(--cyan)">Daily X tech scout</text>
+        </g>
+
+        <!-- Description 卡片 -->
+        <g transform="translate(530, 25)">
+          <rect x="0" y="0" width="230" height="190" rx="8" fill="var(--bg-elev)" stroke="var(--accent)" stroke-width="1.5"/>
+          <rect x="14" y="14" width="105" height="24" rx="4" fill="var(--emerald-soft)"/>
+          <text x="66" y="30" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--emerald)">3. Description</text>
+          <text x="14" y="64" font-size="14" font-weight="650" fill="var(--text)">规则 / SOP</text>
+          <text x="14" y="88" font-size="12" fill="var(--text-dim)">自然语言编写的完整执行流，包含触发、决策与工具调用。</text>
+          <rect x="14" y="112" width="202" height="60" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+          <text x="24" y="130" font-size="10" font-family="var(--font-code)" fill="var(--text-dim)">Look bookmarks &gt; pick tech &gt;</text>
+          <text x="24" y="146" font-size="10" font-family="var(--font-code)" fill="var(--text-dim)">draft prompt &gt; human approval &gt;</text>
+          <text x="24" y="162" font-size="10" font-family="var(--font-code)" fill="var(--emerald)">kick Cursor cloud agent</text>
+        </g>
+      </svg>
+    </div>
+    <div class="fig-caption">图解 3：Bot 的三要素配置示例 —— Name（标识）、Title（职能定位）与 Description（SOP 工作流规则）</div>
+  </div>
+
+  <h3 id="sub-devrel-case">搭建原则与实战案例</h3>
+
+  <p>
+    搭建时的原则是<strong>尽可能详细地描述你的实际操作步骤</strong>，把平时交代给真人的 SOP 完整写给它，并默认它具备操作复杂软件的能力。
+  </p>
+
+  <p>
+    以负责技术布道的“DevRel Bot”为例：每个工作日，它会扫描作者在 X 保存的书签，筛选值得演示的新技术，草拟一份用于构建产品原型的 Prompt 发送给作者。作者稍作调整并批准后，Bot 便通过 Cursor 连接启动 Cloud Agent，同时可以立即在 Cursor 中打开这次构建；任务完成后，它会发回截图或视频片段并创建 PR。
+  </p>
+
+  <!-- 图解 4：设置面板与生态扩展体系 -->
+  <div class="fig-box">
+    <div class="fig-header">
+      <span class="fig-badge">图解 4</span>
+      <span class="fig-label">Ecosystem &amp; Extensibility · MCP &amp; Skills</span>
+    </div>
+    <div class="fig-canvas">
+      <svg viewBox="0 0 780 230" role="img" aria-label="Grok Bot 生态扩展架构：MCP 服务器、外部数据源绑定与多账户体系">
+        <!-- 核心 Bot 节点 -->
+        <rect x="30" y="70" width="180" height="90" rx="8" fill="var(--bg-elev)" stroke="var(--accent)" stroke-width="1.5"/>
+        <text x="120" y="105" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent)">Grok Bot 核心</text>
+        <text x="120" y="125" text-anchor="middle" font-size="11.5" fill="var(--text-dim)">统一上下文与调度引擎</text>
+        <text x="120" y="143" text-anchor="middle" font-size="10.5" fill="var(--text-faint)">Cursor 兼容扩展协议</text>
+
+        <!-- 连线 -->
+        <line x1="210" y1="115" x2="270" y2="115" stroke="var(--border-strong)" stroke-width="2"/>
+        <line x1="270" y1="50" x2="270" y2="180" stroke="var(--border-strong)" stroke-width="2"/>
+        <line x1="270" y1="50" x2="310" y2="50" stroke="var(--border-strong)" stroke-width="2"/>
+        <line x1="270" y1="115" x2="310" y2="115" stroke="var(--border-strong)" stroke-width="2"/>
+        <line x1="270" y1="180" x2="310" y2="180" stroke="var(--border-strong)" stroke-width="2"/>
+
+        <!-- 扩展分支 1：MCP 服务器 -->
+        <g transform="translate(310, 20)">
+          <rect x="0" y="0" width="430" height="60" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+          <text x="16" y="26" font-size="13" font-weight="650" fill="var(--cyan)">Model Context Protocol (MCP) 标准</text>
+          <text x="16" y="46" font-size="11.5" fill="var(--text-dim)">无缝接入 Cursor 生态的 MCP Server、本地工具与自定义 Server</text>
+        </g>
+
+        <!-- 扩展分支 2：外部数据源与多账户绑定 -->
+        <g transform="translate(310, 85)">
+          <rect x="0" y="0" width="430" height="60" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+          <text x="16" y="26" font-size="13" font-weight="650" fill="var(--emerald)">外部应用数据源 (多账户挂载)</text>
+          <text x="16" y="46" font-size="11.5" fill="var(--text-dim)">Gmail / Google Calendar / Drive，同一服务支持个人与企业多账户并行隔离绑定</text>
+        </g>
+
+        <!-- 扩展分支 3：Skills 与插件生态 -->
+        <g transform="translate(310, 150)">
+          <rect x="0" y="0" width="430" height="60" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+          <text x="16" y="26" font-size="13" font-weight="650" fill="var(--amber)">Skills &amp; Plugins 自定义技能库</text>
+          <text x="16" y="46" font-size="11.5" fill="var(--text-dim)">继承作者已有 Cursor Skills（如 pstack 插件），共享代码审查与工程规范</text>
+        </g>
+      </svg>
+    </div>
+    <div class="fig-caption">图解 4：设置面板与生态扩展 —— 兼容 Cursor MCP、支持多账户绑定与自定义技能库</div>
+  </div>
+
+  <h3 id="sub-ecosystem">生态扩展与多账户连接</h3>
+
+  <p>
+    在生态扩展方面，Grok Bot <strong>支持与 Cursor 相同的 MCP 服务器（Model Context Protocol）、插件和技能体系</strong>。
+  </p>
+
+  <p>
+    你可以为它挂载 Gmail、Google Calendar、Google Drive 等外部数据源，并且支持同一服务绑定多个账户。这意味着同一个智能体既能处理个人日程，也能兼顾企业内部的通讯和协作平台。
+  </p>
+</section>
+
+<hr class="divider">
+
+<!-- 第三章 -->
+<section id="sec-collaboration">
+  <h2>交互、例程与多智能体协作</h2>
+
+  <p id="sub-triggers">
+    Grok Bot 摆脱了“人问一句、AI 答一句”的单向被动响应模式，提供了三种维度的驱动方式：
+  </p>
+
+  <ul>
+    <li><strong>直接对话（Chat）</strong>：像微信沟通一样随时给它下发临时指令。</li>
+    <li><strong>例程与触发器（Routines and triggers）</strong>：Bot 可以自主设定运行周期，或者持续监听外部应用的动态事件。例如，它能长期挂在某个 Slack 讨论帖或 GitHub 的代码合并请求中，一旦监测到新动态便自主启动。</li>
+    <li><strong>智能体间互相唤醒（Other bots）</strong>：不同的 Bot 之间可以直接收发消息、互相触发任务。</li>
+  </ul>
+
+  <!-- 图解 5：定时任务与事件触发设置 -->
+  <div class="fig-box">
+    <div class="fig-header">
+      <span class="fig-badge">图解 5</span>
+      <span class="fig-label">Trigger Matrix · Three Drive Modalities</span>
+    </div>
+    <div class="fig-canvas">
+      <svg viewBox="0 0 780 220" role="img" aria-label="三种驱动方式：直接对话、定时例程与事件监听、Bot 互相唤醒">
+        <!-- 驱动维度 1 -->
+        <g transform="translate(20, 20)">
+          <rect x="0" y="0" width="230" height="180" rx="8" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1.2"/>
+          <rect x="14" y="14" width="50" height="22" rx="4" fill="var(--accent-soft)"/>
+          <text x="39" y="29" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">Chat</text>
+          <text x="14" y="60" font-size="14" font-weight="650" fill="var(--text)">直接对话交互</text>
+          <text x="14" y="82" font-size="12" fill="var(--text-dim)">像即时通讯工具一样即呼即应，适合下发临时探索性任务与即时微调。</text>
+          <rect x="14" y="118" width="202" height="46" rx="4" fill="var(--bg-sunk)"/>
+          <text x="24" y="138" font-size="11" font-family="var(--font-code)" fill="var(--text-faint)">触发源：用户主动发起</text>
+          <text x="24" y="152" font-size="11" font-family="var(--font-code)" fill="var(--emerald)">模式：同步 / 交互式</text>
+        </g>
+
+        <!-- 驱动维度 2 -->
+        <g transform="translate(275, 20)">
+          <rect x="0" y="0" width="230" height="180" rx="8" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1.2"/>
+          <rect x="14" y="14" width="70" height="22" rx="4" fill="var(--cyan-soft)"/>
+          <text x="49" y="29" text-anchor="middle" font-size="11" font-weight="700" fill="var(--cyan)">Routines</text>
+          <text x="14" y="60" font-size="14" font-weight="650" fill="var(--text)">例程与动态触发器</text>
+          <text x="14" y="82" font-size="12" fill="var(--text-dim)">定时计划任务或外部事件（GitHub PR 新增、Slack 消息更迭）自主唤醒。</text>
+          <rect x="14" y="118" width="202" height="46" rx="4" fill="var(--bg-sunk)"/>
+          <text x="24" y="138" font-size="11" font-family="var(--font-code)" fill="var(--text-faint)">触发源：Cron / Webhook</text>
+          <text x="24" y="152" font-size="11" font-family="var(--font-code)" fill="var(--cyan)">模式：异步 / 事件驱动</text>
+        </g>
+
+        <!-- 驱动维度 3 -->
+        <g transform="translate(530, 20)">
+          <rect x="0" y="0" width="230" height="180" rx="8" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1.2"/>
+          <rect x="14" y="14" width="80" height="22" rx="4" fill="var(--amber-soft)"/>
+          <text x="54" y="29" text-anchor="middle" font-size="11" font-weight="700" fill="var(--amber)">Other Bots</text>
+          <text x="14" y="60" font-size="14" font-weight="650" fill="var(--text)">智能体间互相唤醒</text>
+          <text x="14" y="82" font-size="12" fill="var(--text-dim)">专业 Bot 间通过群聊或队列互相收发指令，按流水线接力推进任务。</text>
+          <rect x="14" y="118" width="202" height="46" rx="4" fill="var(--bg-sunk)"/>
+          <text x="24" y="138" font-size="11" font-family="var(--font-code)" fill="var(--text-faint)">触发源：Bot 间协作协议</text>
+          <text x="24" y="152" font-size="11" font-family="var(--font-code)" fill="var(--amber)">模式：链式 / 群聊接力</text>
+        </g>
+      </svg>
+    </div>
+    <div class="fig-caption">图解 5：定时任务与事件触发设置 —— 直接对话、外部事件例程、Bot 互唤三种驱动维度</div>
+  </div>
+
+  <h3 id="sub-multi-bot">垂直专长分工与多 Bot 链式调用</h3>
+
+  <p>
+    在实践中，更高效的用法是<strong>将每一个 Bot 当作垂直领域的专业人员</strong>，让它们分工合作。
+  </p>
+
+  <p>
+    例如，你可以将多个 Bot 拉进一个群聊，由一条例程规则驱动它们按顺序接力处理事务。Marketplace Bot 会在 <code>Facebook Marketplace</code> 和 <code>Craigslist</code> 上寻找浓缩咖啡机；遇到需要判断的问题时，它会询问 Chief of Staff Bot。
+  </p>
+
+  <!-- 图解 6：多 Bot 链式调用示例 -->
+  <div class="fig-box">
+    <div class="fig-header">
+      <span class="fig-badge">图解 6</span>
+      <span class="fig-label">Multi-Agent Collaboration · Chain of Work</span>
+    </div>
+    <div class="fig-canvas">
+      <svg viewBox="0 0 780 230" role="img" aria-label="多 Bot 链式接力：Marketplace Bot 与 Chief of Staff Bot 协同处理">
+        <!-- 阶段 1：扫描抓取 -->
+        <g transform="translate(20, 30)">
+          <rect x="0" y="0" width="210" height="160" rx="8" fill="var(--bg-elev)" stroke="var(--border)"/>
+          <text x="16" y="32" font-size="13" font-weight="700" fill="var(--accent)">1. Marketplace Bot</text>
+          <text x="16" y="52" font-size="11.5" fill="var(--text-dim)">专职商品搜寻与比价</text>
+          <rect x="14" y="68" width="182" height="74" rx="4" fill="var(--bg-sunk)"/>
+          <text x="22" y="88" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 爬取 FB Marketplace</text>
+          <text x="22" y="106" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 抓取 Craigslist 列表</text>
+          <text x="22" y="124" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 筛选浓缩咖啡机候选</text>
+        </g>
+
+        <!-- 连线 1 -->
+        <path d="M 230 110 L 276 110" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" fill="none"/>
+        <polygon points="284,110 274,105 274,115" fill="var(--accent)"/>
+        <text x="257" y="100" text-anchor="middle" font-size="10.5" fill="var(--text-faint)">遇到判断</text>
+
+        <!-- 阶段 2：综合裁决 -->
+        <g transform="translate(285, 30)">
+          <rect x="0" y="0" width="210" height="160" rx="8" fill="var(--bg-elev)" stroke="var(--cyan)" stroke-width="1.3"/>
+          <text x="16" y="32" font-size="13" font-weight="700" fill="var(--cyan)">2. Chief of Staff Bot</text>
+          <text x="16" y="52" font-size="11.5" fill="var(--text-dim)">幕僚长决策与综合研判</text>
+          <rect x="14" y="68" width="182" height="74" rx="4" fill="var(--bg-sunk)"/>
+          <text x="22" y="88" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 核对预算与成色偏好</text>
+          <text x="22" y="106" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 评估卖家信用度与运费</text>
+          <text x="22" y="124" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 决定是否向用户提报</text>
+        </g>
+
+        <!-- 连线 2 -->
+        <path d="M 495 110 L 541 110" stroke="var(--cyan)" stroke-width="2" stroke-linecap="round" fill="none"/>
+        <polygon points="549,110 539,105 539,115" fill="var(--cyan)"/>
+        <text x="522" y="100" text-anchor="middle" font-size="10.5" fill="var(--text-faint)">最终裁决</text>
+
+        <!-- 阶段 3：人机确认与执行 -->
+        <g transform="translate(550, 30)">
+          <rect x="0" y="0" width="210" height="160" rx="8" fill="var(--bg-elev)" stroke="var(--emerald)" stroke-width="1.3"/>
+          <text x="16" y="32" font-size="13" font-weight="700" fill="var(--emerald)">3. 人机决策与执行闭环</text>
+          <text x="16" y="52" font-size="11.5" fill="var(--text-dim)">安全通知与最终确认</text>
+          <rect x="14" y="68" width="182" height="74" rx="4" fill="var(--bg-sunk)"/>
+          <text x="22" y="88" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 手机端推送确认卡片</text>
+          <text x="22" y="106" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 人类一键批准或驳回</text>
+          <text x="22" y="124" font-size="11" font-family="var(--font-code)" fill="var(--emerald)">- 自动联络卖家 / 下单</text>
+        </g>
+      </svg>
+    </div>
+    <div class="fig-caption">图解 6：多 Bot 链式调用示例 —— 专业分工智能体在群聊中接力处理复杂业务</div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- 第四章 -->
+<section id="sec-security">
+  <h2>权限控制：当 AI 接管一台电脑，安全怎么保障？</h2>
+
+  <p>
+    赋予智能体操作真实电脑的权限，意味着巨大的便利，但也伴随着切实的风险。如果这台云电脑上已经登录了你的电商账号，从技术机制上讲，它完全具备像真人一样自主下单购买任何商品的系统能力。
+  </p>
+
+  <p id="sub-security-rules">
+    针对这种风险，Grok Bot 采用了一套组合防御机制：<strong>通过自然语言规则定义边界，并引入独立的审查智能体（Review Agent）与黑白名单协同过滤</strong>。
+  </p>
+
+  <p>
+    与传统的代码硬编码或复杂 JSON 策略不同，这里的防线完全是用人类自然语言撰写的。具体入口位于 <code>Settings &gt; General &gt; Agent</code>，你可以在其中写明允许和禁止的行为，例如禁止未经确认的资金支付或重要文件删除。
+  </p>
+
+  <!-- 图解 7：自然语言权限设置与审查规则 -->
+  <div class="fig-box">
+    <div class="fig-header">
+      <span class="fig-badge">图解 7</span>
+      <span class="fig-label">Security &amp; Policy Enforcement Architecture</span>
+    </div>
+    <div class="fig-canvas">
+      <svg viewBox="0 0 780 250" role="img" aria-label="自然语言权限与 Review Agent 安全拦截链条">
+        <!-- 动作发起源 -->
+        <g transform="translate(20, 50)">
+          <rect x="0" y="0" width="160" height="150" rx="8" fill="var(--bg-elev)" stroke="var(--border)"/>
+          <text x="80" y="36" text-anchor="middle" font-size="13" font-weight="700" fill="var(--text)">工作 Bot</text>
+          <text x="80" y="56" text-anchor="middle" font-size="11.5" fill="var(--text-dim)">生成操作动作</text>
+          <rect x="14" y="74" width="132" height="60" rx="4" fill="var(--bg-sunk)"/>
+          <text x="80" y="98" text-anchor="middle" font-size="11" font-family="var(--font-code)" fill="var(--accent)">Action Proposal</text>
+          <text x="80" y="116" text-anchor="middle" font-size="10.5" fill="var(--text-faint)">(如：点击支付、删除)</text>
+        </g>
+
+        <!-- 连线至安全网关 -->
+        <path d="M 180 125 L 230 125" stroke="var(--border-strong)" stroke-width="2"/>
+        <polygon points="238,125 228,120 228,130" fill="var(--border-strong)"/>
+
+        <!-- 核心防护：Review Agent -->
+        <g transform="translate(240, 25)">
+          <rect x="0" y="0" width="280" height="200" rx="8" fill="var(--bg-elev)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="140" y="32" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent)">独立审查智能体 (Review Agent)</text>
+          <text x="140" y="52" text-anchor="middle" font-size="11" fill="var(--text-faint)">Settings &gt; General &gt; Agent 自然语言策略引擎</text>
+
+          <rect x="16" y="66" width="248" height="54" rx="4" fill="var(--bg-sunk)" stroke="var(--border)"/>
+          <text x="26" y="86" font-size="11" font-weight="600" fill="var(--text)">自然语言规则校验：</text>
+          <text x="26" y="104" font-size="10.5" fill="var(--text-dim)">“未经确认禁止资金支付，禁止删除系统文件”</text>
+
+          <rect x="16" y="130" width="248" height="54" rx="4" fill="var(--bg-sunk)" stroke="var(--border)"/>
+          <text x="26" y="150" font-size="11" font-weight="600" fill="var(--text)">黑白名单协同过滤：</text>
+          <text x="26" y="168" font-size="10.5" fill="var(--text-dim)">受信任域列表与危险 API 签名硬阻断</text>
+        </g>
+
+        <!-- 三路分支连线 -->
+        <path d="M 520 80 L 580 60" stroke="var(--emerald)" stroke-width="2"/>
+        <polygon points="586,58 576,55 579,65" fill="var(--emerald)"/>
+
+        <path d="M 520 125 L 580 125" stroke="var(--rose)" stroke-width="2"/>
+        <polygon points="588,125 578,120 578,130" fill="var(--rose)"/>
+
+        <path d="M 520 170 L 580 190" stroke="var(--amber)" stroke-width="2"/>
+        <polygon points="586,192 579,185 576,195" fill="var(--amber)"/>
+
+        <!-- 分支结果 -->
+        <g transform="translate(590, 35)">
+          <rect x="0" y="0" width="170" height="46" rx="6" fill="var(--emerald-soft)" stroke="var(--emerald)"/>
+          <text x="85" y="24" text-anchor="middle" font-size="12" font-weight="650" fill="var(--emerald)">直接放行 (Pass)</text>
+          <text x="85" y="38" text-anchor="middle" font-size="10" fill="var(--emerald)">无风险只读或常规操作</text>
+        </g>
+
+        <g transform="translate(590, 102)">
+          <rect x="0" y="0" width="170" height="46" rx="6" fill="var(--rose-soft)" stroke="var(--rose)"/>
+          <text x="85" y="24" text-anchor="middle" font-size="12" font-weight="650" fill="var(--rose)">拦截阻断 (Block)</text>
+          <text x="85" y="38" text-anchor="middle" font-size="10" fill="var(--rose)">违反安全与合规红线</text>
+        </g>
+
+        <g transform="translate(590, 169)">
+          <rect x="0" y="0" width="170" height="46" rx="6" fill="var(--amber-soft)" stroke="var(--amber)"/>
+          <text x="85" y="24" text-anchor="middle" font-size="12" font-weight="650" fill="var(--amber)">挂起并升级确认 (Escalate)</text>
+          <text x="85" y="38" text-anchor="middle" font-size="10" fill="var(--amber)">支付或关键变更需人工批准</text>
+        </g>
+      </svg>
+    </div>
+    <div class="fig-caption">图解 7：自然语言权限设置与 Review Agent 审查机制 —— 动作实时拦截、判定与人机升级链路</div>
+  </div>
+
+  <h3 id="sub-security-facts">整个安全控制链条包含几个关键事实</h3>
+
+  <div class="card">
+    <table class="grid">
+      <thead>
+        <tr>
+          <th style="width: 25%;">关键安全事实</th>
+          <th style="width: 50%;">机制原理与工程表现</th>
+          <th style="width: 25%;">治理与设防建议</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>动作实时拦截与复核</strong></td>
+          <td>所有的操作提议都会经过一个独立的 Review Agent 审查，由它判定是直接放行、拦截阻断，还是挂起并升级推送给人工作最终确认。</td>
+          <td><span class="tag ok">关键防线</span> 为高危动作设置必须由人审批的硬屏障。</td>
+        </tr>
+        <tr>
+          <td><strong>依赖模型的规则理解</strong></td>
+          <td>这套安全机制的基础，依然建立在“相信底层模型能够准确理解并服从自然语言规则”的前提之上。</td>
+          <td><span class="tag warn">模型依赖</span> 规则表述需严谨详尽，避免歧义漏洞。</td>
+        </tr>
+        <tr>
+          <td><strong>工作发生在隔离环境中</strong></td>
+          <td>官方只说明任务在隔离环境中执行，没有进一步披露底层隔离技术或企业多租户边界。</td>
+          <td><span class="tag cy">隔离边界</span> 敏感数据与高密环境仍需保持审慎。</td>
+        </tr>
+        <tr>
+          <td><strong>多 Bot 共享访问需注意</strong></td>
+          <td>只要其中一个 Bot 登录了某家网站，其他 Bot 也能访问该站点。设定规则时，不能把每个 Bot 的登录状态视为彼此完全隔离。</td>
+          <td><span class="tag bad">跨 Bot 共享</span> 避免在同一电脑环境下混合登录高密与公网账号。</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- 第五章 -->
+<section id="sec-workflows">
+  <h2>真正派上用场的四个实战工作流</h2>
+
+  <p>
+    比起宏大的技术概念，自动化工具的价值最终要靠解决日常琐事的质量来检验。以下是四个作者实际在用的流程：
+  </p>
+
+  <!-- 工作流 1 -->
+  <div class="card" id="wf-crm">
+    <h3>1. 个人社交 CRM：用 15 分钟把社交关注列表变成人脉库</h3>
+    <p>
+      这个自动化任务是作者在手机上花了不到一刻钟配置完成的。核心需求非常明确：把作者在 X 平台上关注的八九百位行业同行转化为 Notion 里的私人人脉管理数据库，且全程只允许使用公开个人资料。
+    </p>
+    <p>
+      Bot 将这些账号的头像、个人简介以及公开主页链接整理到 Notion 看板中。每逢出差或旅行，作者可以用它重新联系已经认识的人，约一杯咖啡。
+    </p>
+
+    <div class="callout emerald">
+      <strong>智能体外包评估准则：</strong>
+      任何你在 LinkedIn 或社交平台上不得不机械重复的手动操作，都可以甩给 Bot；任何你觉得“让实习生去干都会产生内疚感”的繁琐杂活，都极其适合交给 Bot。
+    </div>
+
+    <!-- 图解 8：个人社交 CRM 流程 -->
+    <div class="fig-box">
+      <div class="fig-header">
+        <span class="fig-badge">图解 8</span>
+        <span class="fig-label">Workflow 1 · Personal Social CRM</span>
+      </div>
+      <div class="fig-canvas">
+        <svg viewBox="0 0 780 180" role="img" aria-label="个人社交 CRM：从 X 关注列表清洗并归档至 Notion 数据库">
+          <!-- Step 1 -->
+          <g transform="translate(20, 20)">
+            <rect x="0" y="0" width="170" height="130" rx="8" fill="var(--bg-elev)" stroke="var(--border)"/>
+            <text x="16" y="32" font-size="13" font-weight="700" fill="var(--accent)">X 平台公开资料</text>
+            <text x="16" y="52" font-size="11.5" fill="var(--text-dim)">800~900 关注者</text>
+            <rect x="12" y="68" width="146" height="50" rx="4" fill="var(--bg-sunk)"/>
+            <text x="20" y="88" font-size="10.5" font-family="var(--font-code)" fill="var(--text)">- 头像与 Handle</text>
+            <text x="20" y="104" font-size="10.5" font-family="var(--font-code)" fill="var(--text)">- Bio 简介与城市</text>
+          </g>
+
+          <path d="M 200 85 L 244 85" stroke="var(--accent)" stroke-width="2"/>
+          <polygon points="252,85 242,80 242,90" fill="var(--accent)"/>
+
+          <!-- Step 2 -->
+          <g transform="translate(254, 20)">
+            <rect x="0" y="0" width="220" height="130" rx="8" fill="var(--bg-elev)" stroke="var(--accent)" stroke-width="1.3"/>
+            <text x="16" y="32" font-size="13" font-weight="700" fill="var(--accent)">Grok Bot 提取与过滤</text>
+            <text x="16" y="52" font-size="11.5" fill="var(--text-dim)">15 分钟配置 / 手机端发起</text>
+            <rect x="12" y="68" width="196" height="50" rx="4" fill="var(--bg-sunk)"/>
+            <text x="20" y="88" font-size="10.5" font-family="var(--font-code)" fill="var(--text)">- 仅限抓取公开资料</text>
+            <text x="20" y="104" font-size="10.5" font-family="var(--font-code)" fill="var(--emerald)">- 自动去重与标签分类</text>
+          </g>
+
+          <path d="M 484 85 L 528 85" stroke="var(--accent)" stroke-width="2"/>
+          <polygon points="536,85 526,80 526,90" fill="var(--accent)"/>
+
+          <!-- Step 3 -->
+          <g transform="translate(538, 20)">
+            <rect x="0" y="0" width="220" height="130" rx="8" fill="var(--bg-elev)" stroke="var(--emerald)" stroke-width="1.3"/>
+            <text x="16" y="32" font-size="13" font-weight="700" fill="var(--emerald)">Notion 人脉库看板</text>
+            <text x="16" y="52" font-size="11.5" fill="var(--text-dim)">结构化检索与出差联络</text>
+            <rect x="12" y="68" width="196" height="50" rx="4" fill="var(--bg-sunk)"/>
+            <text x="20" y="88" font-size="10.5" font-family="var(--font-code)" fill="var(--text)">- 按城市快速筛选人脉</text>
+            <text x="20" y="104" font-size="10.5" font-family="var(--font-code)" fill="var(--emerald)">- 出差一键约咖啡触达</text>
+          </g>
+        </svg>
+      </div>
+      <div class="fig-caption">图解 8：个人社交 CRM —— 从 X 关注列表清洗并归档至 Notion 数据库</div>
+    </div>
+  </div>
+
+  <!-- 工作流 2 -->
+  <div class="card" id="wf-arnold">
+    <h3>2. 健身助手 Arnold：把臃肿的独立 App 降维成聊天 Bot</h3>
+    <p>
+      作者此前曾耗费数周时间，用 AI 辅助编码（Vibe-coding）手搓过一个力量训练 App。那款软件确实能用，但耗费了大量精力，且三天两头出现 Bug。后来作者尝试换了个思路：既然这套工具的本质就是输入、逻辑与存储，为什么非要维护一个笨重的 App，而不是把它做成一个 Bot？
+    </p>
+    <p>
+      他将原 App 拆解为 MCP 服务、技能和插件，并通过与 Grok 对话完成改造。更特别的是，这套基础设施本身正是 Grok Bot 在 Grok Bot 内部搭建的。最终诞生的力量与增肌训练教练 Arnold，核心功能与原本的独立软件相同，但形态更精简、维护负担更低、Bug 更少，逻辑调整的反馈链路也变短了——更新训练规则只需继续与 Bot 对话，使用界面同时成了修改行为的入口。
+    </p>
+
+    <div class="callout amber">
+      <strong>轻量软件降维准则：</strong>
+      如果一个轻量软件可以清晰地拆解为<strong>输入数据、处理逻辑和数据存储</strong>三部分，将其重组成一个定制 Bot，往往比维护一整套代码工程要轻量得多。
+    </div>
+
+    <!-- 图解 9：健身助手 Arnold 降维重组 -->
+    <div class="fig-box">
+      <div class="fig-header">
+        <span class="fig-badge">图解 9</span>
+        <span class="fig-label">Workflow 2 · Arnold App-to-Bot Architecture</span>
+      </div>
+      <div class="fig-canvas">
+        <svg viewBox="0 0 780 200" role="img" aria-label="健身助手 Arnold：从独立 App 到轻量 Bot 的降维重构对比">
+          <!-- 传统 Vibe-coding 独立 App -->
+          <g transform="translate(20, 20)">
+            <rect x="0" y="0" width="340" height="155" rx="8" fill="var(--bg-elev)" stroke="var(--rose)" stroke-dasharray="3 3"/>
+            <text x="16" y="32" font-size="13" font-weight="700" fill="var(--rose)">传统思路：手搓独立 App (Vibe-coding)</text>
+            <text x="16" y="52" font-size="11.5" fill="var(--text-faint)">耗时数周 / 维护成本重 / Bug 频出</text>
+            <rect x="14" y="68" width="312" height="72" rx="4" fill="var(--bg-sunk)"/>
+            <text x="24" y="90" font-size="11" font-family="var(--font-code)" fill="var(--text-dim)">- 复杂前端 UI 组件与状态树</text>
+            <text x="24" y="108" font-size="11" font-family="var(--font-code)" fill="var(--text-dim)">- 本地存储/数据库同步代码与数据迁移</text>
+            <text x="24" y="126" font-size="11" font-family="var(--font-code)" fill="var(--rose)">- 修改训练规则必须改代码重新编译发布</text>
+          </g>
+
+          <!-- 转换箭头 -->
+          <path d="M 374 97 L 414 97" stroke="var(--accent)" stroke-width="2.5"/>
+          <polygon points="422,97 412,92 412,102" fill="var(--accent)"/>
+
+          <!-- 降维后：Arnold 聊天 Bot -->
+          <g transform="translate(426, 20)">
+            <rect x="0" y="0" width="334" height="155" rx="8" fill="var(--bg-elev)" stroke="var(--emerald)" stroke-width="1.5"/>
+            <text x="16" y="32" font-size="13" font-weight="700" fill="var(--emerald)">新范式：Grok Bot 健身教练 Arnold</text>
+            <text x="16" y="52" font-size="11.5" fill="var(--text-dim)">对话即界面 / 自然语言热更新 / 零工程包袱</text>
+            <rect x="14" y="68" width="306" height="72" rx="4" fill="var(--bg-sunk)"/>
+            <text x="24" y="90" font-size="11" font-family="var(--font-code)" fill="var(--emerald)">- 输入：直接向 Bot 汇报组数与负荷</text>
+            <text x="24" y="108" font-size="11" font-family="var(--font-code)" fill="var(--emerald)">- 逻辑：Bot 内置渐进超负荷推算公式</text>
+            <text x="24" y="126" font-size="11" font-family="var(--font-code)" fill="var(--emerald)">- 存储：MCP 挂载轻量文件/表格持久化</text>
+          </g>
+        </svg>
+      </div>
+      <div class="fig-caption">图解 9：健身助手 Arnold —— 独立 App 降维至 Bot 架构，对话界面即行为修改入口</div>
+    </div>
+  </div>
+
+  <!-- 工作流 3 -->
+  <div class="card" id="wf-outerloop">
+    <h3>3. 写代码的“双环架构”：用 Grok Bot 给 Cursor 当外环</h3>
+    <p>
+      在现代 AI 辅助编程中，让同一个 Agent 既去各处翻阅资料、参与功能方案讨论，又在同一个会话上下文里直接修改代码，往往会导致模型视野被海量的冗余信息污染（Dirty Context），进而写出质量低下的代码。
+    </p>
+    <p>作者采用了一种<strong>外环（Outer Loop）与内环（Inner Loop）解耦的架构</strong>：</p>
+
+    <ul>
+      <li><strong>外环执行者（Grok Bot）</strong>：充当上下文收集器。它熟悉 Cursor 的代码库、文档和市场相关仓库（marketing repositories），并会使用作者的 Cursor skills，其中包括 Lauren 的 <code>pstack</code> 插件；它穿梭于 Slack、Notion、GitHub 与文档之间收集背景，针对具体需求打磨出一份极度精准、纯净的 Prompt。</li>
+      <li><strong>内环执行者（Cursor Cloud Agent）</strong>：拿到外环给出的干净指令后，专注于实际构建软件，并在完成后交付 PR。</li>
+    </ul>
+
+    <p>
+      Grok Bot 在这里扮演的并不是直接敲代码的程序员，而是经验丰富的架构师或资深同事——它负责帮下游执行者扫清前置认知噪音，生成高质量的工程任务书。
+    </p>
+
+    <!-- 图解 10：编程双环架构 -->
+    <div class="fig-box">
+      <div class="fig-header">
+        <span class="fig-badge">图解 10</span>
+        <span class="fig-label">Workflow 3 · Dual-Loop Decoupled Architecture</span>
+      </div>
+      <div class="fig-canvas">
+        <svg viewBox="0 0 780 250" role="img" aria-label="写代码的双环架构：外环 Grok Bot 上下文净化与内环 Cursor 纯净构建">
+          <!-- 外环区域 -->
+          <rect x="20" y="20" width="370" height="210" rx="10" fill="var(--bg-elev)" stroke="var(--cyan)" stroke-width="1.5"/>
+          <text x="40" y="48" font-size="14" font-weight="700" fill="var(--cyan)">外环 (Outer Loop) · Grok Bot</text>
+          <text x="40" y="68" font-size="11.5" fill="var(--text-dim)">定位：资深架构师 / 上下文收集与净化器</text>
+          
+          <rect x="36" y="82" width="338" height="74" rx="4" fill="var(--bg-sunk)"/>
+          <text x="46" y="102" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 穿梭 Slack, Notion, GitHub 搜集背景</text>
+          <text x="46" y="120" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 熟悉 Repo、文档与 pstack 技能库</text>
+          <text x="46" y="138" font-size="11" font-family="var(--font-code)" fill="var(--emerald)">- 过滤噪音，凝练出高质量纯净 Prompt</text>
+
+          <rect x="36" y="168" width="338" height="46" rx="4" fill="var(--cyan-soft)"/>
+          <text x="205" y="196" text-anchor="middle" font-size="12" font-weight="650" fill="var(--cyan)">产出：极度精准的工程规格说明书</text>
+
+          <!-- 传递通道 -->
+          <path d="M 400 125 L 434 125" stroke="var(--accent)" stroke-width="2.5"/>
+          <polygon points="442,125 432,120 432,130" fill="var(--accent)"/>
+
+          <!-- 内环区域 -->
+          <rect x="450" y="20" width="310" height="210" rx="10" fill="var(--bg-elev)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="470" y="48" font-size="14" font-weight="700" fill="var(--accent)">内环 (Inner Loop) · Cursor Cloud Agent</text>
+          <text x="470" y="68" font-size="11.5" fill="var(--text-dim)">定位：专注于干净执行的建造工匠</text>
+
+          <rect x="466" y="82" width="278" height="74" rx="4" fill="var(--bg-sunk)"/>
+          <text x="476" y="102" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 零冗余认知负担 (Clean Context)</text>
+          <text x="476" y="120" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 专注代码实现、单测覆盖与编译</text>
+          <text x="476" y="138" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 在 Cursor 云端独立分支推进</text>
+
+          <rect x="466" y="168" width="278" height="46" rx="4" fill="var(--accent-soft)"/>
+          <text x="605" y="196" text-anchor="middle" font-size="12" font-weight="650" fill="var(--accent)">产出：可直接合并的 Pull Request (PR)</text>
+        </svg>
+      </div>
+      <div class="fig-caption">图解 10：外环与内环解耦的编程架构 —— Grok Bot 净化上下文，Cursor Cloud Agent 纯净构建</div>
+    </div>
+  </div>
+
+  <!-- 工作流 4 -->
+  <div class="card" id="wf-search">
+    <h3>4. 跨平台聚合搜索：终结企业内部信息碎片化</h3>
+    <p>
+      在同时使用 Notion、Slack、GitHub 和内部 Wiki 的企业中，找资料往往极其折磨人，回封邮件可能要在好几个平台来回切换翻找。
+    </p>
+    <p>
+      作者把这个 Bot 用作 Cursor Product Expert。当遇到产品或公司运作相关的疑问时，它会读取代码库、查看 Slack 讨论并扫描 Notion 中的设计文档，再据此回答问题。
+    </p>
+    <p>
+      把这种琐碎的检索与求证交给 Bot，不仅能快速拿到答案，也能减少对其他同事工作节奏的频繁打扰，在团队内部有效缓解“通讯工具疲劳”。
+    </p>
+
+    <!-- 图解 11：跨平台聚合搜索 -->
+    <div class="fig-box">
+      <div class="fig-header">
+        <span class="fig-badge">图解 11</span>
+        <span class="fig-label">Workflow 4 · Enterprise Cross-Platform Synthesis</span>
+      </div>
+      <div class="fig-canvas">
+        <svg viewBox="0 0 780 200" role="img" aria-label="跨平台聚合搜索：打通 Slack, Notion, GitHub 与 Wiki，终结信息孤岛">
+          <!-- 碎片化多源 -->
+          <g transform="translate(20, 25)">
+            <rect x="0" y="0" width="80" height="34" rx="4" fill="var(--bg-elev)" stroke="var(--border)"/>
+            <text x="40" y="22" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--text)">Slack</text>
+
+            <rect x="0" y="44" width="80" height="34" rx="4" fill="var(--bg-elev)" stroke="var(--border)"/>
+            <text x="40" y="66" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--text)">Notion</text>
+
+            <rect x="0" y="88" width="80" height="34" rx="4" fill="var(--bg-elev)" stroke="var(--border)"/>
+            <text x="40" y="110" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--text)">GitHub</text>
+
+            <rect x="0" y="132" width="80" height="34" rx="4" fill="var(--bg-elev)" stroke="var(--border)"/>
+            <text x="40" y="154" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--text)">Wiki</text>
+          </g>
+
+          <path d="M 110 102 L 170 102" stroke="var(--border-strong)" stroke-width="2"/>
+          <polygon points="178,102 168,97 168,107" fill="var(--border-strong)"/>
+
+          <!-- 聚合 Bot -->
+          <g transform="translate(186, 25)">
+            <rect x="0" y="0" width="280" height="150" rx="8" fill="var(--bg-elev)" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="140" y="32" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent)">Cursor Product Expert</text>
+            <text x="140" y="52" text-anchor="middle" font-size="11.5" fill="var(--text-dim)">常驻云端的全域信息聚合引擎</text>
+            <rect x="16" y="68" width="248" height="66" rx="4" fill="var(--bg-sunk)"/>
+            <text x="26" y="90" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 索引各平台实时讨论与决策</text>
+            <text x="26" y="108" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 关联 PR 代码与设计文档背景</text>
+            <text x="26" y="124" font-size="11" font-family="var(--font-code)" fill="var(--emerald)">- 自动消歧与事实核查</text>
+          </g>
+
+          <path d="M 476 102 L 536 102" stroke="var(--accent)" stroke-width="2"/>
+          <polygon points="544,102 534,97 534,107" fill="var(--accent)"/>
+
+          <!-- 团队赋能效果 -->
+          <g transform="translate(552, 25)">
+            <rect x="0" y="0" width="208" height="150" rx="8" fill="var(--bg-elev)" stroke="var(--emerald)" stroke-width="1.3"/>
+            <text x="16" y="32" font-size="13" font-weight="700" fill="var(--emerald)">团队生产力红利</text>
+            <rect x="12" y="48" width="184" height="88" rx="4" fill="var(--bg-sunk)"/>
+            <text x="20" y="70" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 秒级给出可溯源答案</text>
+            <text x="20" y="90" font-size="11" font-family="var(--font-code)" fill="var(--text)">- 避免打扰其他同事</text>
+            <text x="20" y="110" font-size="11" font-family="var(--font-code)" fill="var(--emerald)">- 消除企业通讯疲劳</text>
+          </g>
+        </svg>
+      </div>
+      <div class="fig-caption">图解 11：跨平台聚合搜索 —— 打通企业多平台知识孤岛，终结内部碎片化与沟通疲劳</div>
+    </div>
+  </div>
+
+  <!-- 交互沙盘：四大工作流装配台 -->
+  <div class="box-sandbox" id="sec-sandbox">
+    <div class="box-sandbox-head">
+      <h3>四大实战工作流装配沙盘</h3>
+      <span class="box-sandbox-kicker">Interactive Setup Workbench</span>
+    </div>
+    <div class="box-sandbox-desc">
+      切换下方标签页，动态查看各工作流的完整三要素定义、触发方式、生态挂载、安全策略建议及可直接复制的一键 Prompt 配置。
+    </div>
+
+    <div class="wf-tabs" id="wf-tabs">
+      <button class="wf-tab active" type="button" data-wf="crm">工作流 1：个人社交 CRM</button>
+      <button class="wf-tab" type="button" data-wf="arnold">工作流 2：健身助手 Arnold</button>
+      <button class="wf-tab" type="button" data-wf="outerloop">工作流 3：写代码双环架构</button>
+      <button class="wf-tab" type="button" data-wf="search">工作流 4：跨平台聚合搜索</button>
+    </div>
+
+    <div class="wf-panel">
+      <div class="wf-grid">
+        <div class="wf-item">
+          <span class="k">Bot 名称 (Name)</span>
+          <div class="v" id="card-name">Social CRM Scout</div>
+        </div>
+        <div class="wf-item">
+          <span class="k">身份职能 (Title)</span>
+          <div class="v" id="card-title">X-to-Notion Relationship Archivist</div>
+        </div>
+        <div class="wf-item">
+          <span class="k">驱动方式 (Trigger)</span>
+          <div class="v" id="card-trigger">每周定时例程 (Routines) + 移动端聊天临时触发</div>
+        </div>
+        <div class="wf-item">
+          <span class="k">生态挂载 (MCP / Tools)</span>
+          <div class="v" id="card-tools">X (Twitter) Session, Notion MCP Server</div>
+        </div>
+        <div class="wf-item">
+          <span class="k">权限与安全防线 (Policy)</span>
+          <div class="v" id="card-policy">仅限读取公开 Profile，禁止私信与任何写操作</div>
+        </div>
+        <div class="wf-item">
+          <span class="k">核心效益与评估准则</span>
+          <div class="v" id="card-benefit">15 分钟配置，解放实习生级别重复杂活，出差按地缘破冰</div>
+        </div>
+      </div>
+
+      <div class="wf-code-wrap">
+        <button class="copy-btn" id="btn-copy" type="button">复制三字段配置</button>
+        <pre><code id="card-code">Name: Social CRM Scout
+Title: X-to-Notion Relationship Archivist
+Description: Access my X following list on demand, extract public profiles (handle, bio, location, avatar url) for up to 900 users, dedup against Notion CRM database via Notion MCP, insert structured contacts and tag them with city/topics. Never post or DM.</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- 第六章 -->
+<section id="sec-conclusion">
+  <h2>从写胶水脚本，到学会给 AI 一台电脑</h2>
+
+  <p>
+    回顾个人自动化的演进路径，很多人最初依靠临时手写脚本，后来尝试用 AI 编写小型工具，或者用第三方低代码平台强行拼凑工作流。
+  </p>
+
+  <p>
+    Grok Bot 展现的变化在于<strong>将自动化环境放进一台云端电脑里</strong>。用户不必让自己的笔记本持续开机。通过自然语言或屏幕录制教它做事，遇到安全关卡随时接管，任务复杂时串联专长 Bot 接力，编程开发时用外环为内环过滤噪音。
+  </p>
+
+  <p>
+    当智能体真正拥有了可持久运行的电脑，个人自动化的边界便不再取决于工具本身的功能列表，而取决于你是否善于把日常工作流拆解并托付出去。作者认为 Grok Bot 与许多个人 Agent 的主要区别是 <code>zero setup</code>，越来越多工作流只需直接告诉 Grok Bot 就能复现。
+  </p>
+</section>
+
+<hr class="divider">
+
+<!-- 资源与渠道 -->
+<section id="sec-resources">
+  <h3>官方资源与延伸渠道</h3>
+
+  <div class="res-list">
+    <div class="res-item">
+      <div>
+        <div class="t">macOS 稳定版客户端</div>
+        <div class="d">可通过官方更新地址下载体验最新的 Grok Bot 桌面客户端，支持云电脑控制台与多 Bot 会话管理。</div>
+      </div>
+      <a class="action" href="https://api2.cursor.sh/updates/download/stable/darwin-arm64/grok-bot-bd824e1890d8b96f" target="_blank" rel="noopener noreferrer">下载体验官方安装包 &rarr;</a>
+    </div>
+
+    <div class="res-item">
+      <div>
+        <div class="t">作者实操演示视频</div>
+        <div class="d">Matt Palmer 在社交平台发布的完整工作流配置录屏，涵盖 15 分钟搭建 Bot 及多智能体串联实操。</div>
+      </div>
+      <a class="action" href="https://x.com/mattyp/status/2092286281266962681" target="_blank" rel="noopener noreferrer">观看工作流配置录屏 &rarr;</a>
+    </div>
+
+    <div class="res-item">
+      <div>
+        <div class="t">团队方案咨询</div>
+        <div class="d">需要企业级部署、多租户安全隔离保障或售前技术支持，可访问 Cursor 官方咨询通道。</div>
+      </div>
+      <a class="action" href="https://cursor.com/contact-sales?product=grok-bot" target="_blank" rel="noopener noreferrer">访问官方咨询通道 &rarr;</a>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div><strong>AIKnowledge 知识库 · 前沿技术白皮书</strong></div>
+    <div>唯一规范存储路径：/Users/yangkejin/Documents/Openai/AIKnowledge/20260914_GrokBot搭建指南与四大实战工作流.html</div>
+    <div>自包含单文件规范：Zero-Dependency Single-File Rule · MathML Core / 原生矢量 SVG · 断网 100% 离线可用</div>
+  </footer>
+</section>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  function byId(id){
+    return document.getElementById(id);
+  }
+
+  // 1. 阅读进度条
+  window.addEventListener("scroll", function(){
+    var h = document.documentElement;
+    var b = document.body;
+    var st = h.scrollTop || b.scrollTop;
+    var sh = h.scrollHeight || b.scrollHeight;
+    var ch = h.clientHeight || b.clientHeight;
+    var pct = 0;
+    if(sh > ch){
+      pct = (st / (sh - ch)) * 100;
+    }
+    var pb = byId("progress-bar");
+    if(pb){
+      pb.style.width = Math.min(100, Math.max(0, pct)) + "%";
+    }
+  });
+
+  // 2. 主题切换
+  var themeBtn = byId("theme-toggle");
+  if(themeBtn){
+    themeBtn.addEventListener("click", function(){
+      var html = document.documentElement;
+      var cur = html.getAttribute("data-theme") || "dark";
+      var next = (cur === "dark") ? "light" : "dark";
+      html.setAttribute("data-theme", next);
+      try{
+        localStorage.setItem("aike-theme", next);
+      }catch(e){}
+    });
+  }
+
+  // 3. 移动端目录抽屉开关
+  var tocBtn = byId("toc-toggle");
+  var sidebar = byId("sidebar");
+  if(tocBtn && sidebar){
+    tocBtn.addEventListener("click", function(){
+      sidebar.classList.toggle("open");
+    });
+  }
+
+  // 4. 目录高亮监听
+  var navLinks = document.querySelectorAll(".sb-link");
+  if("IntersectionObserver" in window && navLinks.length > 0){
+    var targets = [];
+    for(var i = 0; i < navLinks.length; i++){
+      var href = navLinks[i].getAttribute("href");
+      if(href && href.charAt(0) === "#"){
+        var targetEl = byId(href.substring(1));
+        if(targetEl){
+          targets.push({link: navLinks[i], el: targetEl});
+        }
+      }
+    }
+    var observer = new IntersectionObserver(function(entries){
+      for(var j = 0; j < entries.length; j++){
+        if(entries[j].isIntersecting){
+          for(var k = 0; k < navLinks.length; k++){
+            navLinks[k].classList.remove("active");
+          }
+          for(var m = 0; m < targets.length; m++){
+            if(targets[m].el === entries[j].target){
+              targets[m].link.classList.add("active");
+              break;
+            }
+          }
+        }
+      }
+    }, {rootMargin: "-15% 0px -70% 0px"});
+
+    for(var n = 0; n < targets.length; n++){
+      observer.observe(targets[n].el);
+    }
+  }
+
+  // 5. 工作流装配沙盘交互
+  var wfData = {
+    crm: {
+      name: "Social CRM Scout",
+      title: "X-to-Notion Relationship Archivist",
+      trigger: "每周定时例程 (Routines) + 移动端聊天临时触发",
+      tools: "X (Twitter) Session, Notion MCP Server",
+      policy: "仅限读取公开 Profile，禁止私信与任何写操作",
+      benefit: "15 分钟配置，解放实习生级别重复杂活，出差按地缘破冰",
+      code: "Name: Social CRM Scout\nTitle: X-to-Notion Relationship Archivist\nDescription: Access my X following list on demand, extract public profiles (handle, bio, location, avatar url) for up to 900 users, dedup against Notion CRM database via Notion MCP, insert structured contacts and tag them with city/topics. Never post or DM."
+    },
+    arnold: {
+      name: "Arnold",
+      title: "Strength & Hypertrophy Coach",
+      trigger: "直接对话 (Chat) 汇报训练数据 + 训练日程定时提醒",
+      tools: "Workout Logs MCP, Google Sheets, Local File System",
+      policy: "允许读写健身日志与训练计划，禁止删除历史存档",
+      benefit: "将庞大独立 App 降维为三要素轻量 Bot，对话界面即行为热更新入口",
+      code: "Name: Arnold\nTitle: Strength & Hypertrophy Coach\nDescription: Track my strength workouts via chat inputs. Apply progressive overload algorithms across compound movements. Log sets, reps, and RPE to local storage or MCP sheet. When I ask to tweak workout volume or exercise substitutions, update your internal rules dynamically through dialogue."
+    },
+    outerloop: {
+      name: "Cursor Outer Loop",
+      title: "Context Harvester & Spec Architect",
+      trigger: "GitHub Issue / PR Webhook 触发 + 即时开发指令",
+      tools: "Slack MCP, Notion MCP, GitHub Connector, pstack plugin",
+      policy: "只读企业内部文档与讨论，仅向 Cursor Cloud 发起干净构建提议",
+      benefit: "扫除 90% 认知噪音，给内环提供纯净 Prompt，避免 Dirty Context 劣化代码",
+      code: "Name: Cursor Outer Loop\nTitle: Context Harvester & Spec Architect\nDescription: When a feature or bugfix is requested, gather context across Slack conversations, Notion PRDs, and GitHub issues. Leverage repo knowledge and the pstack skill. Filter out all irrelevant noise and synthesize a clean, high-precision specification prompt. Kick a Cursor Cloud Agent to execute the actual build and submit a PR."
+    },
+    search: {
+      name: "Cursor Product Expert",
+      title: "Cross-Platform Knowledge Synthesizer",
+      trigger: "内部提问对话 (Chat) + Slack 频道监控例程",
+      tools: "Notion, Slack, GitHub PRs, Internal Wiki MCP",
+      policy: "多平台全局只读索引，严禁向公共频道广播未经核验的猜测",
+      benefit: "秒级跨平台求证，终结企业碎片化信息孤岛，大幅减轻跨部门沟通疲劳",
+      code: "Name: Cursor Product Expert\nTitle: Cross-Platform Knowledge Synthesizer\nDescription: Answer technical and organizational queries by searching across Notion design docs, Slack threads, GitHub repositories, and Wiki pages simultaneously. Cross-reference code implementations with product specs. Synthesize cited answers and highlight discrepancies, eliminating communications fatigue."
+    }
+  };
+
+  var tabBtns = document.querySelectorAll(".wf-tab");
+  for(var p = 0; p < tabBtns.length; p++){
+    tabBtns[p].addEventListener("click", function(){
+      var key = this.getAttribute("data-wf");
+      if(!wfData[key]) return;
+      for(var q = 0; q < tabBtns.length; q++){
+        tabBtns[q].classList.remove("active");
+      }
+      this.classList.add("active");
+
+      var item = wfData[key];
+      var elName = byId("card-name");
+      var elTitle = byId("card-title");
+      var elTrigger = byId("card-trigger");
+      var elTools = byId("card-tools");
+      var elPolicy = byId("card-policy");
+      var elBenefit = byId("card-benefit");
+      var elCode = byId("card-code");
+
+      if(elName) elName.textContent = item.name;
+      if(elTitle) elTitle.textContent = item.title;
+      if(elTrigger) elTrigger.textContent = item.trigger;
+      if(elTools) elTools.textContent = item.tools;
+      if(elPolicy) elPolicy.textContent = item.policy;
+      if(elBenefit) elBenefit.textContent = item.benefit;
+      if(elCode) elCode.textContent = item.code.replace(/\\n/g, "\n");
+    });
+  }
+
+  // 6. 复制按钮
+  var copyBtn = byId("btn-copy");
+  if(copyBtn){
+    copyBtn.addEventListener("click", function(){
+      var codeEl = byId("card-code");
+      if(!codeEl) return;
+      var text = codeEl.textContent;
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(function(){
+          copyBtn.textContent = "已复制！";
+          setTimeout(function(){ copyBtn.textContent = "复制三字段配置"; }, 2000);
+        });
+      }else{
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try{
+          document.execCommand("copy");
+          copyBtn.textContent = "已复制！";
+          setTimeout(function(){ copyBtn.textContent = "复制三字段配置"; }, 2000);
+        }catch(err){}
+        document.body.removeChild(ta);
+      }
+    });
+  }
+
+})();
+</script>
+</body>
+</html>

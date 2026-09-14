@@ -1,0 +1,1882 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>给 AGENTS.md 配置做一次大扫除：GPT-6 Astra 官方 Skills 与 AGENTS.md 改造实操指南</title>
+  <style>
+    /* ==========================================================================
+       1. 全局设计令牌与双主题系统 (CSS Custom Properties)
+       ========================================================================== */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+      /* 语义状态令牌 */
+      --accent: #D97757;          /* 陶土红 / Astra 强调色 */
+      --accent-hover: #E2886A;
+      --accent-subtle: rgba(217, 119, 87, 0.12);
+      --emerald: #2E8B57;         /* 成果验收 / 通过 */
+      --emerald-subtle: rgba(46, 139, 87, 0.14);
+      --emerald-border: #38A169;
+      --rose: #C53030;            /* 警戒 / 拦截 / 负资产 */
+      --rose-subtle: rgba(197, 48, 48, 0.14);
+      --amber: #D69E2E;           /* 裁切告警 / 规则约束 */
+      --amber-subtle: rgba(214, 158, 46, 0.14);
+      --cyan: #319795;            /* 工程数据 / 按需索引 */
+      --cyan-subtle: rgba(49, 151, 149, 0.14);
+      --purple: #805AD5;          /* 路由推导 / 权限放权 */
+      --purple-subtle: rgba(128, 90, 213, 0.14);
+
+      --aike-sidebar-w: 280px;
+      --aike-content-max: 1180px;
+    }
+
+    /* 深色主题 (Dark Theme - 默认黑曜石科技质感) */
+    html[data-theme="dark"] {
+      --bg-canvas: #141413;
+      --bg-surface: #1E1E1C;
+      --bg-surface-elevated: #282825;
+      --bg-surface-highlight: #32322E;
+      --border-soft: rgba(255, 255, 255, 0.08);
+      --border-medium: rgba(255, 255, 255, 0.16);
+      --border-hard: rgba(255, 255, 255, 0.28);
+      --text-primary: #F4F1EA;
+      --text-secondary: #B0ADA5;
+      --text-tertiary: #7D7A73;
+      --text-inverse: #141413;
+      --code-bg: #181816;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.6);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.7);
+    }
+
+    /* 浅色主题 (Light Theme - 暖羊皮纸经典出版质感) */
+    html[data-theme="light"] {
+      --bg-canvas: #FAF7F2;
+      --bg-surface: #FFFFFF;
+      --bg-surface-elevated: #F3EFE8;
+      --bg-surface-highlight: #EAE5DC;
+      --border-soft: rgba(0, 0, 0, 0.07);
+      --border-medium: rgba(0, 0, 0, 0.14);
+      --border-hard: rgba(0, 0, 0, 0.24);
+      --text-primary: #21201D;
+      --text-secondary: #58554E;
+      --text-tertiary: #8C887F;
+      --text-inverse: #FAF7F2;
+      --code-bg: #F0EAE1;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.12);
+    }
+
+    /* ==========================================================================
+       2. 基础重置与排版引擎 (Typography & Reset)
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      line-height: 1.75;
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      display: block;
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    #reading-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--cyan));
+      width: 0%;
+      z-index: 9999;
+      transition: width 0.1s linear;
+    }
+
+    /* ==========================================================================
+       3. 左右分栏布局与侧边目录 (Layout & TOC)
+       ========================================================================== */
+    .app-sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: var(--aike-sidebar-w);
+      background-color: var(--bg-surface);
+      border-right: 1px solid var(--border-soft);
+      overflow-y: auto;
+      padding: 32px 20px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .sidebar-brand {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .sidebar-brand-title {
+      font-family: var(--font-serif);
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.01em;
+    }
+
+    .sidebar-brand-sub {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .sidebar-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .sidebar-btn {
+      flex: 1;
+      padding: 6px 10px;
+      background-color: var(--bg-surface-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: all 0.2s ease;
+    }
+
+    .sidebar-btn:hover {
+      background-color: var(--bg-surface-highlight);
+      color: var(--text-primary);
+      border-color: var(--border-medium);
+    }
+
+    .toc-nav {
+      flex: 1;
+    }
+
+    .toc-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-tertiary);
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .toc-item a {
+      display: block;
+      padding: 6px 10px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.825rem;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+      line-height: 1.4;
+    }
+
+    .toc-item a:hover {
+      color: var(--accent);
+      background-color: var(--accent-subtle);
+    }
+
+    .toc-item.active a {
+      color: var(--accent);
+      background-color: var(--accent-subtle);
+      font-weight: 600;
+    }
+
+    .sidebar-meta {
+      padding-top: 16px;
+      border-top: 1px solid var(--border-soft);
+      font-size: 0.725rem;
+      color: var(--text-tertiary);
+      line-height: 1.6;
+    }
+
+    /* 主内容居中算法 */
+    main.app-main {
+      display: block;
+      margin-left: calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+      margin-right: max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+      max-width: var(--aike-content-max);
+      width: auto;
+      padding: 48px 48px 120px;
+      box-sizing: border-box;
+    }
+
+    /* ==========================================================================
+       4. 标题与文章排版 (Headings & Prose)
+       ========================================================================== */
+    .article-header {
+      margin-bottom: 48px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--border-medium);
+    }
+
+    .badge-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      line-height: 1.4;
+      background-color: var(--bg-surface-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-soft);
+    }
+
+    .badge-accent {
+      background-color: var(--accent-subtle);
+      color: var(--accent);
+      border-color: rgba(217, 119, 87, 0.3);
+    }
+
+    .badge-emerald {
+      background-color: var(--emerald-subtle);
+      color: var(--emerald);
+      border-color: rgba(46, 139, 87, 0.3);
+    }
+
+    .article-title {
+      font-family: var(--font-serif);
+      font-size: clamp(2rem, 3.5vw, 2.75rem);
+      font-weight: 700;
+      line-height: 1.25;
+      color: var(--text-primary);
+      margin-bottom: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .article-lead {
+      font-size: 1.15rem;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      font-weight: 400;
+    }
+
+    .executive-card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      padding: 24px 28px;
+      margin-bottom: 36px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .executive-card-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .executive-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .executive-list li {
+      position: relative;
+      padding-left: 20px;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      line-height: 1.65;
+    }
+
+    .executive-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: var(--accent);
+      font-weight: bold;
+      font-size: 1.2rem;
+      line-height: 1.4;
+    }
+
+    h2 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.2vw, 1.85rem);
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 56px 0 24px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-soft);
+      letter-spacing: -0.01em;
+      scroll-margin-top: 24px;
+    }
+
+    h3 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 36px 0 16px;
+      letter-spacing: -0.01em;
+      scroll-margin-top: 24px;
+    }
+
+    p {
+      margin-bottom: 20px;
+      color: var(--text-primary);
+      font-size: 1rem;
+      line-height: 1.8;
+    }
+
+    strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    ul, ol {
+      margin: 0 0 24px 24px;
+      color: var(--text-primary);
+    }
+
+    li {
+      margin-bottom: 10px;
+      line-height: 1.75;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--border-soft);
+      margin: 48px 0;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      transition: color 0.15s ease;
+    }
+
+    a:hover {
+      color: var(--accent-hover);
+    }
+
+    /* ==========================================================================
+       5. 代码块与对比卡片 (Code Blocks & Compare)
+       ========================================================================== */
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin: 28px 0 24px;
+    }
+
+    .compare-col {
+      background-color: var(--bg-surface);
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .compare-col.bad-col {
+      border-top: 4px solid var(--rose);
+    }
+
+    .compare-col.good-col {
+      border-top: 4px solid var(--emerald);
+    }
+
+    .compare-header {
+      padding: 12px 18px;
+      background-color: var(--bg-surface-elevated);
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .compare-label {
+      font-size: 0.825rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .bad-col .compare-label {
+      color: var(--rose);
+    }
+
+    .good-col .compare-label {
+      color: var(--emerald);
+    }
+
+    .compare-tag {
+      font-size: 0.725rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .bad-col .compare-tag {
+      background-color: var(--rose-subtle);
+      color: var(--rose);
+    }
+
+    .good-col .compare-tag {
+      background-color: var(--emerald-subtle);
+      color: var(--emerald);
+    }
+
+    .code-container {
+      padding: 16px 18px;
+      background-color: var(--code-bg);
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: var(--text-primary);
+      overflow-x: auto;
+      flex: 1;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .code-dual-lang {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .code-block-en {
+      color: var(--text-primary);
+      border-bottom: 1px dashed var(--border-soft);
+      padding-bottom: 10px;
+    }
+
+    .code-block-zh {
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+    }
+
+    .explain-card {
+      background-color: var(--bg-surface-elevated);
+      border-left: 3px solid var(--cyan);
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin: 16px 0 28px;
+      font-size: 0.925rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    .explain-card strong {
+      color: var(--cyan);
+    }
+
+    .verify-box {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--emerald-border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin: 28px 0 36px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .verify-box-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--emerald);
+      margin-bottom: 10px;
+    }
+
+    /* ==========================================================================
+       6. 交互组件 1: Truncation 截断机制模拟沙盘
+       ========================================================================== */
+    .sandbox-wrap {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 12px;
+      padding: 28px;
+      margin: 36px 0 44px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .sandbox-header {
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .sandbox-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sandbox-desc {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .svg-pipeline-wrap {
+      background-color: var(--code-bg);
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+      padding: 16px;
+      margin-bottom: 24px;
+      overflow-x: auto;
+    }
+
+    .sandbox-ctrl-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      background-color: var(--bg-surface-elevated);
+      padding: 18px 22px;
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+      margin-bottom: 24px;
+    }
+
+    .ctrl-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .ctrl-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .ctrl-slider {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      outline: none;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .btn-group-toggle {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn-toggle {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      background-color: var(--bg-surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-toggle.active {
+      background-color: var(--accent);
+      color: #FFFFFF;
+      border-color: var(--accent);
+    }
+
+    .sandbox-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .metric-card {
+      background-color: var(--bg-surface-elevated);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .metric-val {
+      font-family: var(--font-mono);
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .preview-box {
+      background-color: var(--code-bg);
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+      padding: 16px 20px;
+    }
+
+    .preview-header {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .preview-content {
+      font-family: var(--font-mono);
+      font-size: 0.825rem;
+      line-height: 1.65;
+      color: var(--text-primary);
+      max-height: 240px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .token-pill {
+      display: inline-block;
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin: 1px;
+    }
+
+    .pill-safe {
+      background-color: rgba(46, 139, 87, 0.18);
+      color: var(--emerald);
+    }
+
+    .pill-cut {
+      background-color: rgba(197, 48, 48, 0.22);
+      color: var(--rose);
+      text-decoration: line-through;
+    }
+
+    /* ==========================================================================
+       7. 交互组件 2: 仓库健康自查器与 Prompt 生成器
+       ========================================================================== */
+    .audit-checklist {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .audit-item {
+      background-color: var(--bg-surface-elevated);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .audit-item:hover {
+      border-color: var(--border-medium);
+      background-color: var(--bg-surface-highlight);
+    }
+
+    .audit-item input[type="checkbox"] {
+      margin-top: 3px;
+      accent-color: var(--rose);
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+
+    .audit-text-wrap {
+      flex: 1;
+    }
+
+    .audit-item-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .audit-item-desc {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .audit-toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .audit-btn {
+      padding: 7px 14px;
+      border-radius: 6px;
+      font-size: 0.825rem;
+      font-weight: 600;
+      border: 1px solid var(--border-soft);
+      background-color: var(--bg-surface-elevated);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .audit-btn:hover {
+      color: var(--text-primary);
+      border-color: var(--border-medium);
+    }
+
+    .audit-btn.active {
+      background-color: var(--accent);
+      color: #FFFFFF;
+      border-color: var(--accent);
+    }
+
+    .prompt-box {
+      background-color: var(--code-bg);
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+      padding: 20px;
+      position: relative;
+    }
+
+    .prompt-box-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .prompt-pre {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 380px;
+      overflow-y: auto;
+    }
+
+    .copy-success-tag {
+      font-size: 0.75rem;
+      color: var(--emerald);
+      margin-left: 8px;
+      font-weight: 600;
+    }
+
+    /* ==========================================================================
+       8. 响应式与打印适配 (@media)
+       ========================================================================== */
+    @media (max-width: 1080px) {
+      .app-sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+      }
+
+      .app-sidebar.open {
+        transform: translateX(0);
+      }
+
+      main.app-main {
+        margin-left: 0;
+        margin-right: 0;
+        max-width: 100%;
+        padding: 24px 20px 80px;
+      }
+
+      .mobile-menu-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        background-color: var(--bg-surface);
+        border-bottom: 1px solid var(--border-soft);
+        position: sticky;
+        top: 0;
+        z-index: 90;
+      }
+
+      .compare-grid, .sandbox-ctrl-panel, .sandbox-metrics, .audit-checklist {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (min-width: 1081px) {
+      .mobile-menu-bar {
+        display: none;
+      }
+    }
+
+    @media print {
+      body {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+      }
+
+      .app-sidebar, #reading-progress, .mobile-menu-bar, .sidebar-actions, .sandbox-ctrl-panel, .audit-toolbar, #btn-copy-prompt {
+        display: none !important;
+      }
+
+      main.app-main {
+        margin: 0 !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+      }
+
+      .compare-col, .sandbox-wrap, .verify-box, .executive-card {
+        border: 1px solid #CCCCCC !important;
+        box-shadow: none !important;
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="reading-progress"></div>
+
+  <!-- 移动端顶部呼出条 -->
+  <div class="mobile-menu-bar">
+    <span style="font-weight: 700; color: var(--accent); font-family: var(--font-serif);">GPT-6 Astra 改造指南</span>
+    <button id="btn-toc-toggle" class="sidebar-btn" style="width: auto; padding: 6px 12px;">☰ 目录</button>
+  </div>
+
+  <!-- 侧边栏导航 -->
+  <aside class="app-sidebar" id="app-sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-brand-title">OpenAI Developers 指南</div>
+      <div class="sidebar-brand-sub">GPT-6 Astra 配置治理规范</div>
+    </div>
+
+    <div class="sidebar-actions">
+      <button id="btn-theme-toggle" class="sidebar-btn">🌓 切换主题</button>
+      <button id="btn-print-page" class="sidebar-btn">🖨️ 打印文档</button>
+    </div>
+
+    <nav class="toc-nav">
+      <div class="toc-title">目录导航</div>
+      <ul class="toc-list">
+        <li class="toc-item"><a href="#sec-intro">引言：旧配置何时成了负资产</a></li>
+        <li class="toc-item"><a href="#sec-why-change">核心动因：三大放大缺陷</a></li>
+        <li class="toc-item"><a href="#sec-step1-skills">第一步：瘦身与重构 skills</a></li>
+        <li class="toc-item"><a href="#sec-truncation-demo">└ 描述截断机制可视化沙盘</a></li>
+        <li class="toc-item"><a href="#sec-step2-agents">第二步：重写 AGENTS.md 索引</a></li>
+        <li class="toc-item"><a href="#sec-step3-permissions">第三步：重设权限与本地放权</a></li>
+        <li class="toc-item"><a href="#sec-step4-prompts">第四步：调整 Prompt 明确完成定义</a></li>
+        <li class="toc-item"><a href="#sec-audit-tool">快捷落地：Astra 自助审计器</a></li>
+      </ul>
+    </nav>
+
+    <div class="sidebar-meta">
+      <div>发布基准：2026年9月</div>
+      <div>适用模型：GPT-6 Astra / Codex</div>
+      <div>治理标准：Zero-Overhead Harness</div>
+    </div>
+  </aside>
+
+  <!-- 主内容区 -->
+  <main class="app-main" id="main-content">
+    
+    <header class="article-header">
+      <div class="badge-wrap">
+        <span class="badge badge-accent">GPT-6 Astra 官方指南</span>
+        <span class="badge badge-emerald">OpenAI Developers 最佳实践</span>
+        <span class="badge">配置瘦身与架构重构</span>
+      </div>
+      <h1 class="article-title">给 Agent.MD配置做一次大扫除：GPT-6 Astra 官方 Skills 与 AGENTS.md 改造实操指南</h1>
+      <p class="article-lead">
+        模型变强之后，仓库里那堆当年为了兜住弱模型写下的规则，正在反过来拖慢它。这份指南把 OpenAI Developers 的建议拆成四步可照做的改造：收窄 skill 描述、把 AGENTS.md 从强制通读改成按需索引、给安全环境明确放权、把完成标准写进任务 prompt——每步都附「改对后怎么确认」。
+      </p>
+    </header>
+
+    <!-- 核心提要卡片 -->
+    <div class="executive-card" id="sec-intro">
+      <div class="executive-card-title">
+        <span>⚡</span> 核心改造提要与执行路线
+      </div>
+      <ul class="executive-list">
+        <li><strong>先弄明白为什么要改</strong>：技能一多，系统会按预算裁掉 skill 描述的后半句，模型看到的是残句；死板的步骤限制了推理；当年为约束旧模型写的严厉禁令，会让对齐更好的新模型在安全环节反复停下。</li>
+        <li><strong>第一步改 skills</strong>：描述压到一两句、只说何时调用；复杂技能的根文件只留极简路由，细节下沉到子文档；删掉一步步的操作菜谱。</li>
+        <li><strong>第二步改 AGENTS.md</strong>：删掉「改之前先通读 XXX」，换成按职责标注的文档索引；反复催跑测试的旧话也可以去掉。</li>
+        <li><strong>第三步和第四步管权限与收尾</strong>：无差别拦截收窄到真正的高危操作，隔离的本地测试直接放权自动跑改；任务 prompt 里把「做到什么算完成」写明白，模型才不会写完初版就停。</li>
+        <li><strong>全流程实操资产</strong>：文中所有可抄走的配置片段都是中英对照；末尾带一张讲清描述被截断的示意图，和一个勾选式仓库自查器——勾出中招的项，生成中文或英文的审计 prompt 直接复制。</li>
+      </ul>
+    </div>
+
+    <!-- 历史背景 -->
+    <section class="card-section">
+      <p>
+        在过去很长一段时间里，为了让 Codex 等 coding agent 稳定输出符合预期的代码，开发者习惯在仓库里堆积大量引导规则：巨细靡遗的操作菜谱、修改前必须读完全部架构文档的死规定，以及每走一步都必须暂停确认的防御性指令。
+      </p>
+      <p>
+        随着底层模型升级到 GPT-6 Astra，这套曾经行之有效的配置反而成了负资产。<strong>旧配置从助力变成负担</strong>，核心原因在于模型能力的代际位移：Astra 的理解力、安全对齐与上下文感知大幅提升，过去那种「保姆式脚手架」不仅大量挤占上下文空间，还会引发规则冲突、误触无关流程，甚至让具备高度安全意识的模型陷入不必要的停滞。
+      </p>
+      <p>
+        这份指南将带你系统清理仓库中的历史配置。你可以直接对照自己的项目，从 skills、AGENTS.md、权限边界到任务 prompt，逐步完成改造。
+      </p>
+    </section>
+
+    <hr>
+
+    <!-- 第一章：为什么模型变强了 -->
+    <section id="sec-why-change">
+      <h2>为什么模型变强了，旧配置反而成了累赘？</h2>
+      <p>
+        在动手修改具体文件之前，需要先理解官方提出这一系列重构建议的核心原则：<strong>从保姆式约束转向自主判断与按需路由</strong>。
+      </p>
+      <p>
+        过去一年的典型配置存在三个在强模型下被放大的缺陷：
+      </p>
+
+      <div class="compare-grid">
+        <div class="compare-col bad-col">
+          <div class="compare-header">
+            <span class="compare-label">⚠️ 历史保姆式配置（GPT-5.6 / 旧 Codex 遗留）</span>
+            <span class="compare-tag">高额负资产</span>
+          </div>
+          <div style="padding: 18px 20px; font-size: 0.925rem; line-height: 1.7; color: var(--text-secondary);">
+            <p><strong>1. 宽泛冗长的技能描述</strong>：试图用穷举同义词防漏，导致数十个技能的描述挤爆预算，关键触发词被无情截断成残句。</p>
+            <p><strong>2. 死板教条的操作菜谱</strong>：巨细靡遗的 step-by-step 步骤剥夺了强模型的推理自由度，限制了最佳技术解的生成。</p>
+            <p><strong>3. 全局防御性严苛禁令</strong>：充斥“未授权不得修改”、“每次停下等审批”，让高度对齐的 Astra 在安全沙盒中举步维艰。</p>
+          </div>
+        </div>
+
+        <div class="compare-col good-col">
+          <div class="compare-header">
+            <span class="compare-label">✨ Astra 现代化精简配置（GPT-6 原生标准）</span>
+            <span class="compare-tag">极简高能</span>
+          </div>
+          <div style="padding: 18px 20px; font-size: 0.925rem; line-height: 1.7; color: var(--text-secondary);">
+            <p><strong>1. 精准微型触发器</strong>：描述压缩至 1~2 句，只声明“何时调用”，为实际业务上下文腾出宝贵 Token。</p>
+            <p><strong>2. 渐进式路由器（Router）</strong>：根文件仅作极简分流，将复杂操作与深层逻辑下沉到二级文档与独立执行脚本。</p>
+            <p><strong>3. 安全环境明确连续授权</strong>：对本地单测与隔离夹具完全放权，模型自主完成“写-测-纠-验”端到端闭环。</p>
+          </div>
+        </div>
+      </div>
+
+      <p>
+        <strong>第一是上下文污染与截断风险</strong>。许多团队给项目配置了数十个 skills，每个 skill 都写了很长的描述。当技能总数过多时，Codex 会强行缩短展示给模型的描述摘要。模型看到的描述信息残缺不全，加上各描述词常有重叠，往往会导致误选无关技能；而一旦加载错误的大型技能文件，又会提早触发上下文压缩（compaction），挤掉真正有用的开发上下文。
+      </p>
+      <p>
+        <strong>第二是死板步骤对高阶推理的限制</strong>。老模型容易丢三落四，需要按部就班的菜谱（recipes）指导；但 Astra 对模糊语义与复杂业务逻辑的理解力远超以往，过于详尽的指令步骤不仅显得多余，反而限制了模型的解题空间。
+      </p>
+      <p>
+        <strong>第三是对齐特性导致的过度保守</strong>。Astra 是目前对齐程度最高、判断力更强的模型，在未确认操作安全前通常不会冒进。如果仓库的规则文件里依然残留着此前为了约束旧模型而写下的严厉警告（例如「未经批准不得执行任何操作」），Astra 会极度严格地执行它，导致其在完全安全的本地测试或常规修改中动不动就停下来请求确认。
+      </p>
+      <p>
+        理解了这些变化，改造思路就十分清晰：<strong>把入口做轻、把索取做细、把权限说透、把目标闭环</strong>。
+      </p>
+    </section>
+
+    <hr>
+
+    <!-- 第二章：第一步 改 skills -->
+    <section id="sec-step1-skills">
+      <h2>第一步：瘦身与重构 skills</h2>
+      <p>
+        先弄清楚要改的是什么：skill 本质上就是存成 Markdown 文件的提示词，可以连同资源和脚本一起打包，最适合用来指导某一条具体工作流、或在使用某些特定应用时提供指引。
+      </p>
+      <p>
+        排查仓库内的技能定义文件。官方近期已经更新了 <code>$skill-creator</code> 的内置指引，核心要求就是给技能全面瘦身。
+      </p>
+      <p>
+        <strong>精简触发描述</strong>：skill 的名称与描述是常驻在模型上下文中的索引。描述必须尽可能短，且只明确规定在什么场景下才需要调用。切忌为了「防漏」而把关联模块的所有词汇都堆在描述里。
+      </p>
+
+      <!-- 对比卡片：Postgres Migration -->
+      <div class="compare-grid">
+        <div class="compare-col bad-col">
+          <div class="compare-header">
+            <span class="compare-label">❌ Bad 写法（冗余堆砌）</span>
+            <span class="compare-tag">引发误调用</span>
+          </div>
+          <div class="code-container">
+            <div class="code-dual-lang">
+              <div class="code-block-en">Create and validate Postgres schema migrations. Use when working with databases, queries, models, or persistence.</div>
+              <div class="code-block-zh">创建并校验 Postgres 数据库结构迁移。在处理数据库、查询、模型或持久化相关工作时使用。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="compare-col good-col">
+          <div class="compare-header">
+            <span class="compare-label">✅ Good 写法（精准触发）</span>
+            <span class="compare-tag">推荐范式</span>
+          </div>
+          <div class="code-container">
+            <div class="code-dual-lang">
+              <div class="code-block-en">Create and validate Postgres schema migrations. Use when adding or changing a migration, or reviewing its rollout.</div>
+              <div class="code-block-zh">创建并校验 Postgres 数据库结构迁移。在新增或修改一个 migration、或审查其上线时使用。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="explain-card">
+        <strong>深度解析</strong>：Bad 写法把写查询、改模型、做持久化全当成了触发词，结果只要 Agent 触碰到数据库相关代码，就会错误地把整个 migration 技能调入上下文；Good 写法将范围精准锁定在「新增/修改 migration 或审查其上线」，只有在真正处理迁移时才会触发。
+      </div>
+
+      <!-- 交互组件 1: component:truncation -->
+      <div class="sandbox-wrap" id="sec-truncation-demo">
+        <div class="sandbox-header">
+          <div class="sandbox-title">
+            <span>📊</span> Skills 描述截断机制与语义混淆模拟图解
+          </div>
+          <div class="sandbox-desc">
+            系统会给所有常驻 Skills 描述分配硬上限预算（Token Budget）。技能库一旦膨胀或单个描述过长，引擎将强行裁掉后半截，导致模型看到残缺语义，引发灾难性的误触发与上下文压缩。
+          </div>
+        </div>
+
+        <!-- 内联 SVG 截断管线流程图 -->
+        <div class="svg-pipeline-wrap">
+          <svg viewBox="0 0 960 210" style="width: 100%; height: auto; display: block;" xmlns="http://www.w3.org/2000/svg">
+            <!-- 背景网格修饰 -->
+            <defs>
+              <linearGradient id="grad-pipe-bad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#C53030" stop-opacity="0.2"/>
+                <stop offset="100%" stop-color="#C53030" stop-opacity="0.05"/>
+              </linearGradient>
+              <linearGradient id="grad-pipe-good" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#2E8B57" stop-opacity="0.2"/>
+                <stop offset="100%" stop-color="#2E8B57" stop-opacity="0.05"/>
+              </linearGradient>
+            </defs>
+
+            <!-- 阶段 1: 仓库技能池 -->
+            <rect x="20" y="25" width="200" height="160" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--border-medium)" stroke-width="1.5"/>
+            <text x="120" y="52" fill="var(--text-primary)" font-size="13" font-weight="700" text-anchor="middle">1. 仓库 Skills 定义池</text>
+            <rect x="35" y="70" width="170" height="26" rx="4" fill="var(--bg-surface)" stroke="var(--border-soft)"/>
+            <text x="45" y="87" fill="var(--text-secondary)" font-size="11" font-family="ui-monospace, monospace">skill_postgres_migrate</text>
+            <rect x="35" y="105" width="170" height="26" rx="4" fill="var(--bg-surface)" stroke="var(--border-soft)"/>
+            <text x="45" y="122" fill="var(--text-secondary)" font-size="11" font-family="ui-monospace, monospace">skill_api_deploy_k8s</text>
+            <rect x="35" y="140" width="170" height="26" rx="4" fill="var(--bg-surface)" stroke="var(--border-soft)"/>
+            <text x="45" y="157" fill="var(--text-secondary)" font-size="11" font-family="ui-monospace, monospace">skill_auth_security_jwt</text>
+
+            <!-- 连线 1 -> 2 -->
+            <path d="M 220 105 L 280 105" stroke="var(--border-hard)" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="4,4"/>
+
+            <!-- 阶段 2: 注入与预算裁切门禁 -->
+            <rect x="280" y="25" width="250" height="160" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="405" y="52" fill="var(--accent)" font-size="13" font-weight="700" text-anchor="middle">2. System Prompt 预算管线</text>
+            <rect x="300" y="70" width="210" height="42" rx="4" fill="var(--bg-canvas)" stroke="var(--rose)" stroke-width="1"/>
+            <text x="310" y="88" fill="var(--rose)" font-size="11" font-weight="600">全局硬预算: 500 Tokens</text>
+            <text x="310" y="104" fill="var(--text-tertiary)" font-size="10">超量截断规则: 硬截断至末尾</text>
+            
+            <path d="M 405 115 L 405 132" stroke="var(--border-medium)" stroke-width="1.5"/>
+            <rect x="300" y="135" width="210" height="36" rx="4" fill="rgba(217, 119, 87, 0.1)"/>
+            <text x="405" y="157" fill="var(--text-primary)" font-size="11" text-anchor="middle">单技能摘要预算配额压减</text>
+
+            <!-- 连线 2 -> 3 -->
+            <path d="M 530 105 L 590 105" stroke="var(--border-hard)" stroke-width="2"/>
+
+            <!-- 阶段 3: 模型视角与执行结果 -->
+            <rect x="590" y="25" width="350" height="160" rx="8" fill="var(--bg-surface-elevated)" stroke="var(--border-medium)" stroke-width="1.5"/>
+            <text x="765" y="52" fill="var(--text-primary)" font-size="13" font-weight="700" text-anchor="middle">3. GPT-6 Astra 模型实际接收面</text>
+            
+            <rect x="605" y="68" width="320" height="48" rx="4" fill="rgba(197, 48, 48, 0.15)" stroke="var(--rose)" stroke-width="1"/>
+            <text x="615" y="87" fill="var(--rose)" font-size="11" font-weight="600">❌ 冗长配置被裁切成残句：</text>
+            <text x="615" y="105" fill="var(--text-secondary)" font-size="10" font-family="ui-monospace, monospace">"Use when working with databases, que[...已截断]"</text>
+
+            <rect x="605" y="126" width="320" height="48" rx="4" fill="rgba(46, 139, 87, 0.15)" stroke="var(--emerald)" stroke-width="1"/>
+            <text x="615" y="145" fill="var(--emerald)" font-size="11" font-weight="600">✅ 改造后完整接收路由语义：</text>
+            <text x="615" y="163" fill="var(--text-secondary)" font-size="10" font-family="ui-monospace, monospace">"Use when adding or changing a migration."</text>
+          </svg>
+        </div>
+
+        <!-- 交互控制面板 -->
+        <div class="sandbox-ctrl-panel">
+          <div class="ctrl-group">
+            <div class="ctrl-label">
+              <span>仓库 Skills 技能配置总数:</span>
+              <span id="stat-trunc-count" style="color: var(--accent); font-family: var(--font-mono); font-weight: 700;">20</span>
+            </div>
+            <input type="range" id="input-skill-count" class="ctrl-slider" min="5" max="40" value="20" step="1">
+            <div style="display: flex; justify-content: space-between; font-size: 0.725rem; color: var(--text-tertiary);">
+              <span>5 个（小型项目）</span>
+              <span>20 个（典型仓库）</span>
+              <span>40 个（重度配置）</span>
+            </div>
+          </div>
+
+          <div class="ctrl-group">
+            <div class="ctrl-label">
+              <span>描述风格与重构模式切换:</span>
+            </div>
+            <div class="btn-group-toggle">
+              <button id="btn-mode-bad" class="btn-toggle active">保姆冗余型 (Bad, 38 T/个)</button>
+              <button id="btn-mode-good" class="btn-toggle">精准轻量型 (Good, 14 T/个)</button>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-tertiary);">
+              Bad: 包含查询、模型等泛化词汇 | Good: 仅保留精确调用条件
+            </div>
+          </div>
+        </div>
+
+        <!-- 实时计算指标卡 -->
+        <div class="sandbox-metrics">
+          <div class="metric-card">
+            <div class="metric-label">总描述 Token 预估</div>
+            <div id="stat-trunc-tokens" class="metric-val" style="color: var(--rose);">760</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Codex 注入预算阈值</div>
+            <div id="stat-trunc-budget" class="metric-val">500</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">当前预算健康状态</div>
+            <div id="stat-trunc-status" class="metric-val" style="font-size: 0.95rem; color: var(--rose);">⚠️ 严重超标 (溢出 260 Tokens)</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">平均单个描述长度</div>
+            <div id="stat-trunc-per-skill" class="metric-val">38 Tokens</div>
+          </div>
+        </div>
+
+        <!-- 实时回显与模型真实视界 -->
+        <div class="preview-box">
+          <div class="preview-header">
+            <span>模型在 System Prompt 中看到的真实描述视图（Raw Context View）：</span>
+            <span id="stat-trunc-risk" style="font-size: 0.75rem; color: var(--rose); font-weight: 600;">高危：已触发系统强制截断，末尾关键词丢失引发语义误判与全局 Compaction</span>
+          </div>
+          <div id="out-trunc-preview" class="preview-content"># System Injected Skills Summary (Budget: 500 Tokens):
+- [1] skill_postgres_migrate: Create and validate Postgres schema migrations. Use when working with databases, queries, models, or persistence.
+- [2] skill_user_auth: Manage user authentication, JWT, cookies, sessions, credentials, oauth, and security permissions.
+- [3] skill_deploy_k8s: Build, push, deploy, monitor, rollback, restart, and scale kubernetes pods, clusters, and helm charts.
+- [4] skill_test_runner: Run automated pytest, jest, integration tests, coverage reports, regression sweeps, and mocks.
+- [5] skill_data_etl: Extract, transform, load, ingest, clean, normalize, pipeline, warehouse, and validate big data.
+- [6] skill_payment_gateway: Process stripe, paypal, checkout, subscriptions, refunds, invoices, billing, and chargebacks.
+- [7] skill_search_index: Configure elasticsearch, meilisearch, vector indexes, embeddings, reranking, and semantic queries.
+- [8] skill_email_worker: Send transactional emails, SES, sendgrid, templates, notifications, bounces, and delivery logs.
+- [9] skill_logging_tracing: Setup opentelemetry, datadog, sentry, span traces, log aggregations, alerts, and metrics.
+- [10] skill_cache_redis: Redis caching, key invalidation, cluster management, pubsub, rate limiting, and distributed locks.
+- [11] skill_i18n_locales: Manage translations, locale files, gettext, crowdin, plurals, RTL layouts, and unicode.
+- [12] skill_image_pipeline: Resize, compress, watermark, cdn upload, s3 storage, webp conversion, and thumbnail gen.
+- [13] skill_websocket_pubsub: Websocket connections, socket.io, room management, heartbeat, ping pong, and disconnects... [TRUNCATED: 剩余 7 个技能描述被系统静默截断！模型将完全失去对这些技能的感知]</div>
+        </div>
+      </div>
+
+      <p>
+        <strong>践行渐进式披露（Progressive Disclosure）</strong>：阅读技能内容同样消耗上下文。对于包含多个流程的复杂技能，根文档应当只充当极简的「路由器（Router）」，指引模型按需去寻找二级文档或具体脚本，绝不能把所有操作步骤一股脑塞在根文件里。
+      </p>
+      <p>
+        <strong>精简操作菜谱与考虑多模型协作</strong>：删掉一步步保姆式的详尽指引，让 Astra 自由发挥理解力。但需要留意团队协作情况：如果仓库里还有其他协作者的 Agent 在运行 GPT-5.6 Sol 或 Luna 等旧模型，为老模型保留的强约束可能会过度束缚 Astra，更新公共技能时需权衡协作者的模型构成。
+      </p>
+
+      <div class="verify-box">
+        <div class="verify-box-header">
+          <span>🎯</span> 改对后的确认方式（Verification Criteria）
+        </div>
+        <p style="margin-bottom: 0; font-size: 0.95rem; color: var(--text-secondary);">
+          检查 Codex 加载的 skills 列表，确认每条描述都能完整显示、未被引擎裁剪；在日常编写常规数据库查询或业务逻辑时，观察 Agent 不会再误触发并加载迁移技能。
+        </p>
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- 第三章：第二步 重写 AGENTS.md 的文档索引 -->
+    <section id="sec-step2-agents">
+      <h2>第二步：重写 AGENTS.md 的文档索引</h2>
+      <p>
+        打开项目根目录下的 <a href="https://agents.md/" target="_blank" rel="noopener"><code>AGENTS.md</code></a>。这个文件是 Agent 在仓库内工作时的全局常驻指引，必须逐条审查其中每一项要求的必要性。
+      </p>
+      <p>
+        <strong>从全局强制必读转为按需索取</strong>：旧配置最常见的做法是要求 Agent 在动手前通读一堆规范文档，这在修一个错别字或调整常量时属于极其严重的资源浪费。Astra 完全有能力自行判断当前任务需要查阅哪些背景。
+      </p>
+
+      <!-- 对比卡片：AGENTS.md 索引 -->
+      <div class="compare-grid">
+        <div class="compare-col bad-col">
+          <div class="compare-header">
+            <span class="compare-label">❌ Bad 写法（强制通读）</span>
+            <span class="compare-tag">极度浪费 Token</span>
+          </div>
+          <div class="code-container">
+            <div class="code-dual-lang">
+              <div class="code-block-en">Before every edit, read architecture.md, database.md, and deployment.md.</div>
+              <div class="code-block-zh">每次编辑前，先读完 architecture.md、database.md 和 deployment.md。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="compare-col good-col">
+          <div class="compare-header">
+            <span class="compare-label">✅ Good 写法（场景化索引）</span>
+            <span class="compare-tag">按需精准索取</span>
+          </div>
+          <div class="code-container">
+            <div class="code-dual-lang">
+              <div class="code-block-en">Use architecture.md for service boundaries, database.md for schema changes, and deployment.md when preparing a deployment.</div>
+              <div class="code-block-zh">涉及服务边界查 architecture.md，改表结构查 database.md，准备发布时查 deployment.md。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="explain-card">
+        <strong>深度解析</strong>：Bad 写法要求在每次编辑前通读架构、数据库和部署三大文档，既严重烧 token，又极大拖慢响应速度；Good 写法将文档改为场景化索引，只在涉及服务边界、表结构调整或准备发布时才引导查阅对应文件。同时务必保证索引所指向的文档内容是最新维护的。
+      </div>
+
+      <p>
+        <strong>清理多余的测试督促</strong>：旧模型经常写完代码就交差，以往的 <code>AGENTS.md</code> 会强行要求「修改后必须执行测试并检查产出」。Astra 在这方面具备很强的自主性，会主动进行自测，继续保留这种督促会导致它发起不必要的重复测试。
+      </p>
+
+      <div class="verify-box">
+        <div class="verify-box-header">
+          <span>🎯</span> 改对后的确认方式（Verification Criteria）
+        </div>
+        <p style="margin-bottom: 0; font-size: 0.95rem; color: var(--text-secondary);">
+          派发一个微小修改任务（例如修改某处的文档注释），观察交互日志，确认 Agent 直奔目标文件动手，不再盲目加载全套架构文档，也不再反复刷全量测试。
+        </p>
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- 第四章：第三步 重设权限边界与本地测试授权 -->
+    <section id="sec-step3-permissions">
+      <h2>第三步：重设权限边界与本地测试授权</h2>
+      <p>
+        审查 <code>AGENTS.md</code> 及全局规则中关于「权限与审批」的条款，解除过时的安全束缚。
+      </p>
+      <p>
+        <strong>修正过激的防线语言</strong>：以前为防止旧模型擅自做主，开发者常写下「做任何改动前必须征求人工许可」等强硬指令。面对判断力更强的 Astra，这种防御性用语会导致它过于拘谨，在完全可以安全推进的环节反复暂停。应该清理掉那些因缺乏信任而设的无差别拦截。
+      </p>
+      <p>
+        <strong>给安全环境明确放权</strong>：Astra 工作很周全，但在判断推进步长时偏谨慎，需要适当给它继续前进的许可。对于本地测试这种没有任何生产破坏风险的安全场景，直接在 <code>AGENTS.md</code> 里给予连续执行授权。
+      </p>
+
+      <!-- 授权范例 -->
+      <div class="compare-grid" style="grid-template-columns: 1fr;">
+        <div class="compare-col good-col">
+          <div class="compare-header">
+            <span class="compare-label">✅ 官方推荐本地测试连续放权范例（Permission Granting）</span>
+            <span class="compare-tag">解开束缚</span>
+          </div>
+          <div class="code-container">
+            <div class="code-dual-lang">
+              <div class="code-block-en">The local tests use disposable fixtures and have no production access. Run them, fix failures caused by the requested change, and rerun affected tests without asking for approval at each step.</div>
+              <div class="code-block-zh">本地测试使用一次性夹具且无法访问生产环境。运行测试，修复由本次修改引发的失败，并重新运行受影响的测试，无需在每一步都请求批准。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="explain-card">
+        <strong>深度解析</strong>：这段配置清晰交代了两件事——本地测试无生产风险；明确要求模型自动跑测试、自查报错、修复代码并复测，中途不必每走一步都弹窗请示。
+      </div>
+
+      <div class="verify-box">
+        <div class="verify-box-header">
+          <span>🎯</span> 改对后的确认方式（Verification Criteria）
+        </div>
+        <p style="margin-bottom: 0; font-size: 0.95rem; color: var(--text-secondary);">
+          发起一次会导致单元测试报错的代码修改，观察 Agent 能否自主完成「修改代码 -&gt; 跑测试发现报错 -&gt; 自行修补 -&gt; 重新跑测试通过」的完整闭环，中途不再停下来等待批准。
+        </p>
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- 第五章：第四步 调整任务 prompt，明确完成定义 -->
+    <section id="sec-step4-prompts">
+      <h2>第四步：调整任务 prompt，明确完成定义</h2>
+      <p>
+        除了静态的规则文件，日常下发任务时的 prompt 表达习惯也需要同步调整。
+      </p>
+      <p>
+        <strong>把完成标准（Definition of Done）前置</strong>：很多开发者习惯了 GPT-5.6 Sol 接到需求后单向跑很长链路的风格，转用 GPT-6 Astra 后可能会觉得它变保守了——往往写完第一版代码就停下来，等用户审阅后再继续。
+      </p>
+      <p>
+        如果你的任务本身就包含「把代码跑起来、检查实际输出、修复运行期错误」，就必须在发起任务的 prompt 里明确将它们定义为完成条件。不要预设「写完初稿停下来等我确认」，除非这个决策节点确实必须由人类来定夺；多余的中间停顿要求会把模型推向过早的终止状态。
+      </p>
+      <p>
+        若需要进行探索性尝试，不要只发一句含糊的「多试试不同方案」，明确告知期望探索的具体方向，以及探索到什么边界就可以收敛停下。
+      </p>
+
+      <div class="verify-box">
+        <div class="verify-box-header">
+          <span>🎯</span> 改对后的确认方式（Verification Criteria）
+        </div>
+        <p style="margin-bottom: 0; font-size: 0.95rem; color: var(--text-secondary);">
+          提交需求后，Astra 不再只扔给你一段未验证的初版代码就原地待命，而是能够端到端完成部署或测试验证，并交付完整的检查结果。
+        </p>
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- 第六章：快捷落地 自助审计 -->
+    <section id="sec-audit-tool">
+      <h2>快捷落地：让 GPT-6 Astra 自助审计仓库</h2>
+      <p>
+        改造现有的配置文件不需要你全程手动翻找。最快的方式是让 GPT-6 Astra 亲自来做一次合规体检。
+      </p>
+
+      <!-- 交互组件 2: component:audit -->
+      <div class="sandbox-wrap">
+        <div class="sandbox-header">
+          <div class="sandbox-title">
+            <span>🔍</span> 仓库配置健康体检与 GPT-6 Astra 官方审计 Prompt 提取器
+          </div>
+          <div class="sandbox-desc">
+            勾选你的仓库当前命中的历史负资产项。系统将动态计算当前配置健康度评分，并自动合成可直接复制下发给 GPT-6 Astra 的专业审计提示词。
+          </div>
+        </div>
+
+        <div class="audit-toolbar">
+          <button id="btn-audit-checkall" class="audit-btn">全部勾选（重病仓库）</button>
+          <button id="btn-audit-clear" class="audit-btn">全部取消（清白仓库）</button>
+          <div style="flex: 1;"></div>
+          <button id="btn-lang-zh" class="audit-btn active">🇨🇳 中文提示词</button>
+          <button id="btn-lang-en" class="audit-btn">🇺🇸 English Prompt</button>
+        </div>
+
+        <!-- 8 项中招勾选列表 -->
+        <div class="audit-checklist">
+          <label class="audit-item">
+            <input type="checkbox" id="chk-s1" checked>
+            <div class="audit-text-wrap">
+              <div class="audit-item-title">1. Skills 描述冗长泛化</div>
+              <div class="audit-item-desc">描述超过 2 句话，或堆砌了“查询、模型、持久化、数据库”等宽泛泛词，易被截断或误触。</div>
+            </div>
+          </label>
+
+          <label class="audit-item">
+            <input type="checkbox" id="chk-s2" checked>
+            <div class="audit-text-wrap">
+              <div class="audit-item-title">2. 技能根文件堆满操作菜谱</div>
+              <div class="audit-item-desc">未践行渐进式披露（Progressive Disclosure），根文档塞满 step-by-step 步骤而非 Router。</div>
+            </div>
+          </label>
+
+          <label class="audit-item">
+            <input type="checkbox" id="chk-a1" checked>
+            <div class="audit-text-wrap">
+              <div class="audit-item-title">3. AGENTS.md 强制通读</div>
+              <div class="audit-item-desc">包含“编辑前必须通读 architecture.md / database.md”等强制全读条目，未按需索引。</div>
+            </div>
+          </label>
+
+          <label class="audit-item">
+            <input type="checkbox" id="chk-a2" checked>
+            <div class="audit-text-wrap">
+              <div class="audit-item-title">4. AGENTS.md 重复督促测试</div>
+              <div class="audit-item-desc">残留“修改后必须执行测试并检查产出”等旧催促话术，诱发 Astra 冗余空跑测试。</div>
+            </div>
+          </label>
+
+          <label class="audit-item">
+            <input type="checkbox" id="chk-p1" checked>
+            <div class="audit-text-wrap">
+              <div class="audit-item-title">5. 全局防御性严厉禁令</div>
+              <div class="audit-item-desc">写入“未经批准严禁执行任何改动”，导致高对齐模型在无害操作中频繁停滞索权。</div>
+            </div>
+          </label>
+
+          <label class="audit-item">
+            <input type="checkbox" id="chk-p2" checked>
+            <div class="audit-text-wrap">
+              <div class="audit-item-title">6. 本地隔离测试未连续放权</div>
+              <div class="audit-item-desc">未向一次性夹具明确赋予“自动执行-报错自修-复测闭环”权限，每步都等待审批。</div>
+            </div>
+          </label>
+
+          <label class="audit-item">
+            <input type="checkbox" id="chk-d1" checked>
+            <div class="audit-text-wrap">
+              <div class="audit-item-title">7. 任务 Prompt 缺乏 DoD</div>
+              <div class="audit-item-desc">发起需求时未定义完成判定（Definition of Done），导致模型写完初版即停止待命。</div>
+            </div>
+          </label>
+
+          <label class="audit-item">
+            <input type="checkbox" id="chk-d2">
+            <div class="audit-text-wrap">
+              <div class="audit-item-title">8. 探索性任务边界模糊</div>
+              <div class="audit-item-desc">仅含糊要求“多试试不同方案”，缺乏具体探索方向与明确的收敛停滞边界。</div>
+            </div>
+          </label>
+        </div>
+
+        <!-- 实时健康指标 -->
+        <div class="sandbox-metrics" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 20px;">
+          <div class="metric-card">
+            <div class="metric-label">当前勾选中招项</div>
+            <div id="stat-audit-issues" class="metric-val" style="color: var(--rose);">7 项</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">配置健康度得分</div>
+            <div id="stat-audit-score" class="metric-val" style="color: var(--rose);">30 / 100</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">配置负资产评级</div>
+            <div id="stat-audit-grade" class="metric-val" style="font-size: 0.95rem; color: var(--rose);">重度老化（保姆式负资产密集）</div>
+          </div>
+        </div>
+
+        <!-- 动态建议与生成的 Prompt 卡片 -->
+        <div class="prompt-box">
+          <div class="prompt-box-header">
+            <span style="font-weight: 700; font-size: 0.9rem; color: var(--accent);">📋 GPT-6 Astra 自动化审计任务 Prompt (先出清单、后动手)</span>
+            <div>
+              <button id="btn-copy-prompt" class="sidebar-btn" style="padding: 5px 12px; font-weight: 600;">复制提示词</button>
+              <span id="stat-copy-feedback" class="copy-success-tag"></span>
+            </div>
+          </div>
+          <pre id="out-audit-prompt" class="prompt-pre">请对当前仓库中的 Skills、AGENTS.md 及全局 Prompt 配置执行一次针对 GPT-6 Astra 运行时的系统性体检与重构。
+
+背景：底层模型已全面迁移至 GPT-6 Astra，旧时代为了兜住弱模型而编写的保姆式规则、死板操作菜谱与过度防御性禁令已成为严重负资产。
+
+请遵循以下 4 阶段标准作业程序执行，严格遵守【先出清单、后动手】原则：
+
+阶段 1：全局扫描与负资产排查
+1. 扫描所有 skills 定义文件（Markdown 提示词），重点识别：
+   - 描述超过 2 句话，或堆砌了“查询、模型、持久化”等关联模块宽泛泛词的文件；
+   - 根文件内塞满 step-by-step 详尽操作菜谱的技能（需改为渐进式披露 Router）。
+2. 审查项目根目录的 AGENTS.md 与全局指引：
+   - 排查“编辑前必须通读 architecture.md / database.md”等强制全读条目；
+   - 排查“修改后必须执行测试并检查产出”等冗余测试催促；
+   - 排查“做任何改动前必须征求人工许可”等无差别过度拦截。
+3. 审查测试与执行权限：
+   - 识别本地可隔离测试环境（使用一次性 fixture），为其添加无需步步审批的连续运行与自愈授权。
+
+阶段 2：输出重构计划清单（Wait for Approval）
+在修改任何文件之前，输出一份结构化审查报告：
+- 目标文件路径
+- 当前旧配置片段（Before）
+- 建议改造后的精简方案（After）
+- 瘦身与放权理由
+
+阶段 3：获得人工确认后落地合入
+等待我的确认指令。在我确认后，按清单逐一原子性修改对应文件，并运行验证。
+
+请先开始执行阶段 1，列出你的排查结果与待重构清单。</pre>
+        </div>
+      </div>
+
+      <p>
+        这段 prompt 刻意要求它<strong>先出清单、后动手</strong>——审计的价值在于你能看见它准备改什么。清单过一遍，确认无误再让它合入，整套配置资产就算焕新完成。
+      </p>
+    </section>
+
+  </main>
+
+  <script>
+    (function() {
+      // 辅助 DOM 选择器
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // 1. 阅读进度条
+      function updateProgressBar() {
+        var winScroll = document.documentElement.scrollTop || document.body.scrollTop;
+        var height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        var scrolled = 0;
+        if (height > 0) {
+          scrolled = (winScroll / height) * 100;
+        }
+        var pBar = byId("reading-progress");
+        if (pBar) {
+          pBar.style.width = scrolled + "%";
+        }
+      }
+      window.addEventListener("scroll", updateProgressBar);
+
+      // 2. 主题切换引擎 (默认 Dark)
+      var themeBtn = byId("btn-theme-toggle");
+      function applyTheme(theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        try {
+          if (window.localStorage) {
+            window.localStorage.setItem("aike_theme_pref", theme);
+          }
+        } catch(e) {}
+      }
+
+      if (themeBtn) {
+        themeBtn.addEventListener("click", function() {
+          var current = document.documentElement.getAttribute("data-theme") || "dark";
+          var nextTheme = current === "dark" ? "light" : "dark";
+          applyTheme(nextTheme);
+        });
+      }
+
+      // 打印功能
+      var printBtn = byId("btn-print-page");
+      if (printBtn) {
+        printBtn.addEventListener("click", function() {
+          window.print();
+        });
+      }
+
+      // 移动端目录折叠
+      var tocToggleBtn = byId("btn-toc-toggle");
+      var appSidebar = byId("app-sidebar");
+      if (tocToggleBtn && appSidebar) {
+        tocToggleBtn.addEventListener("click", function() {
+          appSidebar.classList.toggle("open");
+        });
+      }
+
+      // 3. 组件 1: Truncation 截断机制模拟沙盘
+      var inputSkillCount = byId("input-skill-count");
+      var btnModeBad = byId("btn-mode-bad");
+      var btnModeGood = byId("btn-mode-good");
+      var currentMode = "bad"; // 'bad' or 'good'
+
+      var sampleSkills = [
+        { id: "skill_postgres_migrate", badDesc: "Create and validate Postgres schema migrations. Use when working with databases, queries, models, or persistence.", goodDesc: "Create and validate Postgres schema migrations. Use when adding or changing a migration." },
+        { id: "skill_user_auth", badDesc: "Manage user authentication, JWT, cookies, sessions, credentials, oauth, and security permissions.", goodDesc: "Manage authentication tokens, oauth flows, and credentials." },
+        { id: "skill_deploy_k8s", badDesc: "Build, push, deploy, monitor, rollback, restart, and scale kubernetes pods, clusters, and helm charts.", goodDesc: "Deploy, rollback, or scale kubernetes pods and helm charts." },
+        { id: "skill_test_runner", badDesc: "Run automated pytest, jest, integration tests, coverage reports, regression sweeps, and mocks.", goodDesc: "Run pytest or jest test suites and review failures." },
+        { id: "skill_data_etl", badDesc: "Extract, transform, load, ingest, clean, normalize, pipeline, warehouse, and validate big data.", goodDesc: "Run data pipelines and ETL transformation jobs." },
+        { id: "skill_payment_gateway", badDesc: "Process stripe, paypal, checkout, subscriptions, refunds, invoices, billing, and chargebacks.", goodDesc: "Handle billing webhooks, checkout flows, and payment refunds." },
+        { id: "skill_search_index", badDesc: "Configure elasticsearch, meilisearch, vector indexes, embeddings, reranking, and semantic queries.", goodDesc: "Query and rebuild elasticsearch or vector search indexes." },
+        { id: "skill_email_worker", badDesc: "Send transactional emails, SES, sendgrid, templates, notifications, bounces, and delivery logs.", goodDesc: "Dispatch transactional emails and inspect delivery bounces." },
+        { id: "skill_logging_tracing", badDesc: "Setup opentelemetry, datadog, sentry, span traces, log aggregations, alerts, and metrics.", goodDesc: "Inspect error logs, trace spans, and latency metrics." },
+        { id: "skill_cache_redis", badDesc: "Redis caching, key invalidation, cluster management, pubsub, rate limiting, and distributed locks.", goodDesc: "Manage redis caches, rate limits, and lock keys." },
+        { id: "skill_i18n_locales", badDesc: "Manage translations, locale files, gettext, crowdin, plurals, RTL layouts, and unicode.", goodDesc: "Update localization keys and validate translation files." },
+        { id: "skill_image_pipeline", badDesc: "Resize, compress, watermark, cdn upload, s3 storage, webp conversion, and thumbnail gen.", goodDesc: "Optimize images, generate thumbnails, and upload to S3." },
+        { id: "skill_websocket_pubsub", badDesc: "Websocket connections, socket.io, room management, heartbeat, ping pong, and disconnects.", goodDesc: "Manage realtime websocket rooms and message broadcasts." },
+        { id: "skill_graphql_gateway", badDesc: "Apollo federation, schema stitching, resolvers, mutations, queries, fragments, and playground.", goodDesc: "Update GraphQL schemas and test resolver queries." },
+        { id: "skill_secrets_vault", badDesc: "Hashicorp vault, aws kms, secret rotation, env decryption, certificate renewal, and tls.", goodDesc: "Rotate environment secrets and retrieve vault credentials." },
+        { id: "skill_cdn_edge_cache", badDesc: "Cloudflare workers, edge cache purge, waf rules, geo routing, dns records, and ssl certs.", goodDesc: "Purge CDN caches and inspect edge firewall rules." },
+        { id: "skill_db_replica_sync", badDesc: "Postgres read replicas, replication lag, wal shipping, failover, vacuuming, and indexes.", goodDesc: "Inspect database replication lag and index health." },
+        { id: "skill_queue_rabbitmq", badDesc: "RabbitMQ dead letter queues, ack timeout, message consumers, exchange routing, and amqp.", goodDesc: "Publish messages and monitor RabbitMQ queue backlog." },
+        { id: "skill_audit_compliance", badDesc: "SOC2 compliance, audit logs, GDPR export, data deletion, access reviews, and governance.", goodDesc: "Export audit trails and verify SOC2 data compliance." },
+        { id: "skill_mobile_bundler", badDesc: "React Native metro bundler, fast refresh, xcode build, gradle signing, apk, and ipa.", goodDesc: "Compile and sign React Native iOS and Android builds." }
+      ];
+
+      function updateTruncationSimulation() {
+        var count = parseInt(inputSkillCount.value, 10);
+        var statCount = byId("stat-trunc-count");
+        if (statCount) {
+          statCount.textContent = count;
+        }
+
+        var tokensPerSkill = currentMode === "bad" ? 38 : 14;
+        var totalTokens = count * tokensPerSkill;
+        var budget = 500;
+
+        var statTokens = byId("stat-trunc-tokens");
+        var statBudget = byId("stat-trunc-budget");
+        var statStatus = byId("stat-trunc-status");
+        var statPerSkill = byId("stat-trunc-per-skill");
+        var statRisk = byId("stat-trunc-risk");
+        var previewBox = byId("out-trunc-preview");
+
+        if (statTokens) {
+          statTokens.textContent = totalTokens;
+          statTokens.style.color = totalTokens > budget ? "var(--rose)" : "var(--emerald)";
+        }
+        if (statBudget) {
+          statBudget.textContent = budget;
+        }
+        if (statPerSkill) {
+          statPerSkill.textContent = tokensPerSkill + " Tokens";
+        }
+
+        var lines = ["# System Injected Skills Summary (Budget: 500 Tokens):"];
+        var accumTokens = 0;
+        var truncatedIndex = -1;
+
+        for (var i = 0; i < count; i++) {
+          var item = sampleSkills[i % sampleSkills.length];
+          var desc = currentMode === "bad" ? item.badDesc : item.goodDesc;
+          accumTokens += tokensPerSkill;
+
+          if (accumTokens > budget && truncatedIndex === -1) {
+            truncatedIndex = i + 1;
+            var allowedTokensInLast = tokensPerSkill - (accumTokens - budget);
+            var sliceWords = desc.split(" ");
+            var safeWords = sliceWords.slice(0, Math.max(3, Math.floor(sliceWords.length * 0.4))).join(" ");
+            lines.push("- [" + (i + 1) + "] " + item.id + ": " + safeWords + "... [TRUNCATED: 剩余 " + (count - i) + " 个技能描述被系统静默截断！模型将完全失去对这些技能的感知]");
+            break;
+          } else {
+            lines.push("- [" + (i + 1) + "] " + item.id + ": " + desc);
+          }
+        }
+
+        if (totalTokens > budget) {
+          var overflow = totalTokens - budget;
+          if (statStatus) {
+            statStatus.textContent = "⚠️ 严重超标 (溢出 " + overflow + " Tokens)";
+            statStatus.style.color = "var(--rose)";
+          }
+          if (statRisk) {
+            statRisk.textContent = "高危：已触发系统强制截断，末尾关键词丢失引发语义误判与全局 Compaction";
+            statRisk.style.color = "var(--rose)";
+          }
+        } else {
+          var remaining = budget - totalTokens;
+          if (statStatus) {
+            statStatus.textContent = "✅ 预算安全 (结余 " + remaining + " Tokens)";
+            statStatus.style.color = "var(--emerald)";
+          }
+          if (statRisk) {
+            statRisk.textContent = "极佳：全部技能描述完整常驻，无残句污染，模型精准识别场景触发";
+            statRisk.style.color = "var(--emerald)";
+          }
+        }
+
+        if (previewBox) {
+          previewBox.textContent = lines.join("\n");
+        }
+      }
+
+      if (inputSkillCount) {
+        inputSkillCount.addEventListener("input", updateTruncationSimulation);
+      }
+
+      if (btnModeBad) {
+        btnModeBad.addEventListener("click", function() {
+          currentMode = "bad";
+          btnModeBad.classList.add("active");
+          btnModeGood.classList.remove("active");
+          updateTruncationSimulation();
+        });
+      }
+
+      if (btnModeGood) {
+        btnModeGood.addEventListener("click", function() {
+          currentMode = "good";
+          btnModeGood.classList.add("active");
+          btnModeBad.classList.remove("active");
+          updateTruncationSimulation();
+        });
+      }
+
+      // 4. 组件 2: 仓库体检勾选器与 Prompt 生成器
+      var checkIds = ["chk-s1", "chk-s2", "chk-a1", "chk-a2", "chk-p1", "chk-p2", "chk-d1", "chk-d2"];
+      var btnAuditCheckAll = byId("btn-audit-checkall");
+      var btnAuditClear = byId("btn-audit-clear");
+      var btnLangZh = byId("btn-lang-zh");
+      var btnLangEn = byId("btn-lang-en");
+      var btnCopyPrompt = byId("btn-copy-prompt");
+      var promptLang = "zh";
+
+      var prompts = {
+        zh: "请对当前仓库中的 Skills、AGENTS.md 及全局 Prompt 配置执行一次针对 GPT-6 Astra 运行时的系统性体检与重构。\n\n背景：底层模型已全面迁移至 GPT-6 Astra，旧时代为了兜住弱模型而编写的保姆式规则、死板操作菜谱与过度防御性禁令已成为严重负资产。\n\n请遵循以下 4 阶段标准作业程序执行，严格遵守【先出清单、后动手】原则：\n\n阶段 1：全局扫描与负资产排查\n1. 扫描所有 skills 定义文件（Markdown 提示词），重点识别：\n   - 描述超过 2 句话，或堆砌了“查询、模型、持久化”等关联模块宽泛泛词的文件；\n   - 根文件内塞满 step-by-step 详尽操作菜谱的技能（需改为渐进式披露 Router）。\n2. 审查项目根目录的 AGENTS.md 与全局指引：\n   - 排查“编辑前必须通读 architecture.md / database.md”等强制全读条目；\n   - 排查“修改后必须执行测试并检查产出”等冗余测试催促；\n   - 排查“做任何改动前必须征求人工许可”等无差别过度拦截。\n3. 审查测试与执行权限：\n   - 识别本地可隔离测试环境（使用一次性 fixture），为其添加无需步步审批的连续运行与自愈授权。\n\n阶段 2：输出重构计划清单（Wait for Approval）\n在修改任何文件之前，输出一份结构化审查报告：\n- 目标文件路径\n- 当前旧配置片段（Before）\n- 建议改造后的精简方案（After）\n- 瘦身与放权理由\n\n阶段 3：获得人工确认后落地合入\n等待我的确认指令。在我确认后，按清单逐一原子性修改对应文件，并运行验证。\n\n请先开始执行阶段 1，列出你的排查结果与待重构清单。",
+        en: "Please perform a systematic health check and overhaul of all Skills, AGENTS.md, and global prompt configurations in this repository for the GPT-6 Astra runtime.\n\nContext: The underlying agent model has been upgraded to GPT-6 Astra. The legacy scaffolding—overly descriptive skill triggers, rigid step-by-step recipes, and excessive defensive prohibitions designed for weaker models—has now become technical debt.\n\nExecute following this 4-stage protocol, strictly enforcing the principle of [Draft Checklist First, Execute After Approval]:\n\nStage 1: Repository Scan & Tech Debt Identification\n1. Scan all skill definition files (Markdown prompts) to identify:\n   - Descriptions longer than 2 sentences, or packed with broad keywords (e.g., 'queries, models, persistence') that risk budget truncation or misrouting.\n   - Skills stuffed with exhaustive recipes in the root file (must adopt progressive disclosure as a Router).\n2. Audit root AGENTS.md and global directives:\n   - Eliminate blanket mandates such as 'read architecture.md, database.md before every edit'; replace with task-scoped indices.\n   - Remove redundant test nagging ('must run tests and verify output after every edit').\n   - Remove indiscriminate defensive blockers ('ask for approval before any modification').\n3. Audit test environment permissions:\n   - Identify safe, isolated local test suites (disposable fixtures) and explicitly grant continuous execution and self-healing permissions.\n\nStage 2: Structured Proposal Checklist\nBefore touching any file, present a clear audit table:\n- Target File Path\n- Current Legacy Fragment (Before)\n- Proposed Lean Solution (After)\n- Rationalization (Token savings, autonomy grant)\n\nStage 3: Await Human Approval & Atomic Apply\nWait for my explicit approval. Once confirmed, apply the modifications cleanly and verify the runtime state.\n\nPlease begin Stage 1 and report your audit checklist."
+      };
+
+      function updateAuditMetrics() {
+        var issues = 0;
+        checkIds.forEach(function(cid) {
+          var chk = byId(cid);
+          if (chk && chk.checked) {
+            issues++;
+          }
+        });
+
+        var statIssues = byId("stat-audit-issues");
+        var statScore = byId("stat-audit-score");
+        var statGrade = byId("stat-audit-grade");
+        var promptPre = byId("out-audit-prompt");
+
+        var score = Math.max(0, 100 - (issues * 10));
+
+        if (statIssues) {
+          statIssues.textContent = issues + " 项";
+          statIssues.style.color = issues > 3 ? "var(--rose)" : "var(--emerald)";
+        }
+        if (statScore) {
+          statScore.textContent = score + " / 100";
+          statScore.style.color = score < 60 ? "var(--rose)" : (score < 85 ? "var(--amber)" : "var(--emerald)");
+        }
+
+        var grade = "极简高能（现代 Astra 标准）";
+        var gradeColor = "var(--emerald)";
+        if (issues >= 6) {
+          grade = "重度老化（保姆式负资产密集）";
+          gradeColor = "var(--rose)";
+        } else if (issues >= 3) {
+          grade = "中度臃肿（需即刻进行四步重构）";
+          gradeColor = "var(--amber)";
+        } else if (issues >= 1) {
+          grade = "轻度冗余（个别规则需微调）";
+          gradeColor = "var(--cyan)";
+        }
+
+        if (statGrade) {
+          statGrade.textContent = grade;
+          statGrade.style.color = gradeColor;
+        }
+
+        if (promptPre) {
+          promptPre.textContent = prompts[promptLang];
+        }
+      }
+
+      checkIds.forEach(function(cid) {
+        var chk = byId(cid);
+        if (chk) {
+          chk.addEventListener("change", updateAuditMetrics);
+        }
+      });
+
+      if (btnAuditCheckAll) {
+        btnAuditCheckAll.addEventListener("click", function() {
+          checkIds.forEach(function(cid) {
+            var chk = byId(cid);
+            if (chk) chk.checked = true;
+          });
+          updateAuditMetrics();
+        });
+      }
+
+      if (btnAuditClear) {
+        btnAuditClear.addEventListener("click", function() {
+          checkIds.forEach(function(cid) {
+            var chk = byId(cid);
+            if (chk) chk.checked = false;
+          });
+          updateAuditMetrics();
+        });
+      }
+
+      if (btnLangZh) {
+        btnLangZh.addEventListener("click", function() {
+          promptLang = "zh";
+          btnLangZh.classList.add("active");
+          btnLangEn.classList.remove("active");
+          updateAuditMetrics();
+        });
+      }
+
+      if (btnLangEn) {
+        btnLangEn.addEventListener("click", function() {
+          promptLang = "en";
+          btnLangEn.classList.add("active");
+          btnLangZh.classList.remove("active");
+          updateAuditMetrics();
+        });
+      }
+
+      if (btnCopyPrompt) {
+        btnCopyPrompt.addEventListener("click", function() {
+          var promptText = prompts[promptLang];
+          var feedback = byId("stat-copy-feedback");
+          
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(promptText).then(function() {
+              if (feedback) {
+                feedback.textContent = "✓ 已复制到剪贴板！";
+                setTimeout(function() { feedback.textContent = ""; }, 2500);
+              }
+            }).catch(function() {
+              fallbackCopy(promptText, feedback);
+            });
+          } else {
+            fallbackCopy(promptText, feedback);
+          }
+        });
+      }
+
+      function fallbackCopy(text, feedback) {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand("copy");
+          if (feedback) {
+            feedback.textContent = "✓ 已复制到剪贴板！";
+            setTimeout(function() { feedback.textContent = ""; }, 2500);
+          }
+        } catch (e) {
+          if (feedback) {
+            feedback.textContent = "复制失败，请手动选取";
+          }
+        }
+        document.body.removeChild(ta);
+      }
+
+      // 5. 初始执行与状态对齐
+      updateTruncationSimulation();
+      updateAuditMetrics();
+    })();
+  </script>
+</body>
+</html>

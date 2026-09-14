@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grok Bot 模板使用指南 · 从分享 Bot 到安装独立副本</title>
+<meta name="description" content="一份可以照着操作的 Grok Bot 模板指南：系统性梳理模板传递边界（包含与排除项）、六项关键外部依赖盘点、发布者五步打包流程与接收者四步安装指南，附 SpaceX loops Bot 实战拆解与可用性验收沙盘。">
+<style>
+:root{
+  --sidebar-w:280px;
+  --content-max:1180px;
+  --radius-s:6px; --radius-m:10px; --radius-l:16px;
+  --bg:#FAF7F2; --bg-elev:#FFFFFF; --bg-sunk:#F2EDE4;
+  --text:#2A2724; --text-dim:#6B6560; --text-faint:#928B83;
+  --border:#E5DED4; --border-strong:#D5CBBE;
+  --accent:#D97757; --accent-soft:#F6E7E0;
+  --emerald:#2E8B6F; --emerald-soft:#E3F0EA;
+  --rose:#C9503F; --rose-soft:#F8E5E1;
+  --amber:#B8862F; --amber-soft:#F8EED9;
+  --cyan:#3D7F96; --cyan-soft:#E2EFF3;
+  --shadow:0 1px 2px rgba(42,39,36,.05),0 4px 16px rgba(42,39,36,.05);
+  --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --font-head:"Songti SC","SimSun",Newsreader,Georgia,serif;
+  --font-code:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+}
+html[data-theme="dark"]{
+  --bg:#181715; --bg-elev:#201E1B; --bg-sunk:#141311;
+  --text:#E8E3DC; --text-dim:#A7A099; --text-faint:#7C756E;
+  --border:#35322D; --border-strong:#463F39;
+  --accent:#E2886A; --accent-soft:#33241D;
+  --emerald:#5FB99A; --emerald-soft:#1D2B26;
+  --rose:#E0796A; --rose-soft:#33201D;
+  --amber:#D9A94E; --amber-soft:#2E2718;
+  --cyan:#6FB0C6; --cyan-soft:#1B2A30;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-body); font-size:16px; line-height:1.75;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+
+/* ---------- 进度条 ---------- */
+#progress-track{position:fixed;top:0;left:0;right:0;height:3px;background:transparent;z-index:60}
+#progress-bar{height:3px;width:0;background:var(--accent);transition:width .1s linear}
+
+/* ---------- 顶部工具条 ---------- */
+#topbar{position:fixed; top:14px; right:20px; z-index:70; display:flex; gap:8px}
+.tb-btn{
+  background:var(--bg-elev); color:var(--text-dim); border:1px solid var(--border);
+  border-radius:var(--radius-s); padding:6px 12px; font-size:12px; cursor:pointer;
+  font-family:var(--font-body); box-shadow:var(--shadow); transition:all .15s ease;
+}
+.tb-btn:hover{color:var(--accent);border-color:var(--accent)}
+#toc-toggle{display:none}
+
+/* ---------- 侧栏目录 ---------- */
+#sidebar{
+  position:fixed; top:0; left:0; bottom:0; width:var(--sidebar-w);
+  background:var(--bg-elev); border-right:1px solid var(--border);
+  overflow-y:auto; z-index:50; padding:22px 0 40px;
+}
+#sidebar::-webkit-scrollbar{width:6px}
+#sidebar::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+.sb-head{padding:0 20px 14px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.sb-title{font-family:var(--font-head);font-size:15px;font-weight:700;line-height:1.4;margin:0 0 6px}
+.sb-sub{font-size:11.5px;color:var(--text-faint);letter-spacing:.04em}
+.sb-nav{padding:0 12px}
+.sb-link{
+  display:block; padding:6px 10px; border-radius:var(--radius-s);
+  color:var(--text-dim); text-decoration:none; font-size:13px; line-height:1.5;
+  border-left:2px solid transparent; transition:all .15s ease;
+}
+.sb-link:hover{background:var(--bg-sunk);color:var(--text)}
+.sb-link.active{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.sb-link.lv2{padding-left:24px;font-size:12.5px}
+.sb-sep{height:1px;background:var(--border);margin:10px 10px}
+
+/* ---------- 主阅读区 (严格对称居中) ---------- */
+#main{
+  display:block; max-width:var(--content-max);
+  margin-left:calc(var(--sidebar-w) + max(0px,(100% - var(--sidebar-w) - var(--content-max))/2));
+  margin-right:max(0px,calc((100% - var(--sidebar-w) - var(--content-max))/2));
+  padding:56px 48px 120px;
+}
+
+/* ---------- 排版基准 ---------- */
+h1,h2,h3,h4{font-family:var(--font-head);line-height:1.35;color:var(--text)}
+h1{font-size:clamp(28px,4vw,40px);margin:0 0 18px;letter-spacing:-.01em}
+h2{font-size:clamp(22px,2.6vw,28px);margin:64px 0 20px;padding-bottom:12px;border-bottom:2px solid var(--border)}
+h3{font-size:clamp(18px,2vw,22px);margin:38px 0 14px}
+h4{font-size:16.5px;margin:24px 0 10px}
+p{margin:0 0 16px}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent;transition:border-color .15s ease}
+a:hover{border-bottom-color:var(--accent)}
+strong{font-weight:650;color:var(--text)}
+em{font-style:normal;color:var(--text-dim)}
+code{
+  font-family:var(--font-code); font-size:.88em; background:var(--bg-sunk);
+  border:1px solid var(--border); border-radius:4px; padding:2px 6px; color:var(--accent);
+}
+pre{
+  background:var(--bg-sunk); border:1px solid var(--border); border-radius:var(--radius-m);
+  padding:16px 20px; overflow-x:auto; font-family:var(--font-code); font-size:13.5px;
+  line-height:1.6; margin:18px 0 24px; color:var(--text);
+}
+pre code{border:none;background:transparent;padding:0;color:inherit}
+blockquote{
+  margin:24px 0; padding:18px 24px; border-left:4px solid var(--accent);
+  background:var(--bg-elev); border-radius:0 var(--radius-m) var(--radius-m) 0;
+  border-top:1px solid var(--border); border-right:1px solid var(--border); border-bottom:1px solid var(--border);
+}
+blockquote p:last-child{margin-bottom:0}
+ul,ol{margin:0 0 18px;padding-left:24px}
+li{margin-bottom:8px}
+
+/* ---------- 首屏 Hero 卡片 ---------- */
+.hero{
+  border:1px solid var(--border); border-radius:var(--radius-l);
+  background:var(--bg-elev); padding:40px 42px; margin-bottom:28px; box-shadow:var(--shadow);
+}
+.hero-kicker{
+  display:inline-block; font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); border:1px solid var(--accent); border-radius:999px;
+  padding:3px 12px; margin-bottom:18px; font-weight:600;
+}
+.hero-lede{font-size:18px;line-height:1.8;color:var(--text-dim);margin-bottom:0}
+.hero-meta{
+  display:flex; flex-wrap:wrap; gap:10px; margin-top:24px; padding-top:20px;
+  border-top:1px solid var(--border); font-size:12.5px; color:var(--text-faint);
+}
+.hero-meta span{background:var(--bg-sunk);border-radius:var(--radius-s);padding:4px 10px}
+
+/* ---------- TLDR 核心摘要卡 ---------- */
+.tldr{
+  border:1px solid var(--border); border-left:4px solid var(--accent);
+  background:var(--bg-elev); border-radius:var(--radius-m);
+  padding:24px 28px; margin:28px 0 32px; box-shadow:var(--shadow);
+}
+.tldr-title{
+  font-family:var(--font-head); font-size:16px; font-weight:700; color:var(--accent);
+  margin-bottom:12px; display:flex; align-items:center; gap:8px;
+}
+.tldr ul{margin:0;padding-left:20px}
+.tldr li{margin-bottom:8px;color:var(--text);font-size:15px;line-height:1.65}
+
+/* ---------- 图表容器 & UI 图示面板 ---------- */
+.ui-figure{
+  margin:28px 0 36px; padding:0; border:1px solid var(--border);
+  border-radius:var(--radius-l); background:var(--bg-elev);
+  overflow:hidden; box-shadow:var(--shadow);
+}
+.ui-figure-header{
+  padding:12px 20px; background:var(--bg-sunk); border-bottom:1px solid var(--border);
+  display:flex; justify-content:space-between; align-items:center; font-size:12.5px;
+  color:var(--text-dim);
+}
+.ui-figure-tag{
+  display:inline-flex; align-items:center; gap:6px; font-weight:600; color:var(--accent);
+}
+.ui-figure-body{padding:24px; display:flex; justify-content:center; background:var(--bg-elev)}
+.ui-figure-body svg{max-width:100%; height:auto; display:block}
+.ui-figure-caption{
+  padding:14px 20px; border-top:1px solid var(--border); background:var(--bg-sunk);
+  font-size:13.5px; color:var(--text-dim); line-height:1.6;
+}
+.ui-figure-caption strong{color:var(--text)}
+
+/* ---------- 步骤与对比卡片系统 ---------- */
+.step-card{
+  border:1px solid var(--border); border-radius:var(--radius-m);
+  background:var(--bg-elev); padding:24px 28px; margin:22px 0 28px;
+  box-shadow:var(--shadow); transition:border-color .2s ease;
+}
+.step-card:hover{border-color:var(--border-strong)}
+.step-header{display:flex; align-items:center; gap:12px; margin-bottom:16px}
+.step-badge{
+  width:32px; height:32px; border-radius:50%; background:var(--accent-soft);
+  color:var(--accent); display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-head); font-weight:700; font-size:15px; flex-shrink:0;
+}
+.step-title{font-size:18px; font-weight:700; margin:0; font-family:var(--font-head)}
+.step-grid{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));
+  gap:16px; margin-top:16px;
+}
+.step-item{
+  background:var(--bg-sunk); border:1px solid var(--border); border-radius:var(--radius-s);
+  padding:14px 18px; font-size:14px;
+}
+.step-item-title{font-weight:650; margin-bottom:6px; color:var(--text); font-size:13.5px; display:flex; align-items:center; gap:6px}
+.step-item-title.action{color:var(--cyan)}
+.step-item-title.see{color:var(--amber)}
+.step-item-title.check{color:var(--rose)}
+.step-item-body{color:var(--text-dim); line-height:1.6}
+
+/* ---------- 边界对比表格卡 ---------- */
+.grid-2col{
+  display:grid; grid-template-columns:1fr 1fr; gap:20px; margin:22px 0 28px;
+}
+.box-col{
+  border:1px solid var(--border); border-radius:var(--radius-m);
+  background:var(--bg-elev); padding:22px 24px; box-shadow:var(--shadow);
+}
+.box-col.included{border-top:3px solid var(--emerald)}
+.box-col.excluded{border-top:3px solid var(--rose)}
+.box-col-title{
+  font-size:16px; font-weight:700; margin-bottom:14px; font-family:var(--font-head);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.box-col.included .box-col-title{color:var(--emerald)}
+.box-col.excluded .box-col-title{color:var(--rose)}
+
+/* ---------- 交互式沙盘容器 ---------- */
+.sandbox-card{
+  border:1px solid var(--border); border-radius:var(--radius-l);
+  background:var(--bg-elev); margin:36px 0; overflow:hidden;
+  box-shadow:var(--shadow);
+}
+.sbx-head{
+  padding:16px 24px; background:var(--bg-sunk); border-bottom:1px solid var(--border);
+  display:flex; justify-content:space-between; align-items:center;
+}
+.sbx-title{
+  font-family:var(--font-head); font-size:16px; font-weight:700; color:var(--accent);
+  margin:0; display:flex; align-items:center; gap:8px;
+}
+.sbx-sub{font-size:12.5px; color:var(--text-faint)}
+.sbx-body{padding:26px 28px}
+.sbx-controls{margin-bottom:20px}
+.chk-group{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px}
+.chk-item{
+  display:flex; align-items:flex-start; gap:10px; padding:10px 14px;
+  background:var(--bg-sunk); border:1px solid var(--border); border-radius:var(--radius-s);
+  cursor:pointer; font-size:13.5px; color:var(--text); transition:all .15s ease;
+}
+.chk-item:hover{border-color:var(--accent)}
+.chk-item.done{border-color:var(--emerald); background:var(--emerald-soft)}
+.chk-item input{margin-top:3px}
+.sbx-bar-wrap{
+  background:var(--bg-sunk); border:1px solid var(--border); border-radius:999px;
+  height:12px; overflow:hidden; margin:16px 0 10px;
+}
+.sbx-bar-fill{
+  height:100%; width:0%; background:var(--accent); transition:width .25s ease;
+}
+.sbx-stat-row{
+  display:flex; justify-content:space-between; font-size:13px; color:var(--text-dim);
+  margin-bottom:16px;
+}
+.sbx-stat-badge{
+  font-weight:700; color:var(--accent); background:var(--accent-soft);
+  padding:2px 8px; border-radius:4px;
+}
+.sbx-verdict{
+  padding:14px 18px; border-radius:var(--radius-s); background:var(--bg-sunk);
+  border:1px solid var(--border); font-size:14px; line-height:1.6; margin-bottom:18px;
+}
+.sbx-output-box{
+  background:var(--bg-sunk); border:1px solid var(--border); border-radius:var(--radius-m);
+  padding:16px; position:relative;
+}
+.sbx-output-pre{
+  margin:0; font-family:var(--font-code); font-size:12.5px; line-height:1.6;
+  white-space:pre-wrap; max-height:260px; overflow-y:auto;
+}
+.sbx-btn-row{display:flex; gap:10px; margin-top:14px}
+.btn-primary{
+  background:var(--accent); color:#FFF; border:none; border-radius:var(--radius-s);
+  padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer;
+  font-family:var(--font-body); transition:opacity .15s ease;
+}
+.btn-primary:hover{opacity:.9}
+.btn-secondary{
+  background:var(--bg-sunk); color:var(--text); border:1px solid var(--border);
+  border-radius:var(--radius-s); padding:8px 16px; font-size:13px; cursor:pointer;
+  font-family:var(--font-body); transition:all .15s ease;
+}
+.btn-secondary:hover{border-color:var(--accent); color:var(--accent)}
+
+/* ---------- 矩阵筛选器卡片 ---------- */
+.filter-tags{display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap}
+.filter-btn{
+  background:var(--bg-sunk); color:var(--text-dim); border:1px solid var(--border);
+  border-radius:var(--radius-s); padding:6px 14px; font-size:12.5px; cursor:pointer;
+  transition:all .15s ease;
+}
+.filter-btn:hover{border-color:var(--accent); color:var(--text)}
+.filter-btn.active{background:var(--accent); color:#FFF; border-color:var(--accent)}
+.matrix-cards{display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px}
+.matrix-item{
+  background:var(--bg-sunk); border:1px solid var(--border); border-radius:var(--radius-m);
+  padding:18px 20px; transition:transform .15s ease, border-color .15s ease;
+}
+.matrix-item:hover{border-color:var(--border-strong); transform:translateY(-2px)}
+.matrix-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px}
+.matrix-name{font-weight:700; font-size:15px; color:var(--text)}
+.matrix-pill{font-size:11px; padding:2px 8px; border-radius:999px; font-weight:600}
+.pill-inc{background:var(--emerald-soft); color:var(--emerald)}
+.pill-read{background:var(--amber-soft); color:var(--amber)}
+.pill-exc{background:var(--rose-soft); color:var(--rose)}
+.matrix-desc{font-size:13.5px; color:var(--text-dim); line-height:1.6; margin-bottom:10px}
+.matrix-footer{
+  font-size:12.5px; border-top:1px dashed var(--border); padding-top:8px;
+  color:var(--text-faint); display:flex; justify-content:space-between;
+}
+
+/* ---------- 边界警示条 ---------- */
+.callout-box{
+  margin:28px 0; border:1px solid var(--border); border-radius:var(--radius-m);
+  background:var(--bg-elev); padding:20px 24px; box-shadow:var(--shadow);
+}
+.callout-box.warning{border-left:4px solid var(--amber)}
+.callout-box.danger{border-left:4px solid var(--rose)}
+.callout-box.info{border-left:4px solid var(--cyan)}
+.callout-title{
+  font-weight:700; font-size:15px; margin-bottom:8px; display:flex; align-items:center; gap:8px;
+}
+.callout-box.warning .callout-title{color:var(--amber)}
+.callout-box.danger .callout-title{color:var(--rose)}
+.callout-box.info .callout-title{color:var(--cyan)}
+.callout-body{font-size:14.5px; color:var(--text-dim); line-height:1.7}
+
+/* ---------- 响应式与打印适配 ---------- */
+@media (max-width: 1080px){
+  #sidebar{transform:translateX(-100%); transition:transform .2s ease}
+  #sidebar.open{transform:translateX(0)}
+  #toc-toggle{display:block}
+  #main{margin-left:0; margin-right:0; padding:48px 24px 80px}
+  .grid-2col{grid-template-columns:1fr}
+  .chk-group{grid-template-columns:1fr}
+}
+@media print{
+  #sidebar, #topbar, #progress-track, .sbx-controls, .filter-tags, .btn-primary, .btn-secondary{display:none !important}
+  #main{margin:0 !important; max-width:100% !important; padding:0 !important}
+  body{background:#FFF !important; color:#000 !important}
+  .hero, .tldr, .ui-figure, .step-card, .box-col, .sandbox-card{
+    border-color:#CCC !important; box-shadow:none !important; break-inside:avoid;
+  }
+}
+</style>
+</head>
+<body>
+
+<div id="progress-track"><div id="progress-bar"></div></div>
+
+<div id="topbar">
+  <button id="toc-toggle" class="tb-btn" type="button">目录</button>
+  <button id="theme-toggle" class="tb-btn" type="button">🌓 浅色</button>
+</div>
+
+<aside id="sidebar">
+  <div class="sb-head">
+    <div class="sb-title">Grok Bot 模板实战指南</div>
+    <div class="sb-sub">从分享 Bot 到安装独立副本</div>
+  </div>
+  <nav class="sb-nav" id="sb-nav">
+    <a href="#sec-overview" class="sb-link active">核心概览与传递全景</a>
+    <a href="#sec-painpoints" class="sb-link">协作痛点：复制提示词瓶颈</a>
+    <a href="#sec-blueprint" class="sb-link">机制前提：食谱而非成品菜</a>
+    <a href="#sec-sandbox-matrix" class="sb-link lv2">└ 资产传递矩阵沙盘</a>
+    <a href="#sec-preparation" class="sb-link">发布前准备：六项关键依赖</a>
+    <a href="#sec-sandbox-dep" class="sb-link lv2">└ 六项依赖自检沙盘</a>
+    <a href="#sec-publisher-flow" class="sb-link">发布者流程：五步打包模板</a>
+    <a href="#step-pub-1" class="sb-link lv2">└ 第一步：Share as Template</a>
+    <a href="#step-pub-2" class="sb-link lv2">└ 第二步：核对 What's included</a>
+    <a href="#step-pub-3" class="sb-link lv2">└ 第三步：View Details 审计</a>
+    <a href="#step-pub-4" class="sb-link lv2">└ 第四步：选择分享范围</a>
+    <a href="#step-pub-5" class="sb-link lv2">└ 第五步：Publish 复制链接</a>
+    <a href="#sec-receiver-flow" class="sb-link">接收者流程：四步安装副本</a>
+    <a href="#step-rec-1" class="sb-link lv2">└ 第一步：确认模板身份</a>
+    <a href="#step-rec-2" class="sb-link lv2">└ 第二步：Add to Grok Bot</a>
+    <a href="#step-rec-3" class="sb-link lv2">└ 第三步：确认 Add Bot</a>
+    <a href="#step-rec-4" class="sb-link lv2">└ 第四步：补齐外部依赖</a>
+    <a href="#sec-verification" class="sb-link">用前验收：最小代表任务</a>
+    <a href="#sec-sandbox-verify" class="sb-link lv2">└ 副本可用性验收沙盘</a>
+    <a href="#sec-boundaries" class="sb-link">三大机制边界与安全防线</a>
+  </nav>
+</aside>
+
+<main id="main">
+
+  <!-- 首屏英雄卡片 -->
+  <section class="hero" id="sec-overview">
+    <span class="hero-kicker">xAI Grok Bot 知识工作流分享机制实战白皮书</span>
+    <h1>Grok Bot 模板使用指南：从分享 Bot 到安装独立副本</h1>
+    <p class="hero-lede">
+      一份可以照着操作的 Grok Bot 模板指南：先盘点会复制和不会复制的内容，再按按钮完成分享、安装与外部依赖验收。
+    </p>
+    <div class="hero-meta">
+      <span>基准发布日：2026-09-14</span>
+      <span>定位：设计蓝图（Recipe, Not a Meal）</span>
+      <span>原则：独立副本（Distinct New Copy）</span>
+      <span>核心边界：依赖自备与安全审查</span>
+      <span>交付属性：零外部依赖自包含文档</span>
+    </div>
+  </section>
+
+  <!-- TLDR 核心摘要 -->
+  <section class="tldr">
+    <div class="tldr-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      核心决策与核心事实速览 (Executive Summary)
+    </div>
+    <ul>
+      <li><strong>模板本质是一份蓝图而非克隆</strong>：Grok Bot 模板是一份让别人创建独立 Bot 副本的设计蓝图（blueprint），不是原 Bot 的一比一克隆（not a 1:1 clone）。</li>
+      <li><strong>必须提前盘点迁移边界</strong>：分享前先盘点指令、相关记忆、技能、插件与 Routines，并为不会随模板迁移的 MCP、脚本、代码和 API Key 写清安装说明（setup instructions）。</li>
+      <li><strong>发布者五步打包标准闭环</strong>：<code>Share as Template</code> → 检查 <code>What's included</code> 和 <code>View Details</code> → 选择 <code>Team</code> 或公开链接 → <code>Publish</code> → <code>Copy Link</code>。</li>
+      <li><strong>接收者四步安装与依赖补齐</strong>：打开模板链接 → <code>Add to Grok Bot</code> → 检查 context 与 integrations → <code>Add Bot</code> → 重装插件并补齐外部依赖。</li>
+    </ul>
+  </section>
+
+  <!-- 正文引言 -->
+  <p>
+    当你花时间调优出一个熟悉特定工作流、挂载了必要插件、能按固定频率自主执行任务的 AI Bot 时，团队成员往往希望能直接复用这个现成的助手。但在日常协作中，如果只是复制粘贴提示词，对方需要从头重新配置技能、插件和自动化触发机制，步骤繁琐且容易遗漏细节。
+  </p>
+  <p>
+    为了让知识工作流更容易传递，xAI 为 Grok Bot 推出了模板（Templates）机制。官方将模板比喻为“<strong>食谱而非做好的菜肴</strong>”（<em>a recipe, not a meal</em>）——它并不是原 Bot 运行状态的一对一克隆，而是提供一份让其他人能够据此启动独立 Bot 副本的设计蓝图（blueprint）。xAI 宣称这是“<strong>知识工作首次实现广泛可用的共享方式</strong>”（<em>first widely available way to share knowledge work</em>）。
+  </p>
+
+  <!-- 图 1：全景架构图 -->
+  <figure class="ui-figure" id="fig-hero">
+    <div class="ui-figure-header">
+      <span class="ui-figure-tag">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 9h6"/></svg>
+        架构图解 · 核心机制全景
+      </span>
+      <span>Grok Bot Templates Architecture Pipeline</span>
+    </div>
+    <div class="ui-figure-body">
+      <svg viewBox="0 0 920 400" width="920" height="400" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="grad-inc" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#2E8B6F" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="#2E8B6F" stop-opacity="0.03"/>
+          </linearGradient>
+          <linearGradient id="grad-exc" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#C9503F" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="#C9503F" stop-opacity="0.03"/>
+          </linearGradient>
+          <linearGradient id="grad-bp" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#D97757" stop-opacity="0.2"/>
+            <stop offset="100%" stop-color="#D97757" stop-opacity="0.05"/>
+          </linearGradient>
+        </defs>
+
+        <!-- 背景框 1: 原 Bot 资产池 -->
+        <rect x="20" y="30" width="220" height="340" rx="10" fill="var(--bg-sunk)" stroke="var(--border)" stroke-width="1.5"/>
+        <text x="35" y="60" font-family="var(--font-head)" font-size="15" font-weight="bold" fill="var(--text)">源端 Bot 资产池</text>
+        <text x="35" y="80" font-family="var(--font-body)" font-size="11" fill="var(--text-faint)">Original Bot State</text>
+
+        <!-- 内部资产项 -->
+        <rect x="35" y="100" width="190" height="32" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="47" y="121" font-family="var(--font-body)" font-size="12" fill="var(--text)">Bot 系统指令 (Instructions)</text>
+
+        <rect x="35" y="140" width="190" height="32" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="47" y="161" font-family="var(--font-body)" font-size="12" fill="var(--text)">相关记忆与技能 (Memories)</text>
+
+        <rect x="35" y="180" width="190" height="32" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="47" y="201" font-family="var(--font-body)" font-size="12" fill="var(--text)">例行触发器 (Routines)</text>
+
+        <rect x="35" y="220" width="190" height="32" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="47" y="241" font-family="var(--font-body)" font-size="12" fill="var(--text)">第一方插件 (1st-Party Plugins)</text>
+
+        <rect x="35" y="260" width="190" height="32" rx="6" fill="var(--bg-elev)" stroke="var(--border)" stroke-dasharray="3 3"/>
+        <text x="47" y="281" font-family="var(--font-body)" font-size="12" fill="var(--rose)">敏感个人记忆 (Personal)</text>
+
+        <rect x="35" y="300" width="190" height="32" rx="6" fill="var(--bg-elev)" stroke="var(--border)" stroke-dasharray="3 3"/>
+        <text x="47" y="321" font-family="var(--font-body)" font-size="12" fill="var(--rose)">自定义 MCP / 代码 / 密钥</text>
+
+        <!-- 连线到打包过滤器 -->
+        <path d="M 240 180 L 290 180" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 4"/>
+        <polygon points="290,176 298,180 290,184" fill="var(--accent)"/>
+
+        <!-- 背景框 2: 打包过滤器与边界剥离 -->
+        <rect x="300" y="30" width="280" height="340" rx="10" fill="var(--bg-sunk)" stroke="var(--border)" stroke-width="1.5"/>
+        <text x="315" y="60" font-family="var(--font-head)" font-size="15" font-weight="bold" fill="var(--text)">打包机制与边界过滤</text>
+        <text x="315" y="80" font-family="var(--font-body)" font-size="11" fill="var(--text-faint)">Packaging Gate & Filter</text>
+
+        <!-- 允许包含区 -->
+        <rect x="315" y="100" width="250" height="110" rx="8" fill="url(#grad-inc)" stroke="var(--emerald)" stroke-width="1.2"/>
+        <text x="330" y="125" font-family="var(--font-body)" font-size="12.5" font-weight="bold" fill="var(--emerald)">✓ 打包包含 (What's Included)</text>
+        <text x="330" y="148" font-family="var(--font-body)" font-size="11.5" fill="var(--text)">• 系统指令、通用上下文</text>
+        <text x="330" y="168" font-family="var(--font-body)" font-size="11.5" fill="var(--text)">• 关联技能与相关记忆</text>
+        <text x="330" y="188" font-family="var(--font-body)" font-size="11.5" fill="var(--text)">• 第一方特定插件、读取 Routines</text>
+
+        <!-- 严禁包含区 -->
+        <rect x="315" y="225" width="250" height="125" rx="8" fill="url(#grad-exc)" stroke="var(--rose)" stroke-width="1.2"/>
+        <text x="330" y="250" font-family="var(--font-body)" font-size="12.5" font-weight="bold" fill="var(--rose)">✕ 明确排除 (Excluded by Default)</text>
+        <text x="330" y="273" font-family="var(--font-body)" font-size="11.5" fill="var(--text)">• 个人与内部私有记忆</text>
+        <text x="330" y="293" font-family="var(--font-body)" font-size="11.5" fill="var(--text)">• 自定义代码与本地脚本文件</text>
+        <text x="330" y="313" font-family="var(--font-body)" font-size="11.5" fill="var(--text)">• 自定义 MCP 服务、私有 API Key</text>
+        <text x="330" y="333" font-family="var(--font-body)" font-size="11.5" font-style="italic" fill="var(--rose)">需由作者撰写 Setup Instructions 独立补齐</text>
+
+        <!-- 连线到模板与副本 -->
+        <path d="M 580 180 L 630 180" stroke="var(--accent)" stroke-width="2"/>
+        <polygon points="630,176 638,180 630,184" fill="var(--accent)"/>
+
+        <!-- 背景框 3: 目标端独立副本 -->
+        <rect x="640" y="30" width="260" height="340" rx="10" fill="url(#grad-bp)" stroke="var(--accent)" stroke-width="1.5"/>
+        <text x="655" y="60" font-family="var(--font-head)" font-size="15" font-weight="bold" fill="var(--accent)">接收者独立副本</text>
+        <text x="655" y="80" font-family="var(--font-body)" font-size="11" fill="var(--text-faint)">Distinct New Copy (Recipe)</text>
+
+        <rect x="655" y="100" width="230" height="42" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="668" y="120" font-family="var(--font-body)" font-size="12" font-weight="bold" fill="var(--text)">模板蓝图创建 (Add Bot)</text>
+        <text x="668" y="134" font-family="var(--font-body)" font-size="11" fill="var(--text-dim)">生成独立运行实例，无状态污染</text>
+
+        <rect x="655" y="152" width="230" height="52" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="668" y="172" font-family="var(--font-body)" font-size="12" font-weight="bold" fill="var(--amber)">外部依赖手动重装/补齐</text>
+        <text x="668" y="186" font-family="var(--font-body)" font-size="11" fill="var(--text-dim)">1. 重新安装官方/第三方插件</text>
+        <text x="668" y="198" font-family="var(--font-body)" font-size="11" fill="var(--text-dim)">2. 配置私有 API Key 与 MCP</text>
+
+        <rect x="655" y="214" width="230" height="48" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+        <text x="668" y="234" font-family="var(--font-body)" font-size="12" font-weight="bold" fill="var(--cyan)">Routine 触发状态手动校验</text>
+        <text x="668" y="248" font-family="var(--font-body)" font-size="11" fill="var(--text-dim)">核验例行自动化频率是否生效</text>
+
+        <rect x="655" y="272" width="230" height="80" rx="6" fill="var(--emerald-soft)" stroke="var(--emerald)"/>
+        <text x="668" y="295" font-family="var(--font-body)" font-size="12" font-weight="bold" fill="var(--emerald)">✓ 最小代表任务基准验收</text>
+        <text x="668" y="315" font-family="var(--font-body)" font-size="11" fill="var(--text)">执行核心指令，验证端到端闭环</text>
+        <text x="668" y="333" font-family="var(--font-body)" font-size="10.5" fill="var(--text-dim)">确认插件调用正常、外部数据返回无误</text>
+      </svg>
+    </div>
+    <figcaption class="ui-figure-caption">
+      <strong>图 1 架构解读：Grok Bot 模板机制全景</strong> —— 模板处于源端资产池与目标端副本之间，充当一道“安全脱敏与解耦打包过滤器”。它将第一方标准能力（指令、技能、插件蓝图）提炼封装，并明确剔除个人记忆、自定义代码、MCP及鉴权密钥，确保接收者基于“食谱”构建出既保持结构一致又环境隔离的独立副本。
+    </figcaption>
+  </figure>
+
+  <!-- 章节 1: 协作痛点 -->
+  <section id="sec-painpoints">
+    <h2>协作痛点：为什么只复制提示词跑不通完整工作流</h2>
+    <p>
+      在日常协作中，一个深度调优的 AI Bot 往往不再是一段简单的纯文本提示词，而是融合了指令、技能、插件，以及按设定频率自主运行的例行触发器（Routines）。只复制提示词，会漏掉这些互相关联的部分：
+    </p>
+    <ul>
+      <li><strong>结构没有一起过去</strong>：接收者拿到文字，却不知道原 Bot 用了哪些技能、插件和触发器，也不知道哪些外部服务需要另行准备。</li>
+      <li><strong>私有内容不能照搬</strong>：官方明确说，模板默认排除个人或内部记忆，也不会包含自定义代码和脚本。模板有意留下了一些必须由接收者自己补齐的部分。</li>
+    </ul>
+    <p>
+      Grok Bot 的模板（Templates）机制把 Bot 的一部分工作框架整理成可分享蓝图，让接收者据此创建自己的版本。它减少了从零组装的工作，但不承诺把原 Bot 的全部状态和外部环境原样搬过去。
+    </p>
+
+    <!-- 痛点对比卡片 -->
+    <div class="grid-2col">
+      <div class="box-col excluded">
+        <div class="box-col-title">
+          <span>❌ 传统提示词拷贝模式</span>
+          <span style="font-size:12px">碎片化 / 易断裂</span>
+        </div>
+        <ul style="padding-left:18px; margin:0; font-size:14px; color:var(--text-dim)">
+          <li><strong>丢失环境关联</strong>：仅有纯文本，插件挂载、技能集成状态全部丢失。</li>
+          <li><strong>触发机制归零</strong>：Routines 定时/事件自动化配置无法随文本流转。</li>
+          <li><strong>隐私泄漏隐患</strong>：极易不慎将硬编码在 Prompt 里的私有凭据或业务机密泄露。</li>
+          <li><strong>协作复现成本高</strong>：接收者需对照说明逐项重新寻找插件、手动配置参数。</li>
+        </ul>
+      </div>
+      <div class="box-col included">
+        <div class="box-col-title">
+          <span>✓ Grok Bot 模板机制</span>
+          <span style="font-size:12px">蓝图化 / 规范化</span>
+        </div>
+        <ul style="padding-left:18px; margin:0; font-size:14px; color:var(--text-dim)">
+          <li><strong>框架整体打包</strong>：系统指令、关联技能、第一方插件与上下文声明一键固化。</li>
+          <li><strong>自动边界脱敏</strong>：平台默认剔除个人偏好与内部私有记忆，降低泄密敞口。</li>
+          <li><strong>团队一键部署</strong>：支持发布至 Team 空间或生成安全链接，两步生成独立副本。</li>
+          <li><strong>清晰边界划分</strong>：明确告知缺失的外部依赖（MCP/代码/Key），规范安装说明。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 章节 2: 机制前提 -->
+  <section id="sec-blueprint">
+    <h2>机制前提：模板是设计蓝图，不是运行状态的一对一克隆</h2>
+    <p>
+      理解模板机制的关键在于厘清它的传递边界。官方明确将模板比喻为“<strong>食谱而非做好的菜肴</strong>”（<em>a recipe, not a meal</em>）——它传递的是一套包含技能（skills）、记忆（memories）与插件（plugins）设定的设计蓝图（blueprint），而不是原 Bot 的一比一克隆（<em>not a 1:1 clone</em>）。
+    </p>
+    <p>
+      生成模板时，系统会处理以下几类内容；其中有些会被复制，有些只在打包过程中被读取：
+    </p>
+
+    <div class="grid-2col">
+      <div class="box-col included">
+        <div class="box-col-title">
+          <span>模板包含或在生成时读取的内容</span>
+          <span style="font-size:12px">打包传递层</span>
+        </div>
+        <ul style="padding-left:18px; margin:0; font-size:14px; color:var(--text-dim)">
+          <li><strong>Bot 系统指令（Bot Instructions）</strong>：复制原 Bot 的指令，作为新副本的工作基准。</li>
+          <li><strong>相关记忆与技能（Relevant Memories &amp; Skills）</strong>：相关记忆与技能会被复制到模板中。</li>
+          <li><strong>例行自动化触发器（Routines）</strong>：系统生成模板时会读取 Routines。官方把它解释为让 Bot 自行运行的触发器，例如控制运行频率；页面没有进一步说明每条 Routine 如何进入新副本。</li>
+          <li><strong>特定插件（Specific Plugins）</strong>：模板会复制特定插件；页面最后进一步概括为第一方插件和技能会包含在模板中。</li>
+        </ul>
+      </div>
+      <div class="box-col excluded">
+        <div class="box-col-title">
+          <span>模板明确排除（不包含）的内容</span>
+          <span style="font-size:12px">本地自备层</span>
+        </div>
+        <ul style="padding-left:18px; margin:0; font-size:14px; color:var(--text-dim)">
+          <li><strong>个人与内部记忆（Personal or Internal Memories）</strong>：系统默认排除创建者的个人偏好或内部记忆，避免私密信息流出。</li>
+          <li><strong>自定义代码与脚本（Custom Code &amp; Scripts）</strong>：敏感的本地脚本或自定义代码不会被打包进模板。</li>
+          <li><strong>非标准插件与自定义 MCP 服务器（Non-standard plugins &amp; Custom MCP servers）</strong>：非标准插件及外部 Model Context Protocol（MCP）服务器不会包含在模板中，无法通过模板直接传输。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 交互沙盘 1: 资产传递矩阵 -->
+  <section class="sandbox-card" id="sec-sandbox-matrix">
+    <div class="sbx-head">
+      <div class="sbx-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        交互沙盘 · 模板传递边界与资产迁移矩阵审计
+      </div>
+      <span class="sbx-sub">实时筛选不同资产在模板化过程中的行为特征与处置要求</span>
+    </div>
+    <div class="sbx-body">
+      <div class="filter-tags">
+        <button type="button" class="filter-btn active" data-filter="all">全部资产类别 (7 项)</button>
+        <button type="button" class="filter-btn" data-filter="inc">打包包含 (3 项)</button>
+        <button type="button" class="filter-btn" data-filter="read">读取但不保证全迁移 (1 项)</button>
+        <button type="button" class="filter-btn" data-filter="exc">明确排除/需自备 (3 项)</button>
+      </div>
+
+      <div class="sbx-stat-row">
+        <span>当前显示项数：<span id="out-mat-count" class="sbx-stat-badge">7 / 7</span></span>
+        <span style="color:var(--text-faint)">依据 xAI 官方指南边界分类标准归纳</span>
+      </div>
+
+      <div class="matrix-cards" id="box-matrix-cards">
+        <!-- JS 将在此动态渲染/更新卡片 -->
+      </div>
+    </div>
+  </section>
+
+  <!-- 章节 3: 发布前准备 -->
+  <section id="sec-preparation">
+    <h2>发布前准备：对照边界盘点六项关键依赖</h2>
+    <p>
+      基于官方划定的内容边界，在点击打包前，发布者可以先做一次依赖盘点。下面是本文把官方边界转成的操作建议，不代表 Grok Bot 另有一套自动审计或配置界面：
+    </p>
+    <ol>
+      <li><strong>检查个人与内部内容（Personal/Internal Information）</strong>：系统默认排除个人或内部记忆，但如果敏感信息直接写在 Bot 指令或准备分享的说明中，也要在发布前自行检查。</li>
+      <li><strong>确认插件与技能（Plugins &amp; Skills）</strong>：列出工作流依赖的插件和技能，并告诉接收者哪些插件在新 Bot 中需要重新安装。</li>
+      <li><strong>核对例行触发器（Routines）</strong>：列出 Bot 依赖的运行频率或触发条件；官方页面只说明生成模板时会读取 Routines，没有交代迁移细节，因此不要假定它们已经自动恢复。</li>
+      <li><strong>整理自定义代码与脚本（Custom Code &amp; Scripts）</strong>：模板不会打包自定义脚本和代码。若工作流依赖它们，需要另行提供获取与部署方式。</li>
+      <li><strong>梳理外部凭证（API Keys &amp; Endpoints）</strong>：列出工作流所依赖的所有第三方服务 API 密钥及访问端点，明确告知使用者需要自备哪些权限凭据。</li>
+      <li><strong>说明自定义 MCP 服务器（Custom MCP Servers）</strong>：若原 Bot 连接了自定义 MCP 服务器，必须准备好本地部署与连接指导，使用者无法直接通过模板获得现成的服务连接。</li>
+    </ol>
+    <p>
+      对于依赖 API Key、自定义 MCP 或其他外部组件的复杂模板，官方说可以让 Bot 把安装说明（setup instructions）编入模板。以下是一份根据官方边界整理的依赖说明骨架，供发布者在编写 Bot 指令或分发附言时参考：
+    </p>
+
+    <blockquote>
+      <p><strong>本文根据官方边界整理的填写骨架（非官方界面字段）</strong></p>
+      <ul>
+        <li><strong>工作流用途</strong>：简要说明该 Bot 解决什么任务。</li>
+        <li><strong>随模板提供的插件与技能</strong>：列出打包包含的官方第一方插件与技能名称。</li>
+        <li><strong>接收者需重新安装的插件</strong>：提示接收者在创建副本后需要重新安装哪些组件。</li>
+        <li><strong>未随模板打包的外部依赖</strong>：说明需要单独获取的自定义脚本、代码文件或自定义 MCP 服务器地址。</li>
+        <li><strong>需使用者自备的凭证</strong>：列出需自行申请并填入的 API Key 或服务鉴权信息。</li>
+        <li><strong>安装后首个验证任务</strong>：提供一条用于快速测试端到端链路是否畅通的标准指令。</li>
+      </ul>
+    </blockquote>
+  </section>
+
+  <!-- 交互沙盘 2: 六项依赖自检沙盘与骨架生成器 -->
+  <section class="sandbox-card" id="sec-sandbox-dep">
+    <div class="sbx-head">
+      <div class="sbx-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        交互沙盘 · 发布前六项依赖自检与 Setup Instructions 骨架生成器
+      </div>
+      <span class="sbx-sub">逐项勾选依赖完成度，自动判定发布准备度并生成分发安装指南</span>
+    </div>
+    <div class="sbx-body">
+      <div class="chk-group">
+        <label class="chk-item" id="item-dep-1">
+          <input type="checkbox" id="chk-dep-1">
+          <span><strong>1. 检查指令无内部敏感信息</strong><br><small style="color:var(--text-dim)">确认 Bot Prompt 中未硬编码团队密钥、私有内网 URL 或敏感人名</small></span>
+        </label>
+        <label class="chk-item" id="item-dep-2">
+          <input type="checkbox" id="chk-dep-2">
+          <span><strong>2. 确认插件与技能清单</strong><br><small style="color:var(--text-dim)">核验第一方插件名称，明确提示哪些插件在接收端需要手动重新挂载</small></span>
+        </label>
+        <label class="chk-item" id="item-dep-3">
+          <input type="checkbox" id="chk-dep-3">
+          <span><strong>3. 记录例行触发器 (Routines)</strong><br><small style="color:var(--text-dim)">记录原 Bot 触发频率/时区，准备安装附言以便接收者手动恢复</small></span>
+        </label>
+        <label class="chk-item" id="item-dep-4">
+          <input type="checkbox" id="chk-dep-4">
+          <span><strong>4. 整理自定义脚本与本地代码</strong><br><small style="color:var(--text-dim)">将不随模板打包的 .py/.sh 脚本打包上传至团队共享目录或 Git</small></span>
+        </label>
+        <label class="chk-item" id="item-dep-5">
+          <input type="checkbox" id="chk-dep-5">
+          <span><strong>5. 梳理第三方 API Key 与鉴权要求</strong><br><small style="color:var(--text-dim)">列清依赖的第三方服务（如 OpenAI, GitHub token）及申请指引</small></span>
+        </label>
+        <label class="chk-item" id="item-dep-6">
+          <input type="checkbox" id="chk-dep-6">
+          <span><strong>6. 准备自定义 MCP 服务器部署文档</strong><br><small style="color:var(--text-dim)">准备接收者本地启动 MCP server 的 docker/node 命令与端口配置</small></span>
+        </label>
+      </div>
+
+      <div class="sbx-bar-wrap">
+        <div class="sbx-bar-fill" id="out-dep-fill"></div>
+      </div>
+
+      <div class="sbx-stat-row">
+        <span>自检进度：<strong id="out-dep-done" style="color:var(--accent)">0 / 6</strong></span>
+        <span>合规完成度：<strong id="out-dep-pct" style="color:var(--accent)">0%</strong></span>
+      </div>
+
+      <div class="sbx-verdict" id="out-dep-verdict">
+        <b>尚未开始核对。</b>请逐项检查上述六项关键依赖，杜绝在缺少外部依赖说明的情况下盲目发布模板。
+      </div>
+
+      <div class="sbx-output-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+          <span style="font-size:12.5px; font-weight:700; color:var(--text)">生成的分发安装指南骨架 (Setup Instructions Markdown)</span>
+          <button type="button" class="tb-btn" id="btn-copy-skeleton">复制骨架文本</button>
+        </div>
+        <pre class="sbx-output-pre" id="out-dep-skeleton"># Grok Bot 模板依赖安装说明 (Setup Instructions)
+- 工作流用途：[填写该 Bot 解决的核心工作流]
+- 随模板提供的插件与技能：[填写官方第一方插件与已打包技能]
+- 接收者需重新安装的插件：[待填写]
+- 未随模板打包的外部依赖：[待补齐自定义脚本或 MCP]
+- 需使用者自备的凭证：[待补齐 API Key 申请说明]
+- 安装后首个验证任务：[待提供冒烟测试 Prompt]</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 章节 4: 发布者流程 -->
+  <section id="sec-publisher-flow">
+    <h2>发布者手把手流程：五步打包并发布模板</h2>
+    <p>
+      将一个成熟的 Bot 转换为模板并分发给团队，可以通过界面中的标准步骤完成。如果想对照动态操作细节，也可以参考官方页面提供的<a href="https://x.com/mattyp/status/2093379758306504935" target="_blank" rel="noopener noreferrer">操作演示（walkthrough）</a>；具体分步操作与核验节点如下：
+    </p>
+
+    <!-- 第一步 -->
+    <div class="step-card" id="step-pub-1">
+      <div class="step-header">
+        <div class="step-badge">1</div>
+        <h3 class="step-title">第一步：点击 Share as Template，先生成私有模板</h3>
+      </div>
+      <div class="step-grid">
+        <div class="step-item">
+          <div class="step-item-title action">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            动作 (Action)
+          </div>
+          <div class="step-item-body">在目标 Bot 的设置界面中，找到右下角的 <code>Share as Template</code> 并点击。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title see">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            会看到什么 (What you see)
+          </div>
+          <div class="step-item-body">Bot 开始把自己打包成一个匿名化、私有的模板版本。此时模板还没有公开；<code>Share as Template</code> 只是创建可分享版本，不等于发布。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title check">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            继续前检查 (Check before proceeding)
+          </div>
+          <div class="step-item-body">确认你操作的是准备分享的 Bot，而不是仍在临时调试的副本。</div>
+        </div>
+      </div>
+
+      <!-- 图 2：点击 Share as Template -->
+      <figure class="ui-figure" style="margin-top:20px; margin-bottom:0">
+        <div class="ui-figure-header">
+          <span class="ui-figure-tag">界面图示 · 步骤 1 入口</span>
+          <span>Bot Settings &gt; Share as Template</span>
+        </div>
+        <div class="ui-figure-body">
+          <svg viewBox="0 0 760 260" width="760" height="260" xmlns="http://www.w3.org/2000/svg">
+            <rect x="20" y="20" width="720" height="220" rx="10" fill="var(--bg-sunk)" stroke="var(--border)" stroke-width="1.5"/>
+            <!-- 顶部窗口栏 -->
+            <rect x="20" y="20" width="720" height="38" rx="10 10 0 0" fill="var(--bg-elev)" stroke="var(--border)"/>
+            <circle cx="42" cy="39" r="5" fill="var(--rose)"/>
+            <circle cx="58" cy="39" r="5" fill="var(--amber)"/>
+            <circle cx="74" cy="39" r="5" fill="var(--emerald)"/>
+            <text x="100" y="44" font-family="var(--font-head)" font-size="13" font-weight="bold" fill="var(--text)">Bot Configuration Editor · [Production Workflow]</text>
+
+            <!-- 模拟表单项 -->
+            <rect x="50" y="80" width="180" height="18" rx="4" fill="var(--border)"/>
+            <rect x="50" y="110" width="460" height="36" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+            <text x="65" y="133" font-family="var(--font-code)" font-size="12" fill="var(--text-dim)">You are an autonomous release engineering assistant...</text>
+
+            <rect x="50" y="165" width="140" height="18" rx="4" fill="var(--border)"/>
+            <rect x="50" y="195" width="280" height="28" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+            <text x="65" y="214" font-family="var(--font-body)" font-size="11.5" fill="var(--emerald)">● 4 Plugins Attached (GitHub, WebSearch, Docs, Code)</text>
+
+            <!-- 核心交互按钮：Share as Template -->
+            <rect x="530" y="188" width="180" height="42" rx="8" fill="var(--accent)" stroke="var(--accent)"/>
+            <text x="562" y="214" font-family="var(--font-body)" font-size="13.5" font-weight="bold" fill="#FFFFFF">Share as Template</text>
+
+            <!-- 引导红圈与指针 -->
+            <circle cx="620" cy="209" r="28" fill="none" stroke="var(--rose)" stroke-width="2.5" stroke-dasharray="4 3"/>
+            <text x="540" y="174" font-family="var(--font-body)" font-size="11.5" font-weight="bold" fill="var(--rose)">点击打包私有模板 ➔</text>
+          </svg>
+        </div>
+        <figcaption class="ui-figure-caption">
+          <strong>在 Bot 界面点击 Share as Template 打包模板</strong> —— 点击后系统将在后台自动解析当前 Bot 的依赖树，将其剥离并组装为第一阶段的私有未发布蓝图。
+        </figcaption>
+      </figure>
+    </div>
+
+    <!-- 第二步 -->
+    <div class="step-card" id="step-pub-2">
+      <div class="step-header">
+        <div class="step-badge">2</div>
+        <h3 class="step-title">第二步：先看 What's included，不要直接发布</h3>
+      </div>
+      <div class="step-grid">
+        <div class="step-item">
+          <div class="step-item-title action">动作 (Action)</div>
+          <div class="step-item-body">查看模板生成后的 <code>What's included</code> 摘要。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title see">会看到什么 (What you see)</div>
+          <div class="step-item-body">页面会列出系统读取的 Memories、Skills、Routines 与 Plugins。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title check">继续前检查 (Check before proceeding)</div>
+          <div class="step-item-body">核实工作流离不开的插件和技能是否出现；把页面没有说明如何迁移的 Routines 记入安装说明，不能只看到名称就假定它们已经能在新副本中运行。</div>
+        </div>
+      </div>
+
+      <!-- 图 3：核对 What's included -->
+      <figure class="ui-figure" style="margin-top:20px; margin-bottom:0">
+        <div class="ui-figure-header">
+          <span class="ui-figure-tag">界面图示 · 步骤 2 审核</span>
+          <span>Modal Dialog &gt; What's included</span>
+        </div>
+        <div class="ui-figure-body">
+          <svg viewBox="0 0 760 260" width="760" height="260" xmlns="http://www.w3.org/2000/svg">
+            <rect x="80" y="20" width="600" height="220" rx="10" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1.5"/>
+            <!-- 弹窗标题栏 -->
+            <text x="110" y="55" font-family="var(--font-head)" font-size="16" font-weight="bold" fill="var(--text)">Template Generation Preview</text>
+            <text x="110" y="76" font-family="var(--font-body)" font-size="12" fill="var(--text-faint)">What's included in this template snapshot</text>
+
+            <!-- 四大资产项 -->
+            <rect x="110" y="95" width="250" height="50" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+            <text x="125" y="118" font-family="var(--font-body)" font-size="13" font-weight="bold" fill="var(--emerald)">✓ Memories (相关记忆)</text>
+            <text x="125" y="135" font-family="var(--font-body)" font-size="11" fill="var(--text-dim)">5 Relevant Context Items Read</text>
+
+            <rect x="380" y="95" width="260" height="50" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+            <text x="395" y="118" font-family="var(--font-body)" font-size="13" font-weight="bold" fill="var(--emerald)">✓ Skills (挂载技能)</text>
+            <text x="395" y="135" font-family="var(--font-body)" font-size="11" fill="var(--text-dim)">GitOps, PR Review, Lint Tooling</text>
+
+            <rect x="110" y="155" width="250" height="50" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+            <text x="125" y="178" font-family="var(--font-body)" font-size="13" font-weight="bold" fill="var(--amber)">⚠ Routines (例行触发器)</text>
+            <text x="125" y="195" font-family="var(--font-body)" font-size="11" fill="var(--text-dim)">Trigger read; manual verification required</text>
+
+            <rect x="380" y="155" width="260" height="50" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+            <text x="395" y="178" font-family="var(--font-body)" font-size="13" font-weight="bold" fill="var(--emerald)">✓ Plugins (第一方插件)</text>
+            <text x="395" y="195" font-family="var(--font-body)" font-size="11" fill="var(--text-dim)">GitHub Integration, WebSearch</text>
+          </svg>
+        </div>
+        <figcaption class="ui-figure-caption">
+          <strong>核对模板打包读取的 Memories、Skills、Routines 与 Plugins</strong> —— 审视系统提炼生成的资产概要清单，特别警惕 Routines 项的迁移不透明性，切勿仅凭名称断定自动化已就绪。
+        </figcaption>
+      </figure>
+    </div>
+
+    <!-- 第三步 -->
+    <div class="step-card" id="step-pub-3">
+      <div class="step-header">
+        <div class="step-badge">3</div>
+        <h3 class="step-title">第三步：打开 View Details，逐项核对内容</h3>
+      </div>
+      <div class="step-grid">
+        <div class="step-item">
+          <div class="step-item-title action">动作 (Action)</div>
+          <div class="step-item-body">点击 <code>View Details</code>。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title see">会看到什么 (What you see)</div>
+          <div class="step-item-body">详情里会展示模板包含的 context、memories 与 integrations。官方示例还能看到 pstack、GitHub，以及与 Cursor integration 的关联。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title check">继续前检查 (Check before proceeding)</div>
+          <div class="step-item-body">确认这些内容符合预期；如果工作流依赖 API Key、自定义 MCP、脚本或代码，确认你已经另外准备好安装说明。官方建议让 Bot 把 setup instructions 编码进去，但没有指定必须使用哪个界面字段。</div>
+        </div>
+      </div>
+
+      <!-- 图 4：查看 View Details -->
+      <figure class="ui-figure" style="margin-top:20px; margin-bottom:0">
+        <div class="ui-figure-header">
+          <span class="ui-figure-tag">界面图示 · 步骤 3 深度审计</span>
+          <span>Drawer Detail &gt; Context, Memories &amp; Integrations</span>
+        </div>
+        <div class="ui-figure-body">
+          <svg viewBox="0 0 760 260" width="760" height="260" xmlns="http://www.w3.org/2000/svg">
+            <rect x="40" y="20" width="680" height="220" rx="10" fill="var(--bg-sunk)" stroke="var(--border)" stroke-width="1.5"/>
+            <!-- 标题栏 -->
+            <text x="65" y="52" font-family="var(--font-head)" font-size="15" font-weight="bold" fill="var(--text)">Detailed Template Inspector (SpaceX loops Bot Example)</text>
+
+            <!-- 三列详情卡片 -->
+            <rect x="65" y="70" width="195" height="150" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+            <text x="80" y="94" font-family="var(--font-body)" font-size="13" font-weight="bold" fill="var(--cyan)">Context (上下文)</text>
+            <text x="80" y="116" font-family="var(--font-body)" font-size="11.5" fill="var(--text-dim)">• SpaceX Software Repo</text>
+            <text x="80" y="136" font-family="var(--font-body)" font-size="11.5" fill="var(--text-dim)">• Flight Software Lint spec</text>
+            <text x="80" y="156" font-family="var(--font-body)" font-size="11.5" fill="var(--text-dim)">• PR workflow standards</text>
+
+            <rect x="280" y="70" width="195" height="150" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+            <text x="295" y="94" font-family="var(--font-body)" font-size="13" font-weight="bold" fill="var(--emerald)">Memories (提炼记忆)</text>
+            <text x="295" y="116" font-family="var(--font-body)" font-size="11.5" fill="var(--text-dim)">• Release checklist rules</text>
+            <text x="295" y="136" font-family="var(--font-body)" font-size="11.5" fill="var(--text-dim)">• Sanitized team conventions</text>
+            <text x="295" y="156" font-family="var(--font-body)" font-size="11.5" fill="var(--rose)">✕ Excluded: private credentials</text>
+
+            <rect x="495" y="70" width="200" height="150" rx="6" fill="var(--bg-elev)" stroke="var(--border)"/>
+            <text x="510" y="94" font-family="var(--font-body)" font-size="13" font-weight="bold" fill="var(--accent)">Integrations (工具集成)</text>
+            <text x="510" y="116" font-family="var(--font-body)" font-size="11.5" fill="var(--text-dim)">• pstack (internal tool)</text>
+            <text x="510" y="136" font-family="var(--font-body)" font-size="11.5" fill="var(--text-dim)">• GitHub Enterprise</text>
+            <text x="510" y="156" font-family="var(--font-body)" font-size="11.5" fill="var(--amber)">• Cursor integration (耦合)</text>
+          </svg>
+        </div>
+        <figcaption class="ui-figure-caption">
+          <strong>查看模板包含的 context、memories 与 integrations</strong> —— 官方 SpaceX <code>loops</code> 示例表明，模板展示的集成工具（如 pstack、GitHub 与 Cursor）可能存在高度的环境耦合性，接收者必须核实本地是否具备对应访问权限。
+        </figcaption>
+      </figure>
+    </div>
+
+    <!-- 第四步 -->
+    <div class="step-card" id="step-pub-4">
+      <div class="step-header">
+        <div class="step-badge">4</div>
+        <h3 class="step-title">第四步：选择 Team 或公开链接</h3>
+      </div>
+      <div class="step-grid">
+        <div class="step-item">
+          <div class="step-item-title action">动作 (Action)</div>
+          <div class="step-item-body">根据分享对象选择仅团队可见的 <code>Team</code>，或者选择公开链接。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title see">会看到什么 (What you see)</div>
+          <div class="step-item-body">模板会进入相应的分享范围。官方示例中的 <code>loops</code> Bot 因为用于 SpaceX 内部软件开发，所以选择了 <code>Team</code>。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title check">继续前检查 (Check before proceeding)</div>
+          <div class="step-item-body">再次核对接收者范围；只适合组织内部的工作流应选择 <code>Team</code>。</div>
+        </div>
+      </div>
+
+      <!-- 图 5：选择分享范围 -->
+      <figure class="ui-figure" style="margin-top:20px; margin-bottom:0">
+        <div class="ui-figure-header">
+          <span class="ui-figure-tag">界面图示 · 步骤 4 分享权限</span>
+          <span>Access Scope Selector</span>
+        </div>
+        <div class="ui-figure-body">
+          <svg viewBox="0 0 760 230" width="760" height="230" xmlns="http://www.w3.org/2000/svg">
+            <rect x="80" y="20" width="600" height="190" rx="10" fill="var(--bg-sunk)" stroke="var(--border)" stroke-width="1.5"/>
+            <text x="110" y="52" font-family="var(--font-head)" font-size="15" font-weight="bold" fill="var(--text)">Choose Sharing Scope (分享受众范围)</text>
+
+            <!-- 选项 1: Team (选中态) -->
+            <rect x="110" y="75" width="260" height="110" rx="8" fill="var(--bg-elev)" stroke="var(--accent)" stroke-width="2"/>
+            <circle cx="135" cy="100" r="8" fill="var(--accent)"/>
+            <circle cx="135" cy="100" r="4" fill="#FFFFFF"/>
+            <text x="155" y="105" font-family="var(--font-body)" font-size="14" font-weight="bold" fill="var(--accent)">Team Only (团队内部可见)</text>
+            <text x="135" y="132" font-family="var(--font-body)" font-size="11.5" fill="var(--text-dim)">仅本企业/组织工作区内成员可安装</text>
+            <text x="135" y="152" font-family="var(--font-body)" font-size="11.5" fill="var(--emerald)">★ 适用：内网工作流、私有业务规范</text>
+
+            <!-- 选项 2: Public Link -->
+            <rect x="390" y="75" width="260" height="110" rx="8" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1.5"/>
+            <circle cx="415" cy="100" r="8" fill="none" stroke="var(--border-strong)" stroke-width="2"/>
+            <text x="435" y="105" font-family="var(--font-body)" font-size="14" font-weight="bold" fill="var(--text)">Public Link (公开链接)</text>
+            <text x="415" y="132" font-family="var(--font-body)" font-size="11.5" fill="var(--text-dim)">任何持有链接的用户均可创建独立副本</text>
+            <text x="415" y="152" font-family="var(--font-body)" font-size="11.5" fill="var(--rose)">⚠ 提示：确保无任何业务私有信息</text>
+          </svg>
+        </div>
+        <figcaption class="ui-figure-caption">
+          <strong>选择团队内部可见或公开分享</strong> —— 涉及敏感业务代码与私有内网依赖（如 SpaceX loops）的工作流必须严格限定在 Team 范围之内。
+        </figcaption>
+      </figure>
+    </div>
+
+    <!-- 第五步 -->
+    <div class="step-card" id="step-pub-5">
+      <div class="step-header">
+        <div class="step-badge">5</div>
+        <h3 class="step-title">第五步：点击 Publish，再复制链接</h3>
+      </div>
+      <div class="step-grid">
+        <div class="step-item">
+          <div class="step-item-title action">动作 (Action)</div>
+          <div class="step-item-body">确认内容和范围后点击 <code>Publish</code>，发布完成再点击 <code>Copy Link</code>。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title see">会看到什么 (What you see)</div>
+          <div class="step-item-body">模板发布后会获得可分享链接；这个链接会打开模板页面，接收者可以从那里把模板加入 Grok Bot。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title check">继续前检查 (Check before proceeding)</div>
+          <div class="step-item-body">确认模板是在点击 <code>Publish</code> 后才真正上线。把复制出的链接和前面整理的外部依赖说明一起交给接收者。</div>
+        </div>
+      </div>
+
+      <!-- 图 6：Publish 与 Copy Link -->
+      <figure class="ui-figure" style="margin-top:20px; margin-bottom:0">
+        <div class="ui-figure-header">
+          <span class="ui-figure-tag">界面图示 · 步骤 5 正式发布</span>
+          <span>Publish Confirmation &amp; Share Link</span>
+        </div>
+        <div class="ui-figure-body">
+          <svg viewBox="0 0 760 210" width="760" height="210" xmlns="http://www.w3.org/2000/svg">
+            <rect x="80" y="20" width="600" height="170" rx="10" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1.5"/>
+            <!-- 成功发布提示 -->
+            <circle cx="120" cy="55" r="16" fill="var(--emerald-soft)"/>
+            <path d="M 112 55 L 118 61 L 128 49" fill="none" stroke="var(--emerald)" stroke-width="2.5"/>
+            <text x="150" y="55" font-family="var(--font-head)" font-size="16" font-weight="bold" fill="var(--text)">Template Published Successfully</text>
+            <text x="150" y="74" font-family="var(--font-body)" font-size="12" fill="var(--text-faint)">Ready to share with your team members or collaborators</text>
+
+            <!-- 链接框 -->
+            <rect x="110" y="100" width="410" height="42" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+            <text x="125" y="126" font-family="var(--font-code)" font-size="12" fill="var(--text-dim)">https://x.ai/bot/templates/loops-sw-eng-v1-prod</text>
+
+            <!-- Copy Link 按钮 -->
+            <rect x="530" y="100" width="120" height="42" rx="6" fill="var(--accent)"/>
+            <text x="560" y="126" font-family="var(--font-body)" font-size="13" font-weight="bold" fill="#FFFFFF">Copy Link</text>
+          </svg>
+        </div>
+        <figcaption class="ui-figure-caption">
+          <strong>点击 Publish 正式发布模板并复制分享链接</strong> —— 模板生成后必须由发布者主动点击 Publish 方能正式生效，分发时需将链接与外部依赖说明附言一并递交。
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 章节 5: 接收者流程 -->
+  <section id="sec-receiver-flow">
+    <h2>接收者手把手流程：四步安装并补齐外部依赖</h2>
+    <p>
+      作为接收者，获得模板链接后并不是直接盲目添加。官方特别提醒使用者：<strong>应当像检查常规软件或第三方技能一样审视模板内容</strong>，确认其安全性和集成意图后再完成安装。
+    </p>
+
+    <!-- 第一步 -->
+    <div class="step-card" id="step-rec-1">
+      <div class="step-header">
+        <div class="step-badge">1</div>
+        <h3 class="step-title">第一步：打开链接，确认模板身份</h3>
+      </div>
+      <div class="step-grid">
+        <div class="step-item">
+          <div class="step-item-title action">动作 (Action)</div>
+          <div class="step-item-body">在浏览器中打开发布者给你的模板链接，确认它就是你准备安装的模板。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title see">会看到什么 (What you see)</div>
+          <div class="step-item-body">链接会进入模板页面，并提供 <code>Add to Grok Bot</code> 入口。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title check">继续前检查 (Check before proceeding)</div>
+          <div class="step-item-body">先核对链接来源和模板用途，不要因为安装入口只有一次点击就跳过后面的内容审核。</div>
+        </div>
+      </div>
+
+      <!-- 图 7：点击 Add to Grok Bot -->
+      <figure class="ui-figure" style="margin-top:20px; margin-bottom:0">
+        <div class="ui-figure-header">
+          <span class="ui-figure-tag">界面图示 · 接收端步骤 1</span>
+          <span>Template Landing Page &gt; Add to Grok Bot</span>
+        </div>
+        <div class="ui-figure-body">
+          <svg viewBox="0 0 760 210" width="760" height="210" xmlns="http://www.w3.org/2000/svg">
+            <rect x="80" y="20" width="600" height="170" rx="10" fill="var(--bg-sunk)" stroke="var(--border)" stroke-width="1.5"/>
+            <!-- 模板展示信息 -->
+            <rect x="110" y="45" width="48" height="48" rx="8" fill="var(--accent-soft)"/>
+            <text x="127" y="75" font-family="var(--font-head)" font-size="20" font-weight="bold" fill="var(--accent)">🚀</text>
+
+            <text x="175" y="62" font-family="var(--font-head)" font-size="16" font-weight="bold" fill="var(--text)">SpaceX loops Software Bot Template</text>
+            <text x="175" y="82" font-family="var(--font-body)" font-size="12" fill="var(--text-dim)">Shared by Flight Software Team · Includes 3 Skills, 2 Plugins</text>
+
+            <!-- 核心 CTA 按钮 -->
+            <rect x="110" y="115" width="200" height="42" rx="8" fill="var(--accent)"/>
+            <text x="150" y="141" font-family="var(--font-body)" font-size="14" font-weight="bold" fill="#FFFFFF">Add to Grok Bot</text>
+          </svg>
+        </div>
+        <figcaption class="ui-figure-caption">
+          <strong>在模板展示页点击 Add to Grok Bot</strong> —— 接收者从公开或团队页面进入，点击主按钮唤醒 Grok Bot 客户端或 Web 界面进行集成审计。
+        </figcaption>
+      </figure>
+    </div>
+
+    <!-- 第二步 -->
+    <div class="step-card" id="step-rec-2">
+      <div class="step-header">
+        <div class="step-badge">2</div>
+        <h3 class="step-title">第二步：点击 Add to Grok Bot，查看将要加入的内容</h3>
+      </div>
+      <div class="step-grid">
+        <div class="step-item">
+          <div class="step-item-title action">动作 (Action)</div>
+          <div class="step-item-body">点击 <code>Add to Grok Bot</code>，在 Grok Bot 打开的审核界面中查看模板。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title see">会看到什么 (What you see)</div>
+          <div class="step-item-body">界面会展示模板包含的 context 与 integrations。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title check">继续前检查 (Check before proceeding)</div>
+          <div class="step-item-body">像检查 skill 或软件一样，确认这些上下文和集成正是你预期安装的内容。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第三步 -->
+    <div class="step-card" id="step-rec-3">
+      <div class="step-header">
+        <div class="step-badge">3</div>
+        <h3 class="step-title">第三步：确认后点击 Add Bot</h3>
+      </div>
+      <div class="step-grid">
+        <div class="step-item">
+          <div class="step-item-title action">动作 (Action)</div>
+          <div class="step-item-body">确认 context 与 integrations 后，点击 <code>Add Bot</code>。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title see">会看到什么 (What you see)</div>
+          <div class="step-item-body">Grok Bot 会创建一个 distinct new copy，也就是基于同一“食谱”生成的另一个版本。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title check">继续前检查 (Check before proceeding)</div>
+          <div class="step-item-body">确认新副本已经创建。官方指南没有进一步定义它的运行空间或记忆隔离机制，因此不要从“distinct new copy”推导出页面没有承诺的技术保证。</div>
+        </div>
+      </div>
+
+      <!-- 图 8：点击 Add Bot -->
+      <figure class="ui-figure" style="margin-top:20px; margin-bottom:0">
+        <div class="ui-figure-header">
+          <span class="ui-figure-tag">界面图示 · 接收端步骤 3 最终确认</span>
+          <span>Review Dialog &gt; Add Bot</span>
+        </div>
+        <div class="ui-figure-body">
+          <svg viewBox="0 0 760 230" width="760" height="230" xmlns="http://www.w3.org/2000/svg">
+            <rect x="60" y="20" width="640" height="190" rx="10" fill="var(--bg-elev)" stroke="var(--border)" stroke-width="1.5"/>
+            <text x="90" y="52" font-family="var(--font-head)" font-size="15" font-weight="bold" fill="var(--text)">Review Template Context &amp; Integrations</text>
+            <text x="90" y="72" font-family="var(--font-body)" font-size="12" fill="var(--text-faint)">Verify access scope and permissions before creating a distinct local copy</text>
+
+            <rect x="90" y="90" width="400" height="70" rx="6" fill="var(--bg-sunk)" stroke="var(--border)"/>
+            <text x="105" y="112" font-family="var(--font-body)" font-size="12" fill="var(--text)">• <strong>Instructions</strong>: Automated Release Engineer role</text>
+            <text x="105" y="130" font-family="var(--font-body)" font-size="12" fill="var(--text)">• <strong>Integrations</strong>: GitHub, WebSearch, pstack</text>
+            <text x="105" y="148" font-family="var(--font-body)" font-size="11.5" fill="var(--amber)">⚠ Note: Custom MCP servers &amp; API keys are not bundled</text>
+
+            <!-- Add Bot 确认按钮 -->
+            <rect x="520" y="105" width="150" height="42" rx="8" fill="var(--emerald)"/>
+            <text x="565" y="131" font-family="var(--font-body)" font-size="14" font-weight="bold" fill="#FFFFFF">Add Bot</text>
+          </svg>
+        </div>
+        <figcaption class="ui-figure-caption">
+          <strong>查看 context 与 integrations 后点击 Add Bot 完成添加</strong> —— 明确审视将要载入的上下文及关联工具，确认无恶意注入后点击确认创建独立实例。
+        </figcaption>
+      </figure>
+    </div>
+
+    <!-- 第四步 -->
+    <div class="step-card" id="step-rec-4">
+      <div class="step-header">
+        <div class="step-badge">4</div>
+        <h3 class="step-title">第四步：按安装说明补齐模板没有带来的依赖</h3>
+      </div>
+      <div class="step-grid">
+        <div class="step-item">
+          <div class="step-item-title action">动作 (Action)</div>
+          <div class="step-item-body">对照发布者提供的 setup instructions，逐项准备工作流所需的外部依赖。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title see">会看到什么 (What you see)</div>
+          <div class="step-item-body">新 Bot 已经创建，但插件可能仍需重新安装；自定义 MCP、脚本或代码不会随模板出现。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title check">继续前检查 (Check before proceeding)</div>
+          <div class="step-item-body">对照下述四项关键缺失，逐一排查补齐，杜绝留空直接投入生产使用。</div>
+        </div>
+      </div>
+
+      <!-- 四项必须补齐的依赖清单 -->
+      <div style="margin-top:20px; display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:14px">
+        <div class="step-item">
+          <div class="step-item-title" style="color:var(--accent)">1. 重新安装插件 (Reinstall Plugins)</div>
+          <div class="step-item-body">第一方插件和技能会随模板提供，但官方提醒新 Bot 仍可能需要重新安装插件。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title" style="color:var(--rose)">2. 迁移代码与脚本 (Custom Scripts)</div>
+          <div class="step-item-body">自定义代码与脚本不会随模板带来，需要按作者说明另行取得和部署。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title" style="color:var(--cyan)">3. 准备自定义 MCP (Custom MCP)</div>
+          <div class="step-item-body">非标准插件与自定义 MCP 服务器不包含在模板内，需要按作者说明自行准备。</div>
+        </div>
+        <div class="step-item">
+          <div class="step-item-title" style="color:var(--amber)">4. 准备 API Key (API Credentials)</div>
+          <div class="step-item-body">如果流程依赖 API Key，使用者需要拥有自己的可用凭证；官方页面没有说明具体凭证输入界面。</div>
+        </div>
+      </div>
+
+      <!-- 官方案例深度剖析 -->
+      <div class="callout-box info" style="margin-top:24px; margin-bottom:0">
+        <div class="callout-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          官方案例拆解：SpaceX 软件开发 loops Bot
+        </div>
+        <div class="callout-body">
+          官方公开展示的例子是用于 SpaceX 软件开发的 <a href="https://x.ai/bot/Ub3T7usX-c6yRQibQq83P" target="_blank" rel="noopener noreferrer">loops Bot</a>。页面展示了 pstack 与 GitHub，并说明这个 Bot 与 Cursor integration 紧密耦合。这个例子提醒接收者：<strong>看到 integrations 不等于所有相关环境已经迁移完成</strong>，仍要按模板作者的说明核对缺失依赖。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 章节 6: 用前验收 -->
+  <section id="sec-verification">
+    <h2>用前验收：用最小代表任务验证副本可用性</h2>
+    <p>
+      完成安装与依赖配置后，可以先用一个代表性的最小任务检查新副本。<strong>这是本文根据官方边界整理的使用建议；官方页面没有描述平台内置的自动测试功能</strong>：
+    </p>
+    <ul>
+      <li><strong>发起基准测试任务</strong>：向新 Bot 发送一条能够触发核心插件或外部集成的代表性指令（例如要求其调用 GitHub 插件检索仓库，或执行一次标准化分析任务）。</li>
+      <li><strong>验证插件调用</strong>：观察 Bot 是否能调用预期插件；如果提示插件缺失或需要重新安装，先补齐再继续。</li>
+      <li><strong>验证外部连接</strong>：如果工作流涉及 MCP、脚本或第三方 API，检查代表性任务能否拿到预期输入并返回结果；失败时回到依赖说明逐项排查。</li>
+      <li><strong>核对 Routines</strong>：如果工作流依赖 Routines，确认新副本中的触发方式与预期一致。由于官方页面没有解释其迁移细节，不要只看到模板安装成功就认定 Routine 已可运行。</li>
+    </ul>
+  </section>
+
+  <!-- 交互沙盘 3: 副本可用性验收沙盘 -->
+  <section class="sandbox-card" id="sec-sandbox-verify">
+    <div class="sbx-head">
+      <div class="sbx-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        交互沙盘 · 新安装副本端到端冒烟验收模拟器
+      </div>
+      <span class="sbx-sub">模拟接收端最小任务验收流程，检验副本能否真正进入生产执行</span>
+    </div>
+    <div class="sbx-body">
+      <div class="chk-group">
+        <label class="chk-item" id="item-ver-1">
+          <input type="checkbox" id="chk-ver-1">
+          <span><strong>1. 发送标准代表性 Prompt</strong><br><small style="color:var(--text-dim)">触发典型业务场景，验证 Bot 核心角色指令理解是否符合预期</small></span>
+        </label>
+        <label class="chk-item" id="item-ver-2">
+          <input type="checkbox" id="chk-ver-2">
+          <span><strong>2. 观察插件/技能实际唤醒</strong><br><small style="color:var(--text-dim)">检查 GitHub、WebSearch 等第一方插件是否已挂载并可成功执行</small></span>
+        </label>
+        <label class="chk-item" id="item-ver-3">
+          <input type="checkbox" id="chk-ver-3">
+          <span><strong>3. 外部 MCP / API 连通性测试</strong><br><small style="color:var(--text-dim)">确认本地脚本执行权限、自定义 MCP 端点通信与鉴权 Token 有效性</small></span>
+        </label>
+        <label class="chk-item" id="item-ver-4">
+          <input type="checkbox" id="chk-ver-4">
+          <span><strong>4. 例行触发器 (Routines) 状态核对</strong><br><small style="color:var(--text-dim)">核验定时/周期性自动化规则是否已被激活，避免沉默漏跑</small></span>
+        </label>
+      </div>
+
+      <div class="sbx-bar-wrap">
+        <div class="sbx-bar-fill" id="out-ver-fill"></div>
+      </div>
+
+      <div class="sbx-stat-row">
+        <span>验收项：<strong id="out-ver-done" style="color:var(--accent)">0 / 4</strong></span>
+        <span>副本可用性评估：<strong id="out-ver-pct" style="color:var(--accent)">0%</strong></span>
+      </div>
+
+      <div class="sbx-verdict" id="out-ver-verdict">
+        <b>副本尚未验收。</b>请勿将未经最小基准任务验证的副本直接投入团队生产关键路径。
+      </div>
+    </div>
+  </section>
+
+  <!-- 章节 7: 机制边界 -->
+  <section id="sec-boundaries">
+    <h2>必须厘清的三个机制边界</h2>
+    <p>使用 Grok Bot 模板时，至少要分清三个边界：</p>
+
+    <div class="callout-box warning">
+      <div class="callout-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        边界 1：“一键添加”不等于“零配置开箱即用”
+      </div>
+      <div class="callout-body">
+        点击 <code>Add Bot</code> 只完成蓝图副本的创建。插件仍可能需要重新安装；自定义 MCP、脚本和代码不会随模板提供。如果流程依赖 API Key，也需要接收者自己准备。
+      </div>
+    </div>
+
+    <div class="callout-box danger">
+      <div class="callout-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        边界 2：“默认排除个人记忆”不等于“公布了脱敏算法”
+      </div>
+      <div class="callout-body">
+        这篇官方指南只说明系统默认排除个人与内部记忆，没有解释具体如何筛选。发布者仍应查看 <code>View Details</code> 中的 context、memories 与 integrations，确认要分享的内容符合预期。
+      </div>
+    </div>
+
+    <div class="callout-box info">
+      <div class="callout-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        边界 3：官方材料未说明凭据存储与权限审计机制
+      </div>
+      <div class="callout-body">
+        页面提醒复杂模板可能需要 API Key 或自定义 MCP，却没有解释凭证保存、权限审计或沙盒机制。遇到这类外部依赖，仍要按组织现有的软件与权限审查方式处理，不能从模板指南推导出额外安全保证。
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---- DOM 选择器辅助函数 (规避 LaTeX $ 误报) ---- */
+  function byId(id){
+    return document.getElementById(id);
+  }
+
+  /* ============ 主题切换 ============ */
+  (function(){
+    var btn = byId("theme-toggle");
+    if (!btn) { return; }
+    function getTheme(){
+      var stored = "";
+      try { stored = window.localStorage ? window.localStorage.getItem("aike-theme") : ""; } catch(e){}
+      if (stored === "dark" || stored === "light") { return stored; }
+      return document.documentElement.getAttribute("data-theme") || "dark";
+    }
+    function setTheme(t){
+      document.documentElement.setAttribute("data-theme", t);
+      try { if (window.localStorage) { window.localStorage.setItem("aike-theme", t); } } catch(e){}
+      btn.textContent = (t === "dark") ? "🌓 浅色" : "🌙 深色";
+    }
+    setTheme(getTheme());
+    btn.addEventListener("click", function(){
+      var curr = document.documentElement.getAttribute("data-theme") || "dark";
+      setTheme(curr === "dark" ? "light" : "dark");
+    });
+  })();
+
+  /* ============ 阅读进度条 ============ */
+  (function(){
+    var bar = byId("progress-bar");
+    if (!bar) { return; }
+    function onScroll(){
+      var h = document.documentElement;
+      var st = h.scrollTop || (document.body ? document.body.scrollTop : 0);
+      var sh = h.scrollHeight - h.clientHeight;
+      var p = (sh > 0) ? (st / sh * 100) : 0;
+      bar.style.width = Math.min(100, Math.max(0, p)) + "%";
+    }
+    window.addEventListener("scroll", onScroll);
+    onScroll();
+  })();
+
+  /* ============ 移动端目录折叠 ============ */
+  (function(){
+    var toggle = byId("toc-toggle");
+    var sb = byId("sidebar");
+    if (!toggle || !sb) { return; }
+    toggle.addEventListener("click", function(){
+      sb.classList.toggle("open");
+    });
+    document.addEventListener("click", function(e){
+      if (!sb.contains(e.target) && e.target !== toggle && sb.classList.contains("open")){
+        sb.classList.remove("open");
+      }
+    });
+  })();
+
+  /* ============ 交互沙盘 1: 资产传递矩阵筛选 ============ */
+  (function(){
+    var ASSETS = [
+      {
+        id: "m-inst",
+        name: "Bot 系统指令 (Instructions)",
+        cat: "inc",
+        catName: "打包包含",
+        desc: "复制原 Bot 的系统提示词与角色设定，作为新副本的工作基础。",
+        action: "直接复用",
+        risk: "需防范 Prompt 内硬编码密钥"
+      },
+      {
+        id: "m-mem",
+        name: "相关记忆与技能 (Memories & Skills)",
+        cat: "inc",
+        catName: "打包包含",
+        desc: "系统将提取与当前工作流强相关的上下文记忆与挂载的第一方技能。",
+        action: "自动载入",
+        risk: "需审计是否包含敏感业务数据"
+      },
+      {
+        id: "m-plug",
+        name: "特定插件 (Specific Plugins)",
+        cat: "inc",
+        catName: "打包包含",
+        desc: "官方第一方插件配置与挂载声明会进入模板蓝图。",
+        action: "可能需重新授权",
+        risk: "依赖接收者个人账号绑定的权限"
+      },
+      {
+        id: "m-rout",
+        name: "例行自动化触发器 (Routines)",
+        cat: "read",
+        catName: "读取但未透传",
+        desc: "系统生成模板时会读取 Routines，但未承诺如何恢复其在副本中的调度。",
+        action: "需手动核验触发状态",
+        risk: "极易在副本中处于休眠静默状态"
+      },
+      {
+        id: "m-pmem",
+        name: "个人与内部记忆 (Personal Memories)",
+        cat: "exc",
+        catName: "明确排除",
+        desc: "创建者的个人偏好、内部聊天记录及私有上下文默认被系统严格过滤。",
+        action: "不可迁移",
+        risk: "依赖接收者独立积累工作流偏好"
+      },
+      {
+        id: "m-code",
+        name: "自定义代码与本地脚本 (Custom Code)",
+        cat: "exc",
+        catName: "明确排除",
+        desc: "敏感的本地 Python/Shell 脚本或自定义执行代码绝对不打包进模板。",
+        action: "按说明手动部署",
+        risk: "需由作者提供外部仓库或安全分发"
+      },
+      {
+        id: "m-mcp",
+        name: "非标插件与自定义 MCP (Custom MCP/Keys)",
+        cat: "exc",
+        catName: "明确排除",
+        desc: "外部 Model Context Protocol 服务器、私有端点及 API 密钥无法直接传输。",
+        action: "自备服务与密钥",
+        risk: "需按现有软件安全审查流程部署"
+      }
+    ];
+
+    var container = byId("box-matrix-cards");
+    var statCount = byId("out-mat-count");
+    var filterBtns = document.querySelectorAll(".filter-btn");
+
+    function renderMatrix(filter){
+      if (!container) { return; }
+      var filtered = [];
+      for (var i = 0; i < ASSETS.length; i++){
+        if (filter === "all" || ASSETS[i].cat === filter){
+          filtered.push(ASSETS[i]);
+        }
+      }
+
+      if (statCount){
+        statCount.textContent = filtered.length + " / " + ASSETS.length;
+      }
+
+      var html = "";
+      for (var j = 0; j < filtered.length; j++){
+        var item = filtered[j];
+        var pillCls = (item.cat === "inc") ? "pill-inc" : ((item.cat === "read") ? "pill-read" : "pill-exc");
+        html += '<div class="matrix-item">' +
+                  '<div class="matrix-top">' +
+                    '<span class="matrix-name">' + item.name + '</span>' +
+                    '<span class="matrix-pill ' + pillCls + '">' + item.catName + '</span>' +
+                  '</div>' +
+                  '<div class="matrix-desc">' + item.desc + '</div>' +
+                  '<div class="matrix-footer">' +
+                    '<span><strong>接收端操作：</strong>' + item.action + '</span>' +
+                    '<span><strong>安全防线：</strong>' + item.risk + '</span>' +
+                  '</div>' +
+                '</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    for (var k = 0; k < filterBtns.length; k++){
+      filterBtns[k].addEventListener("click", function(){
+        for (var m = 0; m < filterBtns.length; m++){
+          filterBtns[m].classList.remove("active");
+        }
+        this.classList.add("active");
+        renderMatrix(this.getAttribute("data-filter"));
+      });
+    }
+
+    renderMatrix("all");
+  })();
+
+  /* ============ 交互沙盘 2: 发布前六项依赖核验 ============ */
+  (function(){
+    var DEPS = ["chk-dep-1", "chk-dep-2", "chk-dep-3", "chk-dep-4", "chk-dep-5", "chk-dep-6"];
+    var outDone = byId("out-dep-done");
+    var outPct = byId("out-dep-pct");
+    var outFill = byId("out-dep-fill");
+    var outVerdict = byId("out-dep-verdict");
+    var outSkeleton = byId("out-dep-skeleton");
+    var btnCopy = byId("btn-copy-skeleton");
+
+    function getVerdict(doneCount){
+      if (doneCount === 0){
+        return "<b>尚未开始核对。</b>请逐项检查上述六项关键依赖，杜绝在缺少外部依赖说明的情况下盲目发布模板。";
+      } else if (doneCount <= 2){
+        return "<b>依赖严重缺失 (风险极高)。</b>当前只核实了部分基本项，自定义代码、MCP 与 API Key 依赖未明确，接收者安装后必定遭遇功能断裂。";
+      } else if (doneCount <= 5){
+        return "<b>已初具雏形 (基本就绪)。</b>核心依赖已理清，请确保未随模板打包的外部脚本与 API 密钥申请指引已完全写入安装附言。";
+      } else {
+        return "<b>六项依赖全部闭环 (合规就绪)。</b>已系统化完成指令脱敏、插件盘点、Routines 备忘、代码与 MCP 说明整理，可以安全发布！";
+      }
+    }
+
+    function buildSkeletonText(){
+      var c1 = byId("chk-dep-1") && byId("chk-dep-1").checked;
+      var c2 = byId("chk-dep-2") && byId("chk-dep-2").checked;
+      var c3 = byId("chk-dep-3") && byId("chk-dep-3").checked;
+      var c4 = byId("chk-dep-4") && byId("chk-dep-4").checked;
+      var c5 = byId("chk-dep-5") && byId("chk-dep-5").checked;
+      var c6 = byId("chk-dep-6") && byId("chk-dep-6").checked;
+
+      var lines = [
+        "# Grok Bot 模板依赖安装说明 (Setup Instructions)",
+        "- 工作流用途：[核心业务自动化流水线 / 研发发布协同助手]",
+        "- 随模板提供的插件与技能：" + (c2 ? "GitHub 插件、WebSearch 技能已包含" : "[待确认插件清单]"),
+        "- 接收者需重新安装的插件：" + (c2 ? "需在安装后检查第一方插件授权状态并重新点亮" : "[需自检插件重新挂载状态]"),
+        "- 未随模板打包的外部依赖：" + (c4 ? "自定义构建脚本见团队内部 Git 仓库 /tools/ci-runner.sh" : "[需提供自定义脚本获取路径]") +
+                                      (c6 ? "；自定义 MCP 需在本地运行 docker-compose up mcp-server" : "；[需说明 MCP 配置]"),
+        "- 需使用者自备的凭证：" + (c5 ? "需具备个人 GitHub Token 与私有第三方 API Key" : "[需准备独立鉴权凭据]"),
+        "- 例行触发器配置：" + (c3 ? "原 Bot 设定为工作日 09:00 自动执行，新副本请核对定时规则" : "[需手工核实 Routine 状态]"),
+        "- 安装后首个验证任务：向 Bot 发送「@bot 运行当前仓库 release 冒烟检查」验证端到端链路"
+      ];
+      return lines.join("\n");
+    }
+
+    function updateDeps(){
+      var n = 0;
+      for (var i = 0; i < DEPS.length; i++){
+        var chk = byId(DEPS[i]);
+        var checked = !!(chk && chk.checked);
+        if (checked) { n++; }
+        var pItem = byId("item-dep-" + (i + 1));
+        if (pItem && pItem.classList){
+          pItem.classList.toggle("done", checked);
+        }
+      }
+
+      var pct = Math.round((n / DEPS.length) * 100);
+      if (outDone) { outDone.textContent = n + " / " + DEPS.length; }
+      if (outPct) { outPct.textContent = pct + "%"; }
+      if (outFill) { outFill.style.width = pct + "%"; }
+      if (outVerdict) { outVerdict.innerHTML = getVerdict(n); }
+      if (outSkeleton) { outSkeleton.textContent = buildSkeletonText(); }
+    }
+
+    for (var j = 0; j < DEPS.length; j++){
+      var item = byId(DEPS[j]);
+      if (item) { item.addEventListener("change", updateDeps); }
+    }
+
+    if (btnCopy){
+      btnCopy.addEventListener("click", function(){
+        var text = outSkeleton ? outSkeleton.textContent : "";
+        if (navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(text).then(function(){
+            btnCopy.textContent = "已复制 ✓";
+            setTimeout(function(){ btnCopy.textContent = "复制骨架文本"; }, 1500);
+          }).catch(function(){
+            fallbackCopy(text);
+          });
+        } else {
+          fallbackCopy(text);
+        }
+      });
+    }
+
+    function fallbackCopy(text){
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        btnCopy.textContent = "已复制 ✓";
+        setTimeout(function(){ btnCopy.textContent = "复制骨架文本"; }, 1500);
+      } catch(e){}
+      document.body.removeChild(ta);
+    }
+
+    updateDeps();
+  })();
+
+  /* ============ 交互沙盘 3: 接收端验收模拟器 ============ */
+  (function(){
+    var VER_ITEMS = ["chk-ver-1", "chk-ver-2", "chk-ver-3", "chk-ver-4"];
+    var outDone = byId("out-ver-done");
+    var outPct = byId("out-ver-pct");
+    var outFill = byId("out-ver-fill");
+    var outVerdict = byId("out-ver-verdict");
+
+    function getVerVerdict(n){
+      if (n === 0){
+        return "<b>副本尚未验收。</b>请勿将未经最小基准任务验证的副本直接投入团队生产关键路径。";
+      } else if (n <= 2){
+        return "<b>仅完成初步响应测试。</b>提示词已调通，但核心插件或外部 MCP 链路尚未验证，仍存在暗坑。";
+      } else if (n === 3){
+        return "<b>基本可用。</b>核心链路与外部插件调用正常，请确认定时例行触发器是否如期运转。";
+      } else {
+        return "<b>全面验收通过 (生产就绪)。</b>指令、插件、外部 MCP 连通性与 Routines 全部验证成功，副本完全可用！";
+      }
+    }
+
+    function updateVer(){
+      var n = 0;
+      for (var i = 0; i < VER_ITEMS.length; i++){
+        var chk = byId(VER_ITEMS[i]);
+        var checked = !!(chk && chk.checked);
+        if (checked) { n++; }
+        var pItem = byId("item-ver-" + (i + 1));
+        if (pItem && pItem.classList){
+          pItem.classList.toggle("done", checked);
+        }
+      }
+      var pct = Math.round((n / VER_ITEMS.length) * 100);
+      if (outDone) { outDone.textContent = n + " / " + VER_ITEMS.length; }
+      if (outPct) { outPct.textContent = pct + "%"; }
+      if (outFill) { outFill.style.width = pct + "%"; }
+      if (outVerdict) { outVerdict.innerHTML = getVerVerdict(n); }
+    }
+
+    for (var j = 0; j < VER_ITEMS.length; j++){
+      var item = byId(VER_ITEMS[j]);
+      if (item) { item.addEventListener("change", updateVer); }
+    }
+
+    updateVer();
+  })();
+
+  /* ============ 侧栏当前章节高亮 ============ */
+  (function(){
+    var links = document.querySelectorAll("#sb-nav .sb-link");
+    if (!links || !links.length) { return; }
+    var items = [];
+    for (var i = 0; i < links.length; i++){
+      var href = links[i].getAttribute("href") || "";
+      if (href.charAt(0) === "#") {
+        items.push({ link: links[i], id: href.substring(1) });
+      }
+    }
+
+    function highlight(){
+      var best = null;
+      var bestTop = -Infinity;
+      for (var t = 0; t < items.length; t++){
+        var el = byId(items[t].id);
+        if (!el || !el.getBoundingClientRect) { continue; }
+        var box = el.getBoundingClientRect();
+        var top = box.top;
+        if (typeof top !== "number") { continue; }
+        if (top <= 140 && top > bestTop) {
+          bestTop = top;
+          best = items[t];
+        }
+      }
+      for (var u = 0; u < items.length; u++){
+        if (items[u].link && items[u].link.classList){
+          items[u].link.classList.toggle("active", items[u] === best);
+        }
+      }
+    }
+
+    window.addEventListener("scroll", highlight);
+    highlight();
+  })();
+
+})();
+</script>
+</body>
+</html>

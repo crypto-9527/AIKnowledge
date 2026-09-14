@@ -245,6 +245,28 @@ PY
 - 反复渲染失败会留下大量 Chrome 进程与 profile 目录，进一步拖垮后续尝试。每轮失败后 `pkill -f "Chrome.*headless"` 再重试；**注意用户自己开着的 Chrome 进程不含 `headless` 字样，绝不能被误杀**，pattern 必须带 `headless`。
 - 渲染核验**结束后必须删除临时目录**（含 offset/tail 副本、切片图、Chrome profile），只保留唯一交付物。
 
+**⑥-补3 · 沙箱内 Chrome 不退出 + 内容底边误判（2026-09-14 实证）**
+- **现象**：直接按 §Stage 5.5 ⑥ 的命令调用 Chrome 时，**截图文件其实已经正确产出，但进程永不退出**；前台运行会被工具超时强杀，看起来像“渲染失败”。偶发 `crashpad ... value -97304226 out of range` 后 exit 1 且无产物。
+- **正确姿势：后台启动 + 轮询产物 + 定点回收**，绝不要在命令里等 Chrome 自己返回：
+  ```bash
+  ( "$CHROME" --headless=new --disable-gpu --hide-scrollbars --no-sandbox --no-first-run \
+      --disable-extensions --user-data-dir=/tmp/pf --virtual-time-budget=5000 \
+      --window-size=1500,12000 --screenshot=/tmp/shot.png 目标.html >/tmp/log.txt 2>&1 ) &
+  CPID=$!
+  for i in $(seq 1 30); do sleep 1; [ -s /tmp/shot.png ] && break; done
+  sleep 3; kill -9 $CPID 2>/dev/null; pkill -9 -f "Chrome.*headless" 2>/dev/null
+  ```
+  判定成功**只看 PNG 是否存在且非空，不看退出码**。
+- **视口高度上限**：`--window-size` 高度 12000 可稳定产出，1500×14500 实测亦可；再高会遇到 §⑥-补 记录的内存墙，改用尾段切片渲染。
+- **内容底边检测的假阳性（务必避免）**：严禁用「逐行 `std(row) > 1.0`」判空白行。深色背景 `#181715` = RGB(24,23,21) **三通道本就不等**，逐行 std ≈ 1.25 **恒大于 1.0**，会把整页每一行都判成“有内容”，于是“内容底边 = 图像高度”。正确做法是**与背景色精确比对**：
+  ```python
+  BG = np.array([24,23,21], dtype=np.int16)                              # 深色底；浅色底改 (250,247,242)
+  a = np.asarray(im.convert('RGB'))[:, 420:1390, :].astype(np.int16)     # 列裁剪同时排除 fixed 侧栏与 fixed 回到顶部按钮
+  content = (np.abs(a - BG).sum(axis=2) > 12).sum(axis=1) > 0
+  bottom  = int(np.where(content)[0].max())
+  ```
+  两处排除缺一不可：`position: fixed` 的侧栏会铺满整张长图高度，`#toTopBtn` 会把内容底边钉到图像最底部，二者都会让底边判定彻底失效。
+
 **⑦ 一次性任务的收尾**：`/tmp` 下的垫片、抽取脚本、切片图与临时 HTML 副本必须在交付前全部删除，保持交付物唯一（§2.4）。
 
 ---
@@ -267,6 +289,8 @@ PY
 | **12** | **静态自检的虚假安全感（补注）** | 8 项自检全绿就宣告完成，但 `node --check` 只校验 AST 不执行代码，运行期空引用与 NaN 回显照样漏网 | 补 Stage 5.5 的最小 DOM 垫片运行时冒烟测试，逐槽位断言回显值；数值模型做 Python / JS 双路交叉校验到 4 位小数。 |
 | **13** | **结论先于稳健性检验（补注）** | 凭直觉写下「A 导致 B」并美化措辞，从未跑分组或阈值敏感性检验 | 定稿前必须跑一次敏感性检验。若假设被数据推翻，把被推翻的假设与实测数字一并写进正文（如「该检验推翻了……的直觉假设」），而不是悄悄删掉结论。 |
 | **14** | **只看代码不看画面** | 静态自检 + 冒烟全绿即交付，SVG 走线重叠、徽章压线、整段文本被染成强调色等纯视觉缺陷漏网 | 补 Stage 5.5 第 ⑥ 步：headless Chrome 整页长截图 + PIL 切片裁读，深/浅双主题各渲一次。 |
+| **15** | **把「Chrome 不退出」误判成渲染失败** | 前台直调 Chrome，截图已写出但进程挂住，被超时强杀后宣布“沙箱不支持渲染”而跳过目视核验 | 改为后台启动 + 轮询 PNG 产物 + `kill -9` 回收（§Stage 5.5 ⑥-补3）；成功判据是**产物文件非空**，不是退出码。 |
+| **16** | **空白行判定用逐行 std** | 深色底 RGB 三通道不等（(24,23,21) → 行 std≈1.25 恒 >1.0），整页被误判为“满页有内容”，内容底边永远等于图像高度 | 与背景色做精确比对（§Stage 5.5 ⑥-补3），且必须列裁剪排除 `fixed` 侧栏与 `#toTopBtn`。 |
 
 ---
 
