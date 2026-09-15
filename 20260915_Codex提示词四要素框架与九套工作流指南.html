@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex 提示词四要素框架与九套工作流指南</title>
+<meta name="description" content="OpenAI 官方 ChatGPT Learn《Prompting》指南完整消化：目标 / 背景 / 输出 / 边界四要素框架，加上 Codex 九套可复制工作流（读代码库、修 bug、写测试、截图变原型、UI 迭代、委托云端重构、两条代码 review 路径、更新文档），含中英双语 prompt 原文与交互式装配沙盘。">
+<style>
+:root{
+  --bg:#FAF7F2; --bg-card:#FFFDF9; --bg-soft:#F2EDE4; --bg-code:#F4EFE6;
+  --tx:#241F1A; --tx-soft:#5B534A; --tx-dim:#7C7268; --bd:#E2D9CB; --bd-soft:#EDE6DA;
+  --accent:#D97757; --emerald:#2F7A5A; --rose:#B4443A; --amber:#B07B18; --cyan:#2C6E86;
+  --sidebar-w:280px; --content-max:1180px;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+  --serif:"Songti SC","SimSun",Newsreader,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+html[data-theme="dark"]{
+  --bg:#181715; --bg-card:#201E1B; --bg-soft:#262320; --bg-code:#141311;
+  --tx:#EDE7DE; --tx-soft:#BFB6AA; --tx-dim:#948B80; --bd:#38332E; --bd-soft:#2C2825;
+  --accent:#E2886A; --emerald:#6FC79B; --rose:#E2786E; --amber:#DFAE5B; --cyan:#79B6CE;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--bg); color:var(--tx);
+  font-family:var(--sans); font-size:16.5px; line-height:1.85;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:60;transition:width .1s linear;}
+.floating{position:fixed;right:22px;z-index:55;}
+#themeBtn{top:18px;}
+#toTopBtn{bottom:24px;display:none;}
+.floating button{
+  background:var(--bg-card); color:var(--tx); border:1px solid var(--bd);
+  border-radius:10px; padding:8px 13px; font-size:13px; font-family:var(--sans);
+  cursor:pointer; box-shadow:0 3px 12px rgba(0,0,0,.18);
+}
+.floating button:hover{border-color:var(--accent); color:var(--accent);}
+
+/* ---------- 侧栏 ---------- */
+#sidebar{
+  position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh; overflow-y:auto;
+  background:var(--bg-soft); border-right:1px solid var(--bd); padding:26px 16px 60px; z-index:40;
+}
+#sidebar .sb-title{font-family:var(--serif); font-size:15px; font-weight:700; letter-spacing:.06em;
+  color:var(--tx); margin:0 0 4px 12px;}
+#sidebar .sb-sub{font-size:11.5px; color:var(--tx-dim); margin:0 0 16px 12px; font-family:var(--mono);}
+#sidebar a{
+  display:block; padding:6px 12px; margin:1px 0; color:var(--tx-soft); text-decoration:none;
+  font-size:13.2px; line-height:1.5; border-left:2px solid transparent; border-radius:0 6px 6px 0;
+}
+#sidebar a:hover{color:var(--accent); background:var(--bg-card);}
+#sidebar a.active{color:var(--accent); border-left-color:var(--accent); background:var(--bg-card); font-weight:600;}
+#sidebar a.lv2{padding-left:26px; font-size:12.4px; color:var(--tx-dim);}
+#tocToggle{display:none;}
+
+/* ---------- 正文 ---------- */
+main{
+  display:block; max-width:var(--content-max); width:auto; flex:none;
+  margin-left:calc(var(--sidebar-w) + max(0px,(100% - var(--sidebar-w) - var(--content-max))/2));
+  margin-right:max(0px,calc((100% - var(--sidebar-w) - var(--content-max))/2));
+  padding:56px 44px 120px;
+}
+header.doc-head{border-bottom:2px solid var(--bd); padding-bottom:26px; margin-bottom:38px;}
+.kicker{font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-bottom:12px;}
+h1{font-family:var(--serif); font-size:2.28rem; line-height:1.34; margin:0 0 16px; letter-spacing:-.01em;}
+.doc-meta{font-size:13.4px; color:var(--tx-dim); font-family:var(--mono); line-height:2;}
+.doc-meta a{color:var(--cyan); text-decoration:none; border-bottom:1px dotted var(--cyan);}
+.doc-meta a:hover{color:var(--accent); border-bottom-color:var(--accent);}
+
+h2{font-family:var(--serif); font-size:1.6rem; margin:64px 0 20px; padding:8px 0 8px 16px;
+  border-left:4px solid var(--accent); line-height:1.4; scroll-margin-top:24px;}
+h3{font-size:1.14rem; margin:38px 0 14px; color:var(--tx); font-weight:700; scroll-margin-top:24px;}
+h4{font-size:1.0rem; margin:26px 0 10px; color:var(--accent); font-weight:700;}
+p{margin:0 0 16px;}
+strong{color:var(--tx); font-weight:700;}
+em{color:var(--accent); font-style:normal; font-weight:600;}
+a{color:var(--cyan);}
+a:hover{color:var(--accent);}
+ul,ol{margin:0 0 18px; padding-left:24px;}
+li{margin:7px 0;}
+hr{border:0; border-top:1px solid var(--bd-soft); margin:44px 0;}
+
+.lead{font-size:1.06rem; color:var(--tx-soft); border-left:3px solid var(--bd); padding-left:18px; margin-bottom:26px;}
+
+.card{background:var(--bg-card); border:1px solid var(--bd); border-radius:12px; padding:22px 24px; margin:22px 0;}
+.card.hl{border-left:4px solid var(--accent);}
+.card.warn{border-left:4px solid var(--amber); background:var(--bg-soft);}
+.card.stop{border-left:4px solid var(--rose);}
+.card p:last-child{margin-bottom:0;}
+.card .ct{font-family:var(--mono); font-size:11.5px; letter-spacing:.1em; color:var(--tx-dim);
+  text-transform:uppercase; margin-bottom:10px;}
+
+/* 中文提示词块 */
+blockquote.zh{
+  margin:18px 0 10px; padding:14px 18px; background:var(--bg-soft);
+  border-left:3px solid var(--cyan); border-radius:0 8px 8px 0; color:var(--tx-soft); font-size:.98rem;
+}
+blockquote.zh p:last-child{margin-bottom:0;}
+blockquote.en{
+  margin:10px 0 22px; padding:12px 16px; background:transparent; border:1px dashed var(--bd);
+  border-left:3px solid var(--bd); border-radius:0 8px 8px 0; color:var(--tx-dim); font-size:.92rem;
+  font-family:var(--mono); line-height:1.7;
+}
+blockquote.en p:last-child{margin-bottom:0;}
+.prompt-tag{font-family:var(--mono); font-size:11.4px; letter-spacing:.08em; color:var(--tx-dim);
+  text-transform:uppercase; margin:20px 0 0;}
+
+table{width:100%; border-collapse:collapse; margin:22px 0; font-size:14.6px; background:var(--bg-card);}
+th,td{border:1px solid var(--bd); padding:10px 13px; text-align:left; vertical-align:top; line-height:1.7;}
+th{background:var(--bg-soft); font-weight:700; color:var(--tx); font-size:13.6px;}
+tbody tr:nth-child(even){background:var(--bg-soft);}
+td code,th code{font-size:13px;}
+
+code{font-family:var(--mono); font-size:.9em; background:var(--bg-code); padding:2px 6px;
+  border-radius:4px; border:1px solid var(--bd-soft); color:var(--accent);}
+pre{background:var(--bg-code); border:1px solid var(--bd); border-radius:10px; padding:18px 20px;
+  overflow-x:auto; margin:18px 0; position:relative;}
+pre code{background:none; border:none; padding:0; color:var(--tx); font-size:13.2px; line-height:1.75; white-space:pre;}
+.code-wrap{position:relative;}
+.copybtn{position:absolute; top:10px; right:10px; font-size:11.5px; font-family:var(--mono);
+  background:var(--bg-card); color:var(--tx-dim); border:1px solid var(--bd); border-radius:6px;
+  padding:4px 9px; cursor:pointer; z-index:2;}
+.copybtn:hover{color:var(--accent); border-color:var(--accent);}
+
+details{background:var(--bg-card); border:1px solid var(--bd); border-radius:10px; padding:14px 18px; margin:18px 0;}
+details summary{cursor:pointer; font-weight:700; color:var(--accent); font-size:14.6px; outline:none;}
+details[open] summary{margin-bottom:12px; border-bottom:1px dashed var(--bd); padding-bottom:8px;}
+
+figure{margin:26px 0;}
+figure svg{display:block; width:100%; height:auto; background:var(--bg-card);
+  border:1px solid var(--bd); border-radius:12px;}
+figcaption{font-size:12.8px; color:var(--tx-dim); margin-top:10px; line-height:1.7; text-align:center;}
+.sv-box{fill:var(--bg-soft); stroke:var(--bd); stroke-width:1;}
+.sv-key{fill:var(--bg-card); stroke:var(--accent); stroke-width:1.6;}
+.sv-t{fill:var(--tx); font-size:14px; font-weight:700; font-family:var(--sans);}
+.sv-s{fill:var(--tx-dim); font-size:11.4px; font-family:var(--sans);}
+.sv-m{fill:var(--tx-soft); font-size:12.2px; font-family:var(--sans);}
+.sv-a{stroke:var(--tx-dim); stroke-width:1.2; fill:none;}
+.sv-fa{fill:var(--tx-dim);}
+.sv-acc{fill:var(--accent); font-size:12.4px; font-weight:700; font-family:var(--sans);}
+.sv-w{fill:var(--tx); font-size:12.6px; font-family:var(--sans);}
+
+.statgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin:24px 0;}
+.stat{background:var(--bg-card); border:1px solid var(--bd); border-radius:12px; padding:18px; text-align:center;}
+.stat .n{font-family:var(--serif); font-size:2.0rem; font-weight:700; color:var(--accent); line-height:1.2;}
+.stat .u{font-size:12px; color:var(--tx-dim); font-family:var(--mono); display:block; margin-top:6px;}
+.stat .l{font-size:13px; color:var(--tx-soft); margin-top:8px; line-height:1.6;}
+
+.two{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:20px 0;}
+@media (max-width:860px){.two{grid-template-columns:1fr;}}
+
+/* 四色标注 */
+.mk{padding:1px 4px; border-radius:3px; font-weight:600;}
+.mk-goal{background:rgba(217,119,87,.14); border-bottom:2px solid var(--accent); color:var(--tx);}
+.mk-ctx{background:rgba(44,110,134,.14); border-bottom:2px solid var(--cyan); color:var(--tx);}
+.mk-out{background:rgba(47,122,90,.14); border-bottom:2px solid var(--emerald); color:var(--tx);}
+.mk-bd{background:rgba(180,68,58,.14); border-bottom:2px solid var(--rose); color:var(--tx);}
+.mk-lab{font-family:var(--mono); font-size:11.6px; color:var(--tx-dim); margin-right:2px;}
+
+/* 沙盘 */
+.sandbox{background:var(--bg-card); border:1px solid var(--bd); border-radius:14px; padding:24px; margin:26px 0;}
+.sandbox h4{margin-top:0; font-size:1.05rem;}
+.sb-note{font-size:12.6px; color:var(--tx-dim); line-height:1.7; margin-bottom:16px;
+  border-left:3px solid var(--bd); padding-left:12px;}
+.ctrl{display:grid; grid-template-columns:150px 1fr; gap:12px; align-items:start; margin:12px 0;}
+.ctrl label{font-size:13.4px; color:var(--tx-soft); line-height:1.9;}
+.ctrl textarea, .ctrl input[type=text]{
+  width:100%; background:var(--bg-soft); color:var(--tx); border:1px solid var(--bd);
+  border-radius:8px; padding:9px 12px; font-family:var(--sans); font-size:14px; line-height:1.7; resize:vertical;
+}
+.ctrl textarea:focus{outline:none; border-color:var(--accent);}
+.ctrl select{background:var(--bg-soft); color:var(--tx); border:1px solid var(--bd);
+  border-radius:6px; padding:7px 9px; font-size:13.2px; font-family:var(--sans); width:100%;}
+.readout{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-top:18px;
+  padding-top:18px; border-top:1px dashed var(--bd);}
+.ro{background:var(--bg-soft); border-radius:9px; padding:12px 14px;}
+.ro .k{font-size:11.6px; color:var(--tx-dim); font-family:var(--mono); letter-spacing:.04em;}
+.ro .v{font-family:var(--mono); font-size:1.18rem; color:var(--tx); margin-top:4px; font-weight:700;}
+.verdict{margin-top:16px; padding:14px 16px; border-radius:9px; font-size:14px; line-height:1.8;
+  background:var(--bg-soft); border-left:4px solid var(--accent);}
+.verdict.ok{border-left-color:var(--emerald);}
+.verdict.bad{border-left-color:var(--rose);}
+.wf-grid{display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 18px;}
+.wf-btn{background:var(--bg-soft); color:var(--tx-soft); border:1px solid var(--bd); border-radius:20px;
+  padding:6px 14px; font-size:13px; cursor:pointer; font-family:var(--sans);}
+.wf-btn:hover{border-color:var(--accent); color:var(--accent);}
+.wf-btn.on{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600;}
+.pillrow{margin:10px 0 4px;}
+.checklist{list-style:none; padding:0; margin:12px 0;}
+.checklist li{display:flex; gap:10px; align-items:flex-start; padding:8px 12px; border-radius:8px;
+  border:1px solid var(--bd-soft); margin:7px 0; font-size:14.2px; background:var(--bg-soft); line-height:1.7;}
+.checklist li.done{border-color:var(--emerald);}
+.checklist input{margin-top:6px; accent-color:var(--accent); flex:none;}
+.kv{display:grid; grid-template-columns:96px 1fr; gap:6px 14px; font-size:14.2px; margin:6px 0 14px;}
+.kv .kk{font-family:var(--mono); font-size:12.2px; color:var(--tx-dim); letter-spacing:.04em; line-height:1.9;}
+
+.pill{display:inline-block; font-family:var(--mono); font-size:11.5px; padding:2px 9px; border-radius:20px;
+  border:1px solid var(--bd); color:var(--tx-dim); margin-right:6px;}
+.pill.a{color:var(--accent); border-color:var(--accent);}
+.pill.e{color:var(--emerald); border-color:var(--emerald);}
+.pill.r{color:var(--rose); border-color:var(--rose);}
+.pill.c{color:var(--cyan); border-color:var(--cyan);}
+
+footer.doc-foot{margin-top:70px; padding-top:24px; border-top:2px solid var(--bd);
+  font-size:13px; color:var(--tx-dim); line-height:1.9;}
+footer.doc-foot a{color:var(--cyan);}
+
+@media (max-width:1080px){
+  #sidebar{transform:translateX(-100%); transition:transform .25s ease; box-shadow:0 0 30px rgba(0,0,0,.3);}
+  #sidebar.open{transform:translateX(0);}
+  main{margin-left:0 !important; margin-right:0 !important; max-width:100% !important;
+    width:100% !important; padding:56px 20px 100px;}
+  #tocToggle{display:block; position:fixed; left:14px; top:14px; z-index:58;}
+  h1{font-size:1.78rem;} h2{font-size:1.34rem;}
+  .ctrl{grid-template-columns:1fr; gap:4px;}
+  .kv{grid-template-columns:1fr; gap:0;}
+}
+@media print{
+  #sidebar,.floating,#progress{display:none !important;}
+  main{margin:0 !important; max-width:100% !important; padding:0;}
+  body{background:#fff; color:#000; font-size:11pt;}
+  .sandbox,.card,pre,table,figure svg,blockquote{break-inside:avoid;}
+  a{color:#000;}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<div class="floating" id="themeBtn"><button id="btnTheme">☾ 深色</button></div>
+<div class="floating" id="toTopBtn"><button id="btnTop">↑ 回顶</button></div>
+<button id="tocToggle" class="floating" style="left:14px;top:14px;">目录</button>
+
+<aside id="sidebar">
+  <p class="sb-title">Codex 提示词指南</p>
+  <p class="sb-sub">ChatGPT Learn · Prompting</p>
+  <nav id="toc">
+    <a href="#top">文档速览</a>
+    <a href="#s1">01 · 四要素框架</a>
+    <a href="#s1-1" class="lv2">目标：先说清结果</a>
+    <a href="#s1-2" class="lv2">输出：说清用途</a>
+    <a href="#s1-3" class="lv2">边界：最易漏的一项</a>
+    <a href="#s2">02 · 喂对背景</a>
+    <a href="#s3">03 · 跟进与 steer / queue</a>
+    <a href="#s4">04 · 完整例：四要素对号</a>
+    <a href="#s5">05 · Chat 与 Work 的分工</a>
+    <a href="#s5-1" class="lv2">Chat：日常四例</a>
+    <a href="#s5-2" class="lv2">Work：出成品三例</a>
+    <a href="#s6">06 · Codex 基本功三件套</a>
+    <a href="#s6-1" class="lv2">读懂代码库</a>
+    <a href="#s6-2" class="lv2">修 bug</a>
+    <a href="#s6-3" class="lv2">写单元测试</a>
+    <a href="#s7">07 · Codex 进阶三件套</a>
+    <a href="#s7-1" class="lv2">截图变原型</a>
+    <a href="#s7-2" class="lv2">边改边看的 UI 迭代</a>
+    <a href="#s7-3" class="lv2">把重构委托给云端</a>
+    <a href="#s8">08 · 审代码与更新文档</a>
+    <a href="#s9">09 · 沙盘：九套工作流速查</a>
+    <a href="#s10">10 · 沙盘：提交前要素自检</a>
+    <a href="#s11">11 · 边界与前提</a>
+  </nav>
+</aside>
+
+<main id="main">
+
+<header class="doc-head" id="top">
+  <div class="kicker">OpenAI Official Guide · ChatGPT Learn / Prompting</div>
+  <h1>Codex 提示词四要素框架与九套工作流指南</h1>
+  <p class="lead">官方把散落在各产品页的提示技巧收进一套框架：<strong>目标 / 背景 / 输出 / 边界</strong>，外加 Codex 专属的九套工作流范例。本文按原文结构完整呈现中英双语 prompt 原文，可直接抄改。</p>
+  <p class="doc-meta">
+    来源：ChatGPT Learn《Prompting》·
+    <a href="https://learn.chatgpt.com/docs/prompting" target="_blank" rel="noopener">learn.chatgpt.com/docs/prompting</a><br>
+    中文解读：<a href="https://best.xiaohu.ai/article/chatgpt-prompting-guide/" target="_blank" rel="noopener">best.xiaohu.ai · 小互解读</a><br>
+    分类：深度 · 原文日期：2026-07-11 · 语言：中文 · 收录：付费栏目
+  </p>
+</header>
+
+<div class="statgrid">
+  <div class="stat"><div class="n">4</div><span class="u">ELEMENTS</span><div class="l">框架的可选要素：目标 / 背景 / 输出 / 边界</div></div>
+  <div class="stat"><div class="n">3</div><span class="u">SURFACES</span><div class="l">覆盖的界面：Chat / Work / Codex</div></div>
+  <div class="stat"><div class="n">9</div><span class="u">WORKFLOWS</span><div class="l">Codex 给出的具体工作流范例数</div></div>
+  <div class="stat"><div class="n">2</div><span class="u">FOLLOW-UP</span><div class="l">运行中追加消息的通道：steer / queue</div></div>
+</div>
+
+<div class="card hl">
+  <div class="ct">速览</div>
+  <ul>
+    <li>ChatGPT 官方发布提示词指南，覆盖 <strong>Chat、Work、Codex</strong> 三个界面。</li>
+    <li>核心是一套四要素框架：目标、背景、输出、边界。按需选用，不必每项都填。</li>
+    <li>为 Codex 给出 9 套具体工作流：读代码库、修 bug、写测试、截图变原型、边改边看的 UI 迭代、委托云端重构、两条路径的代码 review、更新文档，每套都附可直接抄的提示词。</li>
+    <li>Codex 运行中支持追加消息：<strong>steer</strong> 当场改当前任务方向，<strong>queue</strong> 把话攒到下一轮再处理。</li>
+    <li>本地 IDE 里定好的重构计划，可以带着完整上下文直接迁到云端环境继续执行。</li>
+  </ul>
+</div>
+
+<!-- ============ 01 ============ -->
+<h2 id="s1">01 · 不用背模板：四个要素，该填的才填</h2>
+<p>OpenAI 团队在 learn.chatgpt.com 发布了一份官方提示词指南，讲清楚在 Chat、Work、Codex 三个界面里到底该怎么写提示词。</p>
+<p>它的核心是一套四要素框架：目标、背景、输出、边界。你不用背固定语法，也不用每项都填，只写那几个会影响结果的要素就行。</p>
+<p>一套原则统一了 <strong>Chat、Work、Codex 三个界面</strong>的写法，还给 Codex 配了 <strong>9 套拆到命令级别</strong>的可复制工作流。短任务一句话就够，大任务才补齐要素。</p>
+
+<figure>
+  <svg viewBox="0 0 680 300" role="img" aria-label="四要素框架：目标必给，背景输出边界按需补">
+    <rect class="sv-key" x="20" y="30" width="146" height="112" rx="10"></rect>
+    <text class="sv-t" x="93" y="58" text-anchor="middle">目标</text>
+    <text class="sv-acc" x="93" y="78" text-anchor="middle">Goal · 必给</text>
+    <text class="sv-s" x="93" y="102" text-anchor="middle">要什么结果、给谁看</text>
+    <text class="sv-s" x="93" y="120" text-anchor="middle">过程留给模型自己走</text>
+
+    <rect class="sv-box" x="182" y="30" width="146" height="112" rx="10"></rect>
+    <text class="sv-t" x="255" y="58" text-anchor="middle">背景</text>
+    <text class="sv-s" x="255" y="78" text-anchor="middle">Context · 选填</text>
+    <text class="sv-s" x="255" y="102" text-anchor="middle">文件 / 截图 / 联网</text>
+    <text class="sv-s" x="255" y="120" text-anchor="middle">连接的数据源</text>
+
+    <rect class="sv-box" x="344" y="30" width="146" height="112" rx="10"></rect>
+    <text class="sv-t" x="417" y="58" text-anchor="middle">输出</text>
+    <text class="sv-s" x="417" y="78" text-anchor="middle">Output · 选填</text>
+    <text class="sv-s" x="417" y="102" text-anchor="middle">结果拿来干嘛</text>
+    <text class="sv-s" x="417" y="120" text-anchor="middle">决定长度与详略</text>
+
+    <rect class="sv-box" x="506" y="30" width="146" height="112" rx="10"></rect>
+    <text class="sv-t" x="579" y="58" text-anchor="middle">边界</text>
+    <text class="sv-s" x="579" y="78" text-anchor="middle">Boundaries · 选填</text>
+    <text class="sv-s" x="579" y="102" text-anchor="middle">不能改 / 不能动</text>
+    <text class="sv-s" x="579" y="120" text-anchor="middle">不能猜 / 不能发</text>
+
+    <line class="sv-a" x1="93" y1="146" x2="93" y2="176"></line>
+    <polygon class="sv-fa" points="88,176 98,176 93,183"></polygon>
+    <line class="sv-a" x1="255" y1="146" x2="255" y2="176"></line>
+    <polygon class="sv-fa" points="250,176 260,176 255,183"></polygon>
+    <line class="sv-a" x1="417" y1="146" x2="417" y2="176"></line>
+    <polygon class="sv-fa" points="412,176 422,176 417,183"></polygon>
+    <line class="sv-a" x1="579" y1="146" x2="579" y2="176"></line>
+    <polygon class="sv-fa" points="574,176 584,176 579,183"></polygon>
+
+    <rect class="sv-box" x="20" y="190" width="632" height="76" rx="10"></rect>
+    <text class="sv-t" x="336" y="220" text-anchor="middle">按需拼装：哪个要素会影响结果，就补哪个</text>
+    <text class="sv-m" x="336" y="244" text-anchor="middle">不要求一次填全，也不把每一步写死 —— 流程本身重要时才描述流程</text>
+  </svg>
+  <figcaption>图 1 · 四要素积木：目标为必给项，背景 / 输出 / 边界按影响面按需补齐（依据官方框架绘制）</figcaption>
+</figure>
+
+<h3 id="s1-1">先说清「要什么结果」，别急着列步骤</h3>
+<p>从你想要的结果说起，把受众和格式一并交代，剩下怎么做的空间留给 ChatGPT 去搜索、比较、调整。流程本身重要时才描述流程。</p>
+
+<p class="prompt-tag">目标示例 · 一句话说清做什么给谁看</p>
+<blockquote class="zh"><p>把这些会议记录整理成一份给项目组看的简短更新。把决定和下一步放在最前面。</p></blockquote>
+<blockquote class="en"><p>Turn these meeting notes into a short update for the project team.<br>Put the decisions and next steps first.</p></blockquote>
+
+<h3 id="s1-2">说清结果拿来干嘛，它才知道写多长多细</h3>
+<p>「输出」这一要素的诀窍是：告诉 ChatGPT 你打算怎么用这个结果，它就能自己选对长度、详略和组织方式。对重要的活，还可以在结尾要求一次终检，比如确认每个行动项都有负责人和截止日期，或者把它没能核实的信息标出来，然后你自己再审一遍。</p>
+
+<p class="prompt-tag">输出示例 · 三种「说清用途」的写法</p>
+<blockquote class="zh">
+  <p>做成一页纸摘要，让总监开会前扫一眼就行，决定和下一步放最前面。／<br>
+  把这些笔记整理成一封跟进邮件，写清决定、负责人和截止日期。／<br>
+  做一张计划支出对实际支出的对照表，超过 10% 的差额都标出来。</p>
+</blockquote>
+<blockquote class="en">
+  <p>Make this a one-page summary a director can scan before the meeting. Put the decision and next steps first.</p>
+  <p>Turn these notes into a follow-up email with the decisions, owners, and due dates.</p>
+  <p>Create a clear table of planned versus actual spending and highlight any difference over 10%.</p>
+</blockquote>
+
+<h3 id="s1-3">边界：最容易被忽略的一项</h3>
+<p>边界是那几条防止 ChatGPT 帮倒忙或擅自动手的指令。判据很简单：当「改错一个细节就会让结果没法用」，或者「某个动作会影响到别人、你想先审一遍」时，就加一条。抓最关键的一两条即可，不用管住每一步。</p>
+
+<p class="prompt-tag">边界示例 · 四条最常救命的句式</p>
+<blockquote class="zh">
+  <p>已批准的日期和预算数字保持不变。／<br>
+  只用我给的资料，缺信息就标出来，别猜。／<br>
+  建议不要超出给定预算。／<br>
+  这条消息先做成草稿，别发出去。</p>
+</blockquote>
+<blockquote class="en">
+  <p>Keep the approved dates and budget figures unchanged.</p>
+  <p>Use only the supplied sources. Flag missing information instead of guessing.</p>
+  <p>Keep recommendations within the stated budget.</p>
+  <p>Prepare the message as a draft. Don't send it.</p>
+</blockquote>
+
+<div class="card warn">
+  <div class="ct">判断要不要加边界</div>
+  <p>两个触发条件，命中其一就写：<strong>①</strong> 改错一个细节，结果就没法用；<strong>②</strong> 某个动作会影响到别人、你想先审一遍。只抓最关键的一两条，不必管住每一步。</p>
+</div>
+
+<!-- ============ 02 ============ -->
+<h2 id="s2">02 · 喂对背景：文件、截图、联网搜索、连接的软件</h2>
+<p>「背景」就是那些会改变结果的信息。原则是只给相关的来源，并说清楚要 ChatGPT 从每个来源里拿什么。有这么几种喂法：</p>
+
+<table>
+  <thead>
+    <tr><th style="width:28%">喂法</th><th>什么时候用</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>上传文档 / 表格 / PPT / PDF</td><td>要它总结、比较、改写，或产出可供审阅的文件时</td></tr>
+    <tr><td>截图 / 示意图 / 图片</td><td>任务依赖视觉信息时。配一句文字说清具体看图里哪块，别光甩一张图</td></tr>
+    <tr><td>联网搜索</td><td>答案取决于最新信息时。要核对结果，就顺带让它给出来源</td></tr>
+    <tr><td>连接的数据源（Drive / Slack 等）</td><td>点名去哪找、找什么，不用把每一次检索都描述一遍</td></tr>
+  </tbody>
+</table>
+
+<p class="prompt-tag">连接数据源示例 · 点名去哪找、要什么</p>
+<blockquote class="zh"><p>用 Drive 里最新的项目计划，加上项目 Slack 频道里相关的决定和进展，做一份状态更新。</p></blockquote>
+<blockquote class="en"><p>Use the latest project plan in Drive and relevant decisions and updates from the project's Slack channel to prepare a status update.</p></blockquote>
+
+<div class="card">
+  <div class="ct">两层偏好要分清</div>
+  <p>连接数据源要装对应插件，能不能用取决于你的套餐和工作区设置。想指定某个插件，在输入框打 <code>@</code> 挑就行。</p>
+  <p>还有一层要分清：<strong>每次都适用</strong>的偏好（默认语气、习惯）放进「设置 &gt; 个性化」的自定义指令里；<strong>只对当前这个任务</strong>有用的细节，写在这次的提示词里。</p>
+</div>
+
+<!-- ============ 03 ============ -->
+<h2 id="s3">03 · 结果不满意不用重写：跟进消息 + 插队还是排队</h2>
+<p>第一条提示词不用一次到位。看完结果，直接说你要改的那一处，就能补来源、纠方向、换个版本、调详略，不必从头再来。</p>
+
+<p class="prompt-tag">跟进消息示例 · 改哪里、留哪里、挪到哪里</p>
+<blockquote class="zh"><p>开头改得更直接，证据部分保留，把建议挪到背景那一节的前面。</p></blockquote>
+<blockquote class="en"><p>Make the opening more direct, keep the evidence, and move the recommendation above the background section.</p></blockquote>
+
+<p>在 Codex 里还多一层：它正在跑的时候，你也能再发消息，落在哪一轮取决于你怎么发。</p>
+
+<div class="card">
+  <div class="ct">打个比方</div>
+  <p>像点餐时厨师已经开始炒这道菜。喊「steer」是让他现在就改配料，这盘当场按新要求做；喊「queue」是等这盘炒完再上你加的那道。</p>
+</div>
+
+<figure>
+  <svg viewBox="0 0 680 350" role="img" aria-label="steer 与 queue 两条追加消息通道对比">
+    <rect class="sv-box" x="16" y="16" width="648" height="152" rx="12"></rect>
+    <text class="sv-acc" x="36" y="46">Steer · 插进当前轮（CLI：Enter）</text>
+
+    <rect class="sv-box" x="36" y="66" width="176" height="62" rx="9"></rect>
+    <text class="sv-w" x="124" y="90" text-anchor="middle">① 第 1 轮正在跑</text>
+    <text class="sv-s" x="124" y="112" text-anchor="middle">任务已开始执行</text>
+
+    <line class="sv-a" x1="216" y1="97" x2="252" y2="97"></line>
+    <polygon class="sv-fa" points="252,92 262,97 252,102"></polygon>
+
+    <rect class="sv-key" x="268" y="66" width="176" height="62" rx="9"></rect>
+    <text class="sv-w" x="356" y="90" text-anchor="middle">② 你的追加消息</text>
+    <text class="sv-s" x="356" y="112" text-anchor="middle">当场插入本轮</text>
+
+    <line class="sv-a" x1="448" y1="97" x2="484" y2="97"></line>
+    <polygon class="sv-fa" points="484,92 494,97 484,102"></polygon>
+
+    <rect class="sv-box" x="500" y="66" width="146" height="62" rx="9"></rect>
+    <text class="sv-w" x="573" y="90" text-anchor="middle">③ 当场改方向</text>
+    <text class="sv-s" x="573" y="112" text-anchor="middle">第 1 轮带新指令跑完</text>
+
+    <rect class="sv-box" x="16" y="184" width="648" height="152" rx="12"></rect>
+    <text class="sv-acc" x="36" y="214">Queue · 排到下一轮（CLI：Tab）</text>
+
+    <rect class="sv-box" x="36" y="234" width="176" height="62" rx="9"></rect>
+    <text class="sv-w" x="124" y="258" text-anchor="middle">① 第 1 轮正在跑</text>
+    <text class="sv-s" x="124" y="280" text-anchor="middle">不受影响，照原样做完</text>
+
+    <line class="sv-a" x1="216" y1="265" x2="252" y2="265"></line>
+    <polygon class="sv-fa" points="252,260 262,265 252,270"></polygon>
+
+    <rect class="sv-key" x="268" y="234" width="176" height="62" rx="9"></rect>
+    <text class="sv-w" x="356" y="258" text-anchor="middle">② 消息排队等着</text>
+    <text class="sv-s" x="356" y="280" text-anchor="middle">不打断当前工作</text>
+
+    <line class="sv-a" x1="448" y1="265" x2="484" y2="265"></line>
+    <polygon class="sv-fa" points="484,260 494,265 484,270"></polygon>
+
+    <rect class="sv-box" x="500" y="234" width="146" height="62" rx="9"></rect>
+    <text class="sv-w" x="573" y="258" text-anchor="middle">③ 下一轮才处理</text>
+    <text class="sv-s" x="573" y="280" text-anchor="middle">第 2 轮接着做</text>
+  </svg>
+  <figcaption>图 2 · 追加消息的两条通道：steer 修改正在跑的这一轮，queue 排到下一轮（依据官方说明绘制）</figcaption>
+</figure>
+
+<div class="card">
+  <div class="ct">通道细节</div>
+  <ul>
+    <li>桌面 App 里，默认行为在「设置 &gt; General &gt; Follow-up behavior」里设；排队的消息会显示在输入框上方，可以编辑、重排、发送或删掉。</li>
+    <li>Codex CLI 里，跑的时候按 <strong>Enter</strong> 是 steer 当前轮，按 <strong>Tab</strong> 是 queue 到下一轮。</li>
+    <li>桌面 App 支持语音口述：按住 <code>Ctrl + M</code> 说话，说的内容转成文字进输入框，发送前可以检查修改。</li>
+  </ul>
+</div>
+
+<!-- ============ 04 ============ -->
+<h2 id="s4">04 · 一个完整例子：把四要素在真实 prompt 里对上号</h2>
+<p>四要素不是死格子。下面这段真实的完整 prompt，四种颜色标出哪几句是目标、背景、输出、边界，看一遍就知道它们怎么揉进一段话里。</p>
+
+<div class="card hl">
+  <div class="ct">官方完整例 · 四色标注</div>
+  <p style="line-height:2.1;">
+    <span class="mk-lab">［目标］</span><span class="mk mk-goal">为周一的管理层会议做一份一页的项目状态更新。</span>
+    <span class="mk-lab">［背景］</span><span class="mk mk-ctx">用 Drive 里最新的项目计划，加上项目 Slack 频道里相关的决定和进展。</span>
+    <span class="mk-lab">［输出］</span><span class="mk mk-out">开头先给管理层要拍板的决定和下一步，再总结进展、风险、负责人和截止日期。</span>
+    <span class="mk-lab">［边界］</span><span class="mk mk-bd">已批准的日期和预算数字保持不变；有冲突或缺失的信息标出来；任何东西都别发、别发布。</span>
+    <span class="mk-lab">［边界 · 终检］</span><span class="mk mk-bd">收尾前，检查每个下一步都有负责人和截止日期。</span>
+  </p>
+  <p style="font-size:14px;color:var(--tx-dim);margin-bottom:0;">
+    <span class="pill a">目标</span><span class="pill c">背景</span><span class="pill e">输出</span><span class="pill r">边界</span>
+    它覆盖了目标、背景、输出、边界，末尾加了一句终检，但没有把每一步都写死。这就是四要素「按需拼装」的样子。
+  </p>
+</div>
+
+<!-- 沙盘一 -->
+<section class="sandbox">
+  <h4>沙盘 1 · 四要素提示词装配器</h4>
+  <p class="sb-note">四个文本框对应四要素，勾选「终检」会在末尾追加自检句。装配结果为纯文本拼接，不做任何语义改写；字符数与要素覆盖数由输入实时统计。预置模板全部取自官方原文。</p>
+
+  <div class="ctrl">
+    <label for="sel-preset">预置模板</label>
+    <select id="sel-preset">
+      <option value="p0">官方完整例 · 管理层一页纸状态更新</option>
+      <option value="p1">修 bug · CLI 复现 + 约束 + 验证</option>
+      <option value="p2">截图变原型 · 约束与产出物</option>
+      <option value="p3">Chat 范例 · 五顿工作日晚餐计划</option>
+      <option value="p4">空白 · 自己填</option>
+    </select>
+  </div>
+  <div class="ctrl">
+    <label for="inp-goal">目标（必给）</label>
+    <textarea id="inp-goal" rows="2">为周一的管理层会议做一份一页的项目状态更新。</textarea>
+  </div>
+  <div class="ctrl">
+    <label for="inp-ctx">背景（选填）</label>
+    <textarea id="inp-ctx" rows="2">用 Drive 里最新的项目计划，加上项目 Slack 频道里相关的决定和进展。</textarea>
+  </div>
+  <div class="ctrl">
+    <label for="inp-out">输出（选填）</label>
+    <textarea id="inp-out" rows="2">开头先给管理层要拍板的决定和下一步，再总结进展、风险、负责人和截止日期。</textarea>
+  </div>
+  <div class="ctrl">
+    <label for="inp-bd">边界（选填）</label>
+    <textarea id="inp-bd" rows="2">已批准的日期和预算数字保持不变；有冲突或缺失的信息标出来；任何东西都别发、别发布。</textarea>
+  </div>
+  <div class="ctrl">
+    <label for="chk-final">追加终检句</label>
+    <div><input type="checkbox" id="chk-final" checked style="accent-color:var(--accent);margin-right:8px;"><span style="font-size:13.2px;color:var(--tx-soft);">收尾前，检查每个下一步都有负责人和截止日期。</span></div>
+  </div>
+
+  <div class="code-wrap">
+    <button class="copybtn" id="btnCopyAsm">复制</button>
+    <pre><code id="out-asm-prompt">[目标] 为周一的管理层会议做一份一页的项目状态更新。
+[背景] 用 Drive 里最新的项目计划，加上项目 Slack 频道里相关的决定和进展。
+[输出] 开头先给管理层要拍板的决定和下一步，再总结进展、风险、负责人和截止日期。
+[边界] 已批准的日期和预算数字保持不变；有冲突或缺失的信息标出来；任何东西都别发、别发布。
+[终检] 收尾前，检查每个下一步都有负责人和截止日期。</code></pre>
+  </div>
+
+  <div class="readout">
+    <div class="ro"><div class="k">已填要素</div><div class="v" id="out-asm-fill">4 / 4</div></div>
+    <div class="ro"><div class="k">字符数</div><div class="v" id="out-asm-len">190</div></div>
+    <div class="ro"><div class="k">终检</div><div class="v" id="out-asm-chk">已含</div></div>
+    <div class="ro"><div class="k">缺项</div><div class="v" id="out-asm-miss">无</div></div>
+  </div>
+  <div class="verdict" id="out-asm-verdict">四要素齐备，且带终检：可直接发出，也适合作为可复用模板存下来。</div>
+</section>
+
+<!-- ============ 05 ============ -->
+<h2 id="s5">05 · 日常提问用 Chat，出成品用 Work</h2>
+<p>Chat 适合提问、找点子、写草稿、做日常决定，从你要的结果说起，需要时再补细节。Work 适合要动用多个来源或工具、要走多步、要产出较大成品文件的活。下面是官方给的范例，每条都可直接抄改。</p>
+
+<h3 id="s5-1">Chat：日常提问的四种范例</h3>
+
+<h4>给外行讲懂一个概念</h4>
+<blockquote class="zh"><p>给一个从没投资过的人解释复利是怎么回事。用一个具体例子，凡是引入的金融术语都解释清楚。</p></blockquote>
+<blockquote class="en"><p>Explain how compound interest works for someone who has never invested. Use one concrete example and define any financial terms you introduce.</p></blockquote>
+
+<h4>起草并限定语气 / 字数的邮件</h4>
+<blockquote class="zh"><p>起草一封友善的邮件婉拒这个邀请，理由是我要出差。控制在 120 词以内，给下次活动留个余地。</p></blockquote>
+<blockquote class="en"><p>Draft a friendly email declining this invitation because I will be traveling. Keep it under 120 words and leave the door open for a future event.</p></blockquote>
+
+<h4>列表格比较选项再给建议</h4>
+<blockquote class="zh"><p>帮一个每年出两次国的人比较这两个手机套餐。用表格列出主要差别，然后推荐一个并说明取舍。</p></blockquote>
+<blockquote class="en"><p>Compare these two phone plans for one person who travels internationally twice a year. Show the important differences in a table, then recommend one and explain the tradeoff.</p></blockquote>
+
+<h4>带约束条件做实际计划</h4>
+<blockquote class="zh"><p>规划五顿工作日晚餐，每顿不超过 30 分钟。不用花生，几顿饭之间尽量复用食材，最后汇总成一份购物清单。</p></blockquote>
+<blockquote class="en"><p>Plan five weekday dinners that take less than 30 minutes. Avoid peanuts, reuse ingredients across meals, and finish with one consolidated shopping list.</p></blockquote>
+
+<h3 id="s5-2">Work：出成品的三种范例</h3>
+
+<h4>把源文件做成给高管看的简报 + PPT</h4>
+<blockquote class="zh">
+  <p>用附件里的季度报告做一份给高管看的简报和一个六页 PPT。读者是管理层。开头先给他们要拍板的三个决定，把报告事实和你的分析分清楚，每个数字标明出自哪个源文件，收尾前检查简报和 PPT 内容一致。</p>
+</blockquote>
+<blockquote class="en">
+  <p>Use the attached quarterly reports to create a leadership brief and a six-slide presentation.</p>
+  <p>The audience is the executive team. Lead with the three decisions they need to make, distinguish reported facts from your analysis, cite each number to its source file, and check that the brief and slides agree before you finish.</p>
+</blockquote>
+
+<h4>调研并给出带假设和待确认问题的决策备忘录</h4>
+<blockquote class="zh">
+  <p>为一家 50 人的公司调研三个客服平台。用最新资料比较价格、安全、集成能力和迁移成本。给出一份推荐备忘录，附上链接、你的假设，以及签合同前该弄清楚的问题。</p>
+</blockquote>
+<blockquote class="en">
+  <p>Research three customer-support platforms for a 50-person company. Compare pricing, security, integrations, and migration effort using current sources. Deliver a recommendation memo with links, assumptions, and the questions we should answer before signing a contract.</p>
+</blockquote>
+
+<h4>协调一次产品发布的全套材料</h4>
+<blockquote class="zh">
+  <p>为附件里的产品简介做一份发布计划。包含时间表、负责人、依赖项、风险、发布公告草稿、用户 FAQ，以及发布当天的检查清单。生成最终文件前，把还没定的决定标出来。</p>
+</blockquote>
+<blockquote class="en">
+  <p>Create a launch plan for the attached product brief. Include the timeline, owners, dependencies, risks, announcement draft, customer FAQ, and a checklist for launch day. Flag any missing decisions before producing the final files.</p>
+</blockquote>
+
+<div class="card">
+  <div class="ct">用 Work 的建议</div>
+  <ul>
+    <li>先从一个你能审查的小结果起步，控制来源范围、限定日期，把必做的活和可选的润色分开。</li>
+    <li>方法本身重要时让它先出个计划；发送、发布、改动别人依赖的信息之前，要求先经你批准。</li>
+    <li>这一版跑通了，再把这套流程复用起来；重复性的活还可以直接从那个任务里设成定时自动执行。</li>
+  </ul>
+  <p style="margin-bottom:0;">Work 这个界面本身是什么、能干什么活，小互解读站此前已完整解读过一篇，这里不重复展开。</p>
+</div>
+
+<!-- ============ 06 ============ -->
+<h2 id="s6">06 · Codex 基本功三件套：读代码、修 bug、写测试</h2>
+<p>当你想让 ChatGPT 处理代码、代码库或开发者工具时用 Codex。一条好的 Codex 提示词会点明要什么行为、指向相关代码或复现步骤、保住关键约束，并说清怎么验证。下面三套都可直接照抄。</p>
+
+<div class="card warn">
+  <div class="ct">两个背景前提</div>
+  <p><strong>上下文：</strong>IDE 扩展会自动把你打开的文件当上下文；CLI 里要显式写路径，或用 <code>@</code> 补全、<code>/mention</code> 附文件。</p>
+  <p style="margin-bottom:0;"><strong>沙盒：</strong>Codex 在本地跑命令时被关在一个沙盒里，文件和网络权限受限，一旦要越界（比如访问外网、改沙盒外的文件），得先过你设定的审批策略才放行。</p>
+</div>
+
+<h3 id="s6-1">读懂代码库</h3>
+<p>接手一个陌生服务、想理清某个协议或请求流程时用它。</p>
+
+<p class="prompt-tag">IDE 版 · 选中代码问数据流</p>
+<blockquote class="zh">
+  <p>讲清楚请求是怎么在我选中的这段代码里流转的。包含：涉及的每个模块各自负责什么（简要）、哪些数据在哪里做了校验、改动它时要留意的一两个坑。<br>（验证追问）把请求流程整理成带编号的步骤清单，再列出涉及哪些文件。</p>
+</blockquote>
+<blockquote class="en">
+  <p>Explain how the request flows through the selected code.<br>Include:<br>- a short summary of the responsibilities of each module involved<br>- what data is validated and where<br>- one or two "gotchas" to watch for when changing this</p>
+  <p>(验证追问) Summarize the request flow as a numbered list of steps. Then list the files involved.</p>
+</blockquote>
+
+<p class="prompt-tag">CLI 版 · @ 提及具体文件问协议细节</p>
+<blockquote class="zh">
+  <p>（启动 codex 后）我想搞懂这个服务用的协议。读一下 <code>@foo.ts</code> <code>@schema.ts</code>，讲讲它的数据结构和请求 / 响应流程。重点说清哪些字段必填、哪些可选，以及向后兼容的规则。</p>
+</blockquote>
+<pre><code>codex
+
+I need to understand the protocol used by this service. Read @foo.ts @schema.ts and explain the schema and request/response flow. Focus on required vs optional fields and backward compatibility rules.</code></pre>
+
+<h3 id="s6-2">修 bug</h3>
+<p>手上有个能复现的坏行为时用它。给一份复现配方、加上你怀疑的文件，比一句高层描述有用得多。</p>
+
+<p class="prompt-tag">流程：复现 → 定位 → 修复 → 验证</p>
+
+<p class="prompt-tag">CLI 版 · 复现步骤 + 约束 + 验证一次给全</p>
+<blockquote class="zh">
+  <p>（启动 codex 后）Bug：在设置页点「保存」，有时显示「已保存」但改动没真正存下来。<br>
+  复现：1）启动应用 <code>npm run dev</code>；2）打开 <code>/settings</code>；3）切换「开启提醒」；4）点保存；5）刷新页面，开关又弹回去了。<br>
+  约束：别改 API 的形态；改动尽量小，能加个回归测试就加。先在本地复现这个 bug，再给出补丁并跑一遍检查。<br>
+  （验证追问）修完后跑一下 lint 加最小的相关测试，把用的命令和结果报给我。</p>
+</blockquote>
+<pre><code>codex
+
+Bug: Clicking "Save" on the settings screen sometimes shows "Saved" but doesn't persist the change.
+Repro:
+1) Start the app: npm run dev
+2) Go to /settings
+3) Toggle "Enable alerts"
+4) Click Save
+5) Refresh the page: the toggle resets
+Constraints:
+- Do not change the API shape.
+- Keep the fix minimal and add a regression test if feasible.
+Start by reproducing the bug locally, then propose a patch and run checks.
+
+(验证追问) After the fix, run lint + the smallest relevant test suite. Report the commands and results.</code></pre>
+
+<p class="prompt-tag">IDE 版 · 打开可疑文件直接问</p>
+<blockquote class="zh"><p>找出导致「显示已保存但改动没存下来」的 bug。给出修法后，告诉我怎么在界面上验证。</p></blockquote>
+<blockquote class="en"><p>Find the bug causing "Saved" to show without persisting changes. After proposing the fix, tell me how to verify it in the UI.</p></blockquote>
+
+<h3 id="s6-3">写单元测试</h3>
+<p>想精确框定测哪一段时用它。IDE 里选中函数代码后问，CLI 里直接点名函数名。</p>
+
+<p class="prompt-tag">写测试 · 选中代码 / CLI 点名 两种路径</p>
+<blockquote class="zh">
+  <p>（IDE，选中函数代码后）给这个函数写个单元测试，沿用其他测试里的写法约定。<br>
+  （CLI，直接点名函数）给 <code>@transform.ts</code> 里的 <code>invert_list</code> 函数加个测试，覆盖正常路径和边界情况。</p>
+</blockquote>
+<blockquote class="en">
+  <p>(IDE，选中函数代码后) Write a unit test for this function. Follow conventions used in other tests.</p>
+  <p>(CLI，直接点名函数) Add a test for the invert_list function in @transform.ts. Cover the happy path plus edge cases.</p>
+</blockquote>
+
+<!-- ============ 07 ============ -->
+<h2 id="s7">07 · Codex 进阶三件套：截图变原型、边改边看、委托云端</h2>
+<p>三个更进阶的工作流：把设计截图直接变成能跑的原型、一边改代码一边在浏览器里看效果、把耗时的重构本地定好方案后交给云端跑。</p>
+
+<h3 id="s7-1">截图变原型</h3>
+<p>想把设计稿、截图或 UI 参考变成一个能跑的原型时用它。图给的是视觉要求，框架、路由、组件风格这些实现约束还得你写；图上看不到的行为（hover 状态、校验规则、键盘交互）也要用文字补上。</p>
+
+<div class="two">
+  <div class="card">
+    <div class="ct">输入</div>
+    <p style="margin-bottom:0;">一张设计截图 / UI 参考图，配上你补的实现约束（用什么框架、路由怎么走、组件风格），以及图里看不出的行为说明。</p>
+  </div>
+  <div class="card">
+    <div class="ct">产出</div>
+    <p style="margin-bottom:0;">一个能跑的原型：新路由 / 页面 + 需要的小组件 + 一份 README。让 Codex 起开发服务器，告诉你在哪个本地地址能看到。</p>
+  </div>
+</div>
+
+<p class="prompt-tag">截图变原型 · 约束 + 产出物一次列清</p>
+<blockquote class="zh">
+  <p>（启动 codex，拖入截图后）照着这张图做一个新的仪表盘。<br>
+  约束：用 react、vite、tailwind，代码用 typescript 写；间距、字体、布局尽量贴近原图。<br>
+  产出：一个渲染这套界面的新路由 / 页面、需要的小组件、一份说明怎么在本地运行的 README.md。<br>
+  （验证追问）启动开发服务器，告诉我在哪个本地网址 / 路由能看到这个原型。<br>
+  （IDE 版，贴截图）做一个新的设置页，把附上的截图当作目标界面，沿用本项目其他文件里的设计和视觉风格。</p>
+</blockquote>
+<pre><code>codex
+
+(拖入截图后) Create a new dashboard based on this image.
+Constraints:
+- Use react, vite, and tailwind. Write the code in typescript.
+- Match spacing, typography, and layout as closely as possible.
+Outputs:
+- A new route/page that renders the UI
+- Any small components needed
+- README.md with instructions to run it locally
+
+(验证追问) Start the dev server and tell me the local URL/route to view the prototype.
+
+(IDE版，贴截图) Create a new settings page. Use the attached screenshot as the target UI.
+Follow design and visual patterns from other files in this project.</code></pre>
+
+<h3 id="s7-2">边改边看的 UI 迭代</h3>
+<p>想要「设计 → 微调 → 刷新 → 再调」的小步快跑时用它。一边跑开发服务器，一边用小而具体的指令一轮轮收敛。</p>
+
+<p class="prompt-tag">节奏：提议 2-3 个改动 → 选定方向 → 细化到具体元素 → 继续收敛</p>
+
+<p class="prompt-tag">UI 迭代 · 三轮渐进指令</p>
+<blockquote class="zh">
+  <p>（启动 codex，另开一个终端跑 <code>npm run dev</code>）<br>
+  第一轮：给落地页提 2-3 个样式改进建议。<br>
+  第二轮（选定方向后细化到具体元素）：就按方案 2 来。只改头部：字体排版更有杂志感、增加留白、确保在手机上也好看。<br>
+  第三轮（继续收敛）：下一轮，减少视觉噪音。布局保持不变，只简化配色、去掉多余的边框。</p>
+</blockquote>
+<pre><code>codex
+npm run dev
+
+第一轮：Propose 2-3 styling improvements for the landing page.
+
+第二轮（选定方向后细化到具体元素）：Go with option 2.
+Change only the header:
+- make the typography more editorial
+- increase whitespace
+- ensure it still looks good on mobile
+
+第三轮（继续收敛）：Next iteration: reduce visual noise.
+Keep the layout, but simplify colors and remove any redundant borders.</code></pre>
+
+<div class="card warn">
+  <div class="ct">迭代纪律</div>
+  <p style="margin-bottom:0;">每轮改完在浏览器里看效果，喜欢就 commit，不喜欢就 revert。如果你手动改过或回退过某处，记得告诉 Codex，免得它下一轮把你的改动覆盖掉。</p>
+</div>
+
+<h3 id="s7-3">把重构委托给云端</h3>
+<p>想先用本地上下文设计方案，再把耗时的实现丢给云端并行跑时用它。关键在于：本地定好的方案能带着完整上下文迁到云端。</p>
+
+<figure>
+  <svg viewBox="0 0 680 130" role="img" aria-label="委托云端四步链路">
+    <rect class="sv-box" x="16" y="40" width="136" height="56" rx="9"></rect>
+    <text class="sv-w" x="84" y="64" text-anchor="middle">① 本地规划</text>
+    <text class="sv-s" x="84" y="84" text-anchor="middle">$plan 定方案</text>
+
+    <line class="sv-a" x1="156" y1="68" x2="186" y2="68"></line>
+    <polygon class="sv-fa" points="186,63 196,68 186,73"></polygon>
+
+    <rect class="sv-box" x="202" y="40" width="136" height="56" rx="9"></rect>
+    <text class="sv-w" x="270" y="64" text-anchor="middle">② 切到云端</text>
+    <text class="sv-s" x="270" y="84" text-anchor="middle">带着上下文迁移</text>
+
+    <line class="sv-a" x1="342" y1="68" x2="372" y2="68"></line>
+    <polygon class="sv-fa" points="372,63 382,68 372,73"></polygon>
+
+    <rect class="sv-box" x="388" y="40" width="136" height="56" rx="9"></rect>
+    <text class="sv-w" x="456" y="64" text-anchor="middle">③ 隔离执行</text>
+    <text class="sv-s" x="456" y="84" text-anchor="middle">按里程碑推进</text>
+
+    <line class="sv-a" x1="528" y1="68" x2="558" y2="68"></line>
+    <polygon class="sv-fa" points="558,63 568,68 558,73"></polygon>
+
+    <rect class="sv-key" x="574" y="40" width="90" height="56" rx="9"></rect>
+    <text class="sv-w" x="619" y="64" text-anchor="middle">④ diff / PR</text>
+    <text class="sv-s" x="619" y="84" text-anchor="middle">你 review</text>
+  </svg>
+  <figcaption>图 3 · 委托云端：本地定方案 → 云端隔离执行 → 出 diff 建 PR（依据官方流程绘制）</figcaption>
+</figure>
+
+<p>先在本地 IDE 用 <code>$plan</code> 让 Codex 调查代码、出一份方案，你反复修订到满意。切到云端环境时，Codex 会新建一个云端任务，把已有上下文（含方案和你本地的改动）一并带过去。云端在隔离环境里跑完，直接出 diff，你 review 后可以直接建 PR，也可以拉回本地测。有了方案后还能用 <code>/goal</code> 开 Goal mode，给它设一个持续追踪的长期目标，让它自己往下推进多步。</p>
+
+<p class="prompt-tag">委托云端 · 本地 $plan 定方案，云端按里程碑执行</p>
+<blockquote class="zh">
+  <p>（本地规划，输入 <code>$plan</code>）我们要重构认证子系统，目标：拆分职责（token 解析 / 会话加载 / 权限分开）、减少循环依赖、提升可测试性。约束：用户可见的行为不能变、公开 API 保持稳定、给出一步步的迁移计划。<br>
+  （修订计划）改一下这份计划：写清楚每个里程碑具体移动哪些文件、加一套回滚方案。<br>
+  （切到云端环境后）按计划执行里程碑 1。</p>
+</blockquote>
+<pre><code>本地规划：
+$plan
+We need to refactor the auth subsystem to:
+- split responsibilities (token parsing vs session loading vs permissions)
+- reduce circular imports
+- improve testability
+Constraints:
+- No user-visible behavior changes
+- Keep public APIs stable
+- Include a step-by-step migration plan
+
+修订计划：
+Revise the plan to:
+- specify exactly which files move in each milestone
+- include a rollback strategy
+
+切到云端环境后：
+Implement Milestone 1 from the plan.</code></pre>
+
+<p>委托到云端的任务跑在隔离环境里，agent 阶段默认关网，除非你为该环境开了联网。里程碑 1 跑通后，再一个个推进后面的里程碑。</p>
+
+<!-- ============ 08 ============ -->
+<h2 id="s8">08 · Codex 也能帮你审代码：本地一条命令，或 GitHub 里 @ 它</h2>
+<p>提交或建 PR 前想要第二双眼睛时，有两条路：本地用斜杠命令，或在 GitHub 评论区 @ 它。两条都能给定向聚焦指令，比如只看安全问题。</p>
+
+<table>
+  <thead>
+    <tr><th style="width:22%"></th><th>本地 /review</th><th>GitHub @codex review</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>什么时候用</td><td>提交 / 建 PR 前，自己先过一遍工作区</td><td>不想把分支拉到本地，直接在 PR 上要反馈</td></tr>
+    <tr><td>怎么触发</td><td>Codex 里输入 <code>/review</code></td><td>PR 评论区留言 <code>@codex review</code></td></tr>
+    <tr><td>定向聚焦</td><td><code>/review Focus on...</code></td><td><code>@codex review for...</code></td></tr>
+    <tr><td>前提</td><td>无，Codex 里直接用</td><td>先在仓库开启 Codex 的 Code review</td></tr>
+  </tbody>
+</table>
+
+<p class="prompt-tag">本地代码 review · 斜杠命令 + 定向聚焦</p>
+<blockquote class="zh"><p>（定向聚焦时）在 <code>/review</code> 后面跟上：重点看边界情况和安全问题。</p></blockquote>
+<pre><code>/review
+
+(定向聚焦) /review Focus on edge cases and security issues</code></pre>
+
+<p class="prompt-tag">GitHub PR review · 评论区 @ 它 + 定向聚焦</p>
+<blockquote class="zh"><p>（定向聚焦时）在 <code>@codex review</code> 后面跟上：重点排查安全漏洞和安全隐患。</p></blockquote>
+<pre><code>@codex review
+
+(定向聚焦) @codex review for security vulnerabilities and security concerns</code></pre>
+
+<p>本地 review 完，按反馈改完再跑一遍 <code>/review</code> 确认问题都解了。</p>
+
+<h3>顺带一条：更新文档</h3>
+<p>需要一处准确、清楚的文档改动时，圈定要改的文件、说明范围，并要求它校验。</p>
+
+<p class="prompt-tag">更新文档 · 范围 + 校验要求一次说清</p>
+<blockquote class="zh"><p>更新「高级功能」这篇文档，补上认证问题的排查指引。检查所有链接都有效。</p></blockquote>
+<blockquote class="en"><p>Update the "advanced features" documentation to provide authentication troubleshooting guidance. Verify that all links are valid.</p></blockquote>
+
+<div class="card hl">
+  <div class="ct">怎么开始</div>
+  <p style="margin-bottom:0;">先挑一个最简单的工作流（比如读懂代码库）试着跑通，再把这套写法复用到别的任务上。</p>
+</div>
+
+<blockquote class="zh" style="border-left-color:var(--accent);">
+  <p>写提示词不需要技术语法或固定公式。用你自己的话开头，看它的回应，再用跟进消息把结果一点点塑造成你要的样子。<br>—— ChatGPT Learn · Prompting</p>
+</blockquote>
+
+<!-- ============ 09 ============ -->
+<h2 id="s9">09 · 沙盘：九套 Codex 工作流速查</h2>
+<p>官方给 Codex 列出的九套工作流，按界面归类。点选任一工作流，下方显示它的场景、输入、提示词与验证追问，均为官方原文，可直接复制。</p>
+
+<section class="sandbox">
+  <h4>沙盘 2 · 九套工作流速查表</h4>
+  <p class="sb-note">九个按钮对应官方九套范例。内容为原文照录，未做改写；「验证追问」一栏取自原文括号中的追问句。</p>
+  <div class="wf-grid">
+    <button class="wf-btn on" id="wf-b1">1 读懂代码库</button>
+    <button class="wf-btn" id="wf-b2">2 修 bug</button>
+    <button class="wf-btn" id="wf-b3">3 写单元测试</button>
+    <button class="wf-btn" id="wf-b4">4 截图变原型</button>
+    <button class="wf-btn" id="wf-b5">5 UI 迭代</button>
+    <button class="wf-btn" id="wf-b6">6 委托云端重构</button>
+    <button class="wf-btn" id="wf-b7">7 本地 review</button>
+    <button class="wf-btn" id="wf-b8">8 GitHub review</button>
+    <button class="wf-btn" id="wf-b9">9 更新文档</button>
+  </div>
+
+  <div class="pillrow" id="out-wf-tags"><span class="pill c">IDE / CLI</span></div>
+  <div class="kv">
+    <div class="kk">场景</div><div id="out-wf-scene">接手一个陌生服务、想理清某个协议或请求流程时。</div>
+    <div class="kk">输入</div><div id="out-wf-input">IDE 里选中代码；CLI 里用 @ 提及相关文件。</div>
+    <div class="kk">验证追问</div><div id="out-wf-verify">把请求流程整理成带编号的步骤清单，再列出涉及哪些文件。</div>
+  </div>
+
+  <p class="prompt-tag">提示词 · 中文</p>
+  <blockquote class="zh" id="out-wf-zh"><p>讲清楚请求是怎么在我选中的这段代码里流转的。包含：涉及的每个模块各自负责什么（简要）、哪些数据在哪里做了校验、改动它时要留意的一两个坑。</p></blockquote>
+
+  <div class="code-wrap">
+    <button class="copybtn" id="btnCopyWf">复制</button>
+    <pre><code id="out-wf-en">Explain how the request flows through the selected code.
+Include:
+- a short summary of the responsibilities of each module involved
+- what data is validated and where
+- one or two "gotchas" to watch for when changing this</code></pre>
+  </div>
+  <div class="verdict" id="out-wf-verdict">第 1 套 · 读懂代码库：先要一份模块职责与校验点清单，再用追问把它压成可核对的编号步骤。</div>
+</section>
+
+<!-- ============ 10 ============ -->
+<h2 id="s10">10 · 沙盘：提交前的要素自检</h2>
+<p>把上面四要素与 Codex 的验证要求，压成一份提交前可勾选的清单。勾选项与计数均为实时统计。</p>
+
+<section class="sandbox">
+  <h4>沙盘 3 · 六项提交前自检</h4>
+  <p class="sb-note">六条判据全部来自官方框架：目标、背景、输出、边界、终检、验证。计数为勾选数量，不做任何加权评分。</p>
+  <ul class="checklist">
+    <li><input type="checkbox" id="chk-c1"><span><strong>目标</strong>：说清要什么结果、给谁看，格式一并交代。</span></li>
+    <li><input type="checkbox" id="chk-c2"><span><strong>背景</strong>：点名来源，并说明要从每个来源里拿什么。</span></li>
+    <li><input type="checkbox" id="chk-c3"><span><strong>输出</strong>：说明结果拿来干嘛，让它自己决定长度与详略。</span></li>
+    <li><input type="checkbox" id="chk-c4"><span><strong>边界</strong>：写明不能改、不能动、不能猜、不能发的部分。</span></li>
+    <li><input type="checkbox" id="chk-c5"><span><strong>终检</strong>：要求收尾前自检（负责人 / 截止日期 / 未核实信息）。</span></li>
+    <li><input type="checkbox" id="chk-c6"><span><strong>验证</strong>：说清怎么验证（跑哪些测试、起哪个服务、报什么结果）。</span></li>
+  </ul>
+  <div class="readout">
+    <div class="ro"><div class="k">已勾选</div><div class="v" id="out-cl-done">0 / 6</div></div>
+    <div class="ro"><div class="k">缺项数</div><div class="v" id="out-cl-miss">6</div></div>
+    <div class="ro"><div class="k">最低门槛</div><div class="v" id="out-cl-gate">未达</div></div>
+  </div>
+  <div class="verdict bad" id="out-cl-verdict">一项未勾选：目标缺失时，模型只能猜你要什么结果。</div>
+</section>
+
+<!-- ============ 11 ============ -->
+<h2 id="s11">11 · 边界与前提：用之前先确认这几件事</h2>
+<div class="card stop">
+  <div class="ct">硬性前提</div>
+  <ul>
+    <li><strong>连接的数据源要装对应插件</strong>，能不能用取决于你的套餐和工作区设置；指定插件在输入框打 <code>@</code> 挑。</li>
+    <li><strong>Codex 本地跑命令在沙盒内</strong>，文件与网络权限受限；越界动作（访问外网、改沙盒外文件）需先过你设定的审批策略。</li>
+    <li><strong>云端委托任务默认关网</strong>，agent 阶段不联网，除非你为该环境显式开了联网。</li>
+    <li><strong>GitHub 侧 review 需先在仓库开启</strong> Codex 的 Code review，才能在 PR 评论区 @ 它。</li>
+  </ul>
+</div>
+
+<div class="two">
+  <div class="card">
+    <div class="ct">每次都适用的偏好</div>
+    <p style="margin-bottom:0;">默认语气、表达习惯，写进「设置 &gt; 个性化」的自定义指令，不要重复塞进每条提示词。</p>
+  </div>
+  <div class="card">
+    <div class="ct">只对当前任务有效的细节</div>
+    <p style="margin-bottom:0;">来源、受众、约束、验证方式，写在这一次的提示词里，随任务走。</p>
+  </div>
+</div>
+
+<footer class="doc-foot">
+  <p>本文基于 OpenAI 官方文档 ChatGPT Learn《Prompting》整理解读，原文地址
+    <a href="https://learn.chatgpt.com/docs/prompting" target="_blank" rel="noopener">learn.chatgpt.com/docs/prompting</a>；
+    中文解读版见 <a href="https://best.xiaohu.ai/article/chatgpt-prompting-guide/" target="_blank" rel="noopener">best.xiaohu.ai</a>。
+    文中所有 prompt 范例均出自原文，按原样保留。厂商官方文档，方法与措辞为官方口径。</p>
+  <p>本页为零外部依赖单文件文档：断网可完整阅读，支持深浅主题切换、打印与移动端阅读。</p>
+</footer>
+
+</main>
+
+<script>
+(function(){
+  function byId(id){ return document.getElementById(id); }
+
+  /* ---------- 主题 ---------- */
+  var themeBtn = byId('btnTheme');
+  var root = document.documentElement;
+  function applyTheme(t){
+    root.setAttribute('data-theme', t);
+    themeBtn.textContent = (t === 'dark') ? '☾ 深色' : '☀ 浅色';
+  }
+  var saved = null;
+  try { saved = window.localStorage.getItem('aike-theme'); } catch (e) { saved = null; }
+  applyTheme(saved === 'light' ? 'light' : 'dark');
+  themeBtn.addEventListener('click', function(){
+    var next = (root.getAttribute('data-theme') === 'dark') ? 'light' : 'dark';
+    applyTheme(next);
+    try { window.localStorage.setItem('aike-theme', next); } catch (e) {}
+  });
+
+  /* ---------- 进度条 / 回顶 / 目录 ---------- */
+  var bar = byId('progress');
+  var topBtn = byId('toTopBtn');
+  var tocBtn = byId('tocToggle');
+  var sidebar = byId('sidebar');
+  function onScroll(){
+    var h = root.scrollHeight - root.clientHeight;
+    var p = h > 0 ? (root.scrollTop || document.body.scrollTop) / h : 0;
+    bar.style.width = (p * 100).toFixed(2) + '%';
+    topBtn.style.display = (root.scrollTop > 400) ? 'block' : 'none';
+  }
+  window.addEventListener('scroll', onScroll);
+  onScroll();
+  byId('btnTop').addEventListener('click', function(){ window.scrollTo(0, 0); });
+  if (tocBtn && sidebar){
+    tocBtn.textContent = '目录';
+    tocBtn.addEventListener('click', function(){ sidebar.classList.toggle('open'); });
+  }
+
+  var links = document.querySelectorAll('#toc a');
+  var secs = [];
+  for (var i = 0; i < links.length; i++){
+    var href = links[i].getAttribute('href');
+    if (href && href.length > 1){
+      var el = document.getElementById(href.substring(1));
+      if (el) secs.push({ a: links[i], el: el });
+    }
+  }
+  window.addEventListener('scroll', function(){
+    var best = null, bestD = 1e9;
+    for (var j = 0; j < secs.length; j++){
+      var d = Math.abs(secs[j].el.getBoundingClientRect().top - 120);
+      if (d < bestD){ bestD = d; best = secs[j]; }
+    }
+    for (var k = 0; k < secs.length; k++){ secs[k].a.className = ''; }
+    if (best) best.a.className = 'active';
+  });
+
+  /* ---------- 复制 ---------- */
+  function bindCopy(btnId, srcId){
+    var b = byId(btnId);
+    if (!b) return;
+    b.addEventListener('click', function(){
+      var src = byId(srcId);
+      var text = src ? src.textContent : '';
+      var done = function(){ b.textContent = '已复制'; setTimeout(function(){ b.textContent = '复制'; }, 1400); };
+      function fallback(){
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta); ta.select();
+          document.execCommand('copy'); document.body.removeChild(ta);
+        } catch (e2) {}
+        done();
+      }
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(text).then(done, fallback);
+        } else { fallback(); }
+      } catch (e) { fallback(); }
+    });
+  }
+
+  /* ---------- 沙盘 1：四要素装配器 ---------- */
+  var FINAL_TEXT = '收尾前，检查每个下一步都有负责人和截止日期。';
+  var inpGoal = byId('inp-goal'), inpCtx = byId('inp-ctx');
+  var inpOut = byId('inp-out'), inpBd = byId('inp-bd');
+  var chkFinal = byId('chk-final'), selPreset = byId('sel-preset');
+  var outPrompt = byId('out-asm-prompt');
+  var outFill = byId('out-asm-fill'), outLen = byId('out-asm-len');
+  var outChk = byId('out-asm-chk'), outMiss = byId('out-asm-miss'), outVerdict = byId('out-asm-verdict');
+
+  var PRESETS = {
+    p0: ['为周一的管理层会议做一份一页的项目状态更新。',
+         '用 Drive 里最新的项目计划，加上项目 Slack 频道里相关的决定和进展。',
+         '开头先给管理层要拍板的决定和下一步，再总结进展、风险、负责人和截止日期。',
+         '已批准的日期和预算数字保持不变；有冲突或缺失的信息标出来；任何东西都别发、别发布。'],
+    p1: ['修复设置页「显示已保存但改动没存下来」的 bug，改动尽量小。',
+         '复现：1）启动应用 npm run dev；2）打开 /settings；3）切换「开启提醒」；4）点保存；5）刷新页面，开关又弹回去了。可疑文件：设置页与保存接口。',
+         '先在本地复现，再给出补丁并跑一遍检查；报告用的命令和结果。',
+         '别改 API 的形态；能加个回归测试就加。'],
+    p2: ['照着这张图做一个新的仪表盘，做出能跑的原型。',
+         '附上设计截图作为目标界面；图上看不到的行为（hover 状态、校验规则、键盘交互）另用文字补充。',
+         '产出：一个渲染这套界面的新路由 / 页面、需要的小组件、一份说明怎么在本地运行的 README.md。',
+         '用 react、vite、tailwind，代码用 typescript 写；间距、字体、布局尽量贴近原图。'],
+    p3: ['规划五顿工作日晚餐，最后汇总成一份购物清单。',
+         '没有额外资料，按常见食材与家常做法处理。',
+         '每顿给出菜名、用时与主要食材，最后合并成一份清单。',
+         '每顿不超过 30 分钟；不用花生；几顿饭之间尽量复用食材。'],
+    p4: ['', '', '', '']
+  };
+
+  function renderAsm(){
+    var parts = [];
+    var g = inpGoal.value.trim(), c = inpCtx.value.trim();
+    var o = inpOut.value.trim(), b = inpBd.value.trim();
+    if (g) parts.push('[目标] ' + g);
+    if (c) parts.push('[背景] ' + c);
+    if (o) parts.push('[输出] ' + o);
+    if (b) parts.push('[边界] ' + b);
+    if (chkFinal.checked) parts.push('[终检] ' + FINAL_TEXT);
+    var text = parts.join('\n');
+    outPrompt.textContent = text;
+
+    var miss = [];
+    if (!g) miss.push('目标');
+    if (!c) miss.push('背景');
+    if (!o) miss.push('输出');
+    if (!b) miss.push('边界');
+
+    outFill.textContent = (4 - miss.length) + ' / 4';
+    outLen.textContent = String(text.length);
+    outChk.textContent = chkFinal.checked ? '已含' : '未含';
+    outMiss.textContent = miss.length === 0 ? '无' : miss.join('、');
+
+    if (!g){
+      outVerdict.className = 'verdict bad';
+      outVerdict.textContent = '缺目标：模型只能猜你要什么结果 —— 先把「做什么 + 给谁看」补上。';
+    } else if (miss.length >= 3){
+      outVerdict.className = 'verdict bad';
+      outVerdict.textContent = '只有目标，其余三要素缺 ' + miss.length + ' 项：短任务可用，长任务会跑偏。';
+    } else if (miss.length > 0){
+      outVerdict.className = 'verdict';
+      outVerdict.textContent = '可用，但缺 ' + miss.join('、') + '。按官方判据自查：改错一个细节结果是否就没法用？会影响到别人吗？命中就该补。';
+    } else if (!chkFinal.checked){
+      outVerdict.className = 'verdict';
+      outVerdict.textContent = '四要素齐备。若这份结果要交给别人，建议勾上终检，让它收尾前自核一遍。';
+    } else {
+      outVerdict.className = 'verdict ok';
+      outVerdict.textContent = '四要素齐备，且带终检：可直接发出，也适合作为可复用模板存下来。';
+    }
+  }
+
+  inpGoal.addEventListener('input', renderAsm);
+  inpCtx.addEventListener('input', renderAsm);
+  inpOut.addEventListener('input', renderAsm);
+  inpBd.addEventListener('input', renderAsm);
+  chkFinal.addEventListener('change', renderAsm);
+  selPreset.addEventListener('change', function(){
+    var p = PRESETS[selPreset.value];
+    if (!p) return;
+    inpGoal.value = p[0];
+    inpCtx.value = p[1];
+    inpOut.value = p[2];
+    inpBd.value = p[3];
+    renderAsm();
+  });
+  renderAsm();
+  bindCopy('btnCopyAsm', 'out-asm-prompt');
+
+  /* ---------- 沙盘 2：九套工作流速查 ---------- */
+  var WF = [
+    { id: 1, name: '读懂代码库', tags: 'IDE / CLI',
+      scene: '接手一个陌生服务、想理清某个协议或请求流程时。',
+      input: 'IDE 里选中代码；CLI 里用 @ 提及相关文件。',
+      verify: '把请求流程整理成带编号的步骤清单，再列出涉及哪些文件。',
+      zh: '讲清楚请求是怎么在我选中的这段代码里流转的。包含：涉及的每个模块各自负责什么（简要）、哪些数据在哪里做了校验、改动它时要留意的一两个坑。',
+      en: 'Explain how the request flows through the selected code.\nInclude:\n- a short summary of the responsibilities of each module involved\n- what data is validated and where\n- one or two "gotchas" to watch for when changing this' },
+    { id: 2, name: '修 bug', tags: 'IDE / CLI',
+      scene: '手上有个能复现的坏行为时。给复现配方比一句高层描述有用得多。',
+      input: '复现步骤、你怀疑的文件、不能改的约束。',
+      verify: '修完后跑 lint 加最小的相关测试，把用的命令和结果报给我。',
+      zh: 'Bug：在设置页点「保存」，有时显示「已保存」但改动没真正存下来。\n复现：1）启动应用 npm run dev；2）打开 /settings；3）切换「开启提醒」；4）点保存；5）刷新页面，开关又弹回去了。\n约束：别改 API 的形态；改动尽量小，能加个回归测试就加。先在本地复现这个 bug，再给出补丁并跑一遍检查。',
+      en: 'Bug: Clicking "Save" on the settings screen sometimes shows "Saved" but doesn\'t persist the change.\nRepro:\n1) Start the app: npm run dev\n2) Go to /settings\n3) Toggle "Enable alerts"\n4) Click Save\n5) Refresh the page: the toggle resets\nConstraints:\n- Do not change the API shape.\n- Keep the fix minimal and add a regression test if feasible.\nStart by reproducing the bug locally, then propose a patch and run checks.' },
+    { id: 3, name: '写单元测试', tags: 'IDE / CLI',
+      scene: '想精确框定测哪一段时。',
+      input: 'IDE 里选中函数；CLI 里点名文件与函数名。',
+      verify: '要求覆盖正常路径与边界情况，沿用仓库既有测试约定。',
+      zh: '（IDE，选中函数代码后）给这个函数写个单元测试，沿用其他测试里的写法约定。\n（CLI，直接点名函数）给 @transform.ts 里的 invert_list 函数加个测试，覆盖正常路径和边界情况。',
+      en: 'Write a unit test for this function. Follow conventions used in other tests.\n\nAdd a test for the invert_list function in @transform.ts. Cover the happy path plus edge cases.' },
+    { id: 4, name: '截图变原型', tags: 'IDE / CLI · 云端',
+      scene: '想把设计稿、截图或 UI 参考变成一个能跑的原型时。',
+      input: '一张设计截图 + 你补的实现约束（框架、路由、组件风格）+ 图上看不出的行为说明。',
+      verify: '启动开发服务器，告诉我在哪个本地网址 / 路由能看到这个原型。',
+      zh: '照着这张图做一个新的仪表盘。约束：用 react、vite、tailwind，代码用 typescript 写；间距、字体、布局尽量贴近原图。\n产出：一个渲染这套界面的新路由 / 页面、需要的小组件、一份说明怎么在本地运行的 README.md。',
+      en: 'Create a new dashboard based on this image.\nConstraints:\n- Use react, vite, and tailwind. Write the code in typescript.\n- Match spacing, typography, and layout as closely as possible.\nOutputs:\n- A new route/page that renders the UI\n- Any small components needed\n- README.md with instructions to run it locally\n\nStart the dev server and tell me the local URL/route to view the prototype.' },
+    { id: 5, name: '边改边看的 UI 迭代', tags: 'IDE / CLI · 本地 dev server',
+      scene: '想要「设计 → 微调 → 刷新 → 再调」的小步快跑时。',
+      input: '一个跑着的开发服务器 + 每轮一条小而具体的指令。',
+      verify: '每轮改完在浏览器里看效果，喜欢就 commit，不喜欢就 revert。',
+      zh: '第一轮：给落地页提 2-3 个样式改进建议。\n第二轮：就按方案 2 来。只改头部：字体排版更有杂志感、增加留白、确保在手机上也好看。\n第三轮：下一轮，减少视觉噪音。布局保持不变，只简化配色、去掉多余的边框。',
+      en: 'Propose 2-3 styling improvements for the landing page.\n\nGo with option 2.\nChange only the header:\n- make the typography more editorial\n- increase whitespace\n- ensure it still looks good on mobile\n\nNext iteration: reduce visual noise.\nKeep the layout, but simplify colors and remove any redundant borders.' },
+    { id: 6, name: '委托云端重构', tags: '本地 IDE → 云端',
+      scene: '先用本地上下文设计方案，再把耗时的实现丢给云端并行跑。',
+      input: '本地 $plan 定好的方案（含你的修订与本地改动）。',
+      verify: '云端在隔离环境跑完出 diff，review 后可直接建 PR，也可拉回本地测。',
+      zh: '我们要重构认证子系统，目标：拆分职责（token 解析 / 会话加载 / 权限分开）、减少循环依赖、提升可测试性。约束：用户可见的行为不能变、公开 API 保持稳定、给出一步步的迁移计划。\n（修订计划）写清楚每个里程碑具体移动哪些文件、加一套回滚方案。\n（切到云端后）按计划执行里程碑 1。',
+      en: 'We need to refactor the auth subsystem to:\n- split responsibilities (token parsing vs session loading vs permissions)\n- reduce circular imports\n- improve testability\nConstraints:\n- No user-visible behavior changes\n- Keep public APIs stable\n- Include a step-by-step migration plan\n\nRevise the plan to:\n- specify exactly which files move in each milestone\n- include a rollback strategy\n\nImplement Milestone 1 from the plan.' },
+    { id: 7, name: '本地代码 review', tags: 'Codex 斜杠命令',
+      scene: '提交 / 建 PR 前，自己先过一遍工作区。',
+      input: '无前提，Codex 里直接输入 /review；定向聚焦用 /review Focus on...',
+      verify: '改完反馈再跑一遍 /review 确认问题都解了。',
+      zh: '/review\n（定向聚焦）在 /review 后面跟上：重点看边界情况和安全问题。',
+      en: '/review\n\n/review Focus on edge cases and security issues' },
+    { id: 8, name: 'GitHub PR review', tags: 'GitHub 评论区',
+      scene: '不想把分支拉到本地，直接在 PR 上要反馈。',
+      input: 'PR 评论区 @codex review；前置条件是仓库已开启 Codex 的 Code review。',
+      verify: '按反馈改完可再 @ 一轮，或直接本地复核。',
+      zh: '@codex review\n（定向聚焦）在 @codex review 后面跟上：重点排查安全漏洞和安全隐患。',
+      en: '@codex review\n\n@codex review for security vulnerabilities and security concerns' },
+    { id: 9, name: '更新文档', tags: 'IDE / CLI',
+      scene: '需要一处准确、清楚的文档改动时。',
+      input: '圈定要改的文件、说明改动范围。',
+      verify: '要求它校验：检查所有链接都有效。',
+      zh: '更新「高级功能」这篇文档，补上认证问题的排查指引。检查所有链接都有效。',
+      en: 'Update the "advanced features" documentation to provide authentication troubleshooting guidance. Verify that all links are valid.' }
+  ];
+
+  var outTags = byId('out-wf-tags'), outScene = byId('out-wf-scene');
+  var outInput = byId('out-wf-input'), outVerify = byId('out-wf-verify');
+  var outZh = byId('out-wf-zh'), outEn = byId('out-wf-en'), outWfVerdict = byId('out-wf-verdict');
+  var wfBtnIds = ['wf-b1','wf-b2','wf-b3','wf-b4','wf-b5','wf-b6','wf-b7','wf-b8','wf-b9'];
+
+  function showWf(idx){
+    var w = WF[idx];
+    if (!w) return;
+    outTags.innerHTML = '';
+    var sp = document.createElement('span');
+    sp.className = 'pill c';
+    sp.textContent = w.tags;
+    outTags.appendChild(sp);
+    outScene.textContent = w.scene;
+    outInput.textContent = w.input;
+    outVerify.textContent = w.verify;
+    outZh.textContent = w.zh;
+    outEn.textContent = w.en;
+    outWfVerdict.className = 'verdict ok';
+    outWfVerdict.textContent = '第 ' + w.id + ' 套 · ' + w.name + '：' + w.verify;
+    for (var i = 0; i < wfBtnIds.length; i++){
+      var btn = byId(wfBtnIds[i]);
+      if (!btn) continue;
+      btn.className = (i === idx) ? 'wf-btn on' : 'wf-btn';
+    }
+  }
+  for (var wi = 0; wi < wfBtnIds.length; wi++){
+    (function(i){
+      var b = byId(wfBtnIds[i]);
+      if (!b) return;
+      b.addEventListener('click', function(){ showWf(i); });
+    })(wi);
+  }
+  showWf(0);
+  bindCopy('btnCopyWf', 'out-wf-en');
+
+  /* ---------- 沙盘 3：提交前自检 ---------- */
+  var clIds = ['chk-c1','chk-c2','chk-c3','chk-c4','chk-c5','chk-c6'];
+  var outDone = byId('out-cl-done'), outClMiss = byId('out-cl-miss');
+  var outGate = byId('out-cl-gate'), outClVerdict = byId('out-cl-verdict');
+
+  function renderCl(){
+    var n = 0, miss = [];
+    for (var i = 0; i < clIds.length; i++){
+      var el = byId(clIds[i]);
+      if (!el) continue;
+      if (el.checked){ n++; } else { miss.push(clIds[i]); }
+      var li = el.parentElement;
+      if (li && li.classList){ li.classList.toggle('done', el.checked); }
+    }
+    outDone.textContent = n + ' / 6';
+    outClMiss.textContent = String(6 - n);
+    var gate = (n >= 4) ? '已达' : '未达';
+    outGate.textContent = gate;
+    if (n === 6){
+      outClVerdict.className = 'verdict ok';
+      outClVerdict.textContent = '六项齐备：目标、背景、输出、边界、终检、验证全部到位，可以发出。';
+    } else if (n >= 4){
+      outClVerdict.className = 'verdict';
+      outClVerdict.textContent = '已达最低门槛（4 / 6），还差 ' + (6 - n) + ' 项：' + miss.join('、') + '。';
+    } else if (n >= 1){
+      outClVerdict.className = 'verdict bad';
+      outClVerdict.textContent = '未达门槛：至少 4 项才够用，当前还差 ' + (4 - n) + ' 项达标。';
+    } else {
+      outClVerdict.className = 'verdict bad';
+      outClVerdict.textContent = '一项未勾选：目标缺失时，模型只能猜你要什么结果。';
+    }
+  }
+  for (var ci = 0; ci < clIds.length; ci++){
+    var cb = byId(clIds[ci]);
+    if (!cb) continue;
+    cb.addEventListener('change', renderCl);
+  }
+  renderCl();
+})();
+</script>
+</body>
+</html>

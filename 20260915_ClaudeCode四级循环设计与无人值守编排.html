@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Claude Code 官方循环设计框架：回合制、目标制（/goal）、时间制（/loop 与 /schedule）、主动式四级递进，按「谁触发 / 怎么判断停 / 用什么原语 / 适合什么任务」四个维度拆解，附质量保障四条与 token 管控六条。来源 Anthropic 官方博客 2026-06-30。">
+<title>Claude Code 循环设计：四级递进到无人值守</title>
+<style>
+:root{--aike-content-max:1180px;--aike-sidebar-w:280px}
+html[data-theme="dark"]{--bg:#181715;--bg2:#201e1c;--card:#23211e;--line:#3a3632;--ink:#ece5d8;--muted:#b8ab96;--accent:#E2886A;--emerald:#6fbf8f;--rose:#e0706a;--amber:#d9a441;--cyan:#6fb7bf;--code-bg:#141312;--quote-bg:#23211e;--dim:#8a8071}
+html[data-theme="light"]{--bg:#FAF7F2;--bg2:#f1ebe1;--card:#ffffff;--line:#e3d9c8;--ink:#26231f;--muted:#6b6257;--accent:#D97757;--emerald:#1e7a4c;--rose:#b34038;--amber:#96690f;--cyan:#0f6f7a;--code-bg:#f4efe6;--quote-bg:#f4efe6;--dim:#8d8375}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;line-height:1.78;font-size:16px}
+a{color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+a:hover{text-decoration:underline}
+.app-sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--aike-sidebar-w);background:var(--bg2);border-right:1px solid var(--line);padding:20px 16px;overflow-y:auto;z-index:20}
+.app-sidebar h2{font-family:"Songti SC","SimSun",Georgia,serif;font-size:15px;margin:0 0 10px;letter-spacing:.05em}
+.app-sidebar .brand{font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6}
+.app-sidebar nav a{display:block;border:0;color:var(--muted);font-size:13.5px;padding:6px 10px;border-radius:8px;margin:1px 0}
+.app-sidebar nav a:hover{background:var(--card);color:var(--ink)}
+.app-sidebar nav a.active{background:var(--card);color:var(--accent);font-weight:700}
+.app-sidebar .meta{font-size:12px;color:var(--muted);border-top:1px dashed var(--line);margin-top:14px;padding-top:12px;line-height:1.7}
+.app-main{display:block;max-width:var(--aike-content-max);width:auto;margin-left:calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));margin-right:max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));padding:28px 36px 120px}
+.topbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.badge{display:inline-block;font-size:12px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);background:var(--card)}
+.badge.hot{color:var(--accent);border-color:var(--accent)}
+h1{font-family:"Songti SC","SimSun",Georgia,serif;font-size:32px;line-height:1.35;margin:10px 0 8px}
+.dek{font-size:17px;color:var(--muted);border-left:4px solid var(--accent);padding-left:14px;margin:12px 0 18px}
+:is(body,main,.content,.page) h2{font-family:"Songti SC","SimSun",Georgia,serif;font-size:24px;line-height:1.4;margin:44px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+:is(body,main,.content,.page) h3{font-size:18.5px;margin:28px 0 6px;font-weight:700}
+:is(body,main,.content,.page) h4{font-size:15.5px;margin:20px 0 4px;color:var(--accent)}
+p{margin:10px 0}
+.lead{font-size:16.5px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:14px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.pos{cursor:pointer;transition:transform .15s ease,border-color .15s ease}
+.pos:hover{transform:translateY(-2px);border-color:var(--accent)}
+.pos.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.pos .n{font-size:22px;font-weight:800;color:var(--accent);display:block;line-height:1.3}
+.pos .k{font-size:12px;color:var(--muted);display:block;margin-top:2px}
+.pos code{font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{border-bottom:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+th{background:var(--bg2);font-size:13px;letter-spacing:.04em}
+tr:last-child td{border-bottom:0}
+code,pre{font-family:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto;font-size:13.5px;line-height:1.65;position:relative}
+pre code{background:transparent}
+p code,li code,td code{background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:.88em}
+.callout{border:1px solid var(--line);border-left:4px solid var(--amber);background:var(--quote-bg);border-radius:10px;padding:12px 16px;margin:14px 0;font-size:14.5px}
+.callout.green{border-left-color:var(--emerald)}
+.callout.rose{border-left-color:var(--rose)}
+.callout.cyan{border-left-color:var(--cyan)}
+.callout .h{font-weight:700;display:block;margin-bottom:4px}
+blockquote{margin:14px 0;padding:12px 18px;border-left:4px solid var(--accent);background:var(--quote-bg);border-radius:0 10px 10px 0;color:var(--ink)}
+ul.tight li,ol.tight li{margin:6px 0}
+.btn{display:inline-block;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 14px;font-size:14px;cursor:pointer;font-family:inherit}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#1a1512;font-weight:700}
+html[data-theme="light"] .btn.primary{color:#fff}
+.btn.sm{padding:5px 10px;font-size:12.5px;border-radius:8px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap}
+#bar-progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:50}
+#btn-top{position:fixed;right:18px;bottom:18px;z-index:50}
+.checklist{list-style:none;padding:0;margin:10px 0}
+.checklist li{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:8px 0}
+.checklist input{width:18px;height:18px;margin-top:4px;accent-color:var(--accent)}
+.simrow{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.simrow label{font-size:13px;color:var(--muted);min-width:190px}
+input[type="range"]{accent-color:var(--accent);width:230px}
+.stat{font-size:22px;font-weight:800;color:var(--accent)}
+.statbox{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:center}
+.statbox .lb{font-size:12px;color:var(--muted);display:block;margin-bottom:2px}
+.statbox .vl{font-size:20px;font-weight:800;color:var(--accent)}
+.fig{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px;margin:14px 0}
+.figcap{font-size:12.5px;color:var(--muted);margin-top:8px}
+.tag{font-size:11.5px;border:1px solid var(--line);border-radius:6px;padding:1px 7px;color:var(--muted);white-space:nowrap}
+.src-table td:first-child{white-space:nowrap;font-weight:700}
+.footer{margin-top:40px;border-top:1px solid var(--line);padding-top:16px;color:var(--muted);font-size:13px}
+.kv{font-size:14px;color:var(--muted);margin:4px 0}
+.kv b{color:var(--ink);font-weight:700}
+details{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:10px 14px;margin:10px 0}
+details summary{cursor:pointer;font-weight:700;font-size:14.5px;color:var(--accent)}
+details[open] summary{margin-bottom:8px}
+.ax{stroke:var(--line);fill:none}
+.tt{fill:var(--ink);font-size:12.5px;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+.ts{fill:var(--muted);font-size:11.5px;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+.tb{fill:var(--ink);font-size:13px;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+.bx{fill:var(--bg2);stroke:var(--line)}
+.bx.a{fill:var(--card);stroke:var(--accent)}
+.bx.g{fill:var(--card);stroke:var(--emerald)}
+.bx.r{fill:var(--card);stroke:var(--rose)}
+.ar{stroke:var(--accent);fill:none}
+.ar.d{stroke-dasharray:5 4}
+@media (max-width:1080px){
+.app-sidebar{transform:translateX(-105%);transition:transform .2s ease}
+.app-sidebar.open{transform:none}
+.app-main{margin-left:0;margin-right:0;max-width:100%;width:100%;padding:20px 20px 120px}
+.grid2,.grid4{grid-template-columns:1fr}
+h1{font-size:25px}
+}
+@media print{
+.app-sidebar,#btn-top,#bar-progress,.toolbar{display:none !important}
+body{background:#fff;color:#000}
+.app-main{margin:0;max-width:100%}
+.card,table,pre,.fig{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div id="bar-progress"></div>
+
+<aside class="app-sidebar" id="sidebar">
+  <h2>目录</h2>
+  <div class="brand">Claude Code 循环设计<br>四级递进 · 无人值守</div>
+  <nav id="box-toc">
+    <a href="#s0">一分钟速览</a>
+    <a href="#s1">01 · 背景：谁来决定干完了</a>
+    <a href="#s2">02 · 定义与坐标系</a>
+    <a href="#s3">03 · 第 1 级 · 回合制</a>
+    <a href="#s4">04 · 第 2 级 · 目标制</a>
+    <a href="#s5">05 · 第 3 级 · 时间制</a>
+    <a href="#s6">06 · 第 4 级 · 主动式</a>
+    <a href="#s7">07 · 质量保障四条</a>
+    <a href="#s8">08 · token 管控六条</a>
+    <a href="#s9">09 · 速查表与三个自查</a>
+    <a href="#s10">10 · 来源核验与勘误</a>
+  </nav>
+  <div class="meta">
+    来源：Anthropic 官方博客<br>
+    作者：Delba de Oliveira、Michael Segner<br>
+    发布：2026-06-30<br>
+    <span class="tag">厂商发布内容</span>
+  </div>
+</aside>
+
+<main class="app-main" id="main">
+
+<div class="topbar">
+  <span class="badge hot">深度</span>
+  <span class="badge">Claude Blog</span>
+  <span class="badge">2026-06-30</span>
+  <span class="badge">循环工程 · Loop Engineering</span>
+  <button class="btn sm" id="btn-theme">切换主题</button>
+  <button class="btn sm" id="btn-toc">目录</button>
+</div>
+
+<h1>Claude Code 官方讲透循环设计：4 级递进到无人值守</h1>
+<p class="dek">从手动确认到无人值守，Claude Code 团队给出 4 级循环分类与实操建议。</p>
+
+<section id="s0">
+<h2 id="s0-h">一分钟速览</h2>
+<div class="card">
+<ul class="tight">
+<li>Anthropic 的 Claude Code 团队发博客，把「设计循环（loop）」拆成 4 种标准模式：<strong>回合制、目标制（<code>/goal</code>）、时间制（<code>/loop</code> 和 <code>/schedule</code>）、主动式</strong>，按自主程度从低到高递进。</li>
+<li>循环的官方定义：agent 反复执行一轮轮工作，直到满足某个<strong>停止条件</strong>才收工。四种类型按「谁触发、怎么判断停、用什么功能实现、适合什么任务」四个维度区分。</li>
+<li><code>/goal</code> 的核心机制是引入一个<strong>独立的评估模型</strong>来判定是否达标，Claude 自己不能提前喊「够了就收工」，还可以设最多尝试次数上限。</li>
+<li>主动式循环把 <code>/schedule</code>（定时触发）、<code>/goal</code>（停止条件）、skills（校验标准）、dynamic workflows（多 agent 并行编排）、auto mode（免人工确认）五个功能叠起来，能无人值守地处理 bug 报告分诊、issue 分类、依赖升级这类持续性工作。</li>
+<li>两条实操建议：<strong>确定性工作用脚本</strong>，比让 Claude 每次重新推导更省 token；大规模 dynamic workflows（官方口径为可能拉起<strong>数百个</strong> agent）上线前先在小范围试跑。</li>
+</ul>
+</div>
+
+<div class="callout">
+<span class="h">立场提示</span>
+本文是 Anthropic 官方博客，讲的是自家 Claude Code 的能力与功能组合，属厂商发布内容。文中的分类框架、示例代码与「数百个 agent」等数字均引自原文，是官方口径。
+</div>
+</section>
+
+<section id="s1">
+<h2 id="s1-h">01 · 背景：这篇在讲什么</h2>
+<h3 id="s1-1">AI 帮你干活，但谁来决定「干完了」？</h3>
+<p class="lead">Claude Code 团队的 Delba de Oliveira 和 Michael Segner 于 2026 年 6 月 30 日在 Anthropic 官方博客发文，系统梳理了怎么为 Claude Code 设计「循环（loop）」：让 agent 反复执行工作，直到满足停止条件。</p>
+<p>作者开篇点出一个现象：X 上到处在聊「别再一句句提示编码 agent 了，要设计循环」，但你真去找「循环到底是什么」，会看到一堆互相打架的答案。这篇文章要做的，就是把这件事说清楚。</p>
+<p>它不是一个新产品发布，而是一套框架：把 Claude Code 里早就有的 5 个独立功能，统一整理成按自主程度分级的 4 种循环，并给出可以直接照抄的组合模板。</p>
+
+<div class="callout cyan">
+<span class="h">为什么值得看</span>
+<code>/goal</code>、<code>/loop</code>、<code>/schedule</code>、dynamic workflows、auto mode —— 这 5 个功能第一次被归到一个坐标系里，从「你盯每一轮」到「无人值守」排成 4 级；文末还给出一条可复制的流水线，用这几个功能拼出自动处理 bug 分诊、issue 分类、依赖升级的系统。
+</div>
+<p>下面按 4 级循环从简单到复杂逐个拆开，每级都能对上你手头的某类活儿。</p>
+</section>
+
+<section id="s2">
+<h2 id="s2-h">02 · 定义与坐标系</h2>
+<h3 id="s2-1">先搞懂：「循环」到底是什么</h3>
+<blockquote>官方定义只有一句：<strong>循环，就是 agent 反复执行一轮轮工作，直到满足某个停止条件。</strong>关键区别在于，「什么时候算完成」是提前定好、交给系统判断的，不是你自己一轮一轮盯着催。</blockquote>
+<p>作者按<strong>四个维度</strong>给循环分类，这四个维度就是后面每种循环的统一参照系：谁触发它、它怎么判断该停、它用 Claude Code 里的哪个功能实现、它最适合什么任务。先把坐标系立起来，四种循环再往里对号入座。</p>
+
+<div class="fig">
+<svg viewBox="0 0 720 300" role="img" aria-label="四层同心圆：越往外圈自主程度越高">
+  <circle cx="360" cy="150" r="140" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.95"/>
+  <circle cx="360" cy="150" r="105" fill="none" stroke="var(--cyan)" stroke-width="1.5" opacity="0.85"/>
+  <circle cx="360" cy="150" r="70"  fill="none" stroke="var(--amber)" stroke-width="1.5" opacity="0.8"/>
+  <circle cx="360" cy="150" r="35"  fill="none" stroke="var(--emerald)" stroke-width="1.5" opacity="0.8"/>
+  <text class="tb" x="360" y="28"  text-anchor="middle" fill="var(--accent)">④ 主动式</text>
+  <text class="tb" x="360" y="63"  text-anchor="middle" fill="var(--cyan)">③ 时间制</text>
+  <text class="tb" x="360" y="98"  text-anchor="middle" fill="var(--amber)">② 目标制</text>
+  <text class="tb" x="360" y="138" text-anchor="middle" fill="var(--emerald)">① 回合制</text>
+  <circle cx="360" cy="150" r="3" fill="var(--muted)"/>
+  <text class="ts" x="360" y="258" text-anchor="middle">触发权：人 → 时间间隔 → 事件/排期（全程无人在场）</text>
+  <text class="ts" x="360" y="278" text-anchor="middle">判定权：Claude 自己 → 评估模型 → 任务级退出 + 流水线常驻</text>
+</svg>
+<div class="figcap">四层同心圆示意图（依据原文坐标系重绘，非原图）：越往外圈，自主程度越高，越少人管；最外圈那条持续流动的轨道，就是一条正在无人值守跑着的循环。</div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h4 id="s2-d1">① 谁触发</h4>
+    <p class="kv">一句提示 → 手动实时 → 到点（时间间隔）→ 事件或排期，全程无人在场</p>
+  </div>
+  <div class="card">
+    <h4 id="s2-d2">② 怎么判断停</h4>
+    <p class="kv">Claude 自己判断 → 达标或到重试上限 → 你取消或活干完 → 每个任务达标退出、整条流水线你手动关</p>
+  </div>
+  <div class="card">
+    <h4 id="s2-d3">③ 用什么功能</h4>
+    <p class="kv">默认对话 → <code>/goal</code> → <code>/loop</code>、<code>/schedule</code> → 以上全部 + dynamic workflows + auto mode</p>
+  </div>
+  <div class="card">
+    <h4 id="s2-d4">④ 适合什么任务</h4>
+    <p class="kv">短任务 → 有可验证退出标准的任务 → 周期性或对接外部系统 → 反复出现且定义清晰的工作流</p>
+  </div>
+</div>
+
+<p>作者也提醒：<strong>不是所有任务都需要复杂循环</strong>，从最简单的方案起步，这些模式按需选用就好。</p>
+</section>
+
+<section id="s3">
+<h2 id="s3-h">03 · 第 1 级 · 回合制</h2>
+<h3 id="s3-1">你问一句，它做一轮</h3>
+<p class="lead">这就是你每天在用的默认模式。你发的每一条提示，都开启一个由你亲手引导每一轮的循环：Claude 收集上下文、动手、检查自己的工作、必要时重复、然后回复。官方管它叫「agentic loop」。</p>
+<p>举个原文的例子：你让 Claude 做一个点赞按钮。它读你的代码、改文件、跑测试，然后交回一个它<em>「自认为」</em>能用的东西。接下来由你手动验收，再写下一条提示。触发它的是一句提示，停下来的判断权在 Claude 自己手里，适合那些不属于固定流程、也不按排期来的短任务。</p>
+
+<div class="fig">
+<svg viewBox="0 0 720 150" role="img" aria-label="回合制循环流程：读上下文、动手改、跑测试自查、交回你验收，然后循环">
+  <rect class="bx" x="16"  y="34" width="140" height="56" rx="10"/>
+  <text class="tt" x="86"  y="60" text-anchor="middle">读上下文</text>
+  <text class="ts" x="86"  y="78" text-anchor="middle">gather context</text>
+  <rect class="bx" x="196" y="34" width="140" height="56" rx="10"/>
+  <text class="tt" x="266" y="60" text-anchor="middle">动手改</text>
+  <text class="ts" x="266" y="78" text-anchor="middle">take action</text>
+  <rect class="bx" x="376" y="34" width="140" height="56" rx="10"/>
+  <text class="tt" x="446" y="60" text-anchor="middle">跑测试自查</text>
+  <text class="ts" x="446" y="78" text-anchor="middle">checks its work</text>
+  <rect class="bx a" x="556" y="34" width="148" height="56" rx="10"/>
+  <text class="tt" x="630" y="60" text-anchor="middle">交回你验收</text>
+  <text class="ts" x="630" y="78" text-anchor="middle">你写下一条提示</text>
+  <path class="ar" d="M156 62 L190 62" marker-end="url(#ah)"/>
+  <path class="ar" d="M336 62 L370 62" marker-end="url(#ah)"/>
+  <path class="ar" d="M516 62 L550 62" marker-end="url(#ah)"/>
+  <path class="ar d" d="M630 90 Q 630 136 86 136 Q 60 136 60 100 L60 90" marker-end="url(#ahd)"/>
+  <text class="ts" x="345" y="132" text-anchor="middle">↺ 由你手动验收后，再开启下一轮</text>
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)"/></marker>
+    <marker id="ahd" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)"/></marker>
+  </defs>
+</svg>
+<div class="figcap">回合制循环（agentic loop）示意（依原文描述重绘）：一句提示触发，Claude 自查后交回你手动确认。</div>
+</div>
+
+<h3 id="s3-2">怎么让它自查得更彻底</h3>
+<p>你可以把「验证」这一步做强：把你平时手动验收的步骤写成一个 <code>SKILL.md</code>，让 Claude 能端到端地自己检查更多东西。关键是给它能<strong>看到、量到、动手</strong>的工具或连接器：检查越量化，Claude 越容易自我验证，需要的回合数也越少。</p>
+<p>原文给了一个 <code>verify-frontend-change</code> 技能：任何前端改动，不许只凭「编辑成功」就报完成，得像人类审查者那样走完整流程。</p>
+<ol class="tight">
+<li>启动 dev server，在浏览器打开改动的页面</li>
+<li>直接和改动交互：点按钮、确认状态变化、截图前后对比</li>
+<li>看浏览器控制台：不能有任何新报错或警告</li>
+<li>用 Chrome DevTools MCP 跑性能 trace，审 Core Web Vitals</li>
+</ol>
+<p>任一步失败，就修好后从第 1 步重跑，绝不交半成品。</p>
+
+<details>
+<summary>看原始 SKILL.md 示例代码</summary>
+<pre><code>---
+name: verify-frontend-change
+description: Verify any UI change end-to-end before declaring it done.
+---
+
+# Verifying frontend changes
+Never report a UI change as complete based on a successful edit alone.
+Verify it the way a human reviewer would:
+
+1. Start the dev server and open the edited page in the browser.
+2. Interact with the change directly. For a new control (button,
+   input, toggle): click it, confirm the expected state change,
+   and screenshot before/after.
+3. Check the browser console: zero new errors or warnings.
+4. Use the Chrome Devtools MCP, run a performance trace and audit
+   Core Web Vitals.
+
+If any step fails, fix the issue and rerun from step 1 — do
+not hand back partially verified work.</code></pre>
+</details>
+</section>
+
+<section id="s4">
+<h2 id="s4-h">04 · 第 2 级 · 目标制 · 核心</h2>
+<h3 id="s4-1">先定好「及格线」，它才准停</h3>
+<p class="lead">有时候一轮不够，尤其是复杂任务。agent 在能反复迭代时表现更好。你可以用 <code>/goal</code> 把「什么样才算做完」定义清楚，来延长 Claude 迭代的时间。</p>
+<p>当你定义了成功标准，Claude 就不用自己去判断「够好了吗」然后提前收工。<strong>每次 Claude 想停下来，都有一个独立的评估模型（evaluator）拿着你的条件核对一遍</strong>，没达标就把它打回去继续干，直到目标达成、或者到了你设定的尝试次数上限才真正停。</p>
+<p>换句话说，判定权从 Claude 手里拿走了，交给一个专门核对标准的评估模型。这也是为什么「确定性标准」特别好使：比如通过的测试数量、清除某个分数阈值，评估模型能明确打勾，不含糊。</p>
+
+<div class="fig">
+<svg viewBox="0 0 720 200" role="img" aria-label="目标制循环：Claude 尝试收工后由评估模型核对，达标才停，未达标打回重做">
+  <rect class="bx" x="20" y="76" width="170" height="56" rx="10"/>
+  <text class="tt" x="105" y="100" text-anchor="middle">Claude 尝试收工</text>
+  <text class="ts" x="105" y="118" text-anchor="middle">每轮结束想停下</text>
+  <rect class="bx a" x="258" y="76" width="190" height="56" rx="10"/>
+  <text class="tt" x="353" y="100" text-anchor="middle">评估模型核对标准</text>
+  <text class="ts" x="353" y="118" text-anchor="middle">independent evaluator</text>
+  <rect class="bx g" x="530" y="26" width="170" height="52" rx="10"/>
+  <text class="tt" x="615" y="48" text-anchor="middle">达标 · 真正停下</text>
+  <text class="ts" x="615" y="66" text-anchor="middle">或到尝试次数上限</text>
+  <rect class="bx r" x="530" y="130" width="170" height="52" rx="10"/>
+  <text class="tt" x="615" y="152" text-anchor="middle">未达标 · 打回重做</text>
+  <text class="ts" x="615" y="170" text-anchor="middle">沿虚线回到起点</text>
+  <path class="ar" d="M190 104 L252 104" marker-end="url(#ah2)"/>
+  <path class="ar" d="M448 92 Q 490 78 512 62" marker-end="url(#ah2)"/>
+  <path class="ar" d="M448 116 Q 490 130 512 148" marker-end="url(#ah2)"/>
+  <path class="ar d" d="M615 130 L615 108 Q 615 190 105 190 Q 84 190 84 132 L84 132" marker-end="url(#ah2d)"/>
+  <defs>
+    <marker id="ah2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)"/></marker>
+    <marker id="ah2d" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)"/></marker>
+  </defs>
+</svg>
+<div class="figcap">目标制循环（<code>/goal</code>）示意（依原文描述重绘）：评估模型核对退出标准，不达标打回，达标或到上限才真停。</div>
+</div>
+
+<div class="callout">
+<span class="h">打个比方</span>
+像交作业前先过一道质检关卡：质检员不是自己批自己，而是换了个人（评估模型）拿着标准表逐条打勾，不达标就打回重做，最多返工几次为止。
+</div>
+
+<p>一个具体例子：</p>
+<pre><code>/goal get the homepage Lighthouse score to 90 or above, stop after 5 tries.</code></pre>
+
+<div class="grid2">
+  <div class="card pos" style="cursor:default">
+    <span class="n">90 分</span>
+    <span class="k">示例设定的 Lighthouse 达标线，由评估模型核对</span>
+  </div>
+  <div class="card pos" style="cursor:default">
+    <span class="n">5 次</span>
+    <span class="k">达不到时的最多重试次数，到上限就停，用来管住花销</span>
+  </div>
+</div>
+
+<p>目标制适合有可验证退出标准的任务；你交出去的是<strong>「停止条件」</strong>，用的功能就是 <code>/goal</code>。管花销的办法：把完成标准和重试上限都定具体，比如「试 5 次后停」。</p>
+</section>
+
+<section id="s5">
+<h2 id="s5-h">05 · 第 3 级 · 时间制</h2>
+<h3 id="s5-1">到点自己去看一眼</h3>
+<p class="lead">有些活儿是周期性的：任务不变，只有输入在变，比如每天早上汇总一遍 Slack 消息。还有些活儿依赖外部系统，最简单的对接办法就是按固定间隔去查一下、根据变化做出反应，比如一个 PR，它可能收到评审意见、也可能 CI 挂掉。</p>
+<p>这类工作用 <code>/loop</code> 触发，它会按间隔重跑一句提示。停下来的条件是你取消它、或者活干完了（PR 合并了、队列空了）。例子：</p>
+<pre><code>/loop 5m check my PR, address review comments, and fix failing CI</code></pre>
+
+<div class="grid2">
+  <div class="card">
+    <h4 id="s5-loop"><code>/loop</code>　本地跑</h4>
+    <p class="kv">在你自己的电脑上按固定间隔重跑同一句提示。</p>
+    <p><strong>你把电脑关了，它就停。</strong>适合你人在、临时盯一段的活儿。</p>
+  </div>
+  <div class="card">
+    <h4 id="s5-sched"><code>/schedule</code>　搬到云端</h4>
+    <p class="kv">用 <code>/schedule</code> 建一个 routine，把这套「定时重跑」搬到云端常驻。</p>
+    <p><strong>你电脑关了，它照样跑。</strong>适合要长期挂着、不受你在不在场影响的活儿。</p>
+  </div>
+</div>
+
+<div class="grid2">
+  <div class="card pos" style="cursor:default">
+    <span class="n">5 分钟</span>
+    <span class="k">示例：<code>/loop 5m</code> —— 每 5 分钟检查一次 PR、处理评审意见、修失败的 CI</span>
+  </div>
+  <div class="card pos" style="cursor:default">
+    <span class="n">按需拉长</span>
+    <span class="k">管花销：把间隔设长，或改成「按事件反应」而不是死盯时间</span>
+  </div>
+</div>
+</section>
+
+<section id="s6">
+<h2 id="s6-h">06 · 第 4 级 · 主动式 · 核心</h2>
+<h3 id="s6-1">五个功能拼起来，不用人管自己跑</h3>
+<p class="lead">前面几种原语，加上 auto mode（自动模式，不用每步停下来问你要不要继续）和 dynamic workflows（动态工作流，研究预览版），能组合成一条处理长期工作的循环。触发它的是事件或排期，全程没有人实时在场。</p>
+<p>主动式循环的停止逻辑分两层：<strong>每个具体任务达到自己的目标就退出，而整条 routine 本身会一直跑，直到你手动把它关掉。</strong>它最适合那种反复出现、定义清晰的工作流：bug 报告、issue 分诊、迁移、依赖升级等等。</p>
+
+<h4 id="s6-2">以处理反馈为例，官方给的拼法</h4>
+<ol class="tight">
+<li><strong><code>/schedule</code>　定时触发</strong> —— 建一个 routine，每小时检查一次有没有新报告（研究预览版）</li>
+<li><strong><code>/goal</code>　停止条件</strong> —— 定义什么算「做完」，配合 <strong>skills</strong> 说明该怎么验证</li>
+<li><strong>dynamic workflows　多 agent 编排</strong> —— 编排一批 agent 去分诊每条报告、修复、再审查修复结果</li>
+<li><strong>auto mode　免人工确认</strong> —— 罩在最外层，让整条 routine 一路跑完，不停下来问权限</li>
+</ol>
+
+<div class="fig">
+<svg viewBox="0 0 720 210" role="img" aria-label="主动式循环流水线：事件触发、分诊、多 agent 并行探索三种解法、裁判审查、自动收尾，回到监听">
+  <rect class="bx" x="16"  y="26" width="150" height="56" rx="10"/>
+  <text class="tt" x="91"  y="50" text-anchor="middle">① 事件 / 排期触发</text>
+  <text class="ts" x="91"  y="68" text-anchor="middle">/schedule 每小时</text>
+  <rect class="bx" x="206" y="26" width="120" height="56" rx="10"/>
+  <text class="tt" x="266" y="50" text-anchor="middle">② 分诊</text>
+  <text class="ts" x="266" y="68" text-anchor="middle">triage</text>
+  <rect class="bx a" x="366" y="26" width="250" height="56" rx="10"/>
+  <text class="tt" x="491" y="50" text-anchor="middle">③ 并行探索三种解法</text>
+  <text class="ts" x="491" y="68" text-anchor="middle">三个独立 worktree · dynamic workflows</text>
+  <rect class="bx r" x="366" y="126" width="250" height="56" rx="10"/>
+  <text class="tt" x="491" y="150" text-anchor="middle">④ 裁判 agent 对抗式审查</text>
+  <text class="ts" x="491" y="168" text-anchor="middle">judge reviews them adversarially</text>
+  <rect class="bx" x="206" y="126" width="120" height="56" rx="10"/>
+  <text class="tt" x="266" y="150" text-anchor="middle">⑤ 自动收尾</text>
+  <text class="ts" x="266" y="168" text-anchor="middle">actioned + responded</text>
+  <rect class="bx g" x="16"  y="126" width="150" height="56" rx="10"/>
+  <text class="tt" x="91"  y="150" text-anchor="middle">⑥ 回到监听</text>
+  <text class="ts" x="91"  y="168" text-anchor="middle">等待下一个事件</text>
+  <path class="ar" d="M166 54 L200 54" marker-end="url(#ah3)"/>
+  <path class="ar" d="M326 54 L360 54" marker-end="url(#ah3)"/>
+  <path class="ar" d="M491 82 L491 120" marker-end="url(#ah3)"/>
+  <path class="ar" d="M366 154 L332 154" marker-end="url(#ah3)"/>
+  <path class="ar" d="M206 154 L172 154" marker-end="url(#ah3)"/>
+  <path class="ar" d="M91 126 Q 91 96 60 96 L60 54 L16 54" marker-end="url(#ah3)"/>
+  <defs>
+    <marker id="ah3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)"/></marker>
+  </defs>
+</svg>
+<div class="figcap">主动式循环（proactive loop）示意（依原文描述重绘）：事件或排期触发、无人实时在场，收尾后回到监听形成闭环。</div>
+</div>
+
+<p>拼在一起，一条完整提示长这样：</p>
+<pre><code>/schedule every hour: check #project-feedback for bug reports.
+/goal: don't stop until every report found this run is triaged,
+actioned, and responded to. When fixing a bug, use a workflow to
+explore three solutions in parallel worktrees and have a judge
+adversarially review them.</code></pre>
+
+<div class="callout cyan">
+<span class="h">翻成大白话</span>
+每小时去 <code>#project-feedback</code> 频道查 bug 报告；这一轮找到的每一条，不分诊完、处理完、回复完就别停；修某个 bug 时，用一个 workflow 在三个独立分支（worktree）里并行试三种解法，再让一个裁判 agent 对抗式地互相挑错。
+</div>
+<p>管花销的办法：<strong>把 routine 派给更小更快的模型跑，只在需要判断的关键点上用最强的模型。</strong></p>
+</section>
+
+<section id="s7">
+<h2 id="s7-h">07 · 质量保障</h2>
+<h3 id="s7-1">别让循环自己跑偏</h3>
+<p class="lead">一个循环的输出质量，取决于它周围那套系统。设计系统时，官方给了四条：</p>
+
+<div class="card">
+<ul class="tight">
+<li><strong>保持代码库本身干净</strong> —— Claude 会照着你代码库里已有的模式和约定走，底子干净，它跟着走出来的东西才干净。</li>
+<li><strong>给 Claude 一个自查的手段</strong> —— 把「什么样才算好」用 skills 固化成你和团队的标准，让它能端到端检查自己。</li>
+<li><strong>让文档触手可及</strong> —— 框架和库的官方文档带着最新的最佳实践，别让它凭旧记忆瞎猜。</li>
+<li><strong>用第二个 agent 做代码审查</strong> —— 一个上下文全新的审查者偏见更少，不受主 agent 推理的影响。可以用内置的 <code>/code-review</code>，或接 GitHub 的 Code Review。</li>
+</ul>
+</div>
+
+<div class="callout green">
+<span class="h">核心原则</span>
+当某一次的结果不达标，<strong>别只停在修好这一次的问题</strong>。试着把它固化成规则，去改进整个系统，让后面每一轮迭代都受益。<strong>出错时该改的是系统规则，不是这一次的结果。</strong>
+</div>
+</section>
+
+<section id="s8">
+<h2 id="s8-h">08 · 省 token</h2>
+<h3 id="s8-1">别让循环偷偷烧光你的 token</h3>
+<p class="lead">要管住 token，循环得有清晰的边界。原文给了<strong>六条</strong>可执行清单（解读稿此处仅呈现了其中两条，本章按官方原文补齐为六条，详见 <a href="#s10">第 10 节核验说明</a>）：</p>
+
+<table>
+<thead><tr><th style="width:34%">措施</th><th>要点</th></tr></thead>
+<tbody>
+<tr><td>① 选对原语与模型</td><td>更小的任务不需要多个 agent 或多层循环；部分任务可以用更便宜、更快的模型。</td></tr>
+<tr><td>② 定义清晰的成败与停止标准</td><td>把「做完长什么样」说具体，Claude 才能更快抵达解——但别快到提前收工。</td></tr>
+<tr><td>③ 大规模跑之前先试跑</td><td><strong>dynamic workflows 可以拉起<em>数百个</em> agent</strong>；先在一小片工作上估量用量，再放量。</td></tr>
+<tr><td>④ 确定性工作用脚本</td><td><strong>跑现成脚本比让 Claude 每次重新推导步骤更省</strong>。例如 PDF 技能可以自带一个填表脚本让 Claude 每次直接跑，而不是重推一遍代码。</td></tr>
+<tr><td>⑤ 别跑得比实际需要更勤</td><td>让间隔匹配你所盯的那个东西<em>实际变化的频率</em>。</td></tr>
+<tr><td>⑥ 复核用量</td><td><code>/usage</code> 按 skills、subagents、MCP 拆解近期用量；不带参数跑 <code>/goal</code> 可看当前轮数与 token 用量；<code>/workflows</code> 显示每个 agent 的 token 用量，且可随时停掉某个 agent。</td></tr>
+</tbody>
+</table>
+
+<div class="callout rose">
+<span class="h">另有一条最大的杠杆</span>
+官方明确提示：<strong>模型与 effort level（思考档位）的选择，是对一个循环成本影响最大的杠杆之一。</strong>
+</div>
+</section>
+
+<section id="s9">
+<h2 id="s9-h">09 · 速查</h2>
+<h3 id="s9-1">四种循环怎么选，一张表说清</h3>
+<p>面对一个具体任务，你要想清楚三件事：<strong>交出去什么、什么时候用、用哪个功能。</strong>原文这张总表把四级循环并成一行行对照：</p>
+
+<table>
+<thead><tr><th style="width:16%">循环</th><th style="width:18%">你交出</th><th style="width:30%">什么时候用</th><th style="width:36%">用什么</th></tr></thead>
+<tbody>
+<tr><td><strong>回合制</strong></td><td>「检查」</td><td>你在探索或做决定</td><td>自定义验证 skills</td></tr>
+<tr><td><strong>目标制</strong></td><td>「停止条件」</td><td>你清楚什么算完成</td><td><code>/goal</code></td></tr>
+<tr><td><strong>时间制</strong></td><td>「触发」</td><td>工作在项目之外按时间表发生</td><td><code>/loop</code>、<code>/schedule</code></td></tr>
+<tr><td><strong>主动式</strong></td><td>「提示词」</td><td>工作反复出现且定义清晰</td><td>以上全部 + dynamic workflows</td></tr>
+</tbody>
+</table>
+
+<details>
+<summary>回合制 · 看示例</summary>
+<p>让 Claude 做个点赞按钮：它读代码、改文件、跑测试、交回一个它自认为能用的版本，你手动验收后再写下一条提示。</p>
+</details>
+
+<details>
+<summary>目标制 · 看示例</summary>
+<pre><code>/goal get the homepage Lighthouse score to 90 or above, stop after 5 tries.</code></pre>
+</details>
+
+<details>
+<summary>时间制 · 看示例</summary>
+<pre><code>/loop 5m check my PR, address review comments, and fix failing CI</code></pre>
+</details>
+
+<details>
+<summary>主动式 · 看示例</summary>
+<pre><code>/schedule every hour: check #project-feedback for bug reports.
+/goal: don't stop until every report found this run is triaged,
+actioned, and responded to. When fixing a bug, use a workflow to
+explore three solutions in parallel worktrees and have a judge
+adversarially review them.</code></pre>
+</details>
+
+<h3 id="s9-2">从哪里开始 · 三个自查问题</h3>
+<p>看你已经在做的活儿，挑一个<strong>你是瓶颈</strong>的任务，问自己哪一块能交出去：</p>
+<ul class="checklist">
+<li><input type="checkbox" id="chk-q1"><label for="chk-q1">你能不能写出这件事的<strong>验收检查</strong>？</label></li>
+<li><input type="checkbox" id="chk-q2"><label for="chk-q2">这件事的<strong>目标</strong>够不够清楚？</label></li>
+<li><input type="checkbox" id="chk-q3"><label for="chk-q3">这活儿是不是<strong>按时间表</strong>来的？</label></li>
+</ul>
+<p class="kv">已确认可交出的条件：<span id="out-self-progress" style="font-weight:800;color:var(--accent)">0 / 3</span></p>
+<p>有了想法就把循环跑起来，观察它在哪儿卡住、在哪儿越界，然后放手去迭代它。</p>
+
+<blockquote>我们把循环定义为：agent 反复执行一轮轮工作，直到满足某个停止条件。<br>—— Claude Code 团队，Getting started with loops，2026-06-30</blockquote>
+</section>
+
+<section id="s10">
+<h2 id="s10-h">10 · 来源核验与勘误</h2>
+<h3 id="s10-1">已核实项（对照官方原文）</h3>
+<table class="src-table">
+<thead><tr><th style="width:24%">项目</th><th>核验结果</th></tr></thead>
+<tbody>
+<tr><td>来源</td><td>Anthropic 官方博客《Loop engineering: Getting started with loops》，<a href="https://claude.com/blog/getting-started-with-loops" target="_blank" rel="noopener">claude.com/blog/getting-started-with-loops</a></td></tr>
+<tr><td>作者 / 日期</td><td>Delba de Oliveira、Michael Segner，2026-06-30 —— <strong>一致</strong></td></tr>
+<tr><td>循环定义</td><td>「agents repeating cycles of work until a stop condition is met」—— <strong>一致</strong></td></tr>
+<tr><td>四维度分类</td><td>触发方式 / 停止标准 / 使用的 Claude Code 原语 / 适合的任务类型 —— <strong>一致</strong></td></tr>
+<tr><td>四级循环</td><td>turn-based → goal-based → time-based → proactive —— <strong>一致</strong></td></tr>
+<tr><td>四条示例命令</td><td><code>/goal</code> Lighthouse 90 分 / 5 次；<code>/loop 5m</code> 查 PR；<code>/schedule</code> 每小时 + workflow 三解法 —— <strong>逐字一致</strong></td></tr>
+<tr><td>SKILL.md 示例</td><td><code>verify-frontend-change</code> 四条步骤 —— <strong>逐字一致</strong></td></tr>
+</tbody>
+</table>
+
+<h3 id="s10-2">差异与勘误</h3>
+<div class="callout">
+<span class="h">勘误 1 · 官方标题</span>
+官方英文标题为 <em>「Loop engineering: Getting started with loops」</em>；中文解读稿标题为意译，非直译。
+</div>
+<div class="callout">
+<span class="h">勘误 2 · 第 08 节条目数</span>
+解读稿称「原文给了六条可执行清单」，但正文仅呈现了两条。本文已按官方原文<strong>补齐为六条</strong>（见第 08 节表格），补齐内容同样出自官方原文，非推测。
+</div>
+<div class="callout">
+<span class="h">勘误 3 · 「数百个 agent」的口径</span>
+官方原文中「hundreds of agents」出自 <em>「Pilot before a large run」</em> 条款，是<strong>一般性陈述</strong>（dynamic workflows 可以拉起数百个 agent），并非针对「每小时检查 <code>#project-feedback</code>」那条示例的实测值。解读稿将其与该示例并置，阅读时需注意口径。
+</div>
+<div class="callout">
+<span class="h">勘误 4 · 研究预览版标注</span>
+官方原文明确标注 <code>/schedule</code> 与 dynamic workflows 为 <strong>research preview（研究预览版）</strong>，能力边界与用量可能变动，不宜直接作为生产承诺。
+</div>
+<div class="callout">
+<span class="h">补注 · 官方文档入口</span>
+官方文末给出的延伸阅读：并行运行 agent、<code>loop</code>、<code>schedule</code>（routines）、<code>goal</code>、dynamic workflows 文档页，以及《building verification loops in Claude Code with skills》。
+</div>
+
+<div class="footer">
+<p><strong>来源：</strong>Claude 官方博客《Getting started with loops》（claude.com/blog/getting-started-with-loops），作者 Delba de Oliveira、Michael Segner，发布于 2026-06-30。本文为该厂商发布内容的中文可视化解读；文中分类框架、示例代码（<code>/goal</code>、<code>/loop</code>、<code>/schedule</code> 与组合提示）及「90 分、5 次、数百个 agent」等数字均引自原文，为官方口径。dynamic workflows、<code>/schedule</code> 为原文标注的研究预览版功能。</p>
+<p><strong>中文解读原文：</strong><a href="https://best.xiaohu.ai/article/claude-code-loops/" target="_blank" rel="noopener">best.xiaohu.ai/article/claude-code-loops/</a>（小互解读，2026-07-02，付费内容）</p>
+<p>网页版另有交互视图：一页纸速读视图 / 秒懂漫画。完整体验见原文链接。</p>
+<p style="margin-top:14px">本文档为结构化重排与可视化重绘版本，所有示意图均为依据原文描述重绘，非官方原图。零外部依赖，断网可完整阅读。</p>
+</div>
+</section>
+
+<!-- ============ 沙盘一：四级循环装配台 ============ -->
+<section id="sec-sim1">
+<h2 id="s11">沙盘一 · 四级循环装配台</h2>
+<p class="lead">点选任一级，查看它的完整坐标（谁触发 / 怎么判断停 / 用什么原语 / 适合什么任务 / 你交出什么 / 怎么管花销）与可直接复制的示例提示。</p>
+
+<div class="grid4">
+  <div class="card pos" id="card-l1"><span class="n">L1</span><span class="k">回合制<br>agentic loop</span></div>
+  <div class="card pos" id="card-l2"><span class="n">L2</span><span class="k">目标制<br><code>/goal</code></span></div>
+  <div class="card pos" id="card-l3"><span class="n">L3</span><span class="k">时间制<br><code>/loop</code> · <code>/schedule</code></span></div>
+  <div class="card pos" id="card-l4"><span class="n">L4</span><span class="k">主动式<br>proactive</span></div>
+</div>
+
+<div class="fig">
+<svg viewBox="0 0 720 170" role="img" aria-label="四级自主度阶梯：L1 到 L4 逐级升高">
+  <line class="ax" x1="40" y1="140" x2="700" y2="140"/>
+  <rect id="bar-l1" class="bx" x="60"  y="110" width="120" height="30"  rx="4"/>
+  <rect id="bar-l2" class="bx" x="230" y="86"  width="120" height="54"  rx="4"/>
+  <rect id="bar-l3" class="bx" x="400" y="62"  width="120" height="78"  rx="4"/>
+  <rect id="bar-l4" class="bx" x="570" y="38"  width="120" height="102" rx="4"/>
+  <text class="ts" x="120" y="158" text-anchor="middle">L1 回合制</text>
+  <text class="ts" x="290" y="158" text-anchor="middle">L2 目标制</text>
+  <text class="ts" x="460" y="158" text-anchor="middle">L3 时间制</text>
+  <text class="ts" x="630" y="158" text-anchor="middle">L4 主动式</text>
+  <text class="ts" x="40"  y="24">柱高 = 自主程度（人在环内的程度反向递减）</text>
+</svg>
+</div>
+
+<div class="card">
+  <h4 id="out-lv-name" style="margin-top:0">第 1 级 · 回合制</h4>
+  <div class="grid2">
+    <div>
+      <p class="kv"><b>① 谁触发：</b><span id="out-lv-trigger">—</span></p>
+      <p class="kv"><b>② 怎么判断停：</b><span id="out-lv-stop">—</span></p>
+      <p class="kv"><b>③ 用什么原语：</b><span id="out-lv-prim">—</span></p>
+    </div>
+    <div>
+      <p class="kv"><b>④ 适合什么任务：</b><span id="out-lv-task">—</span></p>
+      <p class="kv"><b>你交出：</b><span id="out-lv-hand">—</span></p>
+      <p class="kv"><b>怎么管花销：</b><span id="out-lv-cost">—</span></p>
+    </div>
+  </div>
+  <pre style="margin-bottom:8px"><code id="out-lv-prompt">—</code></pre>
+  <button class="btn sm" id="btn-copy-lv">复制该级示例提示</button>
+</div>
+</section>
+
+<!-- ============ 沙盘二：/loop 触发频次计算器 ============ -->
+<section id="sec-sim2">
+<h2 id="s12">沙盘二 · <code>/loop</code> 触发频次计算器</h2>
+<p class="lead">「触发」交出去的代价，等于间隔的倒數乘以时长。调两个滑块，看本机 <code>/loop</code> 与云端 <code>/schedule</code> 在同一间隔下的触发轮数差。</p>
+
+<div class="card">
+  <div class="simrow">
+    <label for="rng-interval">轮询间隔 <code>I</code>（分钟）</label>
+    <input type="range" id="rng-interval" min="1" max="60" step="1" value="5">
+    <span class="statbox"><span class="lb">当前</span><span class="vl" id="out-iv-val">5 分钟</span></span>
+  </div>
+  <div class="simrow">
+    <label for="rng-hours">本机持续运行 <code>H</code>（小时）</label>
+    <input type="range" id="rng-hours" min="1" max="24" step="1" value="8">
+    <span class="statbox"><span class="lb">当前</span><span class="vl" id="out-hr-val">8 小时</span></span>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <div class="statbox"><span class="lb">/loop 本机运行 H 小时 → 触发轮数</span><span class="vl" id="out-loop-runs">96 轮</span></div>
+    <div class="statbox"><span class="lb">改 /schedule 云端常驻 24 小时 → 触发轮数</span><span class="vl" id="out-loop-day">288 轮</span></div>
+  </div>
+  <p class="kv" id="out-loop-note" style="margin-top:12px">—</p>
+  <div class="callout rose" style="margin-bottom:0">
+    <span class="h">口径说明</span>
+    此处只计算<strong>触发轮数</strong>（确定性算术：<code>floor(60 × H ÷ I)</code>）。原文未给出单轮 token 单价，因此<strong>不估算费用</strong>；真实花销请按官方给的 <code>/usage</code>、<code>/goal</code>（不带参数）、<code>/workflows</code> 三个命令实测。
+  </div>
+</div>
+</section>
+
+<!-- ============ 沙盘三：/goal 收敛预算 ============ -->
+<section id="sec-sim3">
+<h2 id="s13">沙盘三 · <code>/goal</code> 收敛预算（截断几何模型）</h2>
+<p class="lead">把「最多试几次」当作一个可算的预算问题：设单轮达标概率为 <code>p</code>、最多尝试 <code>K</code> 次，则达标前被评估模型打回的次数是可解的。</p>
+
+<div class="card">
+  <div class="simrow">
+    <label for="rng-hit">单轮达标概率 <code>p</code>（假设值）</label>
+    <input type="range" id="rng-hit" min="5" max="95" step="5" value="30">
+    <span class="statbox"><span class="lb">当前 p</span><span class="vl" id="out-hit-val">0.30</span></span>
+  </div>
+  <div class="simrow">
+    <label for="rng-cap">最多尝试次数 <code>K</code>（turn cap）</label>
+    <input type="range" id="rng-cap" min="1" max="10" step="1" value="5">
+    <span class="statbox"><span class="lb">当前 K</span><span class="vl" id="out-cap-val">5 次</span></span>
+  </div>
+
+  <div class="grid4" style="margin-top:14px">
+    <div class="statbox"><span class="lb">K 次内达标概率</span><span class="vl" id="out-goal-pass">83.19%</span></div>
+    <div class="statbox"><span class="lb">触顶仍未达标</span><span class="vl" id="out-goal-fail">16.81%</span></div>
+    <div class="statbox"><span class="lb">期望执行轮数</span><span class="vl" id="out-goal-exp">2.77 轮</span></div>
+    <div class="statbox"><span class="lb">期望被打回次数</span><span class="vl" id="out-goal-back">1.77 次</span></div>
+  </div>
+
+  <div class="fig" style="margin-top:16px">
+  <svg viewBox="0 0 720 260" role="img" aria-label="达标概率随尝试次数上限 K 变化的曲线">
+    <line class="ax" x1="70"  y1="210" x2="700" y2="210"/>
+    <line class="ax" x1="70"  y1="30"  x2="70"  y2="210"/>
+    <line class="ax" x1="70"  y1="165" x2="700" y2="165" stroke-dasharray="3 5"/>
+    <line class="ax" x1="70"  y1="120" x2="700" y2="120" stroke-dasharray="3 5"/>
+    <line class="ax" x1="70"  y1="75"  x2="700" y2="75"  stroke-dasharray="3 5"/>
+    <line class="ax" x1="70"  y1="30"  x2="700" y2="30"  stroke-dasharray="3 5"/>
+    <text class="ts" x="60" y="214" text-anchor="end">0</text>
+    <text class="ts" x="60" y="169" text-anchor="end">0.25</text>
+    <text class="ts" x="60" y="124" text-anchor="end">0.50</text>
+    <text class="ts" x="60" y="79"  text-anchor="end">0.75</text>
+    <text class="ts" x="60" y="34"  text-anchor="end">1.00</text>
+    <text class="ts" x="70"  y="236" text-anchor="middle">1</text>
+    <text class="ts" x="207" y="236" text-anchor="middle">3</text>
+    <text class="ts" x="345" y="236" text-anchor="middle">5</text>
+    <text class="ts" x="483" y="236" text-anchor="middle">7</text>
+    <text class="ts" x="690" y="236" text-anchor="middle">10</text>
+    <text class="ts" x="380" y="256" text-anchor="middle">K = 最多尝试次数（turn cap）</text>
+    <text class="ts" x="24"  y="120" text-anchor="middle" transform="rotate(-90 24 120)">K 次内达标概率</text>
+    <polyline id="cv-goal-curve" points="70.00,156.00 138.89,118.20 207.78,91.74 276.67,73.22 345.56,60.25 414.44,51.18 483.33,44.82 552.22,40.38 621.11,37.26 690.00,35.08" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+    <line id="mk-goal-cap" x1="345.56" y1="30" x2="345.56" y2="210" stroke="var(--cyan)" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <circle id="cm-goal-dot" cx="345.56" cy="60.25" r="5" fill="var(--accent)"/>
+  </svg>
+  <div class="figcap">曲线为 <code>P(K) = 1 − (1 − p)^K</code>，在给定 <code>p</code> 下随 <code>K</code> 单调上升但边际递减；虚线为当前 turn cap 所在位置。</div>
+  </div>
+
+  <p class="kv" id="out-goal-note">—</p>
+  <div class="callout rose" style="margin-bottom:0">
+    <span class="h">口径说明（防造假）</span>
+    <code>p</code> 是<strong>你自行设定的假设值，非官方数据</strong>——官方从未给出单轮达标率的任何数字。本沙盘只用它演示<strong>轮数上限与达标率的确定性关系</strong>（截断几何分布），不预测任何真实任务的成功率。公式：<code>P = 1 − (1−p)^K</code>；<code>期望轮数 = P ÷ p</code>；<code>期望打回 = 期望轮数 − 1</code>。
+  </div>
+</div>
+</section>
+
+</main>
+
+<button class="btn" id="btn-top">回到顶部</button>
+
+<script>
+(function(){
+function byId(id){return document.getElementById(id);}
+
+/* ---------- 沙盘一：四级循环装配台 ---------- */
+var LV={
+"L1":{
+ name:"第 1 级 · 回合制（agentic loop）",
+ trigger:"一句提示 —— 你发的每一条消息都开启一轮",
+ stop:"Claude 自己判断「做完了」或需要更多上下文",
+ prim:"默认对话 + 自定义验证 skills",
+ task:"不属固定流程、也不按排期来的短任务",
+ hand:"「检查」——每一轮仍由你引导",
+ cost:"把手动验收写成 SKILL.md，给 Claude 能「看到、量到、动手」的工具；检查越量化，需要的回合越少",
+ prompt:"把你平时的手动验收步骤固化成 SKILL.md：任何改动都不许只凭「编辑成功」报完成，必须端到端自查（启动环境、直接交互、查控制台、跑性能 trace），任一步失败就修好后从头重跑，绝不交半成品。"
+},
+"L2":{
+ name:"第 2 级 · 目标制（/goal）",
+ trigger:"手动提示，实时发起",
+ stop:"达标 或 达到你设定的最多尝试次数上限",
+ prim:"/goal（独立评估模型核对标准）",
+ task:"有可验证退出标准的任务（测试通过数、分数阈值）",
+ hand:"「停止条件」——判定权从 Claude 交给评估模型",
+ cost:"把完成标准与重试上限都写具体，例如「stop after 5 tries」",
+ prompt:"/goal get the homepage Lighthouse score to 90 or above, stop after 5 tries."
+},
+"L3":{
+ name:"第 3 级 · 时间制（/loop 与 /schedule）",
+ trigger:"指定的时间间隔",
+ stop:"你取消它，或活干完了（PR 合并、队列清空）",
+ prim:"/loop（本机）/ /schedule（云端 routine）",
+ task:"周期性工作，或对接外部系统（PR 评审、CI 状态）",
+ hand:"「触发」——任务不变，只有输入在变",
+ cost:"把间隔设长，或改成「按事件反应」而不是死盯时间",
+ prompt:"/loop 5m check my PR, address review comments, and fix failing CI"
+},
+"L4":{
+ name:"第 4 级 · 主动式（proactive）",
+ trigger:"事件或排期，全程无人在实时",
+ stop:"每个任务达标即退出；整条 routine 跑到你手动关掉",
+ prim:"/schedule + /goal + skills + dynamic workflows + auto mode",
+ task:"反复出现且定义清晰的工作流：bug 报告、issue 分诊、迁移、依赖升级",
+ hand:"「提示词」——整条流水线交出去",
+ cost:"routine 路由到更小更快的模型，只在需要判断的关键点用最强模型",
+ prompt:"/schedule every hour: check #project-feedback for bug reports.\n/goal: don't stop until every report found this run is triaged,\nactioned, and responded to. When fixing a bug, use a workflow to\nexplore three solutions in parallel worktrees and have a judge\nadversarially review them."
+}};
+var order=["L1","L2","L3","L4"];
+var curLevel="L1";
+
+function setLevel(key){
+ curLevel=key;
+ var d=LV[key]||LV["L1"];
+ function w(id,txt){var e=byId(id);if(e){e.textContent=txt;}}
+ w("out-lv-name",d.name);
+ w("out-lv-trigger",d.trigger);
+ w("out-lv-stop",d.stop);
+ w("out-lv-prim",d.prim);
+ w("out-lv-task",d.task);
+ w("out-lv-hand",d.hand);
+ w("out-lv-cost",d.cost);
+ w("out-lv-prompt",d.prompt);
+ for(var i=0;i<order.length;i++){
+  var k=order[i];
+  var c=byId("card-"+k.toLowerCase());
+  if(c){if(k===key){c.classList.add("sel");}else{c.classList.remove("sel");}}
+  var b=byId("bar-"+k.toLowerCase());
+  if(b){b.setAttribute("class", k===key ? "bx a" : "bx");}
+ }
+}
+
+/* ---------- 沙盘二：/loop 触发频次 ---------- */
+function refreshLoop(){
+ var r1=byId("rng-interval");var r2=byId("rng-hours");
+ var I=r1?parseInt(r1.value,10):5;
+ var H=r2?parseInt(r2.value,10):8;
+ if(!I||I<1){I=1;}
+ var v1=byId("out-iv-val");if(v1){v1.textContent=I+" 分钟";}
+ var v2=byId("out-hr-val");if(v2){v2.textContent=H+" 小时";}
+ var runs=Math.floor(60*H/I);
+ var day=Math.floor(1440/I);
+ var o1=byId("out-loop-runs");if(o1){o1.textContent=runs+" 轮";}
+ var o2=byId("out-loop-day");if(o2){o2.textContent=day+" 轮";}
+ var n=byId("out-loop-note");
+ if(n){n.textContent="公式：本机轮数 = floor(60 × "+H+" ÷ "+I+") = "+runs+" 轮；云端常驻 24 小时 = floor(1440 ÷ "+I+") = "+day+" 轮。间隔从 "+I+" 分钟翻倍到 "+(I*2)+" 分钟，同样时长内轮数减半。";}
+}
+
+/* ---------- 沙盘三：/goal 收敛预算 ---------- */
+var GX0=70, GX1=690, GY0=210, GY1=30;
+function gxK(K){return GX0+(K-1)*(GX1-GX0)/9;}
+function gyP(v){return GY0-v*(GY0-GY1);}
+function Pk(p,K){return 1-Math.pow(1-p,K);}
+
+function refreshGoal(){
+ var r1=byId("rng-hit");var r2=byId("rng-cap");
+ var pr=r1?parseInt(r1.value,10):30;
+ var K=r2?parseInt(r2.value,10):5;
+ var p=pr/100;
+ var P=Pk(p,K);
+ var fail=1-P;
+ var exp=P/p;
+ var back=exp-1;
+ var v1=byId("out-hit-val");if(v1){v1.textContent=p.toFixed(2);}
+ var v2=byId("out-cap-val");if(v2){v2.textContent=K+" 次";}
+ var o1=byId("out-goal-pass");if(o1){o1.textContent=(P*100).toFixed(2)+"%";}
+ var o2=byId("out-goal-fail");if(o2){o2.textContent=(fail*100).toFixed(2)+"%";}
+ var o3=byId("out-goal-exp");if(o3){o3.textContent=exp.toFixed(2)+" 轮";}
+ var o4=byId("out-goal-back");if(o4){o4.textContent=back.toFixed(2)+" 次";}
+ var pts=[];
+ for(var k=1;k<=10;k++){pts.push(gxK(k).toFixed(2)+","+gyP(Pk(p,k)).toFixed(2));}
+ var cv=byId("cv-goal-curve");if(cv){cv.setAttribute("points",pts.join(" "));}
+ var mk=byId("mk-goal-cap");
+ if(mk){var mx=gxK(K).toFixed(2);mk.setAttribute("x1",mx);mk.setAttribute("x2",mx);}
+ var dot=byId("cm-goal-dot");
+ if(dot){dot.setAttribute("cx",gxK(K).toFixed(2));dot.setAttribute("cy",gyP(P).toFixed(2));}
+ var n=byId("out-goal-note");
+ if(n){n.textContent="在当前假设 p="+p.toFixed(2)+"、K="+K+" 下：P = 1 − (1−"+p.toFixed(2)+")^"+K+" = "+P.toFixed(4)+"；期望轮数 = P ÷ p = "+exp.toFixed(4)+" 轮；期望打回 = "+back.toFixed(4)+" 次。即使把上限提到 10 次，达标率也只到 "+(Pk(p,10)*100).toFixed(2)+"%——这就是边际递减，turn cap 不该盲目加大。";}
+}
+
+/* ---------- 自查清单 ---------- */
+var qids=["chk-q1","chk-q2","chk-q3"];
+function refreshSelf(){
+ var n=0;
+ for(var i=0;i<qids.length;i++){var e=byId(qids[i]);if(e&&e.checked){n++;}}
+ var o=byId("out-self-progress");if(o){o.textContent=n+" / 3";}
+}
+
+/* ---------- 复制 ---------- */
+function copyText(t,btn){
+ function done(msg){var old=btn.textContent;btn.textContent=msg;setTimeout(function(){btn.textContent=old;},1400);}
+ if(navigator.clipboard&&navigator.clipboard.writeText){
+  navigator.clipboard.writeText(t).then(function(){done("已复制");},function(){done("复制失败");});
+ }else{
+  var ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);
+  try{ta.select();document.execCommand("copy");done("已复制");}catch(e){done("复制失败");}
+  document.body.removeChild(ta);
+ }
+}
+
+/* ---------- 事件接线 ---------- */
+for(var i=0;i<order.length;i++){
+ (function(k){
+  var c=byId("card-"+k.toLowerCase());
+  if(c){c.addEventListener("click",function(){setLevel(k);});}
+  var b=byId("bar-"+k.toLowerCase());
+  if(b){b.addEventListener("click",function(){setLevel(k);});}
+ })(order[i]);
+}
+var bcl=byId("btn-copy-lv");
+if(bcl){bcl.addEventListener("click",function(){copyText((LV[curLevel]||LV["L1"]).prompt,bcl);});}
+
+var ri=byId("rng-interval");if(ri){ri.addEventListener("input",refreshLoop);}
+var rh=byId("rng-hours");if(rh){rh.addEventListener("input",refreshLoop);}
+var rp=byId("rng-hit");if(rp){rp.addEventListener("input",refreshGoal);}
+var rc=byId("rng-cap");if(rc){rc.addEventListener("input",refreshGoal);}
+for(var q=0;q<qids.length;q++){var qe=byId(qids[q]);if(qe){qe.addEventListener("change",refreshSelf);}}
+
+setLevel("L1");
+refreshLoop();
+refreshGoal();
+refreshSelf();
+
+/* ---------- 主题 / 目录 / 进度条 ---------- */
+function setTheme(t){document.documentElement.setAttribute("data-theme",t);try{if(window.localStorage){window.localStorage.setItem("aike-theme",t);}}catch(e){}}
+var initTheme="dark";
+try{if(window.localStorage){var s=window.localStorage.getItem("aike-theme");if(s==="light"||s==="dark"){initTheme=s;}}}catch(e){}
+setTheme(initTheme);
+var bt=byId("btn-theme");
+if(bt){bt.addEventListener("click",function(){var cur=document.documentElement.getAttribute("data-theme");setTheme(cur==="dark"?"light":"dark");});}
+var tocBtn=byId("btn-toc");
+if(tocBtn){tocBtn.addEventListener("click",function(){var sb=byId("sidebar");if(sb){sb.classList.toggle("open");}});}
+var topBtn=byId("btn-top");
+if(topBtn){topBtn.addEventListener("click",function(){if(window.scrollTo){window.scrollTo(0,0);}document.documentElement.scrollTop=0;document.body.scrollTop=0;});}
+function onScroll(){
+ var h=document.documentElement;
+ var max=h.scrollHeight-h.clientHeight;
+ var bar=byId("bar-progress");
+ if(bar){var p=max>0?(h.scrollTop/max*100):0;bar.style.width=p+"%";}
+}
+if(window.addEventListener){window.addEventListener("scroll",onScroll);}
+onScroll();
+
+if(typeof IntersectionObserver!=="undefined"){
+ var links=document.querySelectorAll("#box-toc a");
+ var secs=[];
+ for(var z=0;z<links.length;z++){
+  var href=links[z].getAttribute("href");
+  if(href&&href.indexOf("#")===0){var tg=byId(href.slice(1));if(tg){secs.push(tg);}}
+ }
+ try{
+  var ob=new IntersectionObserver(function(es){
+   for(var j=0;j<es.length;j++){
+    if(es[j].isIntersecting){
+     var id=es[j].target.getAttribute("id");
+     for(var m2=0;m2<links.length;m2++){
+      if(links[m2].getAttribute("href")==="#"+id){links[m2].classList.add("active");}
+      else{links[m2].classList.remove("active");}
+     }
+    }
+   }
+  },{rootMargin:"-30% 0px -60% 0px"});
+  for(var z2=0;z2<secs.length;z2++){ob.observe(secs[z2]);}
+ }catch(e){}
+}
+})();
+</script>
+</body>
+</html>

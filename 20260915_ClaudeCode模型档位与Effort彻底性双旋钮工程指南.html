@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Claude Code 官方团队长文解读：模型档位管「会不会」，effort 管「愿不愿做够」。含五档 effort 定位、token 生成机制、成本模型与排障决策树。">
+<meta name="author" content="ClaudeDevs / Lydia Hallie（解读整理：AIKnowledge）">
+<title>Claude Code 模型档位与 Effort 彻底性双旋钮工程指南</title>
+<style>
+:root{
+  --bg:#181715; --bg-card:#211F1C; --bg-soft:#26231F; --bg-code:#15130F;
+  --border:#3A3630; --border-soft:#2C2823;
+  --text:#EDE8E0; --text-dim:#A9A29A; --text-faint:#7C766E;
+  --accent:#E2886A; --emerald:#6FBF8E; --rose:#E0765F; --amber:#D9A441; --cyan:#6BA8C4;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.25);
+  --sidebar-w:280px; --content-max:1180px;
+  --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --font-head:"Songti SC","SimSun",Newsreader,Georgia,serif;
+  --font-code:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+}
+html[data-theme="light"]{
+  --bg:#FAF7F2; --bg-card:#FFFDF9; --bg-soft:#F3EEE6; --bg-code:#F5F1EA;
+  --border:#E2DAD0; --border-soft:#EDE7DE;
+  --text:#2A2724; --text-dim:#6B645C; --text-faint:#948C82;
+  --accent:#D97757; --emerald:#2F855A; --rose:#C0392B; --amber:#B7791F; --cyan:#2C7A9B;
+  --shadow:0 1px 2px rgba(80,60,40,.08),0 8px 24px rgba(80,60,40,.10);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-body); font-size:16.5px; line-height:1.85;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+#prog{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:120;transition:width .1s linear}
+
+/* ---------- 侧栏 ---------- */
+.app-sidebar{
+  position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;overflow-y:auto;
+  background:var(--bg-card);border-right:1px solid var(--border-soft);
+  padding:26px 18px 60px;z-index:100;
+}
+.app-sidebar h2{
+  font-family:var(--font-head);font-size:15px;letter-spacing:.12em;margin:0 0 4px;color:var(--accent);
+  text-transform:uppercase;font-weight:600;
+}
+.app-sidebar .sub{font-size:12px;color:var(--text-faint);margin:0 0 18px;line-height:1.6}
+.app-sidebar ol{list-style:none;margin:0;padding:0;counter-reset:toc}
+.app-sidebar li{counter-increment:toc;margin:0}
+.app-sidebar a{
+  display:block;padding:7px 10px 7px 30px;border-radius:6px;color:var(--text-dim);
+  text-decoration:none;font-size:13.5px;line-height:1.5;position:relative;transition:.15s;
+}
+.app-sidebar a::before{
+  content:counter(toc);position:absolute;left:8px;top:7px;font-size:11px;
+  color:var(--text-faint);font-family:var(--font-code);
+}
+.app-sidebar a:hover{background:var(--bg-soft);color:var(--text)}
+.app-sidebar a.active{background:var(--bg-soft);color:var(--accent);font-weight:600}
+.app-sidebar a.sub-link{padding-left:44px;font-size:12.5px;color:var(--text-faint)}
+.app-sidebar a.sub-link::before{content:"·";left:30px}
+
+/* ---------- 正文布局 ---------- */
+#main{
+  display:block;max-width:var(--content-max);width:auto;
+  margin-left:calc(var(--sidebar-w) + max(0px,(100% - var(--sidebar-w) - var(--content-max))/2));
+  margin-right:max(0px,calc((100% - var(--sidebar-w) - var(--content-max))/2));
+  padding:56px 40px 140px;
+}
+header.doc-head{border-bottom:1px solid var(--border);padding-bottom:28px;margin-bottom:12px}
+.kicker{
+  display:inline-block;font-size:12px;letter-spacing:.16em;color:var(--accent);
+  border:1px solid var(--accent);border-radius:999px;padding:3px 12px;margin-bottom:16px;
+}
+h1{
+  font-family:var(--font-head);font-size:2.15rem;line-height:1.35;margin:0 0 14px;font-weight:700;letter-spacing:-.01em;
+}
+h1 .sub{display:block;font-size:1.02rem;color:var(--text-dim);font-weight:400;margin-top:12px;line-height:1.7;font-family:var(--font-body)}
+h2{
+  font-family:var(--font-head);font-size:1.62rem;margin:64px 0 20px;padding-top:14px;
+  border-top:1px solid var(--border-soft);font-weight:700;letter-spacing:-.005em;
+}
+h2 .num{color:var(--accent);font-family:var(--font-code);font-size:.82em;margin-right:12px}
+h3{font-family:var(--font-head);font-size:1.22rem;margin:38px 0 14px;font-weight:600;color:var(--text)}
+h4{font-size:1.02rem;margin:26px 0 10px;font-weight:600;color:var(--text)}
+p{margin:0 0 18px}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(210,135,105,.32)}
+a:hover{border-bottom-color:var(--accent)}
+strong{font-weight:650;color:var(--text)}
+em{color:var(--accent);font-style:normal;font-weight:600}
+ul,ol{margin:0 0 18px;padding-left:1.5em}
+li{margin:7px 0}
+code{
+  font-family:var(--font-code);font-size:.88em;background:var(--bg-code);
+  border:1px solid var(--border-soft);border-radius:4px;padding:1.5px 6px;color:var(--cyan);
+}
+pre{
+  background:var(--bg-code);border:1px solid var(--border-soft);border-radius:8px;
+  padding:16px 18px;overflow-x:auto;font-family:var(--font-code);font-size:13.5px;line-height:1.7;margin:0 0 18px;
+}
+pre code{background:none;border:none;padding:0;color:var(--text-dim)}
+blockquote{
+  margin:22px 0;padding:14px 20px;border-left:3px solid var(--accent);
+  background:var(--bg-soft);border-radius:0 8px 8px 0;color:var(--text);font-family:var(--font-head);font-size:1.06rem;
+}
+blockquote p:last-child{margin:0}
+hr{border:none;border-top:1px solid var(--border-soft);margin:44px 0}
+
+/* ---------- 组件 ---------- */
+.meta-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;
+  background:var(--bg-card);border:1px solid var(--border-soft);border-radius:10px;padding:18px 20px;margin:24px 0 8px;
+}
+.meta-grid div{font-size:13px;line-height:1.7}
+.meta-grid dt{color:var(--text-faint);font-size:11.5px;letter-spacing:.08em;margin-bottom:2px}
+.meta-grid dd{margin:0;color:var(--text-dim)}
+.meta-grid dd a{word-break:break-all}
+
+.callout{border-radius:10px;padding:16px 20px;margin:22px 0;border:1px solid var(--border-soft);background:var(--bg-soft);font-size:14.5px;line-height:1.75}
+.callout .ct{font-weight:700;font-size:13px;letter-spacing:.06em;margin-bottom:8px;display:block}
+.callout.note{border-left:3px solid var(--cyan)} .callout.note .ct{color:var(--cyan)}
+.callout.warn{border-left:3px solid var(--amber)} .callout.warn .ct{color:var(--amber)}
+.callout.key{border-left:3px solid var(--accent)} .callout.key .ct{color:var(--accent)}
+
+.abstract{background:var(--bg-card);border:1px solid var(--border-soft);border-radius:12px;padding:22px 26px;margin:28px 0 8px}
+.abstract h3{margin:0 0 12px;font-size:1.05rem;color:var(--accent);font-family:var(--font-head)}
+.abstract ul{margin:0;padding-left:1.3em}
+.abstract li{margin:9px 0;font-size:15px;line-height:1.75}
+
+figure{margin:26px 0 30px}
+figure svg{display:block;width:100%;height:auto;background:var(--bg-card);border:1px solid var(--border-soft);border-radius:10px}
+figcaption{font-size:12.5px;color:var(--text-faint);margin-top:10px;line-height:1.65;padding-left:2px}
+
+table{width:100%;border-collapse:collapse;margin:22px 0;font-size:14.5px;background:var(--bg-card);border-radius:10px;overflow:hidden}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--border-soft);vertical-align:top;line-height:1.65}
+th{background:var(--bg-soft);font-weight:650;font-size:13px;letter-spacing:.04em;color:var(--text)}
+tbody tr:last-child td{border-bottom:none}
+td:first-child{white-space:nowrap;color:var(--accent);font-weight:600}
+
+/* 沙盘 */
+.box{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:22px 24px;margin:28px 0;box-shadow:var(--shadow)}
+.box h4{margin:0 0 6px;font-family:var(--font-head);font-size:1.1rem}
+.box .hint{font-size:12.5px;color:var(--text-faint);margin:0 0 18px;line-height:1.65}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.chip{
+  font-family:var(--font-code);font-size:13px;padding:7px 15px;border-radius:999px;cursor:pointer;
+  background:var(--bg-soft);border:1px solid var(--border);color:var(--text-dim);transition:.15s;
+}
+.chip:hover{border-color:var(--accent);color:var(--text)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#181715;font-weight:700}
+.panel{background:var(--bg-soft);border-radius:10px;padding:18px 20px;border:1px solid var(--border-soft)}
+.panel .pname{font-family:var(--font-code);font-size:15px;color:var(--accent);font-weight:700;margin-bottom:4px}
+.panel .ptag{font-size:12.5px;color:var(--text-faint);margin-bottom:12px}
+.panel dl{margin:0;font-size:14.5px;line-height:1.75}
+.panel dt{font-size:11.5px;letter-spacing:.08em;color:var(--text-faint);margin-top:12px}
+.panel dt:first-child{margin-top:0}
+.panel dd{margin:2px 0 0}
+.rows{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:820px){.rows.three{grid-template-columns:repeat(3,1fr)}}
+.field{font-size:14px}
+.field label{display:block;font-size:12.5px;color:var(--text-dim);margin-bottom:6px}
+.field select{
+  width:100%;background:var(--bg-soft);color:var(--text);border:1px solid var(--border);
+  border-radius:7px;padding:9px 11px;font-family:var(--font-body);font-size:14px;
+}
+.field input[type=range]{width:100%;accent-color:var(--accent);margin:8px 0 2px}
+.field .rv{font-family:var(--font-code);font-size:13px;color:var(--accent);font-weight:700}
+.verdict{border-radius:10px;padding:16px 20px;margin-top:18px;font-size:15px;line-height:1.8;border:1px solid var(--border)}
+.verdict .vh{font-weight:700;font-size:14px;letter-spacing:.05em;margin-bottom:6px}
+.v-model{background:rgba(107,168,196,.10);border-color:var(--cyan)} .v-model .vh{color:var(--cyan)}
+.v-effort{background:rgba(217,164,65,.10);border-color:var(--amber)} .v-effort .vh{color:var(--amber)}
+.v-ctx{background:rgba(111,191,142,.10);border-color:var(--emerald)} .v-ctx .vh{color:var(--emerald)}
+.bignum{font-family:var(--font-code);font-size:26px;font-weight:700;color:var(--accent);line-height:1.2}
+.grid2{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:820px){.grid2{grid-template-columns:1fr 1fr}}
+.mono-list{font-family:var(--font-code);font-size:13.5px;color:var(--text-dim);line-height:1.9;margin:0}
+
+/* 角色卡 */
+.roles{display:grid;grid-template-columns:1fr;gap:14px;margin:22px 0}
+@media(min-width:760px){.roles{grid-template-columns:repeat(3,1fr)}}
+.role{background:var(--bg-card);border:1px solid var(--border-soft);border-radius:10px;padding:18px 20px}
+.role .rn{font-family:var(--font-code);font-size:16px;font-weight:700;margin-bottom:2px}
+.role .rt{font-size:12px;color:var(--text-faint);letter-spacing:.08em;margin-bottom:12px}
+.role p{font-size:14px;margin:0;line-height:1.75;color:var(--text-dim)}
+.role.r1 .rn{color:var(--rose)} .role.r2 .rn{color:var(--amber)} .role.r3 .rn{color:var(--emerald)}
+
+/* 工具条 */
+.tools{position:fixed;top:14px;right:18px;display:flex;gap:8px;z-index:110}
+.tools button{
+  background:var(--bg-card);border:1px solid var(--border);color:var(--text-dim);
+  border-radius:8px;padding:7px 12px;font-size:12.5px;cursor:pointer;font-family:var(--font-body);transition:.15s;
+}
+.tools button:hover{border-color:var(--accent);color:var(--text)}
+#toTopBtn{
+  position:fixed;bottom:26px;right:26px;background:var(--bg-card);border:1px solid var(--border);
+  color:var(--text-dim);border-radius:50%;width:44px;height:44px;cursor:pointer;font-size:17px;
+  display:none;z-index:110;box-shadow:var(--shadow);
+}
+#toTopBtn:hover{border-color:var(--accent);color:var(--accent)}
+
+footer.doc-foot{margin-top:70px;padding-top:26px;border-top:1px solid var(--border);font-size:13px;color:var(--text-faint);line-height:1.8}
+
+@media (max-width:1080px){
+  .app-sidebar{transform:translateX(-100%);transition:transform .25s;box-shadow:var(--shadow)}
+  body.toc-open .app-sidebar{transform:translateX(0)}
+  #main{margin-left:0!important;margin-right:0!important;max-width:100%!important;width:100%!important;padding:44px 20px 120px}
+  h1{font-size:1.65rem} h2{font-size:1.35rem}
+}
+@media (max-width:640px){ body{font-size:15.5px} .meta-grid{grid-template-columns:1fr 1fr} }
+@media print{
+  .app-sidebar,.tools,#toTopBtn,#prog{display:none!important}
+  #main{margin:0!important;max-width:100%!important;padding:0}
+  body{background:#fff;color:#000;font-size:11.5pt}
+  h2{page-break-after:avoid} figure,table,.box{page-break-inside:avoid}
+  a{color:#000;border:none}
+}
+</style>
+</head>
+<body>
+
+<div id="prog" aria-hidden="true"></div>
+
+<div class="tools">
+  <button id="btn-toc" type="button" aria-label="切换目录">目录</button>
+  <button id="btn-theme" type="button" aria-label="切换深浅色主题">主题</button>
+</div>
+
+<aside class="app-sidebar" id="sidebar">
+  <h2>目录</h2>
+  <p class="sub">Claude Code 模型档位与 Effort<br>双旋钮工程指南</p>
+  <ol>
+    <li><a href="#s1">两个旋钮：都在「把答案变好」</a></li>
+    <li><a href="#s2">先搞懂 effort：这单活做多彻底</a></li>
+    <li><a href="#s2-1" class="sub-link">五档 effort 定位与场景</a></li>
+    <li><a href="#s2-2" class="sub-link">日常怎么拧档</a></li>
+    <li><a href="#s3">模型换「知道什么」，effort 换「做多少」</a></li>
+    <li><a href="#s4">从按下回车开始：请求里发生了什么</a></li>
+    <li><a href="#s5">权重在哪、能不能改</a></li>
+    <li><a href="#s6">effort 在底层怎么生效</a></li>
+    <li><a href="#s7">答错了怎么办：不会还是没用力</a></li>
+    <li><a href="#s8">角色类比：专科、专家、全科</a></li>
+    <li><a href="#s9">钱和 token：账单逻辑会反过来</a></li>
+    <li><a href="#s10">收束：一句话记住</a></li>
+    <li><a href="#s11">原文与延伸</a></li>
+  </ol>
+</aside>
+
+<main id="main">
+
+<header class="doc-head">
+  <span class="kicker">深度 · 小互解读</span>
+  <h1>Claude Code 团队教你如何用好这两个旋钮：一个管它「会不会」，一个管它「愿不愿做够」
+    <span class="sub">ClaudeDevs 长文拆开两个都像「让答案更好」的旋钮：换模型是换哪一套冻结权重，调 effort 是改它愿不愿多读文件、多跑测试、多验证再交卷</span>
+  </h1>
+
+  <dl class="meta-grid">
+    <div><dt>发布日期</dt><dd>2026-07-09</dd></div>
+    <div><dt>分类</dt><dd>深度</dd></div>
+    <div><dt>来源</dt><dd>ClaudeDevs（X）/ Lydia Hallie</dd></div>
+    <div><dt>语言 / 性质</dt><dd>中文 · 解读稿</dd></div>
+    <div><dt>原帖</dt><dd><a href="https://x.com/ClaudeDevs/status/2074900291062034618" target="_blank" rel="noopener">x.com/ClaudeDevs/status/2074900291062034618</a></dd></div>
+    <div><dt>站内链接</dt><dd><a href="https://best.xiaohu.ai/article/claude-code-model-effort/" target="_blank" rel="noopener">best.xiaohu.ai/article/claude-code-model-effort</a></dd></div>
+  </dl>
+</header>
+
+<div class="abstract">
+  <h3>速览</h3>
+  <ul>
+    <li>Anthropic 面向开发者的账号 <strong>@ClaudeDevs</strong> 于 2026 年 7 月 8 日发布长文，作者是 Claude Code 团队成员 <strong>Lydia Hallie（@lydiahallie）</strong>。</li>
+    <li><strong>effort（努力程度）</strong>控制这次任务里 Claude 整体做多少活：多想、多读文件、多跑测试、多验证、多步推进多远再问你。API 侧常见五档：<code>low / medium / high / xhigh / max</code>；多数任务用模型默认档即可。</li>
+    <li><strong>模型设置</strong>决定用哪一套训练好的冻结权重，也就是「知道什么」；<strong>effort</strong> 决定「做多彻底」。答错了先查上下文，再问：是「不会」还是「没用力」？</li>
+    <li>角色类比：Fable 像专科医生，Opus 像专家，Sonnet 像靠谱全科；effort 是他们愿意在你这单上花多少时间。</li>
+    <li>简单任务大模型更贵；难的多步任务大模型有时总账更低，也能做完小模型做不完的活。Opus 4.8 默认 effort 在测试里约等于 4.7 默认 token 量，效果更好。</li>
+  </ul>
+</div>
+
+<div class="callout warn">
+  <span class="ct">口径声明（必读）</span>
+  原文是 Anthropic Claude Code 团队成员写的产品机制说明，不是第三方测评。文中「约 7 倍 token」「成本曲线」图是<strong>示意</strong>，文中明确写了不是真实 benchmark 数据。Fable / Opus / Sonnet 的角色比喻也是作者本人的说法。文中五档 effort 名与定位来自官方 Effort API 文档；「登录 500」逐档举例是为帮助理解的教学场景，不是厂商逐档实测录像。
+</div>
+
+<!-- ===================== 1 ===================== -->
+<h2 id="s1"><span class="num">01</span>两个旋钮，看起来都在「把答案变好」</h2>
+
+<p>2026 年 7 月 8 日，Anthropic 开发者账号 @ClaudeDevs 发了一篇 Claude Code 长文，作者是 Claude Code 团队成员 Lydia Hallie。</p>
+
+<p>用 Claude Code 时，<strong>模型档位</strong>和 <strong>effort（努力程度）</strong>都能让结果看起来更好。一个管它「会不会」，一个管它「愿不愿做够」。</p>
+
+<p>很多人默认：选更大模型（比如 Fable）就比 Sonnet 更聪明；把 effort 调高就只是「想得更久」。第一句大体对，第二句不够。先把 effort 本身看明白，后面「换模型还是调 effort」才有意义。</p>
+
+<!-- ===================== 2 ===================== -->
+<h2 id="s2"><span class="num">02</span>先搞懂 effort：同一模型，这单活做到多彻底</h2>
+
+<p>在 Claude Code 里，effort（努力程度）是和模型选择并排的设置。它<strong>不改模型「会不会」</strong>，只告诉同一套模型：这回你愿意多下多少功夫再交卷。常见误区是把 effort 理解成「想得更久」；其实它管的是整趟活做多彻底。</p>
+
+<p>原文写得很直白：effort 控制的是<strong>这次请求里 Claude 整体做多少工作</strong>，不只包括想多久，还包括：</p>
+
+<ul>
+  <li><strong>读文件</strong> —— 多开几份源码、配置、日志，还是只看你塞进对话框的那几段</li>
+  <li><strong>验证</strong> —— 改完跑不跑测试、复不复查结论、会不会自己再扫一眼边界情况</li>
+  <li><strong>推进多远</strong> —— 多步任务一口气推多远，还是很快停下来问你补上下文</li>
+  <li><strong>思考与计划</strong> —— 先不先写计划、计划多深，找到答案后还要不要多验一步</li>
+</ul>
+
+<figure>
+  <svg viewBox="0 0 680 230" role="img" aria-label="提升 effort 的四个维度示意图">
+    <rect x="0" y="0" width="680" height="230" fill="none"/>
+    <text x="24" y="30" fill="#A9A29A" font-family="ui-monospace,Menlo,monospace" font-size="12">抬 effort 不是换更强的模型，而是同一模型这趟活愿意多读、多验、多推</text>
+    <g font-family="-apple-system,PingFang SC,sans-serif">
+      <g transform="translate(24,58)">
+        <rect x="0" y="0" width="140" height="30" rx="6" fill="#3A3630" stroke="#E2886A"/>
+        <text x="70" y="20" fill="#EDE8E0" font-size="13" text-anchor="middle">读文件</text>
+        <rect x="0" y="34" width="200" height="12" rx="6" fill="#6BA8C4" opacity="0.45"/>
+        <rect x="0" y="34" width="60" height="12" rx="6" fill="#6BA8C4"/>
+        <text x="210" y="45" fill="#7C766E" font-size="11">几段 → 整条调用链</text>
+      </g>
+      <g transform="translate(24,122)">
+        <rect x="0" y="0" width="140" height="30" rx="6" fill="#3A3630" stroke="#E2886A"/>
+        <text x="70" y="20" fill="#EDE8E0" font-size="13" text-anchor="middle">验证</text>
+        <rect x="0" y="34" width="200" height="12" rx="6" fill="#6FBF8E" opacity="0.45"/>
+        <rect x="0" y="34" width="80" height="12" rx="6" fill="#6FBF8E"/>
+        <text x="210" y="45" fill="#7C766E" font-size="11">不跑测试 → 复现 + 回归 + 边界</text>
+      </g>
+      <g transform="translate(24,186)">
+        <rect x="0" y="0" width="140" height="30" rx="6" fill="#3A3630" stroke="#E2886A"/>
+        <text x="70" y="20" fill="#EDE8E0" font-size="13" text-anchor="middle">推进多远</text>
+        <rect x="0" y="34" width="200" height="12" rx="6" fill="#D9A441" opacity="0.45"/>
+        <rect x="0" y="34" width="120" height="12" rx="6" fill="#D9A441"/>
+        <text x="210" y="45" fill="#7C766E" font-size="11">两步就问 → 一口气推到底</text>
+      </g>
+      <g transform="translate(430,58)">
+        <rect x="0" y="0" width="140" height="30" rx="6" fill="#3A3630" stroke="#E2886A"/>
+        <text x="70" y="20" fill="#EDE8E0" font-size="13" text-anchor="middle">思考与计划</text>
+        <rect x="0" y="34" width="200" height="12" rx="6" fill="#E0765F" opacity="0.45"/>
+        <rect x="0" y="34" width="150" height="12" rx="6" fill="#E0765F"/>
+        <text x="0" y="72" fill="#7C766E" font-size="11">不列计划 → 多假设并行排查</text>
+      </g>
+      <g transform="translate(430,150)">
+        <rect x="0" y="0" width="226" height="62" rx="8" fill="#26231F" stroke="#3A3630"/>
+        <text x="113" y="24" fill="#A9A29A" font-size="11" text-anchor="middle" font-family="ui-monospace,Menlo,monospace">effort ↑</text>
+        <text x="113" y="45" fill="#EDE8E0" font-size="12" text-anchor="middle">条长仅为示意</text>
+        <text x="113" y="56" fill="#7C766E" font-size="10" text-anchor="middle">非官方计量</text>
+      </g>
+    </g>
+  </svg>
+  <figcaption>示意图：effort 抬升改变的是「读、验、推、计划」四个维度的工作量，而非模型权重本身。条长仅为示意，不是官方计量。</figcaption>
+</figure>
+
+<p>API 文档里，effort 是<strong>行为信号，不是硬 token 上限</strong>：低档遇到真难题仍可能思考，但同一道题上会比高档「想得少、动得少」。官方列出的档位从省到狠大致是五档（Claude Code 界面里还会看到和多智能体权限绑在一起的 <code>ultracode</code> 一类入口，那是产品侧组合，不是多出一个 API 档名）。</p>
+
+<h3 id="s2-1">五档 effort 定位与场景</h3>
+
+<p>任务固定：「线上登录接口偶尔返回 500，帮我查。」下面五档按官方 low → max 排列；条形只表达相对高低，不是实测 token 数。默认先看 <strong>high</strong>（API 不设 effort 时的行为档）。</p>
+
+<section class="box" id="box-eff">
+  <h4>沙盘 · 点选档位看同一任务会怎样</h4>
+  <p class="hint">内容逐条来自 Effort API 文档定位与原文描述；「登录 500」场景是按原文「高档多读多验、低档更爱先问你」做的教学举例，不是厂商逐档录屏结论。</p>
+  <div class="chips" role="group" aria-label="effort 档位选择">
+    <button class="chip" type="button" id="btn-eff-low" data-lv="0" aria-pressed="false">low</button>
+    <button class="chip" type="button" id="btn-eff-medium" data-lv="1" aria-pressed="false">medium</button>
+    <button class="chip" type="button" id="btn-eff-high" data-lv="2" aria-pressed="true">high</button>
+    <button class="chip" type="button" id="btn-eff-xhigh" data-lv="3" aria-pressed="false">xhigh</button>
+    <button class="chip" type="button" id="btn-eff-max" data-lv="4" aria-pressed="false">max</button>
+  </div>
+  <div class="panel">
+    <div class="pname" id="out-eff-name">high</div>
+    <div class="ptag" id="out-eff-tag">API 默认行为档</div>
+    <dl>
+      <dt>官方定位</dt><dd id="out-eff-desc">不设 effort 参数时的行为。适合复杂推理、难写码、代理任务：质量和速度成本之间的主档。多数「认真干活」从这儿起步。</dd>
+      <dt>登录 500 例（教学场景）</dt><dd id="out-eff-case">更常先列假设、读调用链上多个文件，改完尝试复现或跑相关测试，再跟你说明根因。</dd>
+    </dl>
+  </div>
+</section>
+
+<h3 id="s2-2">日常怎么拧档</h3>
+
+<p>原文建议：多数任务直接用<strong>该模型的默认 effort</strong>。默认是团队认为「大多数人愿意为这类任务花多少 token」的那一档。把它当整体偏好的手动覆盖：你长期要快或长期要抠时再动，不必每个任务拧一次。</p>
+
+<blockquote>
+  <p>另：Opus 4.8 默认 effort 在团队测试里，大约用和 Opus 4.7 默认相近的 token，效果更好。调高了仍糊弄、漏读漏测，才是「没用力」信号；简单改文案却天天 max，多半是浪费。</p>
+</blockquote>
+
+<!-- ===================== 3 ===================== -->
+<h2 id="s3"><span class="num">03</span>模型换的是「知道什么」，effort 换的是「做多少」</h2>
+
+<p>模型更大，按行业常用基准，能力更强。这点原文直接认了。<strong>effort 则不换「会不会」，只改「这趟做多彻底」</strong>。</p>
+
+<div class="grid2">
+  <div class="callout key">
+    <span class="ct">effort 高</span>
+    更愿意自己读、自己验、自己推，再交卷。
+  </div>
+  <div class="callout note">
+    <span class="ct">effort 低</span>
+    更愿意先问你补上下文，而不是自己烧 token 去猜。
+  </div>
+</div>
+
+<p>两个旋钮各管一件事：<strong>模型 ≈ 能力，effort ≈ 彻底性</strong>。多数真实任务两边都要一点。</p>
+
+<!-- ===================== 4 ===================== -->
+<h2 id="s4"><span class="num">04</span>从你按下回车开始：请求里发生了什么</h2>
+
+<p>Claude Code 会把你的消息、系统提示、工具定义、<code>CLAUDE.md</code>、对话历史、当前上下文里的文件，打成<strong>一次</strong> API 请求发出去。</p>
+
+<figure>
+  <svg viewBox="0 0 680 250" role="img" aria-label="上下文整包进一次请求，到服务器后先分词再进模型">
+    <g font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5">
+      <text x="20" y="24" fill="#7C766E" font-family="ui-monospace,Menlo,monospace" font-size="11">客户端：上下文整包 → 一次请求</text>
+      <g fill="#26231F" stroke="#3A3630">
+        <rect x="20" y="38" width="200" height="30" rx="6"/>
+        <rect x="20" y="74" width="200" height="30" rx="6"/>
+        <rect x="20" y="110" width="200" height="30" rx="6"/>
+        <rect x="20" y="146" width="200" height="30" rx="6"/>
+        <rect x="20" y="182" width="200" height="30" rx="6"/>
+      </g>
+      <g fill="#EDE8E0" text-anchor="middle">
+        <text x="120" y="58">你的消息</text>
+        <text x="120" y="94">系统提示</text>
+        <text x="120" y="130">工具定义</text>
+        <text x="120" y="166">CLAUDE.md</text>
+        <text x="120" y="202">对话历史 + 上下文文件</text>
+      </g>
+      <path d="M240 125 L310 125" stroke="#E2886A" stroke-width="2" fill="none"/>
+      <path d="M304 119 L314 125 L304 131 Z" fill="#E2886A"/>
+      <rect x="322" y="80" width="150" height="90" rx="10" fill="#3A3630" stroke="#E2886A"/>
+      <text x="397" y="118" fill="#EDE8E0" text-anchor="middle" font-size="13">一次 API 请求</text>
+      <text x="397" y="140" fill="#A9A29A" text-anchor="middle" font-size="11">打包发出</text>
+      <path d="M482 125 L534 125" stroke="#6BA8C4" stroke-width="2" fill="none"/>
+      <path d="M528 119 L538 125 L528 131 Z" fill="#6BA8C4"/>
+      <rect x="546" y="88" width="112" height="34" rx="7" fill="#26231F" stroke="#6BA8C4"/>
+      <text x="602" y="110" fill="#EDE8E0" text-anchor="middle">tokenization</text>
+      <rect x="546" y="138" width="112" height="34" rx="7" fill="#26231F" stroke="#6BA8C4"/>
+      <text x="602" y="160" fill="#EDE8E0" text-anchor="middle">模型推理</text>
+      <text x="20" y="238" fill="#7C766E" font-size="11">原文图：上下文整包进一次请求，到服务器后先做分词，再进模型。来源：ClaudeDevs / Lydia Hallie</text>
+    </g>
+  </svg>
+  <figcaption>请求打包与分词流程。来源：ClaudeDevs / Lydia Hallie（示意图重绘）。</figcaption>
+</figure>
+
+<p>模型并不直接「读中文句子」。服务器上先做 <strong>tokenization（分词）</strong>：文本切成小块，每块映射成词表里的整数。原文举例：<code>const</code> 可能是 1978，<code>await</code> 可能是 4293。从这一刻起，提示词对模型来说就是<strong>一串整数</strong>。</p>
+
+<figure>
+  <svg viewBox="0 0 680 200" role="img" aria-label="文本块对应 token ID 示意">
+    <g font-family="ui-monospace,Menlo,monospace" font-size="13">
+      <text x="20" y="26" fill="#7C766E" font-size="11" font-family="-apple-system,PingFang SC,sans-serif">上排：文本块</text>
+      <g fill="#26231F" stroke="#3A3630">
+        <rect x="20" y="38" width="66" height="30" rx="6"/>
+        <rect x="94" y="38" width="66" height="30" rx="6"/>
+        <rect x="168" y="38" width="66" height="30" rx="6"/>
+        <rect x="242" y="38" width="66" height="30" rx="6"/>
+        <rect x="316" y="38" width="66" height="30" rx="6"/>
+        <rect x="390" y="38" width="66" height="30" rx="6"/>
+      </g>
+      <g fill="#EDE8E0" text-anchor="middle">
+        <text x="53" y="58">const</text>
+        <text x="127" y="58">x</text>
+        <text x="201" y="58">=</text>
+        <text x="275" y="58">await</text>
+        <text x="349" y="58">fetch</text>
+        <text x="423" y="58">(…)</text>
+      </g>
+      <g stroke="#6BA8C4" stroke-width="1.4">
+        <path d="M53 72 L53 100"/><path d="M127 72 L127 100"/><path d="M201 72 L201 100"/>
+        <path d="M275 72 L275 100"/><path d="M349 72 L349 100"/><path d="M423 72 L423 100"/>
+      </g>
+      <g fill="#6BA8C4"><path d="M53 96 L49 104 L57 104 Z"/><path d="M127 96 L123 104 L131 104 Z"/><path d="M201 96 L197 104 L205 104 Z"/><path d="M275 96 L271 104 L279 104 Z"/><path d="M349 96 L345 104 L353 104 Z"/><path d="M423 96 L419 104 L427 104 Z"/></g>
+      <g fill="#3A3630" stroke="#6BA8C4">
+        <rect x="20" y="110" width="66" height="30" rx="6"/>
+        <rect x="94" y="110" width="66" height="30" rx="6"/>
+        <rect x="168" y="110" width="66" height="30" rx="6"/>
+        <rect x="242" y="110" width="66" height="30" rx="6"/>
+        <rect x="316" y="110" width="66" height="30" rx="6"/>
+        <rect x="390" y="110" width="66" height="30" rx="6"/>
+      </g>
+      <g fill="#6BA8C4" text-anchor="middle">
+        <text x="53" y="130">1978</text>
+        <text x="127" y="130">271</text>
+        <text x="201" y="130">2840</text>
+        <text x="275" y="130">4293</text>
+        <text x="349" y="130">8821</text>
+        <text x="423" y="130">…</text>
+      </g>
+      <text x="20" y="166" fill="#7C766E" font-size="11" font-family="-apple-system,PingFang SC,sans-serif">下排：token ID（数字为示意，const / await 两值取自原文举例）</text>
+    </g>
+  </svg>
+  <figcaption>分词示意：上排文本块对应下排 token ID。来源：ClaudeDevs / Lydia Hallie（示意图重绘）。</figcaption>
+</figure>
+
+<p>模型的工作是：根据当前这一串 token，给词表里每个可能的下一个 token 打概率，再从中取样。在「<code>const x = await</code>」后面，「fetch」概率会很高，「banana」接近零。</p>
+
+<figure>
+  <svg viewBox="0 0 680 170" role="img" aria-label="下一 token 概率分布示意">
+    <g font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5">
+      <text x="20" y="24" fill="#7C766E" font-family="ui-monospace,Menlo,monospace" font-size="11">下一 token 概率（示意，非实测分布）</text>
+      <g>
+        <text x="20" y="56" fill="#EDE8E0" font-family="ui-monospace,Menlo,monospace">fetch</text>
+        <rect x="92" y="44" width="470" height="18" rx="4" fill="#6FBF8E"/>
+        <text x="572" y="58" fill="#6FBF8E" font-family="ui-monospace,Menlo,monospace" font-size="11">高</text>
+      </g>
+      <g>
+        <text x="20" y="88" fill="#EDE8E0" font-family="ui-monospace,Menlo,monospace">axios</text>
+        <rect x="92" y="76" width="95" height="18" rx="4" fill="#D9A441" opacity="0.8"/>
+        <text x="197" y="90" fill="#D9A441" font-family="ui-monospace,Menlo,monospace" font-size="11">中低</text>
+      </g>
+      <g>
+        <text x="20" y="120" fill="#EDE8E0" font-family="ui-monospace,Menlo,monospace">request</text>
+        <rect x="92" y="108" width="52" height="18" rx="4" fill="#D9A441" opacity="0.6"/>
+        <text x="154" y="122" fill="#D9A441" font-family="ui-monospace,Menlo,monospace" font-size="11">低</text>
+      </g>
+      <g>
+        <text x="20" y="152" fill="#EDE8E0" font-family="ui-monospace,Menlo,monospace">banana</text>
+        <rect x="92" y="141" width="4" height="14" rx="2" fill="#E0765F"/>
+        <text x="106" y="153" fill="#E0765F" font-family="ui-monospace,Menlo,monospace" font-size="11">≈ 0</text>
+      </g>
+    </g>
+  </svg>
+  <figcaption>最高概率与无关词之间的差距可以极大。来源：ClaudeDevs / Lydia Hallie（示意图重绘）。</figcaption>
+</figure>
+
+<!-- ===================== 5 ===================== -->
+<h2 id="s5"><span class="num">05</span>权重在哪、能不能改</h2>
+
+<p>把输入变成概率的是 <strong>weights（权重 / 参数）</strong>：训练时写进模型、规模到数十亿级的矩阵数字。预测一个 token，就是把输入在这些矩阵上做一长串运算，读出末尾概率。<strong>权重里装着模型「知道」的东西；推理时权重是只读的。</strong>你的 prompt、<code>CLAUDE.md</code>、上下文都改不了权重，只是在「转向」下一次预测。</p>
+
+<figure>
+  <svg viewBox="0 0 680 240" role="img" aria-label="训练写入权重，推理时权重冻结只读">
+    <g font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5">
+      <rect x="20" y="52" width="130" height="52" rx="8" fill="#26231F" stroke="#6FBF8E"/>
+      <text x="85" y="76" fill="#EDE8E0" text-anchor="middle">训练阶段</text>
+      <text x="85" y="93" fill="#7C766E" text-anchor="middle" font-size="11">写权重</text>
+      <path d="M158 78 L214 78" stroke="#6FBF8E" stroke-width="2" fill="none"/>
+      <path d="M208 72 L218 78 L208 84 Z" fill="#6FBF8E"/>
+      <rect x="226" y="40" width="190" height="76" rx="10" fill="#3A3630" stroke="#E2886A"/>
+      <text x="321" y="68" fill="#EDE8E0" text-anchor="middle" font-size="14">weights · 冻结权重</text>
+      <text x="321" y="88" fill="#A9A29A" text-anchor="middle" font-size="11">数十亿级矩阵数字</text>
+      <text x="321" y="106" fill="#7C766E" text-anchor="middle" font-size="11">推理时只读</text>
+      <path d="M424 78 L482 78" stroke="#E2886A" stroke-width="2" fill="none"/>
+      <path d="M476 72 L486 78 L476 84 Z" fill="#E2886A"/>
+      <rect x="490" y="52" width="170" height="52" rx="8" fill="#26231F" stroke="#E2886A"/>
+      <text x="575" y="76" fill="#EDE8E0" text-anchor="middle">inference（推理）</text>
+      <text x="575" y="93" fill="#7C766E" text-anchor="middle" font-size="11">用冻结权重做预测</text>
+
+      <rect x="226" y="160" width="190" height="52" rx="8" fill="#26231F" stroke="#3A3630"/>
+      <text x="321" y="182" fill="#EDE8E0" text-anchor="middle" font-size="12">prompt / CLAUDE.md</text>
+      <text x="321" y="200" fill="#A9A29A" text-anchor="middle" font-size="11">上下文 / 工具结果</text>
+      <path d="M321 156 C 321 140, 150 140, 150 120 L 150 108" stroke="#6BA8C4" stroke-width="1.6" stroke-dasharray="5 4" fill="none"/>
+      <path d="M150 102 L144 114 L156 114 Z" fill="#6BA8C4"/>
+      <text x="196" y="146" fill="#6BA8C4" font-size="11">steering（转向）</text>
+      <text x="340" y="228" fill="#E0765F" font-size="11.5">✗ 改不了权重，只影响这一次请求</text>
+    </g>
+  </svg>
+  <figcaption>训练结束后权重固定；上下文只能「转向」，不能写入权重。来源：ClaudeDevs / Lydia Hallie（示意图重绘）。</figcaption>
+</figure>
+
+<p>TypeScript、常见框架、一般编程常识，都是训练时写进权重的。把你的真实代码放进上下文，是 <strong>steering（转向）</strong>：对这一次请求很管用，但<strong>不是往权重里「教」新知识</strong>。训练时还不存在的库，权重里没有；你可以贴文档让它用，只影响这一次。幻觉也是权重生成了「看起来像对」的 token 串，不是查表查失败。</p>
+
+<p>所以换模型 = <strong>换另一套冻结权重</strong>来处理你的请求。模型也不是一次写出整段答案，而是逐 token 预测：写出一个，接到序列末尾，再整串重算下一个。200 个 token 的回复 = 权重上走 200 遍。等待时间和输出费用，大量来自这个循环。</p>
+
+<figure>
+  <svg viewBox="0 0 680 200" role="img" aria-label="自回归逐 token 生成循环">
+    <g font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5">
+      <text x="20" y="26" fill="#7C766E" font-family="ui-monospace,Menlo,monospace" font-size="11">自回归：序列每次只长一个 token，模型重读整串再预测下一个</text>
+      <rect x="24" y="60" width="150" height="46" rx="8" fill="#26231F" stroke="#3A3630"/>
+      <text x="99" y="80" fill="#EDE8E0" text-anchor="middle">当前序列</text>
+      <text x="99" y="97" fill="#7C766E" text-anchor="middle" font-size="11">[…, await]</text>
+      <path d="M182 83 L232 83" stroke="#E2886A" stroke-width="2" fill="none"/>
+      <path d="M226 77 L236 83 L226 89 Z" fill="#E2886A"/>
+      <rect x="240" y="60" width="150" height="46" rx="8" fill="#3A3630" stroke="#E2886A"/>
+      <text x="315" y="80" fill="#EDE8E0" text-anchor="middle">冻结权重运算</text>
+      <text x="315" y="97" fill="#7C766E" text-anchor="middle" font-size="11">一长串矩阵计算</text>
+      <path d="M398 83 L448 83" stroke="#E2886A" stroke-width="2" fill="none"/>
+      <path d="M442 77 L452 83 L442 89 Z" fill="#E2886A"/>
+      <rect x="456" y="60" width="150" height="46" rx="8" fill="#26231F" stroke="#6FBF8E"/>
+      <text x="531" y="80" fill="#EDE8E0" text-anchor="middle">下一个 token</text>
+      <text x="531" y="97" fill="#6FBF8E" text-anchor="middle" font-size="11">fetch</text>
+      <path d="M531 112 L531 148 C 531 168, 99 168, 99 112" stroke="#6BA8C4" stroke-width="1.8" stroke-dasharray="6 4" fill="none"/>
+      <path d="M99 106 L93 118 L105 118 Z" fill="#6BA8C4"/>
+      <text x="315" y="166" fill="#6BA8C4" text-anchor="middle" font-size="11.5">追加到序列末尾 → 整串重算，循环 200 次 = 权重上走 200 遍</text>
+      <text x="315" y="188" fill="#7C766E" text-anchor="middle" font-size="11">等待时间与输出费用，大量来自这个循环</text>
+    </g>
+  </svg>
+  <figcaption>逐 token 生成循环。来源：ClaudeDevs / Lydia Hallie（示意图重绘）。</figcaption>
+</figure>
+
+<p>模型设置还决定<strong>每个输出 token 的单价</strong>。它不直接决定「生成多少个 token」。同样一句提示，Claude 决定做多少活，输出量可以差很多。控制那块的，是 effort。</p>
+
+<!-- ===================== 6 ===================== -->
+<h2 id="s6"><span class="num">06</span>effort 在底层怎么生效</h2>
+
+<h3>思考、调工具、跟你说话，都是同一类输出 token</h3>
+
+<p>Claude Code 干活时，吐出来的 token 大致分三类：<strong>思考</strong>（streaming 里看到的推理）、<strong>工具调用</strong>（<code>Read</code> / <code>Edit</code> 等结构化块）、<strong>对你说的话</strong>（计划、进度、总结）。</p>
+
+<p>三类都是同一个生成循环里的普通输出 token，按同样费率计费。思考 token 会留在这一轮后续上下文里：写代码时，更早的推理已经像「读过的文件」一样进输入了。</p>
+
+<figure>
+  <svg viewBox="0 0 680 190" role="img" aria-label="三类输出 token 同属一条生成回路">
+    <g font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5">
+      <g fill="#26231F" stroke="#3A3630">
+        <rect x="24" y="30" width="170" height="48" rx="8"/>
+        <rect x="24" y="86" width="170" height="48" rx="8"/>
+        <rect x="24" y="142" width="170" height="30" rx="8"/>
+      </g>
+      <g fill="#EDE8E0" text-anchor="middle">
+        <text x="109" y="52">思考</text>
+        <text x="109" y="108">工具调用</text>
+        <text x="109" y="162">对你说的话</text>
+      </g>
+      <g fill="#7C766E" text-anchor="middle" font-size="11">
+        <text x="109" y="70">streaming 推理</text>
+        <text x="109" y="126">Read / Edit 等结构化块</text>
+      </g>
+      <g stroke="#E2886A" stroke-width="1.8" fill="none">
+        <path d="M200 54 L268 92"/><path d="M200 110 L268 92"/><path d="M200 157 L268 116"/>
+      </g>
+      <rect x="276" y="70" width="230" height="48" rx="10" fill="#3A3630" stroke="#E2886A"/>
+      <text x="391" y="92" fill="#EDE8E0" text-anchor="middle" font-size="13">同一条生成回路</text>
+      <text x="391" y="110" fill="#A9A29A" text-anchor="middle" font-size="11">按同样费率计费</text>
+      <path d="M514 94 L566 94" stroke="#6BA8C4" stroke-width="1.8" fill="none"/>
+      <path d="M560 88 L570 94 L560 100 Z" fill="#6BA8C4"/>
+      <text x="578" y="90" fill="#6BA8C4" font-size="11">留在</text>
+      <text x="578" y="106" fill="#6BA8C4" font-size="11">上下文</text>
+    </g>
+  </svg>
+  <figcaption>所有输出都是 token，来自同一条生成回路。来源：ClaudeDevs / Lydia Hallie（示意图重绘）。</figcaption>
+</figure>
+
+<h3>effort 只是又一个输入</h3>
+
+<p>effort 等级会作为请求的一部分发给模型。模型在训练里学过各档 effort 该怎么表现，这些行为也写在冻结权重里。到了线上，effort 只是模型要响应的又一输入，和你的提示词一样：规定它要多彻底、多有把握才算任务完成。<strong>每一轮都会重新权衡；更高把握通常要花更多 token。</strong></p>
+
+<figure>
+  <svg viewBox="0 0 680 220" role="img" aria-label="同一提示，高 effort 路径产出更多 token 以换更高确认度">
+    <g font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5">
+      <text x="20" y="26" fill="#7C766E" font-family="ui-monospace,Menlo,monospace" font-size="11">同一提示 · 两条路径（图为示意，非实测 token 数）</text>
+      <text x="20" y="70" fill="#EDE8E0">low effort 路径</text>
+      <rect x="150" y="56" width="110" height="22" rx="5" fill="#6BA8C4" opacity="0.75"/>
+      <text x="272" y="72" fill="#7C766E" font-size="11">少读少验 · 更快更省 · 更爱先问你</text>
+      <text x="20" y="132" fill="#EDE8E0">high effort 路径</text>
+      <rect x="150" y="118" width="460" height="22" rx="5" fill="#E2886A" opacity="0.75"/>
+      <text x="150" y="158" fill="#E2886A" font-size="11">多读多验多推 · 自己补上下文 · 交卷前复查</text>
+      <text x="20" y="196" fill="#A9A29A" font-size="11.5">原文示意：高 effort 路径「大约多产出约 7 倍 token」以换更高确认度 —— 该数字为原文图示意值，明确非 benchmark 数据</text>
+    </g>
+  </svg>
+  <figcaption>同一提示，高低 effort 的路径长度差异。图为示意。来源：ClaudeDevs / Lydia Hallie。</figcaption>
+</figure>
+
+<p>高 effort 时，Claude 常先写计划，且计划更深更广。<strong>计划不是锁死的</strong>：工具结果回来后，它会更新「进展到哪了、结果多有把握」。调试计划里三条假设，第一步就找到 bug，往往就明说后两条不必做，任务列表也会中途改写。</p>
+
+<p>高 effort 也更爱多验一步：已经找到答案还复查，或仍扫一遍本可跳过的假设。但原文强调：训练时专门盯着「过度思考」，不会因为 effort 拧满，就在简单任务上硬刷用量；刷用量会伤实效。</p>
+
+<div class="callout note">
+  <span class="ct">机制小结</span>
+  档位作为请求输入，和提示词一样进入冻结权重学过的行为。日常怎么拧档，见上文「日常怎么拧档」。
+</div>
+
+<!-- ===================== 7 ===================== -->
+<h2 id="s7"><span class="num">07</span>答错了怎么办：先查上下文，再分「不会」还是「没用力」</h2>
+
+<p>Claude 搞砸时，<strong>第一反应不该是改设置</strong>，而该看你给了什么：提示是否糊、工具是否对、技能是否齐。</p>
+
+<p>若你在不该高 effort 的任务上硬抬 effort，问题通常在更上游：上下文、<code>CLAUDE.md</code>、任务怎么拆。</p>
+
+<p>上下文已经清楚仍错，再问这一句：</p>
+
+<blockquote>
+  <p>是它不够<strong>会</strong>，还是不够<strong>用力</strong>？</p>
+</blockquote>
+
+<figure>
+  <svg viewBox="0 0 680 260" role="img" aria-label="问题太难换模型，没读够没验够抬 effort 的决策图">
+    <g font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5">
+      <rect x="270" y="18" width="140" height="42" rx="8" fill="#3A3630" stroke="#E2886A"/>
+      <text x="340" y="44" fill="#EDE8E0" text-anchor="middle">答错了</text>
+      <path d="M340 62 L340 86" stroke="#7C766E" stroke-width="1.6" fill="none"/>
+      <path d="M334 80 L346 80 L340 90 Z" fill="#7C766E"/>
+      <rect x="230" y="94" width="220" height="38" rx="8" fill="#26231F" stroke="#3A3630"/>
+      <text x="340" y="118" fill="#EDE8E0" text-anchor="middle">先修上下文 / 工具 / 技能 / 自验路径</text>
+      <path d="M340 136 L340 158" stroke="#7C766E" stroke-width="1.6" fill="none"/>
+      <path d="M334 152 L346 152 L340 162 Z" fill="#7C766E"/>
+      <text x="252" y="180" fill="#7C766E" font-size="11">仍错 →</text>
+      <path d="M180 186 L118 186 L118 208" stroke="#E0765F" stroke-width="1.6" fill="none"/>
+      <path d="M500 186 L562 186 L562 208" stroke="#D9A441" stroke-width="1.6" fill="none"/>
+      <rect x="24" y="212" width="190" height="36" rx="8" fill="#26231F" stroke="#E0765F"/>
+      <text x="119" y="235" fill="#E0765F" text-anchor="middle">问题本身太难 → 换更大模型</text>
+      <rect x="466" y="212" width="190" height="36" rx="8" fill="#26231F" stroke="#D9A441"/>
+      <text x="561" y="235" fill="#D9A441" text-anchor="middle">漏读漏测 → 抬 effort</text>
+    </g>
+  </svg>
+  <figcaption>原文核心决策图：问题太难→换更大模型；没读够、没验够→抬 effort。来源：ClaudeDevs / Lydia Hallie。</figcaption>
+</figure>
+
+<div class="grid2">
+  <div class="callout key">
+    <span class="ct">Model · 不会</span>
+    问题本身难：隐蔽 bug、陌生领域、架构取舍。小模型再塞上下文仍<strong>自信地错</strong>，就上更大模型。大模型也更扛模糊；小模型更适合你能写死执行步骤的指令。
+    <ul style="margin:10px 0 0;padding-left:1.2em">
+      <li>该用大：难、糊、反复自信错</li>
+      <li>该用小：机械改动、上下文里已有答案、描述精确的例行活</li>
+    </ul>
+  </div>
+  <div class="callout warn">
+    <span class="ct">Effort · 没用力</span>
+    该读的文件没读、该跑的测试没跑、该复查的没复查。尤其是你把 effort 调到<strong>低于默认</strong>时最相关。
+    <ul style="margin:10px 0 0;padding-left:1.2em">
+      <li>抬 effort：明显偷懒、漏验、半途就交</li>
+      <li>别抬：上下文烂、任务糊，先修上游</li>
+    </ul>
+  </div>
+</div>
+
+<section class="box" id="box-triage">
+  <h4>沙盘 · 排障分流器</h4>
+  <p class="hint">判定逻辑逐条来自原文第 7 节决策树与本页「Model · 不会 / Effort · 没用力」清单。本工具只做规则匹配，不产生任何新结论。</p>
+  <div class="rows three">
+    <div class="field">
+      <label for="sel-ctx">① 上下文、工具、技能是否已给足？</label>
+      <select id="sel-ctx">
+        <option value="bad">不清楚 / 缺失 / 工具没接对</option>
+        <option value="ok" selected>已给足且清晰</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="sel-miss">② 是否存在明显漏读、漏测、半途就交？</label>
+      <select id="sel-miss">
+        <option value="yes">是，明显没读完 / 没跑测试</option>
+        <option value="no" selected>否，看起来认真做了</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="sel-wrong">③ 是否「材料都给了仍自信地错」？</label>
+      <select id="sel-wrong">
+        <option value="yes">是，反复自信地错</option>
+        <option value="no" selected>否，只是偶尔出错</option>
+      </select>
+    </div>
+  </div>
+  <div class="verdict v-ctx" id="box-verdict">
+    <div class="vh" id="out-advice">维持默认档，继续观察</div>
+    <div id="out-advice-why">上下文清楚、没有明显漏读漏测、也不是反复自信地错 —— 按原文建议，多数任务直接用该模型的默认 effort 即可，不必每次都拧。</div>
+  </div>
+</section>
+
+<!-- ===================== 8 ===================== -->
+<h2 id="s8"><span class="num">08</span>角色类比：专科医生、专家、全科</h2>
+
+<p>作者用的类比：Fable 是几乎别人搞不定才叫的专科；Opus 是专家；Sonnet 是很强的全科。<strong>effort 决定他们在你这单上待多久。</strong></p>
+
+<div class="roles">
+  <div class="role r1">
+    <div class="rn">Fable</div>
+    <div class="rt">专科医生</div>
+    <p>别人卡住再叫。低 effort 也能看出别人看不出的点。单价最高，留给真需要的任务。</p>
+  </div>
+  <div class="role r2">
+    <div class="rn">Opus</div>
+    <div class="rt">专家</div>
+    <p>低 effort 像跟专家聊五分钟：代码库外的模式和坑他自带，但只会快扫，不会每文件细抠。</p>
+  </div>
+  <div class="role r3">
+    <div class="rn">Sonnet</div>
+    <div class="rt">全科医生</div>
+    <p>高 effort 像全科花一下午：编程功底扎实，会读、会跑、会复查，把你这份代码摸透。</p>
+  </div>
+</div>
+
+<div class="callout key">
+  <span class="ct">没有万能最优</span>
+  模型设置 ≈ 多能干；effort 设置 ≈ 多彻底。没有 universally better 的组合。多数真实任务两边都要一点：<strong>Opus 低 effort ≠ Sonnet 高 effort 的简单替代，Fable 也不是日常默认。</strong>
+</div>
+
+<!-- ===================== 9 ===================== -->
+<h2 id="s9"><span class="num">09</span>钱和 token：简单任务和很难的任务，账单逻辑会反过来</h2>
+
+<p>模型、effort、token 消耗怎么缠在一起，取决于任务难不难。</p>
+
+<h3>例行活、同一 effort</h3>
+
+<p>大小模型一般都能做对。大模型常多走几步验证，token 更多，且单价更高。所以例行阶段降到小模型，能省真钱，质量往往不损。</p>
+
+<h3>难的多步活</h3>
+
+<p>小模型要在能力上限附近死磕，迭代烧得多；大模型用更少步数就能到同一质量。单价更高，但<strong>单任务总成本</strong>有时反而更低。更关键：有些活只有大模型做得到，effort 拧满也救不了小模型。</p>
+
+<p>Fable 在长、多步任务上甩开距离最明显。团队测试里，它能完成 Opus / Sonnet 在任意 effort 下都够不着的活；单价也最高，所以更要留给真正需要的工作。</p>
+
+<figure>
+  <svg viewBox="0 0 680 250" role="img" aria-label="简单任务与难任务的相对成本方向示意">
+    <g font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5">
+      <text x="20" y="26" fill="#7C766E" font-family="ui-monospace,Menlo,monospace" font-size="11">相对成本方向示意（仅表达高低方向，无数值刻度，非 benchmark）</text>
+      <rect x="20" y="44" width="300" height="180" rx="10" fill="#211F1C" stroke="#3A3630"/>
+      <text x="170" y="68" fill="#EDE8E0" text-anchor="middle" font-size="13">例行、描述清楚的改动</text>
+      <text x="52" y="200" fill="#A9A29A" font-size="11">小模型</text>
+      <rect x="46" y="108" width="86" height="80" rx="6" fill="#6FBF8E" opacity="0.8"/>
+      <text x="89" y="196" fill="#6FBF8E" font-size="11" text-anchor="middle">更省</text>
+      <text x="196" y="200" fill="#A9A29A" font-size="11">大模型</text>
+      <rect x="190" y="60" width="86" height="128" rx="6" fill="#E0765F" opacity="0.8"/>
+      <text x="233" y="196" fill="#E0765F" font-size="11" text-anchor="middle">更贵</text>
+      <text x="288" y="128" fill="#7C766E" font-size="11">↑ 多验</text>
+      <text x="288" y="146" fill="#7C766E" font-size="11">↑ 单价</text>
+
+      <rect x="360" y="44" width="300" height="180" rx="10" fill="#211F1C" stroke="#3A3630"/>
+      <text x="510" y="68" fill="#EDE8E0" text-anchor="middle" font-size="13">难、多步、模糊的任务</text>
+      <text x="392" y="200" fill="#A9A29A" font-size="11">小模型</text>
+      <rect x="386" y="72" width="86" height="116" rx="6" fill="#E0765F" opacity="0.8"/>
+      <text x="429" y="196" fill="#E0765F" font-size="11" text-anchor="middle">迭代多</text>
+      <text x="540" y="200" fill="#A9A29A" font-size="11">大模型</text>
+      <rect x="534" y="104" width="86" height="84" rx="6" fill="#6FBF8E" opacity="0.8"/>
+      <text x="577" y="196" fill="#6FBF8E" font-size="11" text-anchor="middle">步数少</text>
+      <text x="628" y="140" fill="#7C766E" font-size="11">↓</text>
+      <text x="628" y="156" fill="#7C766E" font-size="11">总账</text>
+    </g>
+  </svg>
+  <figcaption>示意曲线，非真实 benchmark：左边任务简单到两边都很快完成；右边难到两边都吃力。来源：ClaudeDevs / Lydia Hallie。</figcaption>
+</figure>
+
+<h3>effort 与硬上限</h3>
+
+<p>effort 决定 Claude 愿意沿曲线走多远，<strong>不等于它一定要走到那么远才收工</strong>。effort 塑造用量，但不是硬天花板。系统里真正的硬截断是 <a href="https://platform.claude.com/docs/en/build-with-claude/extended-thinking#max-tokens-and-context-window-size-with-extended-thinking" target="_blank" rel="noopener">max_tokens</a>：撞上会中途切断，偏钝，主要给 API 开发者。更软的约束如 <a href="https://platform.claude.com/docs/en/build-with-claude/task-budgets#task-budgets-are-advisory-not-enforced" target="_blank" rel="noopener">task budgets</a>、或提示里要求简短，是训练过会跟着走的指导：接近限额时倾向收束，而不是撞墙。</p>
+
+<table>
+  <thead>
+    <tr><th>场景</th><th>更划算的倾向</th><th>原因（按原文）</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>例行、描述清楚的改动</td><td>较小模型 + 默认 effort</td><td>两边都能对；大模型多验、单价高</td></tr>
+    <tr><td>难、多步、模糊</td><td>较大模型，effort 用默认或按需抬</td><td>少轮次到质量线；有时总 token 更少；有的活只有大模型够得着</td></tr>
+    <tr><td>明显漏读漏测</td><td>先抬 effort（尤其低于默认时）</td><td>问题是彻底性，不是权重里的知识</td></tr>
+    <tr><td>小模型自信错、上下文已足</td><td>换更大模型</td><td>问题是能力上限，不是再多读几遍</td></tr>
+  </tbody>
+</table>
+
+<section class="box" id="box-cost">
+  <h4>沙盘 · 相对账单演算器</h4>
+  <p class="hint">本工具不预置任何厂商实测数据。三个滑块全部是<strong>你自己填的假设参数</strong>，工具只做一步算术：相对账单 = 单价倍率 × token 量倍率。未填即用下方默认值（纯占位，不代表任何模型真实比值）。</p>
+  <div class="rows three">
+    <div class="field">
+      <label for="rng-price">单价倍率（大模型 ÷ 小模型）<span class="rv" id="out-price">3.0×</span></label>
+      <input type="range" id="rng-price" min="1" max="12" step="0.5" value="3">
+    </div>
+    <div class="field">
+      <label for="rng-tok">单任务 token 量倍率（大模型 ÷ 小模型）<span class="rv" id="out-tok">0.60×</span></label>
+      <input type="range" id="rng-tok" min="0.1" max="3" step="0.05" value="0.6">
+    </div>
+    <div class="field">
+      <label for="rng-eff">effort 抬升带来的 token 倍率<span class="rv" id="out-eff">1.00×</span></label>
+      <input type="range" id="rng-eff" min="1" max="8" step="0.25" value="1">
+    </div>
+  </div>
+  <div class="verdict v-model" style="margin-top:18px">
+    <div class="vh">相对账单（以小模型 = 1.00 为基准）</div>
+    <div style="display:flex;align-items:baseline;gap:26px;flex-wrap:wrap;margin-top:8px">
+      <div><div style="font-size:12px;color:var(--text-faint)">大模型</div><div class="bignum" id="out-cost-ratio">1.80×</div></div>
+      <div style="font-size:14px;color:var(--text-dim);line-height:1.7" id="out-cost-detail">3.0 × 0.60 × 1.00 = 1.80　（＞1 表示大模型更贵；＜1 表示大模型总账更低）</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 10 ===================== -->
+<h2 id="s10"><span class="num">10</span>收束：一句话记住，再回去拧旋钮</h2>
+
+<p><strong>effort 改的是 Claude 做多少活；模型改的是 Claude 知道什么。</strong></p>
+
+<p>结果不满意时：先给清楚提示、对的工具和技能、以及自验路径。仍不对，再问：是不会，还是没用力？<strong>不会是模型问题，没用力是 effort 问题。</strong></p>
+
+<blockquote>
+  <p>「Effort changes how much work Claude does. The model changes what Claude knows.」</p>
+</blockquote>
+
+<!-- ===================== 11 ===================== -->
+<h2 id="s11"><span class="num">11</span>原文与延伸</h2>
+
+<ul>
+  <li><a href="https://x.com/ClaudeDevs/status/2074900291062034618" target="_blank" rel="noopener">原帖（@ClaudeDevs，Lydia Hallie）</a></li>
+  <li><a href="https://platform.claude.com/docs/en/build-with-claude/effort" target="_blank" rel="noopener">官方 Effort 参数文档（五档说明）</a></li>
+  <li><a href="https://platform.claude.com/docs/en/build-with-claude/extended-thinking#max-tokens-and-context-window-size-with-extended-thinking" target="_blank" rel="noopener">max_tokens 与扩展思考文档</a></li>
+  <li><a href="https://platform.claude.com/docs/en/build-with-claude/task-budgets#task-budgets-are-advisory-not-enforced" target="_blank" rel="noopener">task budgets（建议性预算，非硬强制）</a></li>
+</ul>
+
+<div class="callout note">
+  <span class="ct">站内相关解读</span>
+  <a href="https://best.xiaohu.ai/article/claude-code-model-effort/" target="_blank" rel="noopener">Anthropic 官方支招：Fable 5 当顾问，Sonnet 5 干活扛账单大头</a> —— 同一官方账号另一条线：多模型协作怎么省钱。本文讲单次任务里模型 vs effort，那篇讲任务间怎么分工。
+</div>
+
+<footer class="doc-foot">
+  <p>解读基于 2026-07-08 ClaudeDevs 长文；图中 7× token、成本曲线为原文示意。自动 ingest 当日撞 Claude 周限额，本篇为按原文全量手写入库的可视化解读稿。</p>
+  <p>网页版另有交互视图：一页纸速读视图 / 秒懂漫画。完整体验见原文链接。</p>
+  <p style="margin-top:14px">本页为单文件自包含 HTML 归档版：全部图表为内联 SVG 重绘示意图，零外部依赖，断网可完整阅读。</p>
+</footer>
+
+</main>
+
+<button id="toTopBtn" type="button" aria-label="回到顶部">↑</button>
+
+<script>
+(function () {
+  "use strict";
+
+  function byId(id) { return document.getElementById(id); }
+
+  /* ---------------- 阅读进度 ---------------- */
+  var prog = byId("prog");
+  function onScroll() {
+    var de = document.documentElement;
+    var h = de.scrollHeight - de.clientHeight;
+    var pct = h > 0 ? (de.scrollTop || document.body.scrollTop || 0) / h * 100 : 0;
+    if (prog) { prog.style.width = pct.toFixed(2) + "%"; }
+    var tt = byId("toTopBtn");
+    if (tt) { tt.style.display = (de.scrollTop || 0) > 400 ? "block" : "none"; }
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  /* ---------------- 主题切换 ---------------- */
+  var tBtn = byId("btn-theme");
+  if (tBtn) {
+    tBtn.addEventListener("click", function () {
+      var cur = document.documentElement.getAttribute("data-theme");
+      var next = cur === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try { if (window.localStorage) { window.localStorage.setItem("aike-theme", next); } } catch (e) {}
+    });
+  }
+  try {
+    if (window.localStorage) {
+      var saved = window.localStorage.getItem("aike-theme");
+      if (saved === "light" || saved === "dark") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    }
+  } catch (e) {}
+
+  /* ---------------- 目录 ---------------- */
+  var tocBtn = byId("btn-toc");
+  if (tocBtn) {
+    tocBtn.addEventListener("click", function () {
+      document.body.classList.toggle("toc-open");
+    });
+  }
+  var links = Array.prototype.slice.call(document.querySelectorAll(".app-sidebar a"));
+  links.forEach(function (a) {
+    a.addEventListener("click", function () {
+      document.body.classList.remove("toc-open");
+    });
+  });
+
+  /* ---------------- 回到顶部 ---------------- */
+  var topBtn = byId("toTopBtn");
+  if (topBtn) {
+    topBtn.addEventListener("click", function () {
+      if (window.scrollTo) { window.scrollTo(0, 0); }
+    });
+  }
+
+  /* ---------------- 沙盘 1：effort 档位 ---------------- */
+  var EFF = [
+    {
+      name: "low", tag: "最快最省",
+      desc: "显著省 token，能力会让一点。适合范围清楚的轻活、子代理、聊天式问答。难题上可能显得「浅」：该读的没读完就交。",
+      kase: "更可能扫你贴出的报错和一两个相关文件，给一个看起来合理的补丁或直接问你要日志；不一定自己去复现、跑测试。"
+    },
+    {
+      name: "medium", tag: "省一点的平衡档",
+      desc: "从默认往下拧一档，换速度和成本。适合范围清楚、你能接受「够用就行」的代理式任务。官方也把它写成许多工作流的省钱落点。",
+      kase: "会读路由和中间件相关几处，改一处最可疑的点，简单自查；复杂竞态或间歇故障可能仍会漏。"
+    },
+    {
+      name: "high", tag: "API 默认行为档",
+      desc: "不设 effort 参数时的行为。适合复杂推理、难写码、代理任务：质量和速度成本之间的主档。多数「认真干活」从这儿起步。",
+      kase: "更常先列假设、读调用链上多个文件，改完尝试复现或跑相关测试，再跟你说明根因。"
+    },
+    {
+      name: "xhigh", tag: "长程写码 / 代理起点",
+      desc: "给长时程、多工具、探索式任务（反复搜、读知识库、半小时以上的代理活）。token 会明显高于 high。Opus 4.7 / 4.8 写码场景官方常建议从 xhigh 起。",
+      kase: "更愿意多假设并行排查（缓存、连接池、限流、依赖超时），读更多周边服务代码，自己多轮验证；你看到的是更长的任务列表和工具调用。"
+    },
+    {
+      name: "max", tag: "几乎不设上限的最高档",
+      desc: "留给真要极限能力的题。多数活在 xhigh 之上增量有限，却明显更贵；结构化输出或其实不需要深挖的题，还可能「想过头」。官方建议：只有评测证明 xhigh 还有空间，再上 max。",
+      kase: "会把能查的都查一遍，复查也多；简单的配置写错时，你可能感到「太隆重」，账单也更疼。"
+    }
+  ];
+  var EFF_BTNS = ["btn-eff-low", "btn-eff-medium", "btn-eff-high", "btn-eff-xhigh", "btn-eff-max"];
+  function renderEff(idx) {
+    var d = EFF[idx];
+    var n = byId("out-eff-name"); if (n) { n.textContent = d.name; }
+    var t = byId("out-eff-tag"); if (t) { t.textContent = d.tag; }
+    var s = byId("out-eff-desc"); if (s) { s.textContent = d.desc; }
+    var c = byId("out-eff-case"); if (c) { c.textContent = d.kase; }
+    for (var i = 0; i < EFF_BTNS.length; i++) {
+      var b = byId(EFF_BTNS[i]);
+      if (b) { b.setAttribute("aria-pressed", i === idx ? "true" : "false"); }
+    }
+  }
+  EFF_BTNS.forEach(function (bid, i) {
+    var b = byId(bid);
+    if (b) {
+      b.addEventListener("click", function () { renderEff(i); });
+    }
+  });
+  renderEff(2);
+
+  /* ---------------- 沙盘 2：排障分流器 ---------------- */
+  function triage() {
+    var ctx = byId("sel-ctx"); var miss = byId("sel-miss"); var wrong = byId("sel-wrong");
+    var c = ctx ? ctx.value : "ok";
+    var m = miss ? miss.value : "no";
+    var w = wrong ? wrong.value : "no";
+    var box = byId("box-verdict");
+    var h = byId("out-advice");
+    var p = byId("out-advice-why");
+    var cls = "verdict v-ctx", head = "先修上游（不是设置问题）", txt = "";
+    if (c === "bad") {
+      cls = "verdict v-ctx";
+      head = "先修上游：上下文 / 工具 / 技能";
+      txt = "原文第一反应不该是改设置。把提示写清、工具和技能接对、给它自验手段（测试、复现步骤）。上下文烂时抬 effort，等于让它在噪音里多烧 token。";
+    } else if (m === "yes") {
+      cls = "verdict v-effort";
+      head = "抬 effort（若当前低于默认档，先回到默认）";
+      txt = "该读的没读、该跑的没跑、该复查的没复查 —— 这是彻底性问题，不是权重里的知识问题。把 effort 调低于默认时最容易踩到。";
+    } else if (w === "yes") {
+      cls = "verdict v-model";
+      head = "换更大模型";
+      txt = "材料都给了仍反复自信地错，说明撞到能力上限：隐蔽 bug、陌生领域、架构取舍。effort 拧满也只是让它更用力地错。";
+    } else {
+      cls = "verdict v-ctx";
+      head = "维持默认档，继续观察";
+      txt = "上下文清楚、没有明显漏读漏测、也不是反复自信地错 —— 按原文建议，多数任务直接用该模型的默认 effort 即可，不必每次都拧。";
+    }
+    if (box) { box.className = cls; }
+    if (h) { h.textContent = head; }
+    if (p) { p.textContent = txt; }
+  }
+  ["sel-ctx", "sel-miss", "sel-wrong"].forEach(function (sid) {
+    var s = byId(sid);
+    if (s) { s.addEventListener("change", triage); }
+  });
+  triage();
+
+  /* ---------------- 沙盘 3：相对账单演算器 ---------------- */
+  function costCalc() {
+    var rp = byId("rng-price"); var rt = byId("rng-tok"); var re = byId("rng-eff");
+    var price = rp ? parseFloat(rp.value) : 3;
+    var tok = rt ? parseFloat(rt.value) : 0.6;
+    var eff = re ? parseFloat(re.value) : 1;
+    var ratio = price * tok * eff;
+    var op = byId("out-price"); if (op) { op.textContent = price.toFixed(1) + "×"; }
+    var ot = byId("out-tok"); if (ot) { ot.textContent = tok.toFixed(2) + "×"; }
+    var oe = byId("out-eff"); if (oe) { oe.textContent = eff.toFixed(2) + "×"; }
+    var ocr = byId("out-cost-ratio"); if (ocr) { ocr.textContent = ratio.toFixed(2) + "×"; }
+    var ocd = byId("out-cost-detail");
+    if (ocd) {
+      ocd.textContent = price.toFixed(1) + " × " + tok.toFixed(2) + " × " + eff.toFixed(2) +
+        " = " + ratio.toFixed(2) + "　（＞1 表示大模型更贵；＜1 表示大模型总账更低）";
+    }
+  }
+  ["rng-price", "rng-tok", "rng-eff"].forEach(function (rid) {
+    var r = byId(rid);
+    if (r) { r.addEventListener("input", costCalc); }
+  });
+  costCalc();
+})();
+</script>
+
+</body>
+</html>

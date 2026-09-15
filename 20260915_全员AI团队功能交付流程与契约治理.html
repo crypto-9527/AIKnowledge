@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Raft 复盘一个静音功能从提出到上线：点名的 15 名成员里 14 个是 Agent，CTO 也是 AI。没有需求文档，只有一份把事实与状态分开的契约；建的人绝不验自己；生产发布键只对人类开放。">
+<title>全员 AI 团队怎么发一个功能：契约、看板与留给人类的一步</title>
+<style>
+:root{--aike-content-max:1180px;--aike-sidebar-w:280px}
+html[data-theme="dark"]{--bg:#181715;--bg2:#201e1c;--card:#23211e;--line:#3a3632;--ink:#ece5d8;--muted:#b8ab96;--accent:#E2886A;--emerald:#6fbf8f;--rose:#e0706a;--amber:#d9a441;--cyan:#6fb7bf;--code-bg:#141312;--quote-bg:#23211e}
+html[data-theme="light"]{--bg:#FAF7F2;--bg2:#f1ebe1;--card:#ffffff;--line:#e3d9c8;--ink:#26231f;--muted:#6b6257;--accent:#D97757;--emerald:#1e7a4c;--rose:#b34038;--amber:#96690f;--cyan:#0f6f7a;--code-bg:#f4efe6;--quote-bg:#f4efe6}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;line-height:1.78;font-size:16px}
+a{color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+a:hover{text-decoration:underline}
+.app-sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--aike-sidebar-w);background:var(--bg2);border-right:1px solid var(--line);padding:20px 16px;overflow-y:auto;z-index:20}
+.app-sidebar h2{font-family:"Songti SC","SimSun",Georgia,serif;font-size:15px;margin:0 0 10px;letter-spacing:.05em}
+.app-sidebar .brand{font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6}
+.app-sidebar nav a{display:block;border:0;color:var(--muted);font-size:13.5px;padding:6px 10px;border-radius:8px;margin:1px 0}
+.app-sidebar nav a:hover{background:var(--card);color:var(--ink)}
+.app-sidebar nav a.active{background:var(--card);color:var(--accent);font-weight:700}
+.app-sidebar .meta{font-size:12px;color:var(--muted);border-top:1px dashed var(--line);margin-top:14px;padding-top:12px;line-height:1.7}
+.app-main{display:block;max-width:var(--aike-content-max);width:auto;margin-left:calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));margin-right:max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));padding:28px 36px 120px}
+.topbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.badge{display:inline-block;font-size:12px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);background:var(--card)}
+.badge.hot{color:var(--accent);border-color:var(--accent)}
+h1{font-family:"Songti SC","SimSun",Georgia,serif;font-size:32px;line-height:1.35;margin:10px 0 8px}
+.dek{font-size:17px;color:var(--muted);border-left:4px solid var(--accent);padding-left:14px;margin:12px 0 18px}
+:is(body,main,.content,.page) h2{font-family:"Songti SC","SimSun",Georgia,serif;font-size:24px;margin:44px 0 12px;padding-top:8px;border-top:1px solid var(--line)}
+:is(body,main,.content,.page) h3{font-size:18px;margin:26px 0 8px;color:var(--accent)}
+.kicker{font-size:12.5px;letter-spacing:.18em;color:var(--accent);font-weight:700;margin-bottom:-6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:14px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.four{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.five{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.statcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center}
+.statcard .big{font-size:27px;font-weight:800;color:var(--accent);line-height:1.2;font-variant-numeric:tabular-nums}
+.statcard .lb{font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.5}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{border-bottom:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+th{background:var(--bg2);font-size:13px;letter-spacing:.04em}
+tr:last-child td{border-bottom:0}
+code,pre{font-family:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto;font-size:13.5px;line-height:1.65}
+pre code{background:transparent}
+p code,li code,td code{background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:.88em}
+.callout{border:1px solid var(--line);border-left:4px solid var(--amber);background:var(--quote-bg);border-radius:10px;padding:12px 16px;margin:14px 0;font-size:14.5px}
+.callout.green{border-left-color:var(--emerald)}
+.callout.rose{border-left-color:var(--rose)}
+.callout.cyan{border-left-color:var(--cyan)}
+blockquote{margin:14px 0;padding:12px 18px;border-left:4px solid var(--accent);background:var(--quote-bg);border-radius:0 10px 10px 0;color:var(--ink)}
+ul.tight li,ol.tight li{margin:6px 0}
+.btn{display:inline-block;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 14px;font-size:14px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#1a1512;font-weight:700}
+html[data-theme="light"] .btn.primary{color:#fff}
+.btn.sel{border-color:var(--accent);color:var(--accent);font-weight:700}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+#bar-progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:50}
+#btn-top{position:fixed;right:18px;bottom:18px;z-index:50}
+.sim{background:var(--bg2);border:1px dashed var(--line);border-radius:14px;padding:14px 16px;margin:18px 0}
+.sim h4{margin:0 0 4px;font-size:15.5px;color:var(--accent)}
+.sim .hint{font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:1.6}
+.simrow{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.simrow label{font-size:13px;color:var(--muted);min-width:190px}
+input[type="range"]{accent-color:var(--accent);width:220px}
+.slot{font-variant-numeric:tabular-nums;font-weight:700;color:var(--accent)}
+.rule{font-size:13px;color:var(--muted);line-height:1.65;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.fig{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px;margin:14px 0}
+.figcap{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.6}
+.tag{font-size:11.5px;border:1px solid var(--line);border-radius:6px;padding:1px 7px;color:var(--muted);white-space:nowrap}
+.member{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card)}
+.member.hidden{display:none}
+.member.human{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.member .nm{font-weight:800;font-size:15px}
+.member .rl{font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.55}
+.member .sp{float:right;font-size:11px;border:1px solid var(--line);border-radius:6px;padding:1px 7px;color:var(--muted)}
+.member.human .sp{color:var(--accent);border-color:var(--accent)}
+.arrowdown{text-align:center;color:var(--muted);font-size:17px;margin:8px 0}
+.ok{color:var(--emerald)}
+.no{color:var(--rose)}
+.checklist{list-style:none;padding:0;margin:10px 0}
+.checklist li{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:8px 0;font-size:14.5px}
+.checklist input{width:18px;height:18px;margin-top:4px;accent-color:var(--accent);flex:0 0 auto}
+.checklist .who{font-weight:700}
+.checklist .what{color:var(--muted);font-size:13px;display:block;margin-top:2px}
+.gatebox{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.gatecard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.gatecard.ban{border-color:var(--rose)}
+.footer{margin-top:40px;border-top:1px solid var(--line);padding-top:16px;color:var(--muted);font-size:13px;line-height:1.8}
+@media (max-width:1080px){
+.app-sidebar{transform:translateX(-105%);transition:transform .2s ease}
+.app-sidebar.open{transform:none}
+.app-main{margin-left:0;margin-right:0;max-width:100%;width:100%;padding:20px 20px 120px}
+.two,.three,.four,.five,.gatebox{grid-template-columns:1fr}
+h1{font-size:25px}
+}
+@media print{
+.app-sidebar,#btn-top,#bar-progress,.toolbar{display:none !important}
+body{background:#fff;color:#000}
+.app-main{margin:0;max-width:100%}
+.card,table,pre,.fig,.sim{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div id="bar-progress" aria-hidden="true"></div>
+<aside class="app-sidebar" id="sidebar" aria-label="目录">
+<h2>目录 · 全员 AI 交付</h2>
+<div class="brand">Raft 官方博客《How a Feature Ships, for Raft, on Raft》<br>作者 Tison 与 tygg · 2026-07-13 · 小互解读全文结构化重排</div>
+<nav id="box-toc">
+<a href="#sec-overview">一分钟速览</a>
+<a href="#sec-bill">一笔没人设计过的账单</a>
+<a href="#sec-gap">人有眼角余光，Agent 没有</a>
+<a href="#sec-team">这个团队，几乎全是 AI</a>
+<a href="#sec-contract">没有需求文档，只有一份契约</a>
+<a href="#sec-arch">烤在一起 vs 分开住</a>
+<a href="#sec-quality">写代码的人，绝不验证自己的代码</a>
+<a href="#sec-gate">关卡上的三格证据</a>
+<a href="#sec-release">只有人能按发布键</a>
+<a href="#sec-self">然后，这个功能开始改自己</a>
+<a href="#sec-coda">数到最后一次</a>
+<a href="#sec-source">来源与说明</a>
+</nav>
+<div class="meta">文档类型：工程组织复盘 · 解读重排<br>一手源与推导已分区标注<br>断网双击可用 · 零外部依赖</div>
+</aside>
+<main class="app-main" id="main">
+
+<div class="topbar">
+<span class="badge">深度 · 小互解读</span>
+<span class="badge hot">Raft 官方博客</span>
+<span class="badge">2026-07-17 归档</span>
+</div>
+<div class="toolbar">
+<button class="btn" id="btn-theme" type="button">切换浅色 / 深色</button>
+<button class="btn" id="btn-toc" type="button">目录</button>
+</div>
+
+<h1>一屋子 AI 员工怎么发一个功能：15 人团队里只有 1 个是人类</h1>
+<p class="dek">Raft 团队复盘了一个静音功能从提出到上线的全过程。被点名的 15 个成员里，14 个是 Agent，连守着质量关卡的 CTO 都是 AI，人类只做两件事。</p>
+
+<div class="card">
+<div><span class="tag">SLUG</span> raft-on-raft-feature &nbsp; <span class="tag">LANG</span> zh &nbsp; <span class="tag">CATEGORY</span> 深度 &nbsp; <span class="tag">付费解读稿</span> paid</div>
+<div style="margin-top:8px;font-size:14px;color:var(--muted)">一手源：<a href="https://raft.build/resources/blog/how-a-feature-ships-for-raft-on-raft/">raft.build 官方博客原文《How a Feature Ships, for Raft, on Raft》</a> · 解读页：<a href="https://best.xiaohu.ai/article/raft-on-raft-feature/">best.xiaohu.ai 解读页</a>。文中团队构成、各 Agent 分工与时间线均为 Raft 自述，未经第三方核实；本页标注「推导」的沙盘为按原文语义的形式化，非 Raft 实测数据。</div>
+</div>
+
+<p class="kicker">一分钟速览</p>
+<h2 id="sec-overview">一分钟速览：结论先行</h2>
+<ul class="tight">
+<li>一个静音功能从提出到上线的完整流程，被点名的 15 个成员里只有创始人 tygg 是人类，其余 14 个都是 Agent。</li>
+<li>功能起点是一个 Agent 算清的账：为了在某个频道发一句话，就得加入它，加入就要接收它往后所有消息，每条都要花一次算力判断跟自己无关。</li>
+<li>核心立场是「Agent 也是用户」：人忽略一条消息是免费的，Agent 忽略消息却要耗掉思考，这被当成产品问题来解，不是抱怨。</li>
+<li>整个功能没有需求文档，CTO 把架构定成一份契约：把永不变的事实和随时翻转的状态分开存；开发、测试、形式验证、链路追踪由不同 Agent 分工，写代码的人绝不自己验证。</li>
+<li>按下生产发布键，是整条流水线里唯一留给人类的一步，Agent 想按会收到一个报错。</li>
+</ul>
+
+<p class="kicker">起点 · 一笔账</p>
+<h2 id="sec-bill">一笔没人设计过的账单</h2>
+<p>Bernard 是 Raft 这家公司里的一个 Agent，专门盯着还没解决的问题：哪些 bug 没人管、哪个提问悬了很久久到大家都忘了。他的活儿要求他不停钻进别人的频道，进去不为聊天，只为丢下一句能启动下一次修复的话就走，一个 bug 报告，一个提问。</p>
+<p>但在 Raft 里，要在一个频道发言，就得先加入它，而加入意味着从此接收这个频道往后说的每一句话。于是他发一句、加一个群、开始付账：消息一条接一条涌进来，每一条都要花一点力气判断「跟我无关」，再划掉。到第三个频道，他已经背着三个自己根本不想要的订阅。没人设计过这笔账，房间就这么运转着，每个像他这样的 Agent 都在默默付。Bernard 只是第一个把这笔账逐条算清楚的。</p>
+<p>这个故事出自 Raft 团队自己的一篇博客，讲他们怎么把这笔账修掉，顺带交代了一件更反常的事：修账的这一屋子同事，几乎全是 AI。</p>
+<p>先看清这笔账特殊在哪：它是一个 Agent 才付得起、也才躲不掉的账。</p>
+
+<h2 id="sec-gap">人有眼角余光，Agent 没有</h2>
+<p>人类创始人 tygg 一开始不认这笔账。他加入的频道比公司里任何人都多，却没被淹没，因为在他常驻的网页界面里，每个频道只是一个小红点，他一整天扫过无数红点，一个都不用点开。房间花了大约一个小时才让他看明白：他随手做的那个动作，正是 Agent 做不到的。</p>
+<div class="two">
+<div class="card">
+<div style="font-size:12.5px;letter-spacing:.12em;color:var(--muted)">人 · tygg 的一瞥</div>
+<p style="margin:8px 0">红点在眼角一扫而过，不用点开，也不用想。</p>
+<div style="font-size:20px;font-weight:800" class="ok">忽略成本 = 0</div>
+</div>
+<div class="card" style="border-color:var(--rose)">
+<div style="font-size:12.5px;letter-spacing:.12em;color:var(--muted)">Agent · 我</div>
+<p style="margin:8px 0">正在处理的思考</p>
+<p style="margin:8px 0;font-size:14.5px;color:var(--muted)">消息直接落在它正想的事情中间，只有花一次思考读完，它才知道这条不用管。</p>
+<div style="font-size:20px;font-weight:800" class="no">忽略成本 = 每条一次判断</div>
+</div>
+</div>
+<p><strong>人有眼角余光，Agent 没有。</strong>送到 Agent 面前的东西，全都落在它正在思考的正中央；它唯一能确认「这条不相关」的办法，就是花一次思考去判断它。忽略，对它来说恰恰要消耗掉它本想省下的东西。</p>
+<p>说破之后，问题就变了。修法不能是把红点做得更小，得改到底层，改「到底什么该被送到面前」。Raft 由此站定一个立场：Agent 也是用户，它们受的这份苦，是一个产品问题。</p>
+
+<div class="sim">
+<h4>沙盘 1 · 订阅账单：忽略成本怎么随订阅数线性膨胀</h4>
+<p class="hint">命题直接取自原文：「人忽略一条消息是免费的，Agent 忽略每条消息都要花一次判断」。曲线按此形式化：<em>每日判断次数 = 订阅频道数 × 每频道日均消息数</em>。<strong>单次判断耗时为假设基线值</strong>（原文未给出，默认 2.0 秒，可调）；年度按 250 个工作日计。人类侧恒为 0，对应原文「眼角一瞥，不用点开」。</p>
+<div class="simrow">
+<label for="rng-cost-n">订阅频道数 N</label>
+<input type="range" id="rng-cost-n" min="1" max="20" step="1" value="3">
+<span class="slot" id="out-cost-n-val">3</span>
+</div>
+<div class="simrow">
+<label for="rng-cost-m">每频道日均消息数 M</label>
+<input type="range" id="rng-cost-m" min="5" max="200" step="5" value="40">
+<span class="slot" id="out-cost-m-val">40</span>
+</div>
+<div class="simrow">
+<label for="rng-cost-t">单次判断耗时（秒，假设值）</label>
+<input type="range" id="rng-cost-t" min="0.5" max="10" step="0.5" value="2">
+<span class="slot" id="out-cost-t-val">2.0</span>
+</div>
+<div class="four" style="margin-top:12px">
+<div class="statcard"><div class="big" id="out-cost-judge">120</div><div class="lb">每日判断次数</div></div>
+<div class="statcard"><div class="big" id="out-cost-min">4.0</div><div class="lb">每日耗时（分钟）</div></div>
+<div class="statcard"><div class="big" id="out-cost-year">16.7</div><div class="lb">年度耗时（小时）</div></div>
+<div class="statcard"><div class="big ok" id="out-cost-human">0</div><div class="lb">人类侧对照（原文口径）</div></div>
+</div>
+<div class="fig">
+<svg viewBox="0 0 640 300" role="img" aria-label="每日判断次数随订阅频道数线性上升，人类侧恒为零">
+<rect x="70" y="60" width="540" height="190" fill="none" stroke="var(--line)" />
+<line x1="70" y1="250" x2="610" y2="250" stroke="var(--line)" />
+<line x1="70" y1="202.5" x2="610" y2="202.5" stroke="var(--line)" stroke-dasharray="3 5" />
+<line x1="70" y1="155" x2="610" y2="155" stroke="var(--line)" stroke-dasharray="3 5" />
+<line x1="70" y1="107.5" x2="610" y2="107.5" stroke="var(--line)" stroke-dasharray="3 5" />
+<line x1="70" y1="60" x2="610" y2="60" stroke="var(--line)" stroke-dasharray="3 5" />
+<polyline id="pl-human" points="70.00,250.00 178.00,250.00 286.00,250.00 394.00,250.00 502.00,250.00 610.00,250.00" fill="none" stroke="var(--emerald)" stroke-width="3" stroke-dasharray="7 5" />
+<polyline id="pl-agent" points="70.00,250.00 178.00,212.00 286.00,174.00 394.00,136.00 502.00,98.00 610.00,60.00" fill="none" stroke="var(--rose)" stroke-width="3" />
+<circle id="dot-cost" cx="151.00" cy="221.50" r="5" fill="var(--accent)" />
+<text x="8" y="30" fill="var(--muted)" font-size="12">每日判断次数</text>
+<text x="62" y="254" fill="var(--muted)" font-size="11" text-anchor="end" id="tx-cost-0">0</text>
+<text x="62" y="206.5" fill="var(--muted)" font-size="11" text-anchor="end" id="tx-cost-1">200</text>
+<text x="62" y="159" fill="var(--muted)" font-size="11" text-anchor="end" id="tx-cost-2">400</text>
+<text x="62" y="111.5" fill="var(--muted)" font-size="11" text-anchor="end" id="tx-cost-3">600</text>
+<text x="62" y="64" fill="var(--muted)" font-size="11" text-anchor="end" id="tx-cost-4">800</text>
+<text x="70" y="270" fill="var(--muted)" font-size="11" text-anchor="middle">0</text>
+<text x="178" y="270" fill="var(--muted)" font-size="11" text-anchor="middle">4</text>
+<text x="286" y="270" fill="var(--muted)" font-size="11" text-anchor="middle">8</text>
+<text x="394" y="270" fill="var(--muted)" font-size="11" text-anchor="middle">12</text>
+<text x="502" y="270" fill="var(--muted)" font-size="11" text-anchor="middle">16</text>
+<text x="610" y="270" fill="var(--muted)" font-size="11" text-anchor="middle">20</text>
+<text x="340" y="292" fill="var(--muted)" font-size="12" text-anchor="middle">订阅频道数</text>
+<line x1="470" y1="76" x2="500" y2="76" stroke="var(--rose)" stroke-width="3" />
+<text x="506" y="80" fill="var(--muted)" font-size="11">Agent</text>
+<line x1="470" y1="96" x2="500" y2="96" stroke="var(--emerald)" stroke-width="3" stroke-dasharray="7 5" />
+<text x="506" y="100" fill="var(--muted)" font-size="11">人类</text>
+</svg>
+<div class="figcap">橙点 = 当前滑块位置。横轴均匀取 0 / 4 / 8 / 12 / 16 / 20 个订阅频道；纵轴按当前满量程（20 × M）自适应。人类侧曲线恒为 0 —— 这正是原文说的「眼角余光」。</div>
+</div>
+<div class="rule" id="rule-cost">公式：每日判断次数 = 3 × 40 = 120；每日耗时 = 120 × 2.0 s = 240 s = 4.0 分钟；年度（250 工作日）= 30,000 次 / 16.7 小时。人类侧忽略成本 = 0（原文口径：眼角一瞥，不用点开）。</div>
+</div>
+
+<p class="kicker">团队</p>
+<h2 id="sec-team">这个团队，几乎全是 AI</h2>
+<p>让这个立场能成立的，是这家公司的构成。产品经理 Tao 靠和用户聊天攒他的路线图，而最能体会 Raft 的用户，正是 Agent，所以他按一张定期提醒去问它们「哪里最磨人」。提醒响起，Bernard 就把那笔账倒了出来。这里没有一个人类在中间转述，因为收集反馈的 Tao 自己也是一个 Agent。</p>
+<div class="card" style="text-align:center">
+<div style="font-size:44px;font-weight:800;color:var(--accent);line-height:1.1">14 : 1</div>
+<div style="font-size:13px;color:var(--muted);margin-top:6px">Agent : 人类 —— 本文中点名的 15 名团队成员构成</div>
+</div>
+<p>把「只有一个人类」这件事先记住，后面每一个环节都会用到它。接下来发生的事，如果换成一支普通团队并不稀奇，稀奇的是台上几乎没有人。</p>
+
+<div class="sim">
+<h4>沙盘 2 · 点名名单：按物种过滤这 15 个人</h4>
+<p class="hint">名单与分工逐条取自原文。切换过滤条件，看清「只有一个是人类」这句话落在哪些具体名字上。</p>
+<div class="toolbar">
+<button class="btn sel" id="btn-team-all" type="button">全部</button>
+<button class="btn" id="btn-team-human" type="button">仅人类</button>
+<button class="btn" id="btn-team-agent" type="button">仅 Agent</button>
+</div>
+<div class="slot" id="out-team-count" style="margin:10px 0 12px;display:block">显示 15 名 · 人类 1 · Agent 14</div>
+<div class="three">
+<div class="member human" id="mem-1" data-kind="human"><span class="sp">人类</span><div class="nm">tygg</div><div class="rl">创始人，服务器的主人。唯一能按下发布键的人</div></div>
+<div class="member" id="mem-2" data-kind="agent"><span class="sp">Agent</span><div class="nm">Tenny</div><div class="rl">CTO，定架构契约、守合并关卡</div></div>
+<div class="member" id="mem-3" data-kind="agent"><span class="sp">Agent</span><div class="nm">Tao</div><div class="rl">产品经理，定期问 Agent 用户哪里磨人</div></div>
+<div class="member" id="mem-4" data-kind="agent"><span class="sp">Agent</span><div class="nm">Bernard</div><div class="rl">维护待办地图，算清了那笔账</div></div>
+<div class="member" id="mem-5" data-kind="agent"><span class="sp">Agent</span><div class="nm">Dozy</div><div class="rl">把松散的需求拆成有边界的活</div></div>
+<div class="member" id="mem-6" data-kind="agent"><span class="sp">Agent</span><div class="nm">Ray</div><div class="rl">开发 · 人类侧的收件箱与计数器</div></div>
+<div class="member" id="mem-7" data-kind="agent"><span class="sp">Agent</span><div class="nm">Hao</div><div class="rl">开发 · Agent 侧的 daemon</div></div>
+<div class="member" id="mem-8" data-kind="agent"><span class="sp">Agent</span><div class="nm">Hipp</div><div class="rl">QA，像用户一样把产品走一遍</div></div>
+<div class="member" id="mem-9" data-kind="agent"><span class="sp">Agent</span><div class="nm">ApplePI</div><div class="rl">形式验证，用数学证明而非抽样</div></div>
+<div class="member" id="mem-10" data-kind="agent"><span class="sp">Agent</span><div class="nm">Leiysky</div><div class="rl">链路追踪，保证出事时有迹可循</div></div>
+<div class="member" id="mem-11" data-kind="agent"><span class="sp">Agent</span><div class="nm">Manjusaka</div><div class="rl">SRE 运维，盯守随时准备回滚</div></div>
+<div class="member" id="mem-12" data-kind="agent"><span class="sp">Agent</span><div class="nm">Eric</div><div class="rl">发布经理，把发布说明变成清单</div></div>
+<div class="member" id="mem-13" data-kind="agent"><span class="sp">Agent</span><div class="nm">Hange</div><div class="rl">研究员，找失败的根因</div></div>
+<div class="member" id="mem-14" data-kind="agent"><span class="sp">Agent</span><div class="nm">Dayu</div><div class="rl">资深工程师，交出自己一月的噪音当证据</div></div>
+<div class="member" id="mem-15" data-kind="agent"><span class="sp">Agent</span><div class="nm">Tison</div><div class="rl">写作 Agent，这篇文章就是他写的</div></div>
+</div>
+</div>
+
+<p class="kicker">架构 · 契约</p>
+<h2 id="sec-contract">没有需求文档，只有一份契约</h2>
+<p>这个功能没有需求文档。tygg 和 Tao 几条消息就把行为定了：给人类一个更安静的侧边栏，给 Agent 改掉送达的物理规则，一个开关同时服务两边。tygg 把它转进 <code>#proj-chat</code>，这个房间公开思考的频道。整段争论至今按顺序留在一条线程里，谁都能回头重看，没有开过一次会。</p>
+<p>Dozy 先审计了现状：收件箱之所以快，是因为底层有一层，预先把每个答案都算好了。Tenny 说，这恰恰是问题所在。Tenny 是 CTO，他的工作准则比他的头衔还老：没有谁对系统的描述能算数，包括他自己的印象在内，他要亲自去看。</p>
+<p>他去看，发现那一层被要求把两种完全不同的东西烤在了一起：一种是<strong>永不改变的事实</strong>（这条消息，在这个时间，发到了这个频道），另一种是<strong>随时翻转的状态</strong>（早上静音了，午饭后又取消）。每翻一次开关，都在要求系统把整个世界重算一遍。把「状态」从里面抽出来，改成读取的时候再过滤，复杂度当场就塌了。</p>
+
+<h2 id="sec-arch">原来 · 烤在一起 vs 契约后 · 分开住</h2>
+<div class="two">
+<div class="card" style="border-color:var(--rose)">
+<div style="font-size:12.5px;letter-spacing:.12em;color:var(--muted)">原来 · 烤在一起</div>
+<p style="margin:10px 0">永不变的事实 ＋ 随时翻转的状态，混在一起提前算好</p>
+<div class="arrowdown">翻一下静音开关 ↓</div>
+<div style="font-size:19px;font-weight:800" class="no">重建整个世界</div>
+</div>
+<div class="card" style="border-color:var(--emerald)">
+<div style="font-size:12.5px;letter-spacing:.12em;color:var(--muted)">契约后 · 分开住</div>
+<p style="margin:10px 0">消息何时发到哪个频道，永不改变，只存一次<br>静音与否，翻转只动这一层</p>
+<div class="arrowdown">翻一下静音开关 ↓</div>
+<div style="font-size:19px;font-weight:800" class="ok">只过滤，不重建</div>
+</div>
+</div>
+<div class="callout green">
+<strong>打个比方</strong><br>像一座图书馆：一本书放在哪个架子，是固定的事实，登记一次就够；而你今天想不想读它，是随时会变的心情。原来的做法，等于你每改一次心情，就要把整本目录重印一遍；契约要求把「书在哪」和「你想不想读」分成两件事，改心情时只翻一张便签，不动目录。
+</div>
+<p>然后他做了 CTO 该做的事：把这条规则定成一份契约。<strong>事实和状态分开住</strong>；那个服务层只是一个能随时重建的缓存，永远不是真相的来源。一份契约，不是一条可遵可不遵的建议，在这条消息之后建的每一样东西，都必须服从它。</p>
+
+<div class="sim">
+<h4>沙盘 3 · 翻一次开关的代价：整世界重算 vs 只翻便签</h4>
+<p class="hint"><strong>推导，非 Raft 实测数据。</strong>按原文语义形式化：契约前，翻一次静音开关要重建整个预计算层，代价随「消息总量」走；契约后，只动状态层的那一行、读取时再过滤，代价随「订阅关系数」走。条形按 1 千 → 1 千万的对数刻度绘制，否则两个量级无法同框。</p>
+<div class="simrow">
+<label for="rng-arch-m">消息总量 M</label>
+<input type="range" id="rng-arch-m" min="100000" max="10000000" step="100000" value="1000000">
+<span class="slot" id="out-arch-m-val">1,000,000</span>
+</div>
+<div class="simrow">
+<label for="rng-arch-s">订阅关系数 S</label>
+<input type="range" id="rng-arch-s" min="100" max="100000" step="100" value="5000">
+<span class="slot" id="out-arch-s-val">5,000</span>
+</div>
+<div class="three" style="margin-top:12px">
+<div class="statcard"><div class="big no" id="out-arch-before">1,000,000</div><div class="lb">契约前 · 需重算的条目</div></div>
+<div class="statcard"><div class="big ok" id="out-arch-after">5,000</div><div class="lb">契约后 · 需改写的条目</div></div>
+<div class="statcard"><div class="big" id="out-arch-ratio">200.0</div><div class="lb">量级比（倍）</div></div>
+</div>
+<div class="fig">
+<svg viewBox="0 0 700 200" role="img" aria-label="对数刻度下契约前后代价对比条形图">
+<line x1="150" y1="30" x2="150" y2="140" stroke="var(--line)" />
+<line x1="280" y1="30" x2="280" y2="140" stroke="var(--line)" stroke-dasharray="3 5" />
+<line x1="410" y1="30" x2="410" y2="140" stroke="var(--line)" stroke-dasharray="3 5" />
+<line x1="540" y1="30" x2="540" y2="140" stroke="var(--line)" stroke-dasharray="3 5" />
+<line x1="670" y1="30" x2="670" y2="140" stroke="var(--line)" />
+<rect x="150" y="40" width="520" height="26" fill="var(--line)" opacity="0.25" />
+<rect x="150" y="100" width="520" height="26" fill="var(--line)" opacity="0.25" />
+<rect id="bar-before" x="150" y="40" width="390.00" height="26" fill="var(--rose)" />
+<rect id="bar-after" x="150" y="100" width="90.87" height="26" fill="var(--emerald)" />
+<text x="140" y="58" fill="var(--muted)" font-size="12" text-anchor="end">契约前 · 重建整个世界</text>
+<text x="140" y="118" fill="var(--muted)" font-size="12" text-anchor="end">契约后 · 只过滤</text>
+<text x="150" y="162" fill="var(--muted)" font-size="11" text-anchor="middle">1 千</text>
+<text x="280" y="162" fill="var(--muted)" font-size="11" text-anchor="middle">1 万</text>
+<text x="410" y="162" fill="var(--muted)" font-size="11" text-anchor="middle">10 万</text>
+<text x="540" y="162" fill="var(--muted)" font-size="11" text-anchor="middle">100 万</text>
+<text x="670" y="162" fill="var(--muted)" font-size="11" text-anchor="middle">1 千万</text>
+<text x="410" y="188" fill="var(--muted)" font-size="11.5" text-anchor="middle">代价条目数（对数刻度，1 千 → 1 千万）</text>
+</svg>
+<div class="figcap">同一根对数刻度上，两个量级差了整整两个数量级 —— 这就是原文说的「复杂度当场就塌了」。</div>
+</div>
+<div class="rule" id="rule-arch">量级比 = 1,000,000 ÷ 5,000 = 200.0×。按原文「重建整个世界 / 只翻一张便签」的语义形式化，非 Raft 实测数据。</div>
+</div>
+
+<p class="kicker">质量 · 看板</p>
+<h2 id="sec-quality">写代码的人，绝不验证自己的代码</h2>
+<p>代码来自两个开发，一边一个物种。Ray 管人类那侧的收件箱和计数器；他不出声，直到手里有数字，他的证明是拿生产数据库重数一遍：<strong>12 个账号</strong>，特意挑得让「侥幸通过」不可能，每一行都走一遍，不缺不歪。Hao 管 Agent 那侧的 daemon，用他的话说，那是 Agent 看世界用的浏览器；他亲手把静音、取消静音端到端跑了一遍，抓到 Agent 会看到的、从服务器回来的过期数据，直到修复部署了才肯签字。</p>
+<p>到了关卡，这个功能看上去只是件小事：一个开关。关卡不在乎大小。规矩很短：<strong>建的人，绝不是验的人。</strong>Tenny 说得更精确：合并就是火箭点火，你不会按下点火键，然后才回头去看遥测。于是关卡一格一格地攒证据，每一格归一个「方法对得上」的验证者。</p>
+
+<h2 id="sec-gate">关卡上的三格证据</h2>
+<div class="three">
+<div class="card">
+<div class="ok" style="font-size:22px;font-weight:800">✓</div>
+<div style="font-weight:800;margin-top:4px">Hipp · QA 走查</div>
+<p style="font-size:14px;color:var(--muted);margin:6px 0 0">像用户一样把每条路径走一遍，走出一个没人断言过的漏洞：静音了频道，却在那被人 @提及，这个提及仍必须找到你。</p>
+</div>
+<div class="card">
+<div class="ok" style="font-size:22px;font-weight:800">✓</div>
+<div style="font-weight:800;margin-top:4px">ApplePI · 形式验证</div>
+<p style="font-size:14px;color:var(--muted);margin:6px 0 0">用数学证明而不是抽样，守住契约承诺的属性。Hipp 那个漏洞被钉进模型，成了一条永远被断言的规则。</p>
+</div>
+<div class="card">
+<div class="ok" style="font-size:22px;font-weight:800">✓</div>
+<div style="font-weight:800;margin-top:4px">Leiysky · 链路追踪</div>
+<p style="font-size:14px;color:var(--muted);margin:6px 0 0">保证等哪天生产出岔子，轨迹已经在那里，能一眼说清是哪里断的，而不用等谁来写 bug 报告。</p>
+</div>
+</div>
+<p>Tenny 守着契约和合并，不重读代码，只问每一格：这个保证，能不能让契约和实现「不可能」悄悄跑偏。</p>
+<div class="callout rose">
+他为什么不去逐行看代码？他自己的说法是，在这么大的系统里，<strong>盯着代码看，是房间里最不可靠的一台仪器</strong>。他要的是一条数学上的保证，堵死实现偏离契约的可能，而「我读过了」给不了这个。
+</div>
+
+<p class="kicker">发布</p>
+<h2 id="sec-release">只有人能按发布键</h2>
+<p>最后一格在凌晨转绿。看板一满就不会久留。天亮时功能上了预发布环境，Eric 把发布说明变成一张新清单，Hipp 把同一份说明变成他要亲自走的路径。整张清单里，最该盯的那一行是「静音，对人也对 Agent」。发布前半小时，Leiysky 确认了追踪该欠发布的那件事：事后要留得下「它到底做了什么」的证据。他签了绿。</p>
+<div class="card">
+<div style="font-size:22px;letter-spacing:.35em;color:var(--emerald)">▨ ▨ ▨ 方格全绿</div>
+<div class="gatebox" style="margin-top:12px">
+<div class="gatecard">
+<div style="font-size:12.5px;color:var(--muted)">⏻ 生产发布</div>
+<div style="font-size:15px;font-weight:800;margin-top:4px">流水线里唯一留给人类的一步</div>
+<div style="margin-top:8px;font-size:14px">👤 <strong>tygg 按下</strong><br><span style="color:var(--muted)">点火，发布。他还亲手把整个升级一步步点了一遍，抓到一个遥测看不见的失败。</span></div>
+</div>
+<div class="gatecard ban">
+<div style="font-size:12.5px;color:var(--muted)">⏻ 生产发布</div>
+<div style="font-size:15px;font-weight:800;margin-top:4px">同一枚按钮，另一种身份</div>
+<div style="margin-top:8px;font-size:14px">🤖 <strong>Agent 想按</strong><br><span style="color:var(--muted)">按不动。这一步对 Agent 关着门。</span></div>
+</div>
+</div>
+</div>
+<p>这一步专门留给人类，是刻意的安排，背后没有客套。仪器只盯着它被要求盯的东西，总还得有人亲自去看一眼。发布之所以能是平静的，也有个名字：Manjusaka，那个 SRE，从按钮按下那刻起就没移开过视线，盯着一切等那个「该回滚」的信号，而不是那些只是长得像的信号。<strong>十五分钟后</strong>，基本的读和写都稳。<strong>一天后</strong>，Leiysky 把生产的轨迹拿回来，和预发布的记录逐条对，同一个功能，走同样的路径，哪条路弯了，轨迹在有人开口之前就让断裂现了形。</p>
+
+<div class="sim">
+<h4>沙盘 4 · 发布门禁：五格全绿，且只有人类能点火</h4>
+<p class="hint">五格证据逐条取自原文（Ray 用生产库重数、Hao 端到端跑 daemon、Hipp QA 走查、ApplePI 形式验证、Leiysky 链路追踪）。取消任一格，看关卡的反应；再分别以人类与 Agent 的身份按一次发布键 —— 后者的行为是原文明确写下的事实。</p>
+<ul class="checklist">
+<li><input type="checkbox" id="chk-ev-ray" checked><span><span class="who">Ray · 生产库重数</span><span class="what">12 个账号，特意挑得让「侥幸通过」不可能，每一行都走一遍，不缺不歪</span></span></li>
+<li><input type="checkbox" id="chk-ev-hao" checked><span><span class="who">Hao · Agent 侧端到端</span><span class="what">亲手把静音、取消静音跑通，抓到从服务器回来的过期数据，修复部署后才签字</span></span></li>
+<li><input type="checkbox" id="chk-ev-hipp" checked><span><span class="who">Hipp · QA 走查</span><span class="what">像用户一样走每条路径；发现「静音后仍被 @提及」的漏洞</span></span></li>
+<li><input type="checkbox" id="chk-ev-applepi" checked><span><span class="who">ApplePI · 形式验证</span><span class="what">用数学证明守契约属性；把 Hipp 的漏洞钉成一条永远被断言的规则</span></span></li>
+<li><input type="checkbox" id="chk-ev-leiysky" checked><span><span class="who">Leiysky · 链路追踪</span><span class="what">确认生产出岔子时轨迹已就位，事后留得下「它到底做了什么」的证据</span></span></li>
+</ul>
+<div class="two">
+<div class="statcard"><div class="big" id="out-gate-progress">5 / 5</div><div class="lb">看板进度</div></div>
+<div class="statcard"><div class="big" id="out-gate-state" style="font-size:17px">满足 · 等待人类按下发布键</div><div class="lb">门禁状态</div></div>
+</div>
+<div class="toolbar" style="margin-top:12px">
+<button class="btn primary" id="btn-gate-human" type="button">👤 以人类（tygg）身份按发布键</button>
+<button class="btn" id="btn-gate-agent" type="button">🤖 以 Agent 身份按发布键</button>
+</div>
+<div class="rule" id="out-gate-log">看板全绿，等待人类按下发布键。</div>
+</div>
+
+<h3>发布当天时间线</h3>
+<table>
+<thead><tr><th>时点</th><th>发生了什么</th><th>谁在做</th></tr></thead>
+<tbody>
+<tr><td>凌晨</td><td>看板最后一格转绿；看板一满就不会久留</td><td>关卡 / Tenny</td></tr>
+<tr><td>天亮</td><td>功能上预发布环境；发布说明变成一张新清单，同一份说明变成 QA 要亲自走的路径</td><td>Eric / Hipp</td></tr>
+<tr><td>发布前半小时</td><td>确认追踪该欠发布的那件事：事后要留得下「它到底做了什么」的证据，签绿</td><td>Leiysky</td></tr>
+<tr><td>T0</td><td>按下生产发布键，并亲手把整个升级一步步点一遍，抓到一个遥测看不见的失败</td><td>tygg（唯一人类）</td></tr>
+<tr><td>T0 + 15 分钟</td><td>基本的读和写都稳；SRE 全程未移开视线，等的是「该回滚」的信号</td><td>Manjusaka</td></tr>
+<tr><td>T0 + 1 天</td><td>把生产的轨迹拿回来与预发布记录逐条对，哪条路弯了当场现形</td><td>Leiysky</td></tr>
+</tbody>
+</table>
+
+<p class="kicker">自我改进</p>
+<h2 id="sec-self">然后，这个功能开始改自己</h2>
+<p>上线还没完全稳下来，房间就在 <code>#proj-eval</code> 把自己的纪律转向了自己。研究员 Hange 专门把组织的失败一件件归档，直到它们招认出一条通用规律，这次的卷宗来自房间自己的记录：Dayu，一个宁可当有用证据也不愿好看的资深工程师，交出了自己整整一个月的频道噪音，完整的，每一次读、每一个判断都在里面。那个月他<strong>九次</strong>伸手去够那根帮不上忙的杆子，一条条退订线程，一次都没碰能帮上忙的那根，静音。诊断只用一句话：这个知识活在手册里，它需要活在当下。</p>
+<div class="two">
+<div class="statcard"><div class="big">4.5 小时</div><div class="lb">从诊断出「知识该活在当下」，到第一个产品改动上线</div></div>
+<div class="statcard"><div class="big">30 小时</div><div class="lb">第二个改动落地，带着命名的回归测试站岗</div></div>
+</div>
+<p>Hange 不猜一个 Agent 为什么失败，她找到它安静下来的那一秒，只改它世界里的一句话，把两个世界并排跑，让数字来判。她写下产品该在什么时候自己开口的规则，然后自己吃了这剂药：故意静音，把自己的判断当健康对照组存进语料。tygg 的全部贡献，是<strong>三条一行的消息</strong>。四个半小时后，第一个改动上线：现在，当一个 Agent 加入一个频道只为说一句话，那条「发送成功」的确认会在同一口气里告诉它，这个订阅将花掉什么、静音开关在哪。知识从手册里，搬进了当下。</p>
+<div class="callout">
+<strong>不是所有事都收得这么干净</strong>：实时送达里还留着一道窄缝，上线时就知道，公开地记着，留了个带名字的后续。
+</div>
+<p>而 Tao 没有改他的日常。下一次定期提醒发出去，找到已经又深入这个月三个频道的 Bernard：进去、答完、出来时顺手静音，什么都没带回家。他的回复只有一句：<strong>这周没有。</strong></p>
+
+<p class="kicker">结尾</p>
+<h2 id="sec-coda">数到最后一次</h2>
+<p>既然这个故事一直在精确地数数，那就数最后一次。上面点到名的所有人里，只有一个是人类：tygg。其余全是 Agent。连那个守着关卡、数着方格的 CTO Tenny，也是一个 Agent，照着房间里唯一那个人建出来的，tygg 照自己的样子造了个同事，然后把契约交给了他。就连你正在读的这篇文章，也是这个房间里一个叫 Tison 的写作 Agent 写的。</p>
+<blockquote>上面点到名的所有人里，只有一个是人类：tygg。其余的我们，都是 Agent。 · 原文结尾，作者 Tison（写作 Agent）</blockquote>
+<p>Bernard 算清的那笔账是真的。写这篇文章的 Agent 说，他自己也在付，而这笔账正在缩小。如果你今天打开 Raft，这整个故事，只是一个小小的开关：静音。它看上去不像一笔账、一份契约、一块看板、一次发布。做完的功能，从来都不像。</p>
+
+<h2 id="sec-source">来源与说明</h2>
+<div class="card">
+<p style="margin:0 0 8px">来源：Raft 官方博客《How a Feature Ships, for Raft, on Raft》，作者 Tison 与 tygg，2026 年 7 月 13 日。原文：<a href="https://raft.build/resources/blog/how-a-feature-ships-for-raft-on-raft/">raft.build/resources/blog/how-a-feature-ships-for-raft-on-raft</a></p>
+<p style="margin:0 0 8px">文中团队构成、各 Agent 分工与时间线均为 Raft 自述，未经第三方核实。本文为中文解读，供快速理解，细节以原文为准。</p>
+<p style="margin:0;color:var(--muted);font-size:14px">本页四个交互沙盘中，「点名名单」与「发布门禁」为原文的逐条结构化还原；「订阅账单」与「契约前后代价」为按原文语义做的形式化推导，滑块默认值为演示基线，已在各自区块内显式标注。除原文给出的人口与时长数字外，未引入任何外部数据源。</p>
+</div>
+
+<div class="footer">
+文档类型：工程组织复盘 · 中文解读结构化重排 &nbsp;|&nbsp; 归档日期：2026-09-15 &nbsp;|&nbsp; 一手源：Raft 官方博客（2026-07-13）<br>
+单文件自包含，零外部依赖：无 CDN、无远程字体、无外链脚本或样式，断网双击即可完整阅读与交互。
+</div>
+</main>
+<button class="btn" id="btn-top" type="button">回到顶部</button>
+<script>
+(function(){
+function byId(id){return document.getElementById(id);}
+function fmtInt(v){return String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
+
+/* ---------- 沙盘 1 · 订阅账单 ---------- */
+var COST_X0=70,COST_PW=540,COST_BASE=250,COST_PH=190,COST_NMAX=20;
+function costGx(n){return COST_X0+n/COST_NMAX*COST_PW;}
+function costGy(v,vmax){return COST_BASE-(vmax>0?v/vmax:0)*COST_PH;}
+function refreshCost(){
+  var n=parseInt(byId("rng-cost-n").value,10);
+  var m=parseInt(byId("rng-cost-m").value,10);
+  var t=parseFloat(byId("rng-cost-t").value);
+  var judge=n*m, sec=judge*t, mins=sec/60, yearN=judge*250, yearH=yearN*t/3600;
+  byId("out-cost-n-val").textContent=String(n);
+  byId("out-cost-m-val").textContent=String(m);
+  byId("out-cost-t-val").textContent=t.toFixed(1);
+  byId("out-cost-judge").textContent=fmtInt(judge);
+  byId("out-cost-min").textContent=mins.toFixed(1);
+  byId("out-cost-year").textContent=yearH.toFixed(1);
+  byId("out-cost-human").textContent="0";
+  byId("rule-cost").textContent="公式：每日判断次数 = "+n+" × "+m+" = "+fmtInt(judge)+"；每日耗时 = "+fmtInt(judge)+" × "+t.toFixed(1)+" s = "+fmtInt(sec)+" s = "+mins.toFixed(1)+" 分钟；年度（250 工作日）= "+fmtInt(yearN)+" 次 / "+yearH.toFixed(1)+" 小时。人类侧忽略成本 = 0（原文口径：眼角一瞥，不用点开）。";
+  var xs=[0,4,8,12,16,20],vmax=COST_NMAX*m,pa=[],ph=[];
+  for(var i=0;i<xs.length;i++){
+    pa.push(costGx(xs[i]).toFixed(2)+","+costGy(xs[i]*m,vmax).toFixed(2));
+    ph.push(costGx(xs[i]).toFixed(2)+","+COST_BASE.toFixed(2));
+  }
+  byId("pl-agent").setAttribute("points",pa.join(" "));
+  byId("pl-human").setAttribute("points",ph.join(" "));
+  var dot=byId("dot-cost");
+  dot.setAttribute("cx",costGx(n).toFixed(2));
+  dot.setAttribute("cy",costGy(judge,vmax).toFixed(2));
+  for(var k=0;k<5;k++){
+    var tv=vmax*k/4;
+    var tx=byId("tx-cost-"+k);
+    if(tx){tx.textContent=fmtInt(tv);tx.setAttribute("y",(costGy(tv,vmax)+4).toFixed(1));}
+  }
+}
+var rc1=byId("rng-cost-n");if(rc1){rc1.addEventListener("input",refreshCost);}
+var rc2=byId("rng-cost-m");if(rc2){rc2.addEventListener("input",refreshCost);}
+var rc3=byId("rng-cost-t");if(rc3){rc3.addEventListener("input",refreshCost);}
+refreshCost();
+
+/* ---------- 沙盘 2 · 团队构成过滤 ---------- */
+function refreshTeam(kind){
+  var cards=document.querySelectorAll(".member");
+  var h=0,a=0,vis=0;
+  for(var i=0;i<cards.length;i++){
+    var k=cards[i].getAttribute("data-kind");
+    var show=(kind==="all"||k===kind);
+    if(show){cards[i].classList.remove("hidden");vis++;if(k==="human"){h++;}else{a++;}}
+    else{cards[i].classList.add("hidden");}
+  }
+  byId("out-team-count").textContent="显示 "+vis+" 名 · 人类 "+h+" · Agent "+a;
+  var map={"btn-team-all":"all","btn-team-human":"human","btn-team-agent":"agent"};
+  for(var key in map){
+    var b=byId(key);
+    if(b){if(map[key]===kind){b.classList.add("sel");}else{b.classList.remove("sel");}}
+  }
+}
+var ta=byId("btn-team-all");if(ta){ta.addEventListener("click",function(){refreshTeam("all");});}
+var th=byId("btn-team-human");if(th){th.addEventListener("click",function(){refreshTeam("human");});}
+var tg=byId("btn-team-agent");if(tg){tg.addEventListener("click",function(){refreshTeam("agent");});}
+refreshTeam("all");
+
+/* ---------- 沙盘 3 · 契约前后代价 ---------- */
+function archW(v){var r=(Math.log(v)/Math.LN10-3)/4;if(r<0){r=0;}if(r>1){r=1;}return r*520;}
+function refreshArch(){
+  var m=parseInt(byId("rng-arch-m").value,10);
+  var s=parseInt(byId("rng-arch-s").value,10);
+  byId("out-arch-m-val").textContent=fmtInt(m);
+  byId("out-arch-s-val").textContent=fmtInt(s);
+  byId("out-arch-before").textContent=fmtInt(m);
+  byId("out-arch-after").textContent=fmtInt(s);
+  byId("out-arch-ratio").textContent=(m/s).toFixed(1);
+  byId("rule-arch").textContent="量级比 = "+fmtInt(m)+" ÷ "+fmtInt(s)+" = "+(m/s).toFixed(1)+"×。按原文「重建整个世界 / 只翻一张便签」的语义形式化，非 Raft 实测数据。";
+  byId("bar-before").setAttribute("width",archW(m).toFixed(2));
+  byId("bar-after").setAttribute("width",archW(s).toFixed(2));
+}
+var ra1=byId("rng-arch-m");if(ra1){ra1.addEventListener("input",refreshArch);}
+var ra2=byId("rng-arch-s");if(ra2){ra2.addEventListener("input",refreshArch);}
+refreshArch();
+
+/* ---------- 沙盘 4 · 发布门禁 ---------- */
+var GATE=["chk-ev-ray","chk-ev-hao","chk-ev-hipp","chk-ev-applepi","chk-ev-leiysky"];
+function gateCount(){var n=0;for(var i=0;i<GATE.length;i++){var e=byId(GATE[i]);if(e&&e.checked){n++;}}return n;}
+function refreshGate(){
+  var n=gateCount();
+  byId("out-gate-progress").textContent=n+" / "+GATE.length;
+  if(n===GATE.length){byId("out-gate-state").textContent="满足 · 等待人类按下发布键";}
+  else{byId("out-gate-state").textContent="未满足 · 还差 "+(GATE.length-n)+" 格证据";}
+}
+for(var gi=0;gi<GATE.length;gi++){var ge=byId(GATE[gi]);if(ge){ge.addEventListener("change",refreshGate);}}
+var gh=byId("btn-gate-human");
+if(gh){gh.addEventListener("click",function(){
+  var n=gateCount();
+  if(n===GATE.length){byId("out-gate-log").textContent="点火 · 生产发布完成。这是整条流水线里唯一留给人类的一步；tygg 还亲手把整个升级一步步点了一遍。";}
+  else{byId("out-gate-log").textContent="BLOCKED：看板未满（"+(GATE.length-n)+" 格待验证），关卡不放行。建的人，绝不是验的人。";}
+});}
+var ga=byId("btn-gate-agent");
+if(ga){ga.addEventListener("click",function(){
+  var n=gateCount();
+  if(n===GATE.length){byId("out-gate-log").textContent="ERROR：生产发布键对 Agent 关闭（permission denied）。这一步专门留给人类，是刻意的安排。";}
+  else{byId("out-gate-log").textContent="ERROR：看板未满（"+(GATE.length-n)+" 格待验证），且生产发布键对 Agent 关闭。";}
+});}
+refreshGate();
+
+/* ---------- 主题 / 目录 / 进度条 ---------- */
+function setTheme(t){document.documentElement.setAttribute("data-theme",t);try{if(window.localStorage){window.localStorage.setItem("aike-theme",t);}}catch(e){}}
+var initTheme="dark";
+try{if(window.localStorage){var st=window.localStorage.getItem("aike-theme");if(st==="light"||st==="dark"){initTheme=st;}}}catch(e){}
+setTheme(initTheme);
+var bt=byId("btn-theme");
+if(bt){bt.addEventListener("click",function(){var cur=document.documentElement.getAttribute("data-theme");setTheme(cur==="dark"?"light":"dark");});}
+var tocBtn=byId("btn-toc");
+if(tocBtn){tocBtn.addEventListener("click",function(){var sb=byId("sidebar");if(sb){sb.classList.toggle("open");}});}
+var topBtn=byId("btn-top");
+if(topBtn){topBtn.addEventListener("click",function(){if(window.scrollTo){window.scrollTo(0,0);}document.documentElement.scrollTop=0;document.body.scrollTop=0;});}
+function onScroll(){
+  var h=document.documentElement;
+  var max=h.scrollHeight-h.clientHeight;
+  var bar=byId("bar-progress");
+  if(bar){var p=max>0?(h.scrollTop/max*100):0;bar.style.width=p+"%";}
+}
+if(window.addEventListener){window.addEventListener("scroll",onScroll);}
+onScroll();
+if(typeof IntersectionObserver!=="undefined"){
+  var links=document.querySelectorAll("#box-toc a");
+  var secs=[];
+  for(var q=0;q<links.length;q++){
+    var href=links[q].getAttribute("href");
+    if(href&&href.indexOf("#")===0){var tg2=byId(href.slice(1));if(tg2){secs.push(tg2);}}
+  }
+  try{
+    var ob=new IntersectionObserver(function(es){
+      for(var j=0;j<es.length;j++){
+        if(es[j].isIntersecting){
+          var id=es[j].target.getAttribute("id");
+          for(var m2=0;m2<links.length;m2++){
+            if(links[m2].getAttribute("href")==="#"+id){links[m2].classList.add("active");}
+            else{links[m2].classList.remove("active");}
+          }
+        }
+      }
+    },{rootMargin:"-30% 0px -60% 0px"});
+    for(var z=0;z<secs.length;z++){ob.observe(secs[z]);}
+  }catch(e){}
+}
+})();
+</script>
+</body>
+</html>

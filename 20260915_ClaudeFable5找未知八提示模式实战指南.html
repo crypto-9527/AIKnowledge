@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Fable 5 找未知八提示模式实战指南 | AIKnowledge 技术消化白皮书</title>
+<meta name="description" content="Anthropic Claude Code 团队 Thariq Shihipar《A Field Guide to Fable》完整拆解：未知四象限、能力悬垂与提示词做减法、动手前中后 8 个提示模式（盲点扫描、头脑风暴与原型、采访、参考、实现计划、实现笔记、推介与讲解、测验），全部中英示例 prompt 原文保留，附未知发现阶段成本沙盘与来源核验说明。">
+<style>
+  :root {
+    --bg: #181715; --bg-card: #211F1C; --bg-elevated: #2A2723; --bg-subtle: #1E1C19;
+    --border: #33302B; --border-strong: #4D4841;
+    --text-main: #E6E2DC; --text-muted: #A8A29A; --text-dim: #736D64;
+    --accent: #E2886A; --accent-dim: rgba(226,136,106,0.12); --accent-glow: rgba(226,136,106,0.28);
+    --c-teal: #5B9A92; --c-teal-dim: rgba(91,154,146,0.15);
+    --c-gold: #D4A373; --c-gold-dim: rgba(212,163,115,0.15);
+    --c-rose: #D66853; --c-rose-dim: rgba(214,104,83,0.15);
+    --c-blue: #6C9BD1; --c-blue-dim: rgba(108,155,209,0.15);
+    --c-violet: #9B8BC4; --c-violet-dim: rgba(155,139,196,0.15);
+    --code-bg: #121110; --shadow-sm: 0 2px 8px rgba(0,0,0,0.35); --shadow-md: 0 8px 26px rgba(0,0,0,0.45);
+    --font-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", SimSun, STSong, Georgia, serif;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+    --aike-sidebar-w: 280px; --aike-content-max: 1180px;
+  }
+  [data-theme="light"] {
+    --bg: #FAF7F2; --bg-card: #FFFFFF; --bg-elevated: #F3EDE3; --bg-subtle: #F5F1EA;
+    --border: #E6E0D6; --border-strong: #CFC5B6;
+    --text-main: #2B2824; --text-muted: #6E675E; --text-dim: #999083;
+    --accent: #D97757; --accent-dim: rgba(217,119,87,0.10); --accent-glow: rgba(217,119,87,0.20);
+    --c-teal: #2D6A4F; --c-teal-dim: rgba(45,106,79,0.12);
+    --c-gold: #B07D38; --c-gold-dim: rgba(176,125,56,0.12);
+    --c-rose: #C04D38; --c-rose-dim: rgba(192,77,56,0.12);
+    --c-blue: #2B6CB0; --c-blue-dim: rgba(43,108,176,0.12);
+    --c-violet: #6B5B95; --c-violet-dim: rgba(107,91,149,0.12);
+    --code-bg: #F4EFE6; --shadow-sm: 0 2px 8px rgba(0,0,0,0.05); --shadow-md: 0 8px 26px rgba(0,0,0,0.08);
+    --aike-sidebar-w: 280px; --aike-content-max: 1180px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; background: var(--bg); color: var(--text-main);
+         line-height: 1.78; font-family: var(--font-sans); -webkit-text-size-adjust: 100%; }
+  body { background: var(--bg); color: var(--text-main); min-height: 100vh; display: block;
+         transition: background-color .25s ease, color .25s ease; }
+  ::selection { background: var(--accent-glow); }
+
+  #reading-progress-bar { position: fixed; top: 0; left: 0; width: 0%; height: 3px;
+    background: linear-gradient(90deg, var(--c-teal), var(--accent)); z-index: 1000; transition: width .1s linear; }
+
+  .top-header { position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--border);
+    height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; z-index: 900; }
+  .header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .header-brand { font-family: var(--font-serif); font-size: .95rem; font-weight: 700; color: var(--accent); letter-spacing: .04em; white-space: nowrap; }
+  .header-title { font-size: .84rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
+  .header-right { display: flex; align-items: center; gap: 8px; }
+  .icon-btn { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-muted);
+    border-radius: 8px; padding: 6px 12px; font-size: .8rem; cursor: pointer; font-family: inherit; transition: all .18s ease; }
+  .icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  #sidebar { position: fixed; top: 54px; left: 0; bottom: 0; width: var(--aike-sidebar-w);
+    overflow-y: auto; border-right: 1px solid var(--border); background: var(--bg); padding: 20px 14px 40px; z-index: 800; }
+  #sidebar .toc-title { font-size: .72rem; letter-spacing: .18em; color: var(--text-dim); text-transform: uppercase; margin: 0 0 12px 10px; }
+  #sidebar ol { list-style: none; counter-reset: toc; }
+  #sidebar li { counter-increment: toc; }
+  #sidebar a { display: block; padding: 7px 10px; border-radius: 7px; color: var(--text-muted);
+    text-decoration: none; font-size: .85rem; line-height: 1.5; border-left: 2px solid transparent; transition: all .16s ease; }
+  #sidebar a::before { content: counter(toc, decimal-leading-zero) "  "; color: var(--text-dim); font-family: var(--font-mono); font-size: .74rem; }
+  #sidebar a:hover { color: var(--text-main); background: var(--bg-elevated); }
+  #sidebar a.active { color: var(--accent); background: var(--accent-dim); border-left-color: var(--accent); font-weight: 600; }
+
+  body > #main { display: block; max-width: var(--aike-content-max); width: auto; flex: none;
+    margin-left: calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+    margin-right: max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+    box-sizing: border-box; padding: 42px 46px 96px; }
+
+  .hero { border-bottom: 1px solid var(--border); padding-bottom: 30px; margin-bottom: 38px; }
+  .kicker { display: inline-block; font-size: .72rem; letter-spacing: .2em; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 999px; padding: 3px 12px; margin-bottom: 16px; text-transform: uppercase; }
+  h1 { font-family: var(--font-serif); font-size: clamp(1.7rem, 3.4vw, 2.5rem); line-height: 1.3;
+    color: var(--text-main); font-weight: 700; letter-spacing: -.01em; margin-bottom: 14px; }
+  .subtitle { font-size: 1.02rem; color: var(--text-muted); max-width: 62ch; margin-bottom: 22px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 18px;
+    border-top: 1px dashed var(--border); padding-top: 16px; }
+  .meta-item { font-size: .8rem; color: var(--text-dim); }
+  .meta-item b { display: block; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+  .meta-item span { color: var(--text-main); }
+  .meta-item a { color: var(--accent); text-decoration: none; word-break: break-all; }
+  .meta-item a:hover { text-decoration: underline; }
+
+  h2 { font-family: var(--font-serif); font-size: 1.62rem; line-height: 1.35; color: var(--text-main);
+    margin: 58px 0 6px; padding-top: 12px; border-top: 1px solid var(--border); scroll-margin-top: 76px; }
+  h2 .sec-num { display: inline-block; font-family: var(--font-mono); font-size: .8rem; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 6px; padding: 1px 8px; margin-right: 10px; vertical-align: 3px; }
+  h2 + .sec-kicker { font-size: .78rem; letter-spacing: .16em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 20px; }
+  h3 { font-family: var(--font-serif); font-size: 1.2rem; color: var(--text-main); margin: 34px 0 12px; scroll-margin-top: 76px; }
+  h4 { font-size: 1rem; color: var(--text-main); margin: 22px 0 8px; }
+  p { margin: 14px 0; color: var(--text-main); }
+  ul, ol { margin: 14px 0 14px 22px; color: var(--text-main); }
+  li { margin: 7px 0; }
+  strong { color: var(--text-main); font-weight: 600; }
+  a { color: var(--accent); }
+  hr { border: none; border-top: 1px dashed var(--border); margin: 34px 0; }
+
+  .lead { font-size: 1.06rem; color: var(--text-muted); }
+  .tldr { background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 10px; padding: 20px 24px; margin: 24px 0 8px; box-shadow: var(--shadow-sm); }
+  .tldr h3 { margin: 0 0 10px; font-size: 1rem; letter-spacing: .06em; color: var(--accent); }
+  .tldr ul { margin: 0 0 0 20px; }
+  .tldr li { color: var(--text-muted); font-size: .95rem; }
+
+  .quote { border-left: 3px solid var(--c-gold); background: var(--bg-subtle); padding: 16px 20px;
+    margin: 22px 0; border-radius: 0 10px 10px 0; font-family: var(--font-serif); font-size: 1.02rem; color: var(--text-main); }
+  .quote cite { display: block; margin-top: 8px; font-size: .8rem; font-style: normal; color: var(--text-dim); font-family: var(--font-sans); }
+
+  .callout { border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; margin: 20px 0; background: var(--bg-card); }
+  .callout .ct { font-size: .76rem; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; font-weight: 700; }
+  .callout p:first-of-type { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin: 20px 0; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 20px 0; }
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow-sm); }
+  .card h4 { margin: 0 0 10px; font-size: 1rem; }
+  .card ul { margin: 0 0 0 18px; font-size: .92rem; color: var(--text-muted); }
+  .card.neg { border-color: var(--c-rose); background: var(--c-rose-dim); }
+  .card.pos { border-color: var(--c-teal); background: var(--c-teal-dim); }
+  .card.neg h4 { color: var(--c-rose); }
+  .card.pos h4 { color: var(--c-teal); }
+  .card .stage { font-size: .72rem; letter-spacing: .12em; color: var(--text-dim); text-transform: uppercase; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin: 22px 0; }
+  .stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; text-align: left; }
+  .stat .v { font-family: var(--font-mono); font-size: 1.5rem; color: var(--accent); line-height: 1.2; }
+  .stat .l { font-size: .78rem; color: var(--text-muted); margin-top: 6px; }
+  .stat .n { font-size: .72rem; color: var(--text-dim); margin-top: 6px; line-height: 1.5; }
+
+  figure { margin: 26px 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 18px 14px; box-shadow: var(--shadow-sm); }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { font-size: .8rem; color: var(--text-dim); margin-top: 12px; line-height: 1.6; text-align: center; }
+  .fig-h { font-family: var(--font-serif); font-size: .95rem; color: var(--text-main); margin-bottom: 12px; text-align: center; }
+
+  table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: .9rem; }
+  th, td { border: 1px solid var(--border); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--bg-elevated); color: var(--text-main); font-weight: 600; font-size: .84rem; letter-spacing: .03em; }
+  td { color: var(--text-muted); }
+  tbody tr:nth-child(even) { background: var(--bg-subtle); }
+  .tbl-wrap { overflow-x: auto; }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px;
+    overflow-x: auto; margin: 18px 0; font-family: var(--font-mono); font-size: .84rem; line-height: 1.7; color: var(--text-main); white-space: pre-wrap; word-break: break-word; }
+  code { font-family: var(--font-mono); font-size: .88em; }
+  p code, li code, td code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; color: var(--accent); }
+
+  details { border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin: 18px 0; background: var(--bg-subtle); }
+  summary { cursor: pointer; font-weight: 600; color: var(--text-main); font-size: .95rem; }
+  details[open] summary { margin-bottom: 10px; }
+  details p { font-size: .92rem; color: var(--text-muted); }
+
+  .math-block { margin: 20px 0; padding: 18px 20px; background: var(--bg-subtle); border: 1px solid var(--border);
+    border-radius: 10px; overflow-x: auto; text-align: center; color: var(--text-main); }
+  .math-block .eq { font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", Georgia, serif; font-size: 1.16rem; }
+  .mfrac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 .35em; }
+  .mfrac .num { border-bottom: 1.4px solid currentColor; padding: 0 .4em .12em; }
+  .mfrac .den { padding: .12em .4em 0; }
+  .eq-note { display: block; font-family: var(--font-sans); font-size: .8rem; color: var(--text-dim); margin-top: 10px; letter-spacing: .02em; }
+
+  .sandbox { border: 1px solid var(--border-strong); border-radius: 14px; padding: 22px; margin: 26px 0;
+    background: var(--bg-card); box-shadow: var(--shadow-sm); }
+  .sandbox-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .sandbox-h h4 { margin: 0; font-family: var(--font-serif); font-size: 1.06rem; }
+  .sandbox-h .badge { font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 999px; padding: 1px 9px; }
+  .sandbox-desc { font-size: .84rem; color: var(--text-dim); margin: 8px 0 16px; }
+  .ctrl-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 12px 0; }
+  .ctrl-row label { font-size: .86rem; color: var(--text-muted); min-width: 176px; }
+  input[type="range"] { flex: 1; min-width: 180px; accent-color: var(--accent); height: 24px; }
+  .readout { font-family: var(--font-mono); font-size: .92rem; color: var(--accent); min-width: 96px; text-align: right; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .tab { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-muted);
+    border-radius: 999px; padding: 6px 14px; font-size: .82rem; cursor: pointer; font-family: inherit; transition: all .16s ease; }
+  .tab:hover { color: var(--text-main); }
+  .tab.on { background: var(--accent); border-color: var(--accent); color: #16130F; font-weight: 600; }
+
+  .verdict { margin-top: 16px; padding: 14px 16px; border-radius: 10px; font-size: .92rem;
+    border: 1px solid var(--border); background: var(--bg-subtle); color: var(--text-main); }
+  .verdict b { color: var(--accent); }
+  .verdict.ok { border-color: var(--c-teal); background: var(--c-teal-dim); }
+  .verdict.no { border-color: var(--c-rose); background: var(--c-rose-dim); }
+
+  .checklist { list-style: none; margin: 16px 0 0; }
+  .checklist li { display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: start;
+    padding: 11px 14px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--bg-subtle); transition: all .18s ease; }
+  .checklist li.done { border-color: var(--c-teal); background: var(--c-teal-dim); }
+  .checklist input { margin-top: 5px; width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+  .checklist .t { font-size: .93rem; color: var(--text-main); }
+  .checklist .t b { color: var(--accent); }
+  .checklist .t em { font-style: normal; color: var(--text-muted); font-size: .86rem; display: block; margin-top: 3px; }
+  .checklist li.done .t { text-decoration: line-through; text-decoration-color: var(--text-dim); }
+
+  /* 方法卡 */
+  .method { background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 12px; padding: 18px 20px; margin: 18px 0; box-shadow: var(--shadow-sm); }
+  .method-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .mnum { font-family: var(--font-mono); font-size: 1.05rem; color: var(--accent); font-weight: 700; }
+  .method-h h4 { margin: 0; font-family: var(--font-serif); font-size: 1.06rem; }
+  .method-h .en { font-size: .78rem; color: var(--text-dim); font-family: var(--font-mono); letter-spacing: .02em; }
+  .chip { font-size: .68rem; border-radius: 999px; padding: 1px 9px; border: 1px solid var(--border-strong); color: var(--text-muted); white-space: nowrap; }
+  .chip.uu { border-color: var(--c-rose); color: var(--c-rose); background: var(--c-rose-dim); }
+  .chip.uk { border-color: var(--c-gold); color: var(--c-gold); background: var(--c-gold-dim); }
+  .chip.kk { border-color: var(--c-teal); color: var(--c-teal); background: var(--c-teal-dim); }
+  .chip.ku { border-color: var(--c-blue); color: var(--c-blue); background: var(--c-blue-dim); }
+  .chip.na { border-style: dashed; color: var(--text-dim); }
+  .mdesc { font-size: .93rem; color: var(--text-muted); margin: 8px 0 4px; }
+  .pi { border-top: 1px dashed var(--border); padding-top: 12px; margin-top: 12px; }
+  .pi-h { font-size: .84rem; color: var(--text-main); margin-bottom: 8px; }
+  .pi-h b { color: var(--accent); }
+  .pzh { border-left: 3px solid var(--border-strong); padding: 2px 0 2px 12px; margin: 8px 0; font-size: .9rem; color: var(--text-muted); }
+  .pen { position: relative; }
+  .pen pre { margin: 8px 0 10px; }
+  .copy-btn { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-muted);
+    border-radius: 7px; padding: 4px 12px; font-size: .76rem; cursor: pointer; font-family: inherit; transition: all .16s ease; }
+  .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .copy-btn.done { color: var(--c-teal); border-color: var(--c-teal); }
+
+  /* 四象限 SVG */
+  .qbox { fill: var(--bg-subtle); stroke: var(--border); stroke-width: 1; transition: opacity .2s ease, stroke-width .2s ease; }
+  .qbox.kk { fill: var(--c-teal-dim); stroke: var(--c-teal); }
+  .qbox.ku { fill: var(--c-blue-dim); stroke: var(--c-blue); }
+  .qbox.uk { fill: var(--c-gold-dim); stroke: var(--c-gold); }
+  .qbox.uu { fill: var(--c-rose-dim); stroke: var(--c-rose); }
+  .qbox.dim { opacity: .3; }
+  .qbox.hi { opacity: 1; stroke-width: 2.6; }
+  .qt { font-family: var(--font-sans); font-size: 13px; font-weight: 700; }
+  .qt.kk { fill: var(--c-teal); } .qt.ku { fill: var(--c-blue); }
+  .qt.uk { fill: var(--c-gold); } .qt.uu { fill: var(--c-rose); }
+  .qs { font-family: var(--font-sans); font-size: 11.5px; fill: var(--text-muted); }
+  .qax { font-family: var(--font-sans); font-size: 11.5px; fill: var(--text-dim); }
+  .gl { stroke: var(--border); stroke-width: 1; }
+  .bflow { fill: none; stroke: var(--text-dim); stroke-width: 1.4; }
+  .bx { fill: var(--bg-elevated); stroke: var(--border-strong); stroke-width: 1; }
+  .btx { font-family: var(--font-sans); font-size: 11.5px; fill: var(--text-main); }
+  .bnum { font-family: var(--font-mono); font-size: 11px; fill: var(--accent); }
+  .bar-w { fill: var(--c-rose); opacity: .55; }
+  .bar-s1 { fill: var(--c-teal); } .bar-s2 { fill: var(--c-gold); } .bar-s3 { fill: var(--c-rose); }
+  .blbl { font-family: var(--font-sans); font-size: 11.5px; fill: var(--text-muted); }
+  .bval { font-family: var(--font-mono); font-size: 11.5px; fill: var(--text-main); }
+  .btk { font-family: var(--font-mono); font-size: 10.5px; fill: var(--text-dim); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: .8rem; color: var(--text-muted); margin-top: 10px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+
+  .src-note { font-size: .82rem; color: var(--text-dim); line-height: 1.7; margin-top: 14px; }
+  footer { margin-top: 60px; padding-top: 22px; border-top: 1px solid var(--border); font-size: .8rem; color: var(--text-dim); }
+
+  #toTopBtn { position: fixed; right: 24px; bottom: 28px; z-index: 950; background: var(--bg-elevated);
+    border: 1px solid var(--border-strong); color: var(--text-muted); border-radius: 999px;
+    width: 42px; height: 42px; cursor: pointer; font-size: 1.1rem; display: none; box-shadow: var(--shadow-md); }
+  #toTopBtn:hover { color: var(--accent); border-color: var(--accent); }
+
+  @media (max-width: 1080px) {
+    #sidebar { transform: translateX(-100%); transition: transform .22s ease; background: var(--bg-card); box-shadow: var(--shadow-md); }
+    #sidebar.open { transform: translateX(0); }
+    body > #main { margin-left: 0 !important; margin-right: 0 !important; max-width: 100% !important; width: 100% !important; padding: 30px 20px 80px; }
+    h2 { font-size: 1.4rem; }
+  }
+  @media (max-width: 640px) {
+    h1 { font-size: 1.5rem; }
+    .ctrl-row label { min-width: 100%; }
+    .readout { min-width: 72px; }
+  }
+  @media print {
+    #sidebar, .top-header, #toTopBtn, #reading-progress-bar { display: none !important; }
+    body > #main { margin: 0 !important; max-width: 100% !important; padding: 0 !important; }
+    body { background: #fff !important; color: #000 !important; }
+    .sandbox, .card, .method, figure, pre, table { break-inside: avoid; }
+    h2 { break-after: avoid; }
+    a { color: #000 !important; text-decoration: underline; }
+  }
+</style>
+</head>
+<body>
+<div id="reading-progress-bar"></div>
+
+<header class="top-header">
+  <div class="header-left">
+    <button class="icon-btn" id="btn-toc" type="button">目录</button>
+    <span class="header-brand">AIKnowledge</span>
+    <span class="header-title">Claude Fable 5 找未知八提示模式实战指南</span>
+  </div>
+  <div class="header-right">
+    <button class="icon-btn" id="btn-theme" type="button">浅色 / 深色</button>
+    <button class="icon-btn" id="btn-print" type="button">打印</button>
+  </div>
+</header>
+
+<aside id="sidebar">
+  <div class="toc-title">全文目录</div>
+  <ol>
+    <li><a href="#s0">一分钟速览</a></li>
+    <li><a href="#s1">这场演讲在讲什么</a></li>
+    <li><a href="#s2">尖刺式变强与提示词做减法</a></li>
+    <li><a href="#s3">未知四象限（交互沙盘）</a></li>
+    <li><a href="#s4">开工前两招：盲点扫描 · 头脑风暴</a></li>
+    <li><a href="#s5">开工前三招：采访 · 参考 · 实现计划</a></li>
+    <li><a href="#s6">动手中与动手后三招</a></li>
+    <li><a href="#s7">八模式速查表（交互筛选）</a></li>
+    <li><a href="#s8">成本前移沙盘：阶段代价数学</a></li>
+    <li><a href="#s9">完整案例：Fable 发布视频</a></li>
+    <li><a href="#s10">落地清单</a></li>
+    <li><a href="#s11">心态收尾</a></li>
+    <li><a href="#s12">来源与核验说明</a></li>
+  </ol>
+</aside>
+
+<main id="main">
+<article>
+
+<div class="hero">
+  <span class="kicker">深度 · 方法拆解</span>
+  <h1>Claude Fable 5 实战指南：8 个「找未知」提示模式，从盲点扫描到读后小测验</h1>
+  <p class="subtitle">Claude Code 团队 Thariq Shihipar 大会演讲实录：新模型的瓶颈不再是模型本身，而是你能不能讲清自己的未知。</p>
+  <div class="meta-grid">
+    <div class="meta-item"><b>讲者</b><span>Thariq Shihipar（Anthropic, Claude Code）</span></div>
+    <div class="meta-item"><b>场合</b><span>AI Engineer World's Fair</span></div>
+    <div class="meta-item"><b>一手博客</b><span><a href="https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns" target="_blank" rel="noopener">A field guide to Claude Fable 5</a>（2026-07-06）</span></div>
+    <div class="meta-item"><b>演讲录像</b><span><a href="https://www.youtube.com/watch?v=9fubhllmsBU" target="_blank" rel="noopener">YouTube 原视频 ↗</a></span></div>
+    <div class="meta-item"><b>拆解稿</b><span><a href="https://best.xiaohu.ai/article/fable-field-guide-unknowns/" target="_blank" rel="noopener">小互解读原文 ↗</a></span></div>
+    <div class="meta-item"><b>文档日期</b><span>2026-09-15</span></div>
+  </div>
+</div>
+
+<h2 id="s0"><span class="sec-num">00</span>一分钟速览</h2>
+<p class="sec-kicker">Executive Summary</p>
+
+<div class="tldr">
+  <h3>速览</h3>
+  <ul>
+    <li>Anthropic Claude Code 团队成员 Thariq Shihipar 在 AI Engineer World's Fair 发表演讲《A Field Guide to Fable》，同日配套官方博客发布，据报道三天内阅读量约两百万。</li>
+    <li>核心方法论：把「你知道什么」拆成四象限——已知的已知、已知的未知、未知的已知、未知的未知。减少并预先规划这些「未知」，是用好新一代模型的核心技能。</li>
+    <li>演讲给出 8 个可直接照抄的提示模式，按动手前、动手中、动手后组织，每个都配了现成的中英文示例 prompt。</li>
+    <li>一手反直觉披露：Claude Code 系统提示词最近被删掉 80%，对新模型来说示例反而会束缚它，方向从「给约束」转向「给上下文」。</li>
+    <li>Thariq 用这套方法从零剪出了 Fable 的发布视频，而视频剪辑对他是完全陌生的领域。</li>
+  </ul>
+</div>
+
+<div class="stat-grid">
+  <div class="stat">
+    <div class="v">约 200 万</div>
+    <div class="l">配套官方博客三天内阅读量</div>
+    <div class="n">口径：演讲与相关报道。本次核验未能独立复核该数字，按「据报道」处理。</div>
+  </div>
+  <div class="stat">
+    <div class="v">80%</div>
+    <div class="l">Claude Code 系统提示词删减比例</div>
+    <div class="n">口径：演讲披露。一手博客全文未见此表述，属「仅演讲口径」，未获二次验证。</div>
+  </div>
+  <div class="stat">
+    <div class="v">8 个</div>
+    <div class="l">可直接复制的提示模式</div>
+    <div class="n">口径：一手博客逐节列名（Blind spot pass / Brainstorms and prototypes / Interviews / References / Implementation plan / Implementation notes / Pitches and explainers / Quizzes）——已核验一致。</div>
+  </div>
+</div>
+
+<h2 id="s1"><span class="sec-num">01</span>这场演讲到底在讲什么</h2>
+<p class="sec-kicker">What This Talk Is Actually About</p>
+
+<p>Anthropic Claude Code 团队成员 Thariq Shihipar，在 AI Engineer World's Fair 大会做了主题演讲，同步发布同名官方博客《A field guide to Claude Fable 5: Finding your unknowns》。</p>
+
+<p>这场演讲讲的是一件很具体的事：<strong>Fable 这一代模型能干到什么程度，卡点已经从模型本身转移到你身上</strong>，转移到你能不能把「自己不知道什么」讲清楚。演讲里几乎没有 Fable 的硬指标或架构，通篇是「怎么和更强的模型协作」。</p>
+
+<p>为什么值得看：Claude Code 系统提示词最近被删掉 80%，方向从「给约束」转向「给上下文」，这是 Anthropic 内部提示词工程的一手变化；同时它把「怎么用好更强的模型」总结成 8 个能直接复制粘贴的提示模式，每个都带现成示例。</p>
+
+<p>演讲里反复出现一个词：<strong>解放模型（unhobbling）</strong>。意思是真正约束模型的，往往是你自己套在它身上的框架、和写提示词的老习惯，这些框架本质上是「你对模型理解程度」的映射。改掉它们，就能把它本来就有的能力放出来。</p>
+
+<div class="callout">
+  <div class="ct">打个比方</div>
+  <p>给一匹本来就能跑的马，卸掉那些不必要的缰绳和眼罩。</p>
+</div>
+
+<div class="callout">
+  <div class="ct">演讲录像 · 未内嵌说明</div>
+  <p>完整演讲约 19 分钟，中英双语字幕。本文件遵循零外部依赖原则，不内嵌视频流与外链脚本，仅保留直链入口：</p>
+  <ul>
+    <li><a href="https://www.youtube.com/watch?v=9fubhllmsBU" target="_blank" rel="noopener">原视频 YouTube 英文 ↗</a>（需联网）</li>
+    <li><a href="https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns" target="_blank" rel="noopener">配套官方博客 ↗</a>（需联网）</li>
+  </ul>
+</div>
+
+<h2 id="s2"><span class="sec-num">02</span>模型是「尖刺式」变聪明的，提示词反而要做减法</h2>
+<p class="sec-kicker">Capability Overhang &amp; Prompt Subtraction</p>
+
+<p>要理解为什么这代模型「少喂示例、多给上下文」，先看两个背景。这一节是铺垫，重点在后面。</p>
+
+<h3>背景一：能力悬垂（capability overhang）</h3>
+<p>模型不是齐头并进变强，而是在某些具体任务上突然跳出一大截。网上有条火帖问「为什么大模型说不出哪些宝可梦名字以 AW 结尾」，普通聊天模型答不上来，虽然它显然知道所有宝可梦的名字。但 Claude Code 能答，因为它会把每个宝可梦抓下来、写个脚本筛出以 AW 结尾的。同一份「知识」，给不给它代码执行工具，结果天差地别。</p>
+
+<div class="callout">
+  <div class="ct">打个比方</div>
+  <p>像地下埋着深浅不一的矿脉，工具就是决定你能挖到哪条矿脉的镐子。用好新模型的一半功夫，就是搞清现在到底有哪些新的可能。</p>
+</div>
+
+<h3>背景二：系统提示词正在越变越小</h3>
+<p>Thariq 把提示词工程的最佳实践分成三段，看得出趋势。</p>
+
+<div class="grid-3">
+  <div class="card">
+    <span class="stage">Sonnet 3.5 New 时代</span>
+    <h4>小提示词 · 少工具</h4>
+    <ul><li>主要靠堆大量示例，教它照着做。</li></ul>
+  </div>
+  <div class="card">
+    <span class="stage">模型变强之后</span>
+    <h4>大提示词 · 多工具</h4>
+    <ul><li>能塞更多信息和指令，它开始能照单执行，示例照旧堆。</li></ul>
+  </div>
+  <div class="card">
+    <span class="stage">Fable 这一代</span>
+    <h4>系统提示词删掉 80%</h4>
+    <ul><li>示例反而束缚它，它比你给的示例更有想象力。给上下文，别给约束，尽量不写「不要做这个」。</li></ul>
+  </div>
+</div>
+
+<p>工具也在跟着模型能力一起进化。以 <code>ask-user-question</code> 工具（让模型在规划时反过来弹多选问题问你）为例：Opus 4 时它勉强能调用；Opus 4.5 时你能让它「问我 40 个关于需求的问题」，它开始能采访你；到 Opus 4.8 和 Fable，它能直接生成一整份把问题嵌在里面的 HTML 报告。理解模型这件事，更像生物学，很经验、很有机，需要你去建立直觉。</p>
+
+<h2 id="s3"><span class="sec-num">03</span>核心框架：把你的未知分成四格</h2>
+<p class="sec-kicker">The Four Quadrants of Unknowns</p>
+
+<p>你脑子里的计划、提示词、spec，是「地图」；真实的代码库、现实约束，是「疆域」。每当 Claude 在疆域里撞上地图上没标的东西，它就得靠猜你到底想要什么，做一个决定，这个点就叫一个「未知（unknown）」。它要干的活越多，撞上的未知越多。</p>
+
+<div class="quote">
+  Claude Fable 是第一个让我觉得，产出质量的瓶颈在于我能不能把它的未知讲清楚的模型。
+  <cite>Thariq Shihipar，A Field Guide to Fable（一手博客原文：&ldquo;Claude Fable is the first model where I find the quality of the work is bottlenecked by my ability to clarify its unknowns.&rdquo;）</cite>
+</div>
+
+<p>而且光提前规划还不够，未知可能藏在实现深处才冒出来，所以用 Fable 是一个在动手前、动手中、动手后不断发现未知的迭代过程。</p>
+
+<figure>
+  <div class="fig-h">未知四象限：纵轴 = 你有没有意识到，横轴 = 你实际懂不懂</div>
+  <svg viewBox="0 0 660 420" role="img" aria-label="未知四象限图：已知的未知、已知的已知、未知的未知、未知的已知">
+    <rect class="qbox ku" id="rq-KU" x="40" y="46" width="280" height="140" rx="8"/>
+    <rect class="qbox kk" id="rq-KK" x="340" y="46" width="280" height="140" rx="8"/>
+    <rect class="qbox uu" id="rq-UU" x="40" y="216" width="280" height="140" rx="8"/>
+    <rect class="qbox uk" id="rq-UK" x="340" y="216" width="280" height="140" rx="8"/>
+
+    <text class="qax" x="40" y="34" text-anchor="start">↑ 意识到（Aware）：你知道这块的存在</text>
+    <text class="qax" x="40" y="410" text-anchor="start">↓ 没意识到（Unaware）：你压根没往这想</text>
+    <text class="qax" x="30" y="200" text-anchor="start" transform="rotate(-90 30 200)">不懂</text>
+    <text class="qax" x="640" y="200" text-anchor="start" transform="rotate(90 640 200)">懂</text>
+
+    <text class="qt ku" x="62" y="76">KNOWN UNKNOWN</text>
+    <text class="qt" x="62" y="98" style="fill:var(--text-main)">已知的未知</text>
+    <text class="qs" x="62" y="124">你还没搞清，但你知道自己</text>
+    <text class="qs" x="62" y="144">没搞清的东西。</text>
+
+    <text class="qt kk" x="362" y="76">KNOWN KNOWN</text>
+    <text class="qt" x="362" y="98" style="fill:var(--text-main)">已知的已知</text>
+    <text class="qs" x="362" y="124">你写进 prompt 里、明确告诉</text>
+    <text class="qs" x="362" y="144">它你要的东西。</text>
+
+    <text class="qt uu" x="62" y="246">UNKNOWN UNKNOWN</text>
+    <text class="qt" x="62" y="268" style="fill:var(--text-main)">未知的未知</text>
+    <text class="qs" x="62" y="294">你压根没想到的东西；不知道</text>
+    <text class="qs" x="62" y="314">自己缺哪块知识，也不知道</text>
+    <text class="qs" x="62" y="334">一件事到底能做到多好。</text>
+
+    <text class="qt uk" x="362" y="246">UNKNOWN KNOWN</text>
+    <text class="qt" x="362" y="268" style="fill:var(--text-main)">未知的已知</text>
+    <text class="qs" x="362" y="294">太显然，你根本不会写下来，</text>
+    <text class="qs" x="362" y="314">但一看到就认得出</text>
+    <text class="qs" x="362" y="334">（know it when I see it）。</text>
+  </svg>
+  <figcaption>四象限定义逐条取自一手博客《Knowing your unknowns》一节；轴含义（纵轴 = 意识到与否，横轴 = 实际懂不懂）取自拆解稿对原演讲配图的说明。</figcaption>
+</figure>
+
+<p>顶尖的 agentic coder（他点名了 Boris、Jarred）有个共同点：他们的未知很少，看他们写 prompt，能感到对代码库和模型行为都门儿清；同时他们会预设未知一定存在。所以<strong>减少并预先规划你的未知，就是 agentic coding 这门手艺的核心技能</strong>，而这门技能可以靠「和 Claude 一起练」来提升。</p>
+
+<h3>为什么处理未知是关键</h3>
+<p>因为给 Claude 下指令是个微妙的平衡，太具体和太模糊都会输。</p>
+
+<div class="grid-2">
+  <div class="card neg">
+    <h4>指令太具体</h4>
+    <ul><li>它会死死照你说的做，哪怕此刻换个方向其实更合适。</li></ul>
+  </div>
+  <div class="card neg">
+    <h4>指令太模糊</h4>
+    <ul><li>它按行业最佳实践自己脑补假设，未必贴合你的任务。</li></ul>
+  </div>
+</div>
+
+<p>不为未知做准备，你两头都会输：不知道哪段路上有坑（该细的地方没细），也不知道哪段路其实通、可以放手让它自己走（该放的地方没放）。好在 Claude 能帮你更快找未知，它搜代码库和全网都极快，从失败里迭代也比你快。最关键的一步，是<strong>把你的「起点」给它</strong>：告诉它你在思考哪个阶段、对这个问题和代码库有多少经验，让它当你的思考伙伴。</p>
+
+<div class="sandbox">
+  <div class="sandbox-h">
+    <h4>沙盘 A · 四象限 × 八模式对位</h4>
+    <span class="badge">交互</span>
+  </div>
+  <p class="sandbox-desc">点击象限，查看该象限的定义，以及 8 个提示模式中哪些在一手材料里被明确指派给它。<strong>对位口径严格按原文</strong>：一手博客只为「盲点扫描 / 头脑风暴与原型 / 实现笔记」三处显式标注了未知类型，其余五处原文未标注象限，此处一律标为「原文未标注」，不做推测补齐。</p>
+  <div class="tabs">
+    <button class="tab on" id="q-KK" type="button">已知的已知</button>
+    <button class="tab" id="q-KU" type="button">已知的未知</button>
+    <button class="tab" id="q-UK" type="button">未知的已知</button>
+    <button class="tab" id="q-UU" type="button">未知的未知</button>
+  </div>
+  <div class="card">
+    <h4 id="out-q-name">已知的已知 · KNOWN KNOWN</h4>
+    <p class="mdesc" id="out-q-def">你写进 prompt 里、明确告诉它你要的东西。</p>
+    <p class="mdesc" id="out-q-methods">原文明确指派给本象限的模式：0 个。</p>
+    <p class="src-note" id="out-q-note">原文未给该象限指派任何模式——已知的已知本就是你已经在 prompt 里说清的部分，八个模式处理的是「还没说清」的三格。</p>
+  </div>
+</div>
+
+<h2 id="s4"><span class="sec-num">04</span>开工前两招：盲点扫描 + 头脑风暴与原型</h2>
+<p class="sec-kicker">Pre-implementation · Pattern 1 &amp; 2</p>
+
+<p>开工前最该先解决两类未知：你压根没想到的（未知的未知），和你说不清、但一看就认得的（未知的已知）。</p>
+
+<div class="method" id="mcard-1" data-stage="pre">
+  <div class="method-h">
+    <span class="mnum">①</span>
+    <h4>盲点扫描 <span class="en">Blind Spot Pass</span></h4>
+    <span class="chip uu">未知的未知</span>
+    <span class="chip">本篇重点</span>
+  </div>
+  <p class="mdesc">对付「未知的未知」。当你要在代码库里一个陌生的地方写功能、或用 Claude 做你不熟的活（比如调设计），你多半有一堆盲区：不知道该问什么、不知道「好」长什么样、不知道有哪些坑要绕。原文特别提示：要用上「blind spot pass」和「unknown unknowns」这两个字面词，并给出你是谁、你知道什么的上下文。</p>
+
+  <div class="pi">
+    <div class="pi-h"><b>场景</b> 给陌生的认证模块加功能前，先让它扫出你的盲区</div>
+    <blockquote class="pzh">「我要给这个代码库加一个新的 auth（认证）provider，但我对这里的认证模块一无所知。你能不能做一次盲点扫描（blind spot pass），帮我找出我相关的『未知的未知』、并教我怎么把提示写得更好。」</blockquote>
+    <div class="pen"><pre id="pe-1a">"I'm working on adding a new auth provider but I know nothing about the auth modules in this codebase. Can you do a blind spot pass to help me figure out my relevant unknown unknowns and help me prompt you better."</pre>
+    <button class="copy-btn" type="button" data-src="pe-1a">复制英文原文</button></div>
+  </div>
+
+  <div class="pi">
+    <div class="pi-h"><b>场景</b> 做完全不懂的活（调色）前，让它教你认清盲区</div>
+    <blockquote class="pzh">「我不懂什么叫调色（color grading），但我需要给这段视频调色。你能不能教我理解我在调色上的『未知的未知』，好让我能把提示写得更好？」</blockquote>
+    <div class="pen"><pre id="pe-1b">"I don't know what color grading is but I need to grade this video. Can you teach me to understand my unknown unknowns about color grading, so that I can prompt better?"</pre>
+    <button class="copy-btn" type="button" data-src="pe-1b">复制英文原文</button></div>
+  </div>
+</div>
+
+<div class="method" id="mcard-2" data-stage="pre">
+  <div class="method-h">
+    <span class="mnum">②</span>
+    <h4>头脑风暴与原型 <span class="en">Brainstorms &amp; Prototypes</span></h4>
+    <span class="chip uk">未知的已知</span>
+  </div>
+  <p class="mdesc">对付「未知的已知」。当你在一个「标准只有看到才说得出（know it when you see it）」的领域，让 Claude 陪你头脑风暴、做原型。原文理由：在实现阶段才发现未知的已知，代价相对昂贵——需求或 spec 里很小的改动，落到代码上可能是截然不同的实现，而且让 agent 回滚前面的改动更难。</p>
+
+  <div class="pi">
+    <div class="pi-h"><b>场景</b> 没视觉品味时，让它出四个截然不同的方向给你挑</div>
+    <blockquote class="pzh">「我想给这份数据做个仪表盘，但我没什么视觉品味、也不知道能做成什么样。给我做一个 HTML 页面，放四种截然不同的设计方向，让我来挑、来反应。」</blockquote>
+    <div class="pen"><pre id="pe-2a">"I want a dashboard for this data but I have no visual taste and don't know what's possible. Make me an HTML page with 4 wildly different design directions so I can react to them."</pre>
+    <button class="copy-btn" type="button" data-src="pe-2a">复制英文原文</button></div>
+  </div>
+
+  <div class="pi">
+    <div class="pi-h"><b>场景</b> 动真代码前，用假数据先 mock 一个布局给你反应</div>
+    <blockquote class="pzh">「先别接任何东西。用一个单独的 HTML 文件、拿假数据把新的编辑器工具栏做个 mock 出来。我想在你动真正的 app 之前，先对着布局反应一下。」</blockquote>
+    <div class="pen"><pre id="pe-2b">"Before wiring anything up, make a single HTML file mocking the new editor toolbar with fake data. I want to react to the layout before you touch the real app."</pre>
+    <button class="copy-btn" type="button" data-src="pe-2b">复制英文原文</button></div>
+  </div>
+
+  <div class="pi">
+    <div class="pi-h"><b>场景</b> 给个粗糙问题，让它搜代码库头脑风暴 10 个切入点</div>
+    <blockquote class="pzh">「这是我一个粗糙的问题：用户在 onboarding 之后就流失。搜一下代码库，头脑风暴出 10 个我们可以介入的地方，从最便宜到最有野心排。我来告诉你哪些戳中了我。」</blockquote>
+    <div class="pen"><pre id="pe-2c">"Here's my rough problem: users churn after onboarding. Search the codebase and brainstorm 10 places we could intervene, from cheapest to most ambitious. I'll tell you which ones resonate."</pre>
+    <button class="copy-btn" type="button" data-src="pe-2c">复制英文原文</button></div>
+  </div>
+
+  <div class="callout">
+    <div class="ct">原文补充</div>
+    <p>他几乎每个编码 session 都以探索或头脑风暴阶段开始，带着意图去定义项目范围：Claude 常常能找到他会漏掉的高价值路径，有时也会见木不见林。头脑风暴能防止他把范围定得太窄或太宽。</p>
+  </div>
+</div>
+
+<h2 id="s5"><span class="sec-num">05</span>开工前还有三招：让它采访你、给它参考、要一份实现计划</h2>
+<p class="sec-kicker">Pre-implementation · Pattern 3, 4 &amp; 5</p>
+
+<p>头脑风暴做够了，多半还剩一些未知。剩下三招，把模糊逼出来、给它一张更好的地图、让计划把「最可能改的决策」排在最前面。</p>
+
+<div class="method" id="mcard-3" data-stage="pre">
+  <div class="method-h">
+    <span class="mnum">③</span>
+    <h4>让模型采访你 <span class="en">Interviews</span></h4>
+    <span class="chip na">原文未标注象限</span>
+  </div>
+  <p class="mdesc">让 Claude 反过来采访你，把问题里的模糊和没考虑到的地方逼出来。采访时给它你的问题背景来引导提问。</p>
+  <div class="pi">
+    <div class="pi-h"><b>场景</b> 让它反过来采访你，把有歧义的地方逼出来</div>
+    <blockquote class="pzh">「一次问我一个问题，围绕任何有歧义的地方采访我；优先问那些『我的回答会改变架构』的问题。」</blockquote>
+    <div class="pen"><pre id="pe-3a">"Interview me one question at a time about anything ambiguous, prioritize questions where my answer would change the architecture."</pre>
+    <button class="copy-btn" type="button" data-src="pe-3a">复制英文原文</button></div>
+  </div>
+</div>
+
+<div class="method" id="mcard-4" data-stage="pre">
+  <div class="method-h">
+    <span class="mnum">④</span>
+    <h4>参考物 <span class="en">References</span></h4>
+    <span class="chip na">原文未标注象限</span>
+  </div>
+  <p class="mdesc">有时你没法把想要的东西描述清楚，要么缺词，要么复杂到讲清要花很久。最好的办法是给一个参考。图、文档、截图都行，但<strong>最好的参考是源代码</strong>，哪怕它是另一种语言写的——相比截图，它能给 Claude 提供更丰富的标记与结构细节。</p>
+  <div class="pi">
+    <div class="pi-h"><b>场景</b> 把它指到一段参考源代码，哪怕是另一种语言写的</div>
+    <blockquote class="pzh">「vendor/rate-limiter 里这个 Rust crate 实现了我想要的那种退避（backoff）行为。读懂它，然后在我们的 TypeScript API 客户端里把同样的语义重新实现一遍。」</blockquote>
+    <div class="pen"><pre id="pe-4a">"This Rust crate in vendor/rate-limiter implements the exact backoff behavior I want. Read it and reimplement the same semantics in our TypeScript API client."</pre>
+    <button class="copy-btn" type="button" data-src="pe-4a">复制英文原文</button></div>
+  </div>
+</div>
+
+<div class="method" id="mcard-5" data-stage="pre">
+  <div class="method-h">
+    <span class="mnum">⑤</span>
+    <h4>实现计划 <span class="en">Implementation Plans</span></h4>
+    <span class="chip na">原文未标注象限</span>
+  </div>
+  <p class="mdesc">觉得可以动手了，先让 Claude 出一份实现计划给你审。关键是让它把「你其实可能要改」的东西主动浮出来——数据模型、类型接口或 UX 流程，机械性的重构放最后。</p>
+  <div class="grid-2">
+    <div class="card neg">
+      <h4>传统实现计划</h4>
+      <ul><li>从机械细节、文件结构一路往下写，你最该拍板的决策淹在中间。</li></ul>
+    </div>
+    <div class="card pos">
+      <h4>这套方法</h4>
+      <ul><li>开头先放你最可能要改的：数据模型改动、新的类型接口、以及任何面向用户的东西；机械性重构埋在最底下。</li></ul>
+    </div>
+  </div>
+  <div class="pi">
+    <div class="pi-h"><b>场景</b> 让它出实现计划，把你最可能改的决策放最前</div>
+    <blockquote class="pzh">「用 HTML 写一份实现计划，但开头先放我最可能要调整的决策：数据模型改动、新的类型接口、以及任何面向用户的东西。把机械性的重构埋在最底下，那部分我信你。」</blockquote>
+    <div class="pen"><pre id="pe-5a">"Write an implementation plan in HTML, but lead with the decisions I'm most likely to tweak with: data model changes, new type interfaces, and anything user-facing. Bury the mechanical refactoring at the bottom, I trust you on that part."</pre>
+    <button class="copy-btn" type="button" data-src="pe-5a">复制英文原文</button></div>
+  </div>
+</div>
+
+<h2 id="s6"><span class="sec-num">06</span>动手中和动手后：实现笔记、推介文档、让它反过来考你</h2>
+<p class="sec-kicker">During &amp; Post Implementation · Pattern 6, 7 &amp; 8</p>
+
+<p>计划满意后，开一个新 session，把 spec、原型这些 artifacts 传进去，给它一个干净的上下文窗口，但带着规划阶段的全部信息。接下来三招，管的是干活途中和交付之后。</p>
+
+<div class="method" id="mcard-6" data-stage="dur">
+  <div class="method-h">
+    <span class="mnum">⑥</span>
+    <h4>实现笔记 <span class="en">Implementation Notes</span></h4>
+    <span class="chip uu">未知的未知</span>
+  </div>
+  <p class="mdesc">对付实现深处才冒出来的「未知的未知」。无论规划多充分，agent 干着干着可能因为代码里某个边界情况需要换打法。让它维护一个临时的 <code>implementation-notes.md</code>（或 .html），把决定记下来，方便下次学习。</p>
+  <div class="pi">
+    <div class="pi-h"><b>场景</b> 让它边干边把被迫偏离计划的决定记进一个文件</div>
+    <blockquote class="pzh">「维护一个 implementation-notes.md 文件。如果你撞上一个边界情况、被迫偏离计划，就选保守的那个选项，把它记在『Deviations』（偏差）标题下，然后继续干。」</blockquote>
+    <div class="pen"><pre id="pe-6a">"Keep an implementation-notes.md file. If you hit an edge case that forces you to deviate from the plan, pick the conservative option, log it under 'Deviations', and keep going."</pre>
+    <button class="copy-btn" type="button" data-src="pe-6a">复制英文原文</button></div>
+  </div>
+</div>
+
+<div class="method" id="mcard-7" data-stage="post">
+  <div class="method-h">
+    <span class="mnum">⑦</span>
+    <h4>推介与讲解 <span class="en">Pitches &amp; Explainers</span></h4>
+    <span class="chip na">原文未标注象限</span>
+  </div>
+  <p class="mdesc">交付一个东西，很重要的一环是拿到认同和审批。用 Claude 把原型、spec、实现笔记打包成一份「推介、讲解」文档，用途有二：当审阅者和你一开始有同样的未知时，加速他们理解；当专家想看到「你考虑到了他们会预料的失败点」时，加速审批。</p>
+  <div class="pi">
+    <div class="pi-h"><b>场景</b> 把原型、spec、实现笔记打包成一份能拿去要认同的文档</div>
+    <blockquote class="pzh">「把原型、spec 和实现笔记打包成一份我能丢进 Slack 拿认同的文档。开头先放演示 GIF。」</blockquote>
+    <div class="pen"><pre id="pe-7a">"Package the prototype, the spec, and the implementation notes into a single doc I can drop in Slack to get buy-in. Lead with the demo GIF."</pre>
+    <button class="copy-btn" type="button" data-src="pe-7a">复制英文原文</button></div>
+  </div>
+</div>
+
+<div class="method" id="mcard-8" data-stage="post">
+  <div class="method-h">
+    <span class="mnum">⑧</span>
+    <h4>让它考你 <span class="en">Quizzes</span></h4>
+    <span class="chip na">原文未标注象限</span>
+  </div>
+  <p class="mdesc">一段长会话之后，Claude 干的活可能比你意识到的多得多。只看代码 diff 只能给你浅层理解，因为很多行为依赖既有的代码路径。让它在给你一堆上下文之后反过来考你——原文口径：只有全部答对，他才合并。</p>
+  <div class="pi">
+    <div class="pi-h"><b>场景</b> 让它给你出一份关于这次改动的测验，你必须全过</div>
+    <blockquote class="pzh">「我想确保我完全理解这次改动里发生的一切。给我一份关于这些改动的 HTML 报告，带上上下文、直觉、做了什么等等，让我读懂；并在最底下出一套关于这些改动的测验，我必须全过。」</blockquote>
+    <div class="pen"><pre id="pe-8a">"I want to make sure I understand everything that's happened in this change. Give me a HTML report on the changes for me to read and understand with context, intuition, what was done, etc. and a quiz at the bottom on the changes that I must pass."</pre>
+    <button class="copy-btn" type="button" data-src="pe-8a">复制英文原文</button></div>
+  </div>
+</div>
+
+<h2 id="s7"><span class="sec-num">07</span>八模式速查表</h2>
+<p class="sec-kicker">Quick Reference · 可交互筛选</p>
+
+<div class="sandbox">
+  <div class="sandbox-h">
+    <h4>沙盘 B · 按阶段筛选模式卡</h4>
+    <span class="badge">交互</span>
+  </div>
+  <p class="sandbox-desc">点击标签切换阶段。模式卡片位于第 04 / 05 / 06 节，此处筛选会同步显隐对应卡片。</p>
+  <div class="tabs">
+    <button class="tab on" id="tab-all" type="button">全部（8）</button>
+    <button class="tab" id="tab-pre" type="button">动手前（5）</button>
+    <button class="tab" id="tab-dur" type="button">动手中（1）</button>
+    <button class="tab" id="tab-post" type="button">动手后（2）</button>
+  </div>
+  <p class="src-note" id="out-filter-note">当前：全部 8 个模式。阶段划分严格按一手博客的小标题（Pre-implementation / During implementation / Post implementation）。</p>
+</div>
+
+<div class="tbl-wrap">
+<table>
+  <thead>
+    <tr><th>阶段</th><th>#</th><th>模式</th><th>主打未知（原文口径）</th><th>一句话</th><th>示例 prompt</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>动手前</td><td>①</td><td>盲点扫描</td><td><span class="chip uu">未知的未知</span></td><td>让它在陌生领域先教你怎么问。</td><td>2 条</td></tr>
+    <tr><td>动手前</td><td>②</td><td>头脑风暴与原型</td><td><span class="chip uk">未知的已知</span></td><td>用原型把「看到才认得」的标准逼出来。</td><td>3 条</td></tr>
+    <tr><td>动手前</td><td>③</td><td>采访</td><td><span class="chip na">原文未标注</span></td><td>让它反过来一次问一个歧义点。</td><td>1 条</td></tr>
+    <tr><td>动手前</td><td>④</td><td>参考物</td><td><span class="chip na">原文未标注</span></td><td>说不清就给参考，最好的参考是源码。</td><td>1 条</td></tr>
+    <tr><td>动手前</td><td>⑤</td><td>实现计划</td><td><span class="chip na">原文未标注</span></td><td>把最可能改的决策顶到计划最前面。</td><td>1 条</td></tr>
+    <tr><td>动手中</td><td>⑥</td><td>实现笔记</td><td><span class="chip uu">未知的未知</span></td><td>偏离计划时选保守项，并记进 Deviations。</td><td>1 条</td></tr>
+    <tr><td>动手后</td><td>⑦</td><td>推介与讲解</td><td><span class="chip na">原文未标注</span></td><td>打包成能丢进 Slack 拿认同的文档。</td><td>1 条</td></tr>
+    <tr><td>动手后</td><td>⑧</td><td>测验</td><td><span class="chip na">原文未标注</span></td><td>让它出卷考你，全对才合并。</td><td>1 条</td></tr>
+  </tbody>
+</table>
+</div>
+
+<figure>
+  <div class="fig-h">八模式在动手前 / 中 / 后的分布</div>
+  <svg viewBox="0 0 660 250" role="img" aria-label="八提示模式按阶段分布时间轴">
+    <text class="qax" x="20" y="30">动手前（Pre-implementation）· 5 个</text>
+    <line class="gl" x1="20" y1="40" x2="640" y2="40"/>
+    <rect class="bx" x="20" y="52" width="118" height="46" rx="7"/>
+    <text class="bnum" x="32" y="70">①</text><text class="btx" x="48" y="70">盲点扫描</text><text class="btx" x="48" y="88" style="font-size:10px">Blind Spot Pass</text>
+    <rect class="bx" x="148" y="52" width="118" height="46" rx="7"/>
+    <text class="bnum" x="160" y="70">②</text><text class="btx" x="176" y="70">头脑风暴</text><text class="btx" x="176" y="88" style="font-size:10px">Brainstorms</text>
+    <rect class="bx" x="276" y="52" width="118" height="46" rx="7"/>
+    <text class="bnum" x="288" y="70">③</text><text class="btx" x="304" y="70">采访</text><text class="btx" x="304" y="88" style="font-size:10px">Interviews</text>
+    <rect class="bx" x="404" y="52" width="118" height="46" rx="7"/>
+    <text class="bnum" x="416" y="70">④</text><text class="btx" x="432" y="70">参考物</text><text class="btx" x="432" y="88" style="font-size:10px">References</text>
+    <rect class="bx" x="532" y="52" width="108" height="46" rx="7"/>
+    <text class="bnum" x="544" y="70">⑤</text><text class="btx" x="560" y="70">实现计划</text><text class="btx" x="560" y="88" style="font-size:10px">Impl. Plan</text>
+
+    <text class="qax" x="20" y="130">动手中（During implementation）· 1 个</text>
+    <line class="gl" x1="20" y1="140" x2="640" y2="140"/>
+    <rect class="bx" x="20" y="152" width="118" height="46" rx="7"/>
+    <text class="bnum" x="32" y="170">⑥</text><text class="btx" x="48" y="170">实现笔记</text><text class="btx" x="48" y="188" style="font-size:10px">Impl. Notes</text>
+
+    <text class="qax" x="20" y="228">动手后（Post implementation）· 2 个</text>
+    <line class="gl" x1="20" y1="238" x2="640" y2="238"/>
+    <rect class="bx" x="20" y="0" width="0" height="0"/>
+  </svg>
+  <figcaption>阶段归属取自一手博客三级标题；动手后的两个模式（⑦ 推介与讲解、⑧ 测验）见下方文字列表。图内矩形仅为结构示意，不代表工作量或优先级权重。</figcaption>
+</figure>
+
+<ul>
+  <li><strong>动手后（Post implementation）· 2 个</strong>：⑦ 推介与讲解（Pitches and explainers）、⑧ 测验（Quizzes）。</li>
+</ul>
+
+<h2 id="s8"><span class="sec-num">08</span>成本前移沙盘：未知发现阶段的代价数学</h2>
+<p class="sec-kicker">Modeling the Cost of Late Discovery</p>
+
+<p>原文的核心经济学断言只有一句，但足够硬：<strong>「每一个讲解、头脑风暴、采访、原型、参考，都是在『变贵之前』便宜地搞清你原先不知道的东西。」</strong>把它形式化，可以量化「把未知发现阶段前移」到底值多少。</p>
+
+<h3>模型定义</h3>
+<p>设一次任务里共有若干未知，按<strong>被发现时所处的阶段</strong>分成三档，各档占比为 p<sub>pre</sub>、p<sub>mid</sub>、p<sub>post</sub>，三者之和为 1。令单个未知在「动手前」被发现的修正成本为基准单位 1，动手中与动手后的修正成本倍数分别为 k<sub>mid</sub>、k<sub>post</sub>。则每个未知的平均修正成本为：</p>
+
+<div class="math-block">
+  <span class="eq">E = p<sub>pre</sub> · 1 &nbsp;+&nbsp; p<sub>mid</sub> · k<sub>mid</sub> &nbsp;+&nbsp; p<sub>post</sub> · k<sub>post</sub></span>
+  <span class="eq-note">最坏情形 E<sub>worst</sub> = k<sub>post</sub>（所有未知都拖到动手后才发现）；相对最坏情形的节省率 = (E<sub>worst</sub> − E) / E<sub>worst</sub>。</span>
+</div>
+
+<p>分配规则：先由「动手前发现占比」a 确定 p<sub>pre</sub> = a / 100；剩余部分再按「剩余中动手中占比」m 拆给 p<sub>mid</sub> 与 p<sub>post</sub>。因此 p<sub>mid</sub> = (1 − p<sub>pre</sub>) · m / 100，p<sub>post</sub> = 1 − p<sub>pre</sub> − p<sub>mid</sub>。</p>
+
+<div class="sandbox">
+  <div class="sandbox-h">
+    <h4>沙盘 C · 未知发现阶段分布 → 期望修正成本</h4>
+    <span class="badge">交互 · 实时计算</span>
+  </div>
+  <p class="sandbox-desc"><strong>参数口径声明（防造假）</strong>：k<sub>mid</sub> 与 k<sub>post</sub> 的具体倍数在一手材料中没有给出，此处默认值 6 与 18 为<strong>演示用基线假设</strong>，请按你自己的团队数据替换；所有回显数值均由上方公式实时运算得出，无任何预置结论。当 k<sub>mid</sub> 被调到大于 k<sub>post</sub> 时，模型自动钳制 k<sub>mid</sub> = k<sub>post</sub>，因为「动手后发现更贵」是本模型的定义前提。</p>
+
+  <div class="ctrl-row">
+    <label for="rg-pre">动手前发现占比 a</label>
+    <input type="range" id="rg-pre" min="0" max="100" step="1" value="45">
+    <span class="readout" id="out-a">45%</span>
+  </div>
+  <div class="ctrl-row">
+    <label for="rg-mid">剩余中动手中占比 m</label>
+    <input type="range" id="rg-mid" min="0" max="100" step="1" value="50">
+    <span class="readout" id="out-m">50%</span>
+  </div>
+  <div class="ctrl-row">
+    <label for="rg-kmid">动手中成本倍数 k<sub>mid</sub></label>
+    <input type="range" id="rg-kmid" min="1" max="20" step="0.5" value="6">
+    <span class="readout" id="out-kmid">6.0</span>
+  </div>
+  <div class="ctrl-row">
+    <label for="rg-kpost">动手后成本倍数 k<sub>post</sub></label>
+    <input type="range" id="rg-kpost" min="2" max="40" step="0.5" value="18">
+    <span class="readout" id="out-kpost">18.0</span>
+  </div>
+
+  <figure style="margin:18px 0 6px;">
+    <svg viewBox="0 0 670 190" role="img" aria-label="期望修正成本对比条形图">
+      <line class="gl" x1="100" y1="18" x2="100" y2="132"/>
+      <line class="gl" x1="360" y1="18" x2="360" y2="132" stroke-dasharray="3 4"/>
+      <line class="gl" x1="620" y1="18" x2="620" y2="132"/>
+
+      <text class="blbl" x="0" y="41">最坏情形</text>
+      <text class="blbl" x="0" y="57" style="font-size:10px">全部动手后</text>
+      <rect class="bar-w" id="bar-worst" x="100" y="28" width="520" height="24" rx="3"/>
+      <text class="bval" id="out-svg-worst" x="628" y="45">18.00</text>
+
+      <text class="blbl" x="0" y="97">八模式后</text>
+      <text class="blbl" x="0" y="113" style="font-size:10px">按当前分布</text>
+      <rect class="bar-s1" id="bar-s1" x="100" y="84" width="13" height="24"/>
+      <rect class="bar-s2" id="bar-s2" x="113" y="84" width="47.67" height="24"/>
+      <rect class="bar-s3" id="bar-s3" x="160.67" y="84" width="143" height="24" rx="3"/>
+      <text class="bval" id="out-svg-e" x="311.67" y="101">7.05</text>
+
+      <text class="btk" x="100" y="152" text-anchor="middle">0</text>
+      <text class="btk" id="out-tk-1" x="360" y="152" text-anchor="middle">9.00</text>
+      <text class="btk" id="out-tk-2" x="620" y="152" text-anchor="middle">18.00</text>
+      <text class="blbl" x="360" y="172" text-anchor="middle">单个未知的平均修正成本（单位 = 动手前修正成本）</text>
+    </svg>
+  </figure>
+
+  <div class="legend">
+    <span><i style="background:var(--c-teal)"></i>动手前贡献 <span id="out-pct-pre">45.0%</span> · <span id="out-cost-pre">0.45</span></span>
+    <span><i style="background:var(--c-gold)"></i>动手中贡献 <span id="out-pct-mid">27.5%</span> · <span id="out-cost-mid">1.65</span></span>
+    <span><i style="background:var(--c-rose)"></i>动手后贡献 <span id="out-pct-post">27.5%</span> · <span id="out-cost-post">4.95</span></span>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat"><div class="v" id="out-e">7.05</div><div class="l">期望修正成本 E</div></div>
+    <div class="stat"><div class="v" id="out-save">60.83%</div><div class="l">相对最坏情形节省</div></div>
+    <div class="stat"><div class="v" id="out-speedup">2.55</div><div class="l">成本杠杆倍数 E<sub>worst</sub> / E</div></div>
+  </div>
+
+  <div class="verdict ok" id="out-cost-verdict">
+    当前分布下，把 <b>45.0%</b> 的未知提到动手前发现，即可把平均修正成本压到最坏情形的 <b>39.17%</b>；成本杠杆 <b>2.55 倍</b>。注：k 值为演示基线假设，非原文数据。
+  </div>
+</div>
+
+<h3>怎么用这个模型</h3>
+<ul>
+  <li><strong>它不预测绝对值，只做杠杆比较。</strong>k 值需要你自己标定：统计过去若干次返工中「动手后发现」与「动手前发现」的实际工时比，用它替换默认值 18。</li>
+  <li><strong>三个模式（①②⑤）直接作用于 a</strong>，把未知往动手前推；⑥ 实现笔记作用于 p<sub>mid</sub>，降低「动手中冒出的未知」直接砸到动手后的概率；⑧ 测验则是在动手后补一道闸门，避免未知流到合并之后。</li>
+  <li><strong>模型的边界</strong>：它假设各阶段的修正成本可加、且未知之间无耦合。真实工程里未知之间常有依赖（一个未知暴露会引出三个新的），因此本模型给出的是下界估计。</li>
+</ul>
+
+<h2 id="s9"><span class="sec-num">09</span>活教材：他自己怎么把这套方法用了一遍</h2>
+<p class="sec-kicker">Launching Fable: The Worked Example</p>
+
+<p>Fable 的发布视频，是 Thariq 用 Claude Code 从头到尾剪出来的，而视频剪辑对他是个全新领域，他并非专家。他的做法正好把上面的方法串成一条链。</p>
+
+<figure>
+  <div class="fig-h">发布视频的四步链条（每一步都在「变贵之前」先搞清未知）</div>
+  <svg viewBox="0 0 660 190" role="img" aria-label="Fable 发布视频剪辑的四步链条">
+    <rect class="bx" x="14" y="60" width="130" height="62" rx="8"/>
+    <text class="bnum" x="26" y="80">起点</text>
+    <text class="btx" x="26" y="98">知道能剪 / 转录</text>
+    <text class="btx" x="26" y="114" style="font-size:10.5px;fill:var(--text-muted)">但不确定精度够不够</text>
+
+    <path class="bflow" d="M148 91 L176 91"/>
+    <path class="bflow" d="M170 86 L177 91 L170 96"/>
+
+    <rect class="bx" x="180" y="60" width="130" height="62" rx="8"/>
+    <text class="bnum" x="192" y="80">② 讲解</text>
+    <text class="btx" x="192" y="98">Whisper 转录原理</text>
+    <text class="btx" x="192" y="114" style="font-size:10.5px;fill:var(--text-muted)">ffmpeg 能否精确切 um</text>
+
+    <path class="bflow" d="M314 91 L342 91"/>
+    <path class="bflow" d="M336 86 L343 91 L336 96"/>
+
+    <rect class="bx" x="346" y="60" width="130" height="62" rx="8"/>
+    <text class="bnum" x="358" y="80">③ 原型</text>
+    <text class="btx" x="358" y="98">Remotion 逐字字幕</text>
+    <text class="btx" x="358" y="114" style="font-size:10.5px;fill:var(--text-muted)">先验证可行再投入</text>
+
+    <path class="bflow" d="M480 91 L508 91"/>
+    <path class="bflow" d="M502 86 L509 91 L502 96"/>
+
+    <rect class="bx" x="512" y="60" width="134" height="62" rx="8"/>
+    <text class="bnum" x="524" y="80">① 盲点扫描</text>
+    <text class="btx" x="524" y="98">先学调色是什么</text>
+    <text class="btx" x="524" y="114" style="font-size:10.5px;fill:var(--text-muted)">再谈怎么调好</text>
+
+    <text class="qax" x="14" y="40">每一步都是在「做」之前，先用廉价方式把未知摊开</text>
+    <text class="qax" x="14" y="158">关键转折：视频发灰是调色问题，但他不知道「好的调色」长什么样——先让 Claude 教他、把未知找出来，再动手。</text>
+    <text class="qax" x="14" y="176">（而不是直接让它出几版调色让他挑——那是在未知未清的前提下做选择。）</text>
+  </svg>
+  <figcaption>链条四步均取自一手博客《How this comes together: launching Fable》一节；括号内注解为基于原文的推论，非原文原句。</figcaption>
+</figure>
+
+<div class="quote">
+  每一个讲解、头脑风暴、采访、原型、参考，都是在「变贵之前」便宜地搞清你原先不知道的东西。
+  <cite>Thariq Shihipar，A Field Guide to Fable（原文：&ldquo;Every explainer, brainstorm, interview, prototype, and reference is a cheap way to find out what you didn't know before it gets expensive to fix.&rdquo;）</cite>
+</div>
+
+<h2 id="s10"><span class="sec-num">10</span>落地清单：从下一个项目开始怎么用</h2>
+<p class="sec-kicker">Adoption Checklist</p>
+
+<p>把 8 个模式按开工时机汇总成一张清单，照着对号入座就行。</p>
+
+<ul class="checklist" id="box-checklist">
+  <li><input type="checkbox" id="chk-1"><span class="t"><b>① 盲点扫描</b><em>钻进陌生模块、做不熟的活时</em></span></li>
+  <li><input type="checkbox" id="chk-2"><span class="t"><b>② 头脑风暴与原型</b><em>标准靠「看到才认得」时</em></span></li>
+  <li><input type="checkbox" id="chk-3"><span class="t"><b>③ 让它采访你</b><em>头脑风暴后还剩模糊时</em></span></li>
+  <li><input type="checkbox" id="chk-4"><span class="t"><b>④ 参考物</b><em>想要的东西说不清时</em></span></li>
+  <li><input type="checkbox" id="chk-5"><span class="t"><b>⑤ 实现计划</b><em>准备动手前，让它先列给你审</em></span></li>
+  <li><input type="checkbox" id="chk-6"><span class="t"><b>⑥ 实现笔记</b><em>干着干着被迫偏离计划时</em></span></li>
+  <li><input type="checkbox" id="chk-7"><span class="t"><b>⑦ 推介与讲解</b><em>要拿认同、审批时</em></span></li>
+  <li><input type="checkbox" id="chk-8"><span class="t"><b>⑧ 让它考你</b><em>合并前，逼自己真看懂改动</em></span></li>
+</ul>
+
+<p class="src-note">进度：<span id="out-chk-done">0 / 8 已完成</span>。勾选状态仅保存在当前页面会话内，刷新后重置（本文件不写入任何本地存储，除主题偏好）。</p>
+
+<h2 id="s11"><span class="sec-num">11</span>心态收尾</h2>
+<p class="sec-kicker">Closing Notes</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h4>处理失落</h4>
+    <p style="font-size:.93rem;color:var(--text-muted)">Thariq 说第一次用 Fable 这类模型，收获感和失落感一起来。他热爱手写代码、热爱在脑子里翻转整个代码库的感觉，但唯一的出路是穿过去，保持在环内、把模型放开，就能走到另一头，带更多东西回来。</p>
+  </div>
+  <div class="card">
+    <h4>做个不讲道理的人</h4>
+    <p style="font-size:.93rem;color:var(--text-muted)">他最喜欢 Anthropic 的一点，是相信「取舍」并不真实存在。逼现实把取舍摊出来：好、快、便宜过去是三选二，现在三个全要。最后一个提醒是，构建变容易了，创造价值依然很难，别把心思全花在搭建过程和你的配置上。</p>
+  </div>
+</div>
+
+<p>从下一个项目开始，先让 Claude 帮你找未知。</p>
+
+<h2 id="s12"><span class="sec-num">12</span>来源与核验说明</h2>
+<p class="sec-kicker">Sources &amp; Verification Notes</p>
+
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>项</th><th>口径</th><th>核验结论</th></tr></thead>
+  <tbody>
+    <tr><td>8 个模式的名称与阶段划分</td><td>一手博客三级标题</td><td><strong>已核验一致</strong>：Blind spot pass、Brainstorms and prototypes、Interviews、References、Implementation plan（Pre）/ Implementation notes（During）/ Pitches and explainers、Quizzes（Post）。</td></tr>
+    <tr><td>11 条英文示例 prompt</td><td>一手博客 Example prompts</td><td><strong>已逐条核验</strong>，与拆解稿所载英文原文一致，本文件按原文完整保留，未做改写。</td></tr>
+    <tr><td>四象限定义</td><td>一手博客 Knowing your unknowns</td><td><strong>已核验一致</strong>：Known Knowns / Known Unknowns / Unknown Knowns / Unknown Unknowns 四条释义按原文译出。</td></tr>
+    <tr><td>「地图与疆域」「瓶颈在于我能否讲清未知」</td><td>一手博客开篇</td><td><strong>已核验一致</strong>，并附英文原句。</td></tr>
+    <tr><td>发布视频四步案例</td><td>一手博客 How this comes together</td><td><strong>已核验一致</strong>（Whisper 转录 / ffmpeg 切 um 与长停顿 / Remotion 原型 / 调色先学再做）。</td></tr>
+    <tr><td>模式 → 象限的指派</td><td>一手博客正文</td><td><strong>仅三处显式标注</strong>：① 盲点扫描与 ⑥ 实现笔记 → 未知的未知；② 头脑风暴与原型 → 未知的已知。其余五处原文未标注，本文件标为「原文未标注」，不做补齐。</td></tr>
+    <tr><td>Claude Code 系统提示词删掉 80%</td><td>演讲披露（拆解稿转述）</td><td><strong>未获二次验证</strong>：一手博客全文未见此表述，仅按演讲口径保留，并已在速览卡片上标注。</td></tr>
+    <tr><td>能力悬垂 / 宝可梦 AW 结尾案例</td><td>演讲内容（拆解稿转述）</td><td><strong>未获二次验证</strong>：一手博客未包含该段，属演讲口径。</td></tr>
+    <tr><td>提示词演化三段（Sonnet 3.5 New → 大提示词 → Fable）</td><td>演讲内容（拆解稿转述）</td><td><strong>未获二次验证</strong>：属演讲口径。</td></tr>
+    <tr><td>约 200 万阅读量</td><td>据报道</td><td><strong>无法核验</strong>，保留「据报道」限定语。</td></tr>
+    <tr><td>成本模型的 k<sub>mid</sub> = 6、k<sub>post</sub> = 18</td><td>本文件构造</td><td><strong>非原文数据</strong>，为演示基线假设值，已在沙盘内显式声明，所有回显由公式实时运算。</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="src-note">来源：Thariq Shihipar 于 AI Engineer World's Fair 大会主题演讲《A Field Guide to Fable》，及配套官方博客《A field guide to Claude Fable 5: Finding your unknowns》（claude.com/blog，2026-07-06）。本文件为方法拆解与工程化建模，所有示例 prompt 按原文完整保留：中文为译文（便于理解），英文为可直接复制照抄的原文。文中数据（80%、约 200 万阅读量等）为演讲与博客口径，已在上方逐项标注核验状态。</p>
+
+<p class="src-note">原拆解稿页尾提示：网页版另有交互视图（一页纸速读视图 / 秒懂漫画），完整体验见原文链接 <a href="https://best.xiaohu.ai/article/fable-field-guide-unknowns/" target="_blank" rel="noopener">best.xiaohu.ai ↗</a>。</p>
+
+<footer>
+  <p>AIKnowledge 技术消化系列 · 单文件零依赖交付 · 生成日期 2026-09-15</p>
+  <p>本文件为完全自包含 HTML：断网双击即可阅读，全部样式、图形与交互逻辑均内联，不含任何外部脚本、字体或图片请求。</p>
+</footer>
+
+</article>
+</main>
+
+<button id="toTopBtn" type="button" title="回到顶部">↑</button>
+
+<script>
+(function () {
+  "use strict";
+
+  function byId(id) { return document.getElementById(id); }
+
+  /* ---------- 1. 阅读进度条 + 侧栏高亮 ---------- */
+  var SECTIONS = ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12"];
+
+  function onScroll() {
+    var winH = window.innerHeight || 800;
+    var docH = (document.documentElement.scrollHeight || 0) - winH;
+    var scrolled = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var bar = byId("reading-progress-bar");
+    if (bar && docH > 0) {
+      var pct = Math.min(100, Math.max(0, (scrolled / docH) * 100));
+      bar.style.width = pct.toFixed(1) + "%";
+    }
+    var topBtn = byId("toTopBtn");
+    if (topBtn) { topBtn.style.display = scrolled > 600 ? "block" : "none"; }
+
+    var activeId = "";
+    for (var i = 0; i < SECTIONS.length; i++) {
+      var el = byId(SECTIONS[i]);
+      if (el && el.getBoundingClientRect().top <= 140) { activeId = SECTIONS[i]; }
+    }
+    if (activeId) {
+      var links = document.querySelectorAll("#sidebar a");
+      for (var j = 0; j < links.length; j++) {
+        var href = links[j].getAttribute("href");
+        if (href === "#" + activeId) { links[j].classList.add("active"); }
+        else { links[j].classList.remove("active"); }
+      }
+    }
+  }
+  window.addEventListener("scroll", onScroll);
+  window.addEventListener("resize", onScroll);
+
+  /* ---------- 2. 主题切换 ---------- */
+  var themeBtn = byId("btn-theme");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var cur = document.documentElement.getAttribute("data-theme") || "dark";
+      var next = cur === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try { if (window.localStorage) { window.localStorage.setItem("aike_theme", next); } } catch (e) {}
+    });
+  }
+  try {
+    if (window.localStorage) {
+      var saved = window.localStorage.getItem("aike_theme");
+      if (saved === "light" || saved === "dark") { document.documentElement.setAttribute("data-theme", saved); }
+    }
+  } catch (e) {}
+
+  /* ---------- 3. 目录抽屉与回到顶部 ---------- */
+  var tocBtn = byId("btn-toc");
+  if (tocBtn) {
+    tocBtn.addEventListener("click", function () {
+      var sb = byId("sidebar");
+      if (sb) { sb.classList.toggle("open"); }
+    });
+  }
+  var printBtn = byId("btn-print");
+  if (printBtn) { printBtn.addEventListener("click", function () { window.print(); }); }
+  var toTop = byId("toTopBtn");
+  if (toTop) { toTop.addEventListener("click", function () { window.scrollTo(0, 0); }); }
+
+  /* ---------- 4. 沙盘 A：四象限 × 八模式对位 ---------- */
+  var QUADS = {
+    "q-KK": {
+      name: "已知的已知 · KNOWN KNOWN",
+      def: "你写进 prompt 里、明确告诉它你要的东西。",
+      rect: "rq-KK",
+      named: [],
+      note: "原文未给该象限指派任何模式——已知的已知本就是你已经在 prompt 里说清的部分，八个模式处理的是「还没说清」的三格。"
+    },
+    "q-KU": {
+      name: "已知的未知 · KNOWN UNKNOWN",
+      def: "你还没搞清，但你知道自己没搞清的东西。",
+      rect: "rq-KU",
+      named: [],
+      note: "原文未给该象限指派模式。可行的自行对位思路（属本文件推论，非原文）：③ 采访与 ⑤ 实现计划主要作用于把已知的未知问清楚，但原文未如此表述。"
+    },
+    "q-UK": {
+      name: "未知的已知 · UNKNOWN KNOWN",
+      def: "太显然，你根本不会写下来，但一看到就认得出（know it when I see it）。",
+      rect: "rq-UK",
+      named: ["② 头脑风暴与原型 Brainstorms & Prototypes"],
+      note: "原文显式标注：头脑风暴与原型针对存在大量 unknown knowns 的领域。④ 参考物在语义上也贴合此格，但原文未做该指派。"
+    },
+    "q-UU": {
+      name: "未知的未知 · UNKNOWN UNKNOWN",
+      def: "你压根没想到的东西，不知道自己缺哪块知识，也不知道一件事到底能做到多好。",
+      rect: "rq-UU",
+      named: ["① 盲点扫描 Blind Spot Pass", "⑥ 实现笔记 Implementation Notes"],
+      note: "原文显式标注两处：盲点扫描针对开工前的未知未知；实现笔记针对「无论规划多充分，实现深处仍然潜伏着的」未知未知。"
+    }
+  };
+  var QIDS = ["q-KK", "q-KU", "q-UK", "q-UU"];
+  var RECTS = ["rq-KK", "rq-KU", "rq-UK", "rq-UU"];
+
+  function renderQuad(qid) {
+    var cfg = QUADS[qid];
+    if (!cfg) { return; }
+    var nameEl = byId("out-q-name");
+    var defEl = byId("out-q-def");
+    var mEl = byId("out-q-methods");
+    var nEl = byId("out-q-note");
+    if (nameEl) { nameEl.textContent = cfg.name; }
+    if (defEl) { defEl.textContent = cfg.def; }
+    if (mEl) {
+      if (cfg.named.length === 0) {
+        mEl.textContent = "原文明确指派给本象限的模式：0 个。";
+      } else {
+        mEl.textContent = "原文明确指派给本象限的模式（" + cfg.named.length + " 个）：" + cfg.named.join("；") + "。";
+      }
+    }
+    if (nEl) { nEl.textContent = cfg.note; }
+
+    for (var r = 0; r < RECTS.length; r++) {
+      var rc = byId(RECTS[r]);
+      if (!rc) { continue; }
+      if (RECTS[r] === cfg.rect) { rc.classList.add("hi"); rc.classList.remove("dim"); }
+      else { rc.classList.add("dim"); rc.classList.remove("hi"); }
+    }
+    for (var t = 0; t < QIDS.length; t++) {
+      var btn = byId(QIDS[t]);
+      if (!btn) { continue; }
+      if (QIDS[t] === qid) { btn.classList.add("on"); } else { btn.classList.remove("on"); }
+    }
+  }
+
+  for (var qi = 0; qi < QIDS.length; qi++) {
+    (function (id) {
+      var b = byId(id);
+      if (b) { b.addEventListener("click", function () { renderQuad(id); }); }
+    })(QIDS[qi]);
+  }
+  renderQuad("q-KK");
+
+  /* ---------- 5. 沙盘 B：阶段筛选 ---------- */
+  var TABS = ["tab-all", "tab-pre", "tab-dur", "tab-post"];
+  var STAGE_OF_TAB = { "tab-all": "all", "tab-pre": "pre", "tab-dur": "dur", "tab-post": "post" };
+  var TAB_NOTE = {
+    "tab-all": "当前：全部 8 个模式。阶段划分严格按一手博客的小标题（Pre-implementation / During implementation / Post implementation）。",
+    "tab-pre": "当前：动手前 5 个（①②③④⑤）。这一段的共同目的，是把未知尽可能前移到「便宜」的阶段。",
+    "tab-dur": "当前：动手中 1 个（⑥ 实现笔记）。它的作用不是消灭未知，而是让实现深处冒出的未知被记录而非被静默吞掉。",
+    "tab-post": "当前：动手后 2 个（⑦⑧）。⑦ 对付审阅者的未知，⑧ 对付你自己的未知。"
+  };
+  var MCARDS = ["mcard-1", "mcard-2", "mcard-3", "mcard-4", "mcard-5", "mcard-6", "mcard-7", "mcard-8"];
+
+  function renderFilter(tabId) {
+    var want = STAGE_OF_TAB[tabId] || "all";
+    for (var i = 0; i < MCARDS.length; i++) {
+      var c = byId(MCARDS[i]);
+      if (!c) { continue; }
+      var st = c.getAttribute("data-stage");
+      c.style.display = (want === "all" || st === want) ? "" : "none";
+    }
+    for (var t = 0; t < TABS.length; t++) {
+      var b = byId(TABS[t]);
+      if (!b) { continue; }
+      if (TABS[t] === tabId) { b.classList.add("on"); } else { b.classList.remove("on"); }
+    }
+    var note = byId("out-filter-note");
+    if (note) { note.textContent = TAB_NOTE[tabId] || TAB_NOTE["tab-all"]; }
+  }
+  for (var ti = 0; ti < TABS.length; ti++) {
+    (function (id) {
+      var b = byId(id);
+      if (b) { b.addEventListener("click", function () { renderFilter(id); }); }
+    })(TABS[ti]);
+  }
+  renderFilter("tab-all");
+
+  /* ---------- 6. 复制按钮 ---------- */
+  var copyBtns = document.querySelectorAll(".copy-btn");
+  for (var ci = 0; ci < copyBtns.length; ci++) {
+    (function (btn) {
+      btn.addEventListener("click", function () {
+        var srcId = btn.getAttribute("data-src");
+        var src = srcId ? byId(srcId) : null;
+        var txt = src ? (src.textContent || "") : "";
+        var ok = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(txt);
+            ok = true;
+          } else if (document.execCommand) {
+            var ta = document.createElement("textarea");
+            ta.value = txt;
+            document.body.appendChild(ta);
+            ta.select();
+            ok = document.execCommand("copy");
+            document.body.removeChild(ta);
+          }
+        } catch (e) { ok = false; }
+        btn.classList.add("done");
+        var old = btn.textContent;
+        btn.textContent = ok ? "已复制" : "请手动复制";
+        window.setTimeout(function () {
+          btn.classList.remove("done");
+          btn.textContent = old;
+        }, 1400);
+      });
+    })(copyBtns[ci]);
+  }
+
+  /* ---------- 7. 沙盘 C：成本前移模型 ---------- */
+  var X0 = 100, MAXW = 520, BAR_Y = 84, BAR_H = 24;
+
+  function calcCost() {
+    var aEl = byId("rg-pre"), mEl = byId("rg-mid"), kmEl = byId("rg-kmid"), kpEl = byId("rg-kpost");
+    var a = aEl ? parseFloat(aEl.value) : 45;
+    var m = mEl ? parseFloat(mEl.value) : 50;
+    var km = kmEl ? parseFloat(kmEl.value) : 6;
+    var kp = kpEl ? parseFloat(kpEl.value) : 18;
+    if (!(a >= 0)) { a = 0; }
+    if (!(m >= 0)) { m = 0; }
+    if (!(km >= 1)) { km = 1; }
+    if (!(kp >= 2)) { kp = 2; }
+    if (km > kp) { km = kp; }
+
+    var pPre = a / 100;
+    var pMid = (1 - pPre) * (m / 100);
+    var pPost = Math.max(0, 1 - pPre - pMid);
+
+    var c1 = pPre * 1;
+    var c2 = pMid * km;
+    var c3 = pPost * kp;
+    var E = c1 + c2 + c3;
+    var Ew = kp;
+    var save = Ew > 0 ? (Ew - E) / Ew : 0;
+    return { a: a, m: m, km: km, kp: kp, pPre: pPre, pMid: pMid, pPost: pPost,
+             c1: c1, c2: c2, c3: c3, E: E, Ew: Ew, save: save };
+  }
+
+  function setText(id, txt) {
+    var el = byId(id);
+    if (el) { el.textContent = txt; }
+  }
+
+  function renderCost() {
+    var r = calcCost();
+
+    setText("out-a", r.a.toFixed(0) + "%");
+    setText("out-m", r.m.toFixed(0) + "%");
+    setText("out-kmid", r.km.toFixed(1));
+    setText("out-kpost", r.kp.toFixed(1));
+
+    var w1 = r.c1 / r.kp * MAXW;
+    var w2 = r.c2 / r.kp * MAXW;
+    var w3 = r.c3 / r.kp * MAXW;
+
+    var b1 = byId("bar-s1"), b2 = byId("bar-s2"), b3 = byId("bar-s3"), bw = byId("bar-worst");
+    if (b1) {
+      b1.setAttribute("x", String(X0));
+      b1.setAttribute("width", String(Math.max(0, w1)));
+      b1.setAttribute("y", String(BAR_Y));
+      b1.setAttribute("height", String(BAR_H));
+    }
+    if (b2) {
+      b2.setAttribute("x", String(X0 + w1));
+      b2.setAttribute("width", String(Math.max(0, w2)));
+    }
+    if (b3) {
+      b3.setAttribute("x", String(X0 + w1 + w2));
+      b3.setAttribute("width", String(Math.max(0, w3)));
+    }
+    if (bw) { bw.setAttribute("width", String(MAXW)); }
+
+    var lblE = byId("out-svg-e");
+    if (lblE) { lblE.setAttribute("x", String(X0 + w1 + w2 + w3 + 8)); }
+    var lblW = byId("out-svg-worst");
+    if (lblW) { lblW.setAttribute("x", String(X0 + MAXW + 8)); }
+
+    setText("out-svg-e", r.E.toFixed(2));
+    setText("out-svg-worst", r.Ew.toFixed(2));
+    setText("out-tk-1", (r.kp / 2).toFixed(2));
+    setText("out-tk-2", r.kp.toFixed(2));
+
+    setText("out-pct-pre", (r.pPre * 100).toFixed(1) + "%");
+    setText("out-pct-mid", (r.pMid * 100).toFixed(1) + "%");
+    setText("out-pct-post", (r.pPost * 100).toFixed(1) + "%");
+    setText("out-cost-pre", r.c1.toFixed(2));
+    setText("out-cost-mid", r.c2.toFixed(2));
+    setText("out-cost-post", r.c3.toFixed(2));
+
+    setText("out-e", r.E.toFixed(2));
+    setText("out-save", (r.save * 100).toFixed(2) + "%");
+    setText("out-speedup", r.E > 0 ? (r.Ew / r.E).toFixed(2) : "—");
+
+    var v = byId("out-cost-verdict");
+    if (v) {
+      var ratio = (1 - r.save) * 100;
+      v.innerHTML = "当前分布下，把 <b>" + (r.pPre * 100).toFixed(1) + "%</b> 的未知提到动手前发现，即可把平均修正成本压到最坏情形的 <b>" + ratio.toFixed(2) + "%</b>；" +
+        "成本杠杆 <b>" + (r.E > 0 ? (r.Ew / r.E).toFixed(2) : "—") + " 倍</b>。" +
+        "注：k 值为演示基线假设，非原文数据。";
+    }
+  }
+
+  var COST_INPUTS = ["rg-pre", "rg-mid", "rg-kmid", "rg-kpost"];
+  for (var ci2 = 0; ci2 < COST_INPUTS.length; ci2++) {
+    (function (id) {
+      var el = byId(id);
+      if (el) { el.addEventListener("input", renderCost); }
+    })(COST_INPUTS[ci2]);
+  }
+  renderCost();
+
+  /* ---------- 8. 落地清单 ---------- */
+  var CHKS = ["chk-1", "chk-2", "chk-3", "chk-4", "chk-5", "chk-6", "chk-7", "chk-8"];
+
+  function renderChk() {
+    var done = 0;
+    for (var i = 0; i < CHKS.length; i++) {
+      var c = byId(CHKS[i]);
+      if (!c) { continue; }
+      if (c.checked) { done++; }
+      var li = c.parentElement;
+      if (li && li.classList) {
+        if (c.checked) { li.classList.add("done"); } else { li.classList.remove("done"); }
+      }
+    }
+    var out = byId("out-chk-done");
+    if (out) { out.textContent = done + " / " + CHKS.length + " 已完成"; }
+  }
+  for (var ki = 0; ki < CHKS.length; ki++) {
+    (function (id) {
+      var el = byId(id);
+      if (el) { el.addEventListener("change", renderChk); }
+    })(CHKS[ki]);
+  }
+  renderChk();
+
+  onScroll();
+})();
+</script>
+</body>
+</html>

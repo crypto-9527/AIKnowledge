@@ -1,0 +1,2177 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>当 AI 能完成作业，大学该教什么、怎么考？MIT 的 26 项重构建议 | AIKnowledge 机构级报告白皮书</title>
+  <style>
+    /* CSS 设计令牌系统 (黑曜石深色基线 + 暖羊皮纸浅色基线) */
+    :root, html.dark, [data-theme="dark"] {
+      --bg: #181715;
+      --bg-card: #211F1C;
+      --bg-elevated: #2A2723;
+      --border: #33302B;
+      --border-strong: #4D4841;
+      --text-main: #E6E2DC;
+      --text-muted: #A8A29A;
+      --text-dim: #736D64;
+      --accent: #E2886A;
+      --accent-dim: rgba(226, 136, 106, 0.12);
+      --accent-glow: rgba(226, 136, 106, 0.25);
+      --c-teal: #4E8A83;
+      --c-teal-dim: rgba(78, 138, 131, 0.15);
+      --c-gold: #D4A373;
+      --c-gold-dim: rgba(212, 163, 115, 0.15);
+      --c-rose: #D66853;
+      --c-rose-dim: rgba(214, 104, 83, 0.15);
+      --c-blue: #4A90E2;
+      --c-blue-dim: rgba(74, 144, 226, 0.15);
+      --code-bg: #121110;
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
+      --font-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", SimSun, STSong, Georgia, serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --aike-sidebar-w: 280px;
+      --aike-content-max: 1180px;
+    }
+
+    html.light, [data-theme="light"] {
+      --bg: #FAF7F2;
+      --bg-card: #FFFFFF;
+      --bg-elevated: #F2ECE1;
+      --border: #E6E0D6;
+      --border-strong: #CFC5B6;
+      --text-main: #2B2824;
+      --text-muted: #6E675E;
+      --text-dim: #999083;
+      --accent: #D97757;
+      --accent-dim: rgba(217, 119, 87, 0.1);
+      --accent-glow: rgba(217, 119, 87, 0.2);
+      --c-teal: #2D6A4F;
+      --c-teal-dim: rgba(45, 106, 79, 0.12);
+      --c-gold: #B07D38;
+      --c-gold-dim: rgba(176, 125, 56, 0.12);
+      --c-rose: #C04D38;
+      --c-rose-dim: rgba(192, 77, 56, 0.12);
+      --c-blue: #2B6CB0;
+      --c-blue-dim: rgba(43, 108, 176, 0.12);
+      --code-bg: #F4EFE6;
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.08);
+      --aike-sidebar-w: 280px;
+      --aike-content-max: 1180px;
+    }
+
+    /* 基础重置 */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      scroll-behavior: smooth;
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.75;
+      font-family: var(--font-sans);
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 顶部阅读进度条 */
+    #reading-progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 0%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--c-teal), var(--accent));
+      z-index: 1000;
+      transition: width 0.1s linear;
+    }
+
+    /* 顶部固定导航栏 */
+    .top-header {
+      position: sticky;
+      top: 0;
+      background-color: var(--bg);
+      border-bottom: 1px solid var(--border);
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      z-index: 900;
+      backdrop-filter: blur(8px);
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-logo {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge-tag {
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .header-meta-text {
+      font-size: 12px;
+      color: var(--text-dim);
+      border-left: 1px solid var(--border);
+      padding-left: 12px;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .theme-toggle-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .theme-toggle-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* 移动端菜单切换按钮 */
+    .menu-toggle-btn {
+      display: none;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    /* 主布局容器：侧栏固定 + 正文对称居中 */
+    .layout-container {
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex: 1;
+      padding: 24px 20px 60px 20px;
+      gap: 36px;
+    }
+
+    /* 侧边栏目录 (280px) */
+    .sidebar-nav {
+      width: var(--aike-sidebar-w);
+      flex-shrink: 0;
+      position: sticky;
+      top: 76px;
+      height: calc(100vh - 96px);
+      overflow-y: auto;
+      padding-right: 12px;
+    }
+    .sidebar-nav::-webkit-scrollbar {
+      width: 4px;
+    }
+    .sidebar-nav::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 2px;
+    }
+    .toc-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .toc-item a {
+      display: block;
+      padding: 6px 10px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      border-radius: 6px;
+      line-height: 1.4;
+      transition: all 0.2s ease;
+      border-left: 2px solid transparent;
+    }
+    .toc-item a:hover {
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .toc-item a.active {
+      color: var(--accent);
+      background: var(--accent-dim);
+      border-left-color: var(--accent);
+      font-weight: 600;
+    }
+    .toc-item.sub a {
+      padding-left: 20px;
+      font-size: 12px;
+    }
+
+    /* 正文主体区域 */
+    .main-content {
+      flex: 1;
+      min-width: 0;
+      max-width: var(--aike-content-max);
+    }
+
+    /* 面包屑与头部 */
+    .meta-breadcrumbs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+    }
+    .main-h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(26px, 3.2vw, 36px);
+      line-height: 1.3;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 16px;
+      letter-spacing: -0.5px;
+    }
+    .lead-paragraph {
+      font-size: 18px;
+      line-height: 1.65;
+      color: var(--accent);
+      margin-bottom: 24px;
+      font-weight: 500;
+      background: var(--accent-dim);
+      padding: 16px 20px;
+      border-radius: 8px;
+      border-left: 4px solid var(--accent);
+    }
+
+    /* 四项要点网格卡片 */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .summary-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .summary-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .summary-icon {
+      font-size: 20px;
+      margin-bottom: 8px;
+      color: var(--accent);
+    }
+    .summary-card p {
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+    .summary-card strong {
+      color: var(--text-main);
+    }
+
+    /* 题图矢量插画容器 (MIT 10号主楼与穹顶) */
+    .hero-banner-container {
+      margin: 28px 0;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-sm);
+    }
+    .hero-banner-svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .figure-caption {
+      padding: 10px 16px;
+      font-size: 12px;
+      color: var(--text-dim);
+      border-top: 1px solid var(--border);
+      background: var(--bg-elevated);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* 核心引用卡片 */
+    .quote-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--c-teal);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin: 28px 0;
+      position: relative;
+    }
+    .quote-text {
+      font-size: 15px;
+      line-height: 1.8;
+      color: var(--text-main);
+      font-style: normal;
+    }
+    .quote-author {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--c-teal);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* 章节标题与层级 */
+    h2.section-h2 {
+      font-family: var(--font-serif);
+      font-size: clamp(20px, 2.4vw, 26px);
+      color: var(--text-main);
+      margin: 44px 0 20px 0;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h2.section-h2::before {
+      content: "";
+      display: inline-block;
+      width: 5px;
+      height: 22px;
+      background: var(--accent);
+      border-radius: 3px;
+    }
+    h3.section-h3 {
+      font-size: 18px;
+      color: var(--text-main);
+      margin: 28px 0 14px 0;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    h3.section-h3::before {
+      content: "§";
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 14px;
+    }
+
+    p {
+      margin-bottom: 16px;
+      font-size: 15.5px;
+      line-height: 1.8;
+      color: var(--text-main);
+    }
+    ul, ol {
+      margin: 12px 0 20px 24px;
+      font-size: 15px;
+      line-height: 1.75;
+      color: var(--text-main);
+    }
+    li {
+      margin-bottom: 8px;
+    }
+    li strong {
+      color: var(--accent);
+    }
+
+    /* 调查数据亮点三列网格 */
+    .survey-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin: 24px 0;
+    }
+    .survey-stat-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px;
+      position: relative;
+    }
+    .survey-stat-num {
+      font-family: var(--font-mono);
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.1;
+      margin-bottom: 6px;
+    }
+    .survey-stat-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+    .survey-stat-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* 图表卡片容器 */
+    .chart-container-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      margin: 28px 0;
+      box-shadow: var(--shadow-sm);
+    }
+    .chart-header {
+      margin-bottom: 20px;
+    }
+    .chart-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+    .chart-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .chart-source-line {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-dim);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* 8条原则网格卡片 */
+    .principles-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin: 24px 0;
+    }
+    .principle-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .principle-card:hover {
+      border-color: var(--c-teal);
+      background: var(--bg-elevated);
+    }
+    .principle-num {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      background: var(--accent-dim);
+      width: fit-content;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    .principle-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 8px;
+    }
+    .principle-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      flex: 1;
+    }
+
+    /* 交互沙盘 1: 逆向教学设计与能力证明沙盘 (education-loop) */
+    .interactive-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 32px 0;
+      box-shadow: var(--shadow-md);
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--c-teal-dim);
+      color: var(--c-teal);
+      font-weight: 600;
+    }
+    .tab-btn-group {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .tab-btn:hover {
+      color: var(--text-main);
+      border-color: var(--accent);
+    }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #FFFFFF;
+      border-color: var(--accent);
+    }
+
+    /* 逆向流程五阶卡片 */
+    .edu-steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .edu-step-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+    }
+    .edu-step-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .edu-step-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .edu-step-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .edu-step-body {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.55;
+      flex: 1;
+    }
+
+    /* 交互沙盘 2: 课程 AI 政策四象限与决策矩阵 (policy-map) */
+    .policy-selector-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .policy-opt-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: left;
+    }
+    .policy-opt-card:hover {
+      border-color: var(--accent);
+    }
+    .policy-opt-card.active {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .policy-opt-tag {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 4px;
+      font-family: var(--font-mono);
+    }
+    .policy-opt-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .policy-detail-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 14px;
+    }
+    .policy-detail-row {
+      margin-bottom: 12px;
+    }
+    .policy-detail-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .policy-detail-val {
+      font-size: 14px;
+      color: var(--text-main);
+      line-height: 1.6;
+    }
+
+    /* 交互沙盘 3: MIT AI 教育改革带走包 (takeaway-pack) */
+    .takeaway-toolkit {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 36px 0;
+      box-shadow: var(--shadow-md);
+    }
+    .toolkit-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .toolkit-filters {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+    .filter-btn:hover {
+      color: var(--text-main);
+      border-color: var(--accent);
+    }
+    .filter-btn.active {
+      background: var(--accent);
+      color: #FFFFFF;
+      border-color: var(--accent);
+    }
+    .toolkit-search-box {
+      flex: 1;
+      max-width: 280px;
+      position: relative;
+    }
+    .toolkit-search-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+    }
+    .toolkit-search-input:focus {
+      border-color: var(--accent);
+    }
+    .copy-action-btn {
+      background: var(--c-teal);
+      border: 1px solid var(--c-teal);
+      color: #FFFFFF;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: opacity 0.2s ease;
+    }
+    .copy-action-btn:hover {
+      opacity: 0.9;
+    }
+
+    /* 26项建议速查卡片列表 */
+    .recs-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 600px;
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+    .recs-container::-webkit-scrollbar {
+      width: 4px;
+    }
+    .recs-container::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 2px;
+    }
+    .rec-item-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 18px;
+      transition: all 0.2s ease;
+    }
+    .rec-item-card:hover {
+      border-color: var(--border-strong);
+      background: var(--bg-elevated);
+    }
+    .rec-header-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .rec-id-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      background: var(--accent-dim);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .rec-cat-badge {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--c-teal);
+      border: 1px solid var(--c-teal);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .rec-title-zh {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .rec-title-en {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-left: 6px;
+      font-family: var(--font-sans);
+    }
+    .rec-body-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .rec-actor-tag {
+      display: inline-block;
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+      background: var(--bg-card);
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    /* 5步逆向设计检查清单 */
+    .checklist-container {
+      margin-top: 20px;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+    .checklist-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 12px;
+    }
+    .checklist-items {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .check-item-label {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-main);
+      cursor: pointer;
+      user-select: none;
+    }
+    .check-item-label input[type="checkbox"] {
+      margin-top: 3px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .checklist-progress-bar-wrap {
+      margin-top: 12px;
+      height: 6px;
+      background: var(--bg);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .checklist-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--c-teal);
+      transition: width 0.3s ease;
+    }
+
+    /* 响应式媒体查询 */
+    @media (max-width: 1080px) {
+      .layout-container {
+        flex-direction: column;
+        padding: 16px 12px;
+      }
+      .sidebar-nav {
+        display: none;
+        width: 100%;
+        height: auto;
+        position: static;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 16px;
+        margin-bottom: 20px;
+      }
+      .sidebar-nav.mobile-open {
+        display: block;
+      }
+      .menu-toggle-btn {
+        display: block;
+      }
+      .survey-stat-grid {
+        grid-template-columns: 1fr;
+      }
+      .policy-selector-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media print {
+      .top-header, #reading-progress-bar, .sidebar-nav, .theme-toggle-btn, .menu-toggle-btn, .copy-action-btn, .toolkit-controls {
+        display: none !important;
+      }
+      .layout-container {
+        padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+      }
+      .main-content {
+        max-width: 100% !important;
+        width: 100% !important;
+      }
+      body {
+        background: #FFFFFF !important;
+        color: #000000 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 顶部阅读进度条 -->
+  <div id="reading-progress-bar"></div>
+
+  <!-- 顶部导航条 -->
+  <header class="top-header">
+    <div class="header-left">
+      <button class="menu-toggle-btn" id="btn-toggle-menu" aria-label="切换目录">☰ 目录</button>
+      <div class="header-logo">
+        <span>MIT AI &amp; Education</span>
+        <span class="badge-tag">特设委员会报告</span>
+      </div>
+      <div class="header-meta-text">2026 年教育重构行动指南</div>
+    </div>
+    <div class="header-actions">
+      <button class="theme-toggle-btn" id="btn-toggle-theme" aria-label="切换深浅主题">
+        <span id="theme-icon">☀️</span>
+        <span id="theme-text">深色模式</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 主布局网格 -->
+  <div class="layout-container">
+    
+    <!-- 左侧目录导航 (280px) -->
+    <aside class="sidebar-nav" id="sidebar-nav">
+      <div class="toc-title">
+        <span>目录导航 (CONTENTS)</span>
+      </div>
+      <ul class="toc-list">
+        <li class="toc-item"><a href="#sec-overview" class="active">0. 导言与核心主旨</a></li>
+        <li class="toc-item"><a href="#sec-survey">1. 现状调查：高频使用与深层不安</a></li>
+        <li class="toc-item sub"><a href="#sec-survey-chart">1.1 调查数据多维图表看板</a></li>
+        <li class="toc-item"><a href="#sec-principles">2. 八条原则：先保护学习与人</a></li>
+        <li class="toc-item"><a href="#sec-backward-design">3. 课程重塑：从学习目标逆向倒推</a></li>
+        <li class="toc-item sub"><a href="#sec-edu-loop">3.1 逆向教学设计交互沙盘</a></li>
+        <li class="toc-item sub"><a href="#sec-four-policies">3.2 附录 B 四种课程政策模板</a></li>
+        <li class="toc-item sub"><a href="#sec-policy-matrix">3.3 课程政策四象限决策矩阵</a></li>
+        <li class="toc-item sub"><a href="#sec-transparency-literacy">3.4 双向透明与三维 AI 素养</a></li>
+        <li class="toc-item"><a href="#sec-assessment">4. 评估重构：从一份答案到多元证据</a></li>
+        <li class="toc-item sub"><a href="#sec-social-integrity">4.1 社交学习与审慎对待防作弊</a></li>
+        <li class="toc-item"><a href="#sec-residential">5. 住宿制共同体：不可替代的基础设施</a></li>
+        <li class="toc-item sub"><a href="#sec-urop">5.1 UROP 警示：严防 Agent 替代学徒制</a></li>
+        <li class="toc-item"><a href="#sec-governance">6. 持续治理：全校协同支撑体系</a></li>
+        <li class="toc-item sub"><a href="#sec-infra-equity">6.1 公平入口与环境成本审计</a></li>
+        <li class="toc-item"><a href="#sec-takeaway-pack">7. MIT AI 教育改革带走包</a></li>
+        <li class="toc-item sub"><a href="#sec-26-recommendations">7.1 26 项行动建议完整速查矩阵</a></li>
+        <li class="toc-item sub"><a href="#sec-syllabus-generator">7.2 课程大纲声明生成器</a></li>
+        <li class="toc-item"><a href="#sec-system-loop">8. 总结：可自我迭代的教育闭环</a></li>
+      </ul>
+    </aside>
+
+    <!-- 右侧正文主体 -->
+    <main class="main-content">
+      
+      <!-- 文章头部与元数据 -->
+      <article class="article-header" id="sec-overview">
+        <div class="meta-breadcrumbs">
+          <span>AIKnowledge 知识库</span>
+          <span>&gt;</span>
+          <span>高等教育与 AI 治理</span>
+          <span>&gt;</span>
+          <span>MIT 教学与科研 AI 重构白皮书</span>
+        </div>
+        
+        <h1 class="main-h1">当 AI 能完成作业，大学该教什么、怎么考？MIT 的 26 项重构建议</h1>
+        
+        <div class="lead-paragraph">
+          MIT 用 8 条原则、4 种课程政策和 26 项行动，把学习目标、评估、住宿制共同体与持续治理连成一套可迭代的教育改造方法。
+        </div>
+
+        <!-- 四项核心要点卡片 -->
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-icon">📊</div>
+            <p><strong>现状调查</strong>：三组调查显示 AI 已高频进入学习，而过度依赖也成为学生的主要担忧。</p>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon">🎯</div>
+            <p><strong>逆向设计</strong>：报告要求先定义学习目标和评估证据，再决定 AI 在作业中的位置。</p>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon">⚖️</div>
+            <p><strong>政策模板</strong>：四种课程政策是并列选择，每一种都要说明与学习目标的关系。</p>
+          </div>
+          <div class="summary-card">
+            <div class="summary-icon">🏛️</div>
+            <p><strong>协同治理</strong>：26 项建议按教育过程 10 项、人与共同体 6 项、持续治理 10 项展开，必须协同推进。</p>
+          </div>
+        </div>
+
+        <!-- 题图矢量插画：MIT 10 号主楼与大穹顶 (替换原 /media/mit-ai-education-report-2026/mit-campus.jpg) -->
+        <div class="hero-banner-container">
+          <svg class="hero-banner-svg" viewBox="0 0 1000 360" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="var(--bg-elevated)"/>
+                <stop offset="100%" stop-color="var(--bg-card)"/>
+              </linearGradient>
+              <linearGradient id="domeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="var(--c-teal)" stop-opacity="0.8"/>
+                <stop offset="50%" stop-color="var(--c-teal)" stop-opacity="0.95"/>
+                <stop offset="100%" stop-color="var(--c-teal)" stop-opacity="0.7"/>
+              </linearGradient>
+            </defs>
+            <!-- 背景底色 -->
+            <rect x="0" y="0" width="1000" height="360" fill="url(#skyGrad)"/>
+            
+            <!-- 远景微弱坐标网格线 -->
+            <path d="M 0 60 L 1000 60 M 0 120 L 1000 120 M 0 180 L 1000 180 M 0 240 L 1000 240" stroke="var(--border)" stroke-width="0.8" stroke-dasharray="4,4"/>
+            
+            <!-- MIT 大穹顶 (Great Dome) 建筑剪影与柱廊 -->
+            <g transform="translate(200, 40)">
+              <!-- 穹顶外廊圆顶 -->
+              <path d="M 220 120 A 80 80 0 0 1 380 120 Z" fill="url(#domeGrad)"/>
+              <!-- 穹顶顶部小尖塔 -->
+              <rect x="296" y="24" width="8" height="16" fill="var(--c-gold)"/>
+              <circle cx="300" cy="20" r="5" fill="var(--c-gold)"/>
+              <!-- 穹顶鼓座立柱层 -->
+              <rect x="210" y="120" width="180" height="24" rx="2" fill="var(--bg)" stroke="var(--border-strong)" stroke-width="1.5"/>
+              <line x1="230" y1="120" x2="230" y2="144" stroke="var(--border-strong)" stroke-width="2"/>
+              <line x1="255" y1="120" x2="255" y2="144" stroke="var(--border-strong)" stroke-width="2"/>
+              <line x1="280" y1="120" x2="280" y2="144" stroke="var(--border-strong)" stroke-width="2"/>
+              <line x1="300" y1="120" x2="300" y2="144" stroke="var(--border-strong)" stroke-width="2"/>
+              <line x1="320" y1="120" x2="320" y2="144" stroke="var(--border-strong)" stroke-width="2"/>
+              <line x1="345" y1="120" x2="345" y2="144" stroke="var(--border-strong)" stroke-width="2"/>
+              <line x1="370" y1="120" x2="370" y2="144" stroke="var(--border-strong)" stroke-width="2"/>
+
+              <!-- 主楼三角楣饰 (Pediment) -->
+              <polygon points="120,170 300,144 480,170" fill="var(--bg-card)" stroke="var(--border-strong)" stroke-width="1.5"/>
+              <!-- 门楣浮雕装饰文字 -->
+              <text x="300" y="165" font-family="var(--font-serif)" font-size="11" font-weight="700" fill="var(--c-gold)" text-anchor="middle" letter-spacing="3">MASSACHVSETTS INSTITVTE OF TECHNOLOGY</text>
+
+              <!-- 经典柱廊檐口 (Entablature) -->
+              <rect x="110" y="170" width="380" height="12" fill="var(--bg)" stroke="var(--border-strong)" stroke-width="1.2"/>
+
+              <!-- 巨柱门廊 (10 根爱奥尼柱) -->
+              <g stroke="var(--border-strong)" stroke-width="3">
+                <line x1="135" y1="182" x2="135" y2="280"/>
+                <line x1="170" y1="182" x2="170" y2="280"/>
+                <line x1="205" y1="182" x2="205" y2="280"/>
+                <line x1="240" y1="182" x2="240" y2="280"/>
+                <line x1="280" y1="182" x2="280" y2="280"/>
+                <line x1="320" y1="182" x2="320" y2="280"/>
+                <line x1="360" y1="182" x2="360" y2="280"/>
+                <line x1="395" y1="182" x2="395" y2="280"/>
+                <line x1="430" y1="182" x2="430" y2="280"/>
+                <line x1="465" y1="182" x2="465" y2="280"/>
+              </g>
+
+              <!-- 台基与石阶 -->
+              <rect x="90" y="280" width="420" height="16" fill="var(--bg-elevated)" stroke="var(--border-strong)" stroke-width="1.5"/>
+            </g>
+
+            <!-- 侧翼现代几何象征线条 -->
+            <path d="M 50 310 L 950 310" stroke="var(--accent)" stroke-width="2"/>
+            <text x="50" y="338" font-family="var(--font-mono)" font-size="12" fill="var(--accent)" font-weight="700">MENS ET MANUS · 手脑并用</text>
+            <text x="950" y="338" font-family="var(--font-sans)" font-size="12" fill="var(--text-dim)" text-anchor="end">MIT AD HOC COMMITTEE ON AI IN EDUCATION · AUGUST 2026</text>
+          </svg>
+          <div class="figure-caption">
+            <span>图 1：MIT 标志性建筑 Building 10 主楼与 Great Dome 穹顶象征之经典住宿式教育殿堂（内联矢量渲染）</span>
+            <span>来源：MIT Ad Hoc Committee on AI Report 2026</span>
+          </div>
+        </div>
+
+        <!-- 核心引言引用框 -->
+        <blockquote class="quote-box">
+          <p class="quote-text">
+            “MIT 关于‘教学、学习与研究训练中的 AI 使用’报告，由一个临时委员会经过 5 个月的会议、调研与校内沟通完成。它不只讨论怎样限制 AI，而是提出 8 条指导原则和 3 大类、26 项建议，试图回答一个更根本的问题：当作业的答案可以随手生成，大学如何仍能让学生真正学会、证明自己学会，并在人与人的关系中成长？”
+          </p>
+          <div class="quote-author">— MIT Ad Hoc Committee on AI Use in Teaching, Learning, and Research Training</div>
+        </blockquote>
+      </article>
+
+      <!-- 章节一：先看现状：使用已经普遍，不安也同时存在 -->
+      <section id="sec-survey">
+        <h2 class="section-h2">先看现状：使用已经普遍，不安也同时存在</h2>
+        
+        <p>
+          报告汇总了三组问卷。它们的调查对象、时间和题目不同，不能直接拼成一个“MIT 全校使用率”，但能互相印证一个现象：<strong>AI 已经是校园学习和工作流程的常见部分</strong>。
+        </p>
+
+        <!-- 三组问卷核心指标卡片 -->
+        <div class="survey-stat-grid">
+          <div class="survey-stat-box">
+            <div class="survey-stat-num">44%</div>
+            <div class="survey-stat-label">特设委员会专项调查</div>
+            <div class="survey-stat-desc">收到 1,632 份回复，回复率 12%。全校 44% 经常/非常经常使用 ChatGPT；学生为 46%，教师和教学人员为 35%。</div>
+          </div>
+          <div class="survey-stat-box">
+            <div class="survey-stat-num">40%</div>
+            <div class="survey-stat-label">Quality of Life Survey</div>
+            <div class="survey-stat-desc">校本部约 8,200 人参与。总体约 40% 经常或非常经常使用生成式 AI；本科生受访者中该比例达 46%。</div>
+          </div>
+          <div class="survey-stat-box">
+            <div class="survey-stat-num">90%</div>
+            <div class="survey-stat-label">The Tech 学生报纸调查</div>
+            <div class="survey-stat-desc">1,002 份回复中，46% 本科生每天使用 LLM，30% 每周数次；90% 对过度依赖感到担忧（67% 非常担心）。</div>
+          </div>
+        </div>
+
+        <!-- 机构级数据可视化图表看板 (替换原 /media/mit-ai-education-report-2026/Frequency-of-AI-tool-use-1024x443.png) -->
+        <div class="chart-container-box" id="sec-survey-chart">
+          <div class="chart-header">
+            <div class="chart-title">MIT Quality of Life Survey 及系列调查中生成式 AI 使用频率与心理态度分布</div>
+            <div class="chart-subtitle">横向对比各群体高频使用率、本科生日均使用节奏及对“认知外包”的担忧分布（单位：%）</div>
+          </div>
+          
+          <svg viewBox="0 0 900 360" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
+            <!-- 背景线 -->
+            <line x1="80" y1="280" x2="860" y2="280" stroke="var(--border)" stroke-width="1.5"/>
+            <line x1="80" y1="210" x2="860" y2="210" stroke="var(--border)" stroke-width="0.8" stroke-dasharray="3,3"/>
+            <line x1="80" y1="140" x2="860" y2="140" stroke="var(--border)" stroke-width="0.8" stroke-dasharray="3,3"/>
+            <line x1="80" y1="70" x2="860" y2="70" stroke="var(--border)" stroke-width="0.8" stroke-dasharray="3,3"/>
+
+            <!-- Y 轴刻度文本 -->
+            <text x="70" y="284" font-family="var(--font-mono)" font-size="11" fill="var(--text-dim)" text-anchor="end">0%</text>
+            <text x="70" y="214" font-family="var(--font-mono)" font-size="11" fill="var(--text-dim)" text-anchor="end">25%</text>
+            <text x="70" y="144" font-family="var(--font-mono)" font-size="11" fill="var(--text-dim)" text-anchor="end">50%</text>
+            <text x="70" y="74" font-family="var(--font-mono)" font-size="11" fill="var(--text-dim)" text-anchor="end">75%</text>
+
+            <!-- 组 1: Quality of Life Survey 各群体高频使用率 (柱高按 280 - val * 2.8) -->
+            <!-- 本科生 46% (高 128.8, y=151.2) -->
+            <rect x="120" y="151" width="55" height="129" rx="4" fill="var(--accent)"/>
+            <text x="147" y="142" font-family="var(--font-mono)" font-size="12" font-weight="700" fill="var(--accent)" text-anchor="middle">46%</text>
+            <text x="147" y="302" font-size="12" fill="var(--text-main)" text-anchor="middle">本科生</text>
+
+            <!-- 全校总体 40% (高 112, y=168) -->
+            <rect x="195" y="168" width="55" height="112" rx="4" fill="var(--c-teal)"/>
+            <text x="222" y="159" font-family="var(--font-mono)" font-size="12" font-weight="700" fill="var(--c-teal)" text-anchor="middle">40%</text>
+            <text x="222" y="302" font-size="12" fill="var(--text-main)" text-anchor="middle">全校总体</text>
+
+            <!-- 教师教学人员 35% (高 98, y=182) -->
+            <rect x="270" y="182" width="55" height="98" rx="4" fill="var(--c-gold)"/>
+            <text x="297" y="173" font-family="var(--font-mono)" font-size="12" font-weight="700" fill="var(--c-gold)" text-anchor="middle">35%</text>
+            <text x="297" y="302" font-size="12" fill="var(--text-main)" text-anchor="middle">教师/教学</text>
+
+            <!-- 组 2: The Tech 调查频次结构 (本科生) -->
+            <!-- 每天使用 46% (y=151) -->
+            <rect x="400" y="151" width="55" height="129" rx="4" fill="var(--accent)"/>
+            <text x="427" y="142" font-family="var(--font-mono)" font-size="12" font-weight="700" fill="var(--accent)" text-anchor="middle">46%</text>
+            <text x="427" y="302" font-size="12" fill="var(--text-main)" text-anchor="middle">每天使用</text>
+
+            <!-- 每周数次 30% (高 84, y=196) -->
+            <rect x="475" y="196" width="55" height="84" rx="4" fill="var(--c-teal)"/>
+            <text x="502" y="187" font-family="var(--font-mono)" font-size="12" font-weight="700" fill="var(--c-teal)" text-anchor="middle">30%</text>
+            <text x="502" y="302" font-size="12" fill="var(--text-main)" text-anchor="middle">每周数次</text>
+
+            <!-- 偶尔或极少 24% (高 67, y=213) -->
+            <rect x="550" y="213" width="55" height="67" rx="4" fill="var(--border-strong)"/>
+            <text x="577" y="204" font-family="var(--font-mono)" font-size="12" font-weight="700" fill="var(--text-dim)" text-anchor="middle">24%</text>
+            <text x="577" y="302" font-size="12" fill="var(--text-main)" text-anchor="middle">偶尔/极少</text>
+
+            <!-- 组 3: 对过度依赖与认知外包的担忧比例 -->
+            <!-- 非常担心 67% (高 187.6, y=92.4) -->
+            <rect x="680" y="92" width="60" height="188" rx="4" fill="var(--c-rose)"/>
+            <text x="710" y="83" font-family="var(--font-mono)" font-size="12" font-weight="700" fill="var(--c-rose)" text-anchor="middle">67%</text>
+            <text x="710" y="302" font-size="12" fill="var(--text-main)" text-anchor="middle">非常担心</text>
+
+            <!-- 有些担心 23% (高 64.4, y=215.6) -->
+            <rect x="760" y="215" width="60" height="65" rx="4" fill="var(--c-gold)"/>
+            <text x="790" y="206" font-family="var(--font-mono)" font-size="12" font-weight="700" fill="var(--c-gold)" text-anchor="middle">23%</text>
+            <text x="790" y="302" font-size="12" fill="var(--text-main)" text-anchor="middle">有些担心</text>
+
+            <!-- 图例与分组标注 -->
+            <text x="222" y="332" font-size="12" font-weight="700" fill="var(--text-dim)" text-anchor="middle">【QoL调查：群体高频使用率】</text>
+            <text x="502" y="332" font-size="12" font-weight="700" fill="var(--text-dim)" text-anchor="middle">【The Tech：本科生使用频次】</text>
+            <text x="750" y="332" font-size="12" font-weight="700" fill="var(--text-dim)" text-anchor="middle">【学生对过度依赖的担忧程度】</text>
+          </svg>
+
+          <div class="chart-source-line">
+            <span>口径说明：根据 MIT 特设委员会问卷 (N=1,632)、QoL 调查 (N≈8,200) 与 The Tech 调查 (N=1,002) 复合数据绘制</span>
+            <span>注：图表标题表达明确结论，数据保留自选样本统计边界</span>
+          </div>
+        </div>
+
+        <p>
+          这些数字背后有一对同时存在的感受。受访者普遍认为 AI 技能很重要，也认为 AI 提高了效率；另一方面，他们也感到自己在变得更依赖它。报告用了 <strong>cognitive offloading（认知外包）</strong>、<strong>overreliance（过度依赖）</strong> 和 <strong>cognitive surrender（认知屈从）</strong> 这些表达：<strong>学生在第一个卡点就把思考交给 AI，可能损害批判思维、记忆、信心和对知识的掌握</strong>。这是报告引用的早期信号和师生担忧，还不是已经建立的长期因果结论。
+        </p>
+
+        <p>
+          调查也有明确限制。委员会问卷回复率只有 12%，The Tech 调查同样来自自愿回复者；对 AI 更有态度、使用更多或更少的人，都可能更愿意填写问卷。这些调查能帮助 MIT 识别问题，却不能直接代表所有 MIT 成员，更不能代表所有大学。
+        </p>
+      </section>
+
+      <!-- 章节二：再定原则：先保护学习和人，再决定技术放在哪里 -->
+      <section id="sec-principles">
+        <h2 class="section-h2">再定原则：先保护学习和人，再决定技术放在哪里</h2>
+        
+        <p>
+          委员会用 8 条原则给后续建议划定方向。它们在两类张力之间建立约束：技术变化很快，学校既不能自信地宣布已有定论，也不能把不确定当成不行动的理由；AI 可以增强人的能力，学校也必须防止它代替学生本应经历的思考、判断和人际关系。
+        </p>
+
+        <!-- 8条原则网格卡片 -->
+        <div class="principles-grid">
+          <div class="principle-card">
+            <div class="principle-num">PRINCIPLE 01</div>
+            <div class="principle-title">保持谦逊 (Be humble)</div>
+            <div class="principle-desc">承认技术和其影响仍在快速演化，今天的提案一定还需要校正与动态演进。</div>
+          </div>
+          <div class="principle-card">
+            <div class="principle-num">PRINCIPLE 02</div>
+            <div class="principle-title">大胆行动 (Be bold)</div>
+            <div class="principle-desc">不用零散补丁应对结构性变化，也不放弃个性化辅导和研究创新的重大历史机会。</div>
+          </div>
+          <div class="principle-card">
+            <div class="principle-num">PRINCIPLE 03</div>
+            <div class="principle-title">把人性放在中心 (Put humanity front and center)</div>
+            <div class="principle-desc">效率不能成为唯一标准，师生连接、学徒制和人的精神成长同样是不可割裂的教育产出。</div>
+          </div>
+          <div class="principle-card">
+            <div class="principle-num">PRINCIPLE 04</div>
+            <div class="principle-title">直面学习本身 (Lean into learning)</div>
+            <div class="principle-desc">学习需要“有生产力的挣扎”；最重要的产品不是分数或文凭，而是学生的想象力、洞察力和判断力。</div>
+          </div>
+          <div class="principle-card">
+            <div class="principle-num">PRINCIPLE 05</div>
+            <div class="principle-title">有意图地教 (Teach with intentionality)</div>
+            <div class="principle-desc">先严格定义学习目标与能力证据，再审慎决定是否、何时和怎样使用 AI。</div>
+          </div>
+          <div class="principle-card">
+            <div class="principle-num">PRINCIPLE 06</div>
+            <div class="principle-title">不追求一刀切 (No one size fits all)</div>
+            <div class="principle-desc">诗歌研讨课、数学证明课和建筑设计实验室，各自需要的 AI 边界必然截然不同。</div>
+          </div>
+          <div class="principle-card">
+            <div class="principle-num">PRINCIPLE 07</div>
+            <div class="principle-title">增强而非自动化 (Augmentation not automation)</div>
+            <div class="principle-desc">让 AI 帮人承担新任务、获得新专长，同时坚决保留人的主体能动性与终身责任。</div>
+          </div>
+          <div class="principle-card">
+            <div class="principle-num">PRINCIPLE 08</div>
+            <div class="principle-title">放眼课堂与校园之外 (Think beyond the classroom)</div>
+            <div class="principle-desc">考虑学生步入工作、公共公民生活和 AI 创造环境后需要的职业伦理与社会责任。</div>
+          </div>
+        </div>
+
+        <p>
+          这八条原则被进一步整理成三类核心工作：
+        </p>
+        <ol>
+          <li><strong>让教育过程适应 AI 已经存在的世界</strong>：重新审视培养目标，重构作业与考核，确保真实掌握。</li>
+          <li><strong>把人、共同体和住宿制教育置于中心</strong>：抵御社交疏离，守护人际关系、学术学徒制与心理健康。</li>
+          <li><strong>建立能持续反思、迭代和改进的流程、团队与工具</strong>：提供校级平台、算力公平、试点基金与伦理审计。</li>
+        </ol>
+      </section>
+
+      <!-- 章节三：然后设计课程：从学习目标倒推作业和 AI 规则 -->
+      <section id="sec-backward-design">
+        <h2 class="section-h2">然后设计课程：从学习目标倒推作业和 AI 规则</h2>
+        
+        <p>
+          报告引入了 <strong>Backward Design（逆向设计）</strong>。教师不从“这门课要不要禁止 AI”开始，而是先问：
+        </p>
+        <ul>
+          <li><strong>第一步（学习目标）</strong>：学生最后应该知道什么？能做什么？应该学会重视什么？</li>
+          <li><strong>第二步（评估证据）</strong>：设计能证明这些目标已切实达成的有效证据。</li>
+          <li><strong>第三步（作业与学习活动）</strong>：设计具体的作业和学习活动，以及 AI 在其中被允许、限制或要求的位置。</li>
+        </ul>
+
+        <!-- 交互组件 1: Backward Design 逆向教学设计交互沙盘 (component:education-loop) -->
+        <div class="interactive-panel" id="sec-edu-loop">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span>🔄 逆向教学设计与能力证明交互沙盘 (Backward Design Loop)</span>
+            </div>
+            <span class="panel-badge">交互式学科模型</span>
+          </div>
+
+          <p style="font-size: 13.5px; color: var(--text-muted); margin-bottom: 16px;">
+            点击下方切换不同学科，动态推演如何从“培养目标”倒推“评估证据”，进而界定“AI 的边界定位”：
+          </p>
+
+          <div class="tab-btn-group">
+            <button class="tab-btn active" id="btn-tab-cs">计算机系统与算法</button>
+            <button class="tab-btn" id="btn-tab-math">纯数学与理论证明</button>
+            <button class="tab-btn" id="btn-tab-writing">创意写作与人文研讨</button>
+            <button class="tab-btn" id="btn-tab-eng">工程设计与实体实验</button>
+          </div>
+
+          <div class="edu-steps-grid">
+            <div class="edu-step-card">
+              <div class="edu-step-header">
+                <span class="edu-step-num">STEP 01</span>
+                <span class="edu-step-name">预期学习目标</span>
+              </div>
+              <div class="edu-step-body" id="out-step-goal">
+                掌握并发系统底层锁机制与数据结构设计，能独立分析复杂边界与竞态条件。
+              </div>
+            </div>
+
+            <div class="edu-step-card">
+              <div class="edu-step-header">
+                <span class="edu-step-num">STEP 02</span>
+                <span class="edu-step-name">传统考核脆弱点</span>
+              </div>
+              <div class="edu-step-body" id="out-step-vulnerability">
+                传统课后代码提交：AI Copilot 随手生成正确算法片段，掩盖学生未真正掌握并发逻辑的事实。
+              </div>
+            </div>
+
+            <div class="edu-step-card">
+              <div class="edu-step-header">
+                <span class="edu-step-num">STEP 03</span>
+                <span class="edu-step-name">真实掌握证据</span>
+              </div>
+              <div class="edu-step-body" id="out-step-evidence">
+                口试答辩解释死锁恢复策略；现场黑盒故障调试；代码审查（Code Review）中准确找出 Bug。
+              </div>
+            </div>
+
+            <div class="edu-step-card">
+              <div class="edu-step-header">
+                <span class="edu-step-num">STEP 04</span>
+                <span class="edu-step-name">重构后作业形态</span>
+              </div>
+              <div class="edu-step-body" id="out-step-task">
+                单学期构建接近工业级分布式存储系统，重点考核架构权衡、压力测试报告与现场当面答辩。
+              </div>
+            </div>
+
+            <div class="edu-step-card">
+              <div class="edu-step-header">
+                <span class="edu-step-num">STEP 05</span>
+                <span class="edu-step-name">AI 政策定位</span>
+              </div>
+              <div class="edu-step-body" id="out-step-aipolicy">
+                <strong>要求使用或有限支持</strong>：允许 AI 辅助编写样板代码与单元测试，但核心架构必须口头答辩说明。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p>
+          这一顺序最后要落实成清楚、可见的课程规则。委员会建议每门课都在课程大纲和课程网站醒目公布 AI 使用政策，让学生明确知道什么时候、在哪里、为什么允许、限制或要求使用 AI。
+        </p>
+
+        <h3 class="section-h3" id="sec-four-policies">附录 B 四种课程政策模板深度解析</h3>
+        
+        <p>
+          附录 B 给出四种可供课程选择和改写的政策模板。它们是服务于不同学习目标的并列选择：
+        </p>
+        <ol>
+          <li><strong>Unrestricted GenAI Use（不限制使用）</strong>：学生自主决定如何使用，但仍要对学习、原创性和最终提交负责。适合主要通过课内无 AI 评估验证能力，或评估、整合 AI 输出本身就是任务的课程。</li>
+          <li><strong>Limited GenAI Use: Support Tool Only（有限使用：只作支持工具）</strong>：可用于学习支持、头脑风暴、编辑、调试或解释，不能产生完整或大部分作业解答。学生需要区分自己的工作和 AI 辅助内容，并引用 AI 产生的材料或想法。</li>
+          <li><strong>Required GenAI Use（要求使用）</strong>：学生按规定流程使用指定工具，并提交所要求的 AI 互动记录。适合 AI 辅助编程、提示设计、模型输出批评、人机协作或 AI 系统评估本身就是学习目标的作业。</li>
+          <li><strong>GenAI Use Strictly Prohibited（严格禁止使用）</strong>：学生不能在作业中使用生成式 AI。适合需要建立基础知识和独立解题能力，或作业的核心价值就是未经辅助的表达和思考的课程。</li>
+        </ol>
+
+        <!-- 交互组件 2: 课程 AI 政策四象限与决策矩阵 (component:policy-map) -->
+        <div class="interactive-panel" id="sec-policy-matrix">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span>🗺️ 附录 B 课程 AI 政策四象限与决策矩阵 (Course Policy Matrix)</span>
+            </div>
+            <span class="panel-badge">附录 B 官方规范</span>
+          </div>
+
+          <p style="font-size: 13.5px; color: var(--text-muted); margin-bottom: 16px;">
+            点击下方政策卡片，查看对应的适用场景、Rationale 阐述模板与学术责任要求：
+          </p>
+
+          <div class="policy-selector-grid">
+            <div class="policy-opt-card active" id="card-pol-unrestricted">
+              <div class="policy-opt-tag">POLICY OPTION 1</div>
+              <div class="policy-opt-title">不限制使用</div>
+              <div style="font-size: 11px; color: var(--text-dim);">Unrestricted GenAI Use</div>
+            </div>
+            <div class="policy-opt-card" id="card-pol-limited">
+              <div class="policy-opt-tag">POLICY OPTION 2</div>
+              <div class="policy-opt-title">仅作支持工具</div>
+              <div style="font-size: 11px; color: var(--text-dim);">Limited: Support Only</div>
+            </div>
+            <div class="policy-opt-card" id="card-pol-required">
+              <div class="policy-opt-tag">POLICY OPTION 3</div>
+              <div class="policy-opt-title">强制要求使用</div>
+              <div style="font-size: 11px; color: var(--text-dim);">Required GenAI Use</div>
+            </div>
+            <div class="policy-opt-card" id="card-pol-prohibited">
+              <div class="policy-opt-tag">POLICY OPTION 4</div>
+              <div class="policy-opt-title">严格禁止使用</div>
+              <div style="font-size: 11px; color: var(--text-dim);">Strictly Prohibited</div>
+            </div>
+          </div>
+
+          <div class="policy-detail-card" id="box-policy-detail">
+            <div class="policy-detail-row">
+              <div class="policy-detail-label">政策核心内涵 (Core Definition)</div>
+              <div class="policy-detail-val" id="out-pol-def">
+                学生在作业中可自由使用任何生成式 AI 工具。所有成果评估均通过现场闭卷考试、当面口试或物理实验操作完成，课外作业不作为独立能力评估的唯一依据。
+              </div>
+            </div>
+            <div class="policy-detail-row">
+              <div class="policy-detail-label">典型适用课程 (Typical Courses)</div>
+              <div class="policy-detail-val" id="out-pol-fit">
+                考核主要基于课内面对面评估的课程；或者评估、对齐、反思模型输出本身即为课程核心目标的进阶研讨课。
+              </div>
+            </div>
+            <div class="policy-detail-row">
+              <div class="policy-detail-label">教师必须向学生阐述的理由模板 (Rationale Template)</div>
+              <div class="policy-detail-val" id="out-pol-rationale">
+                “本课程鼓励使用 AI，因为在真实职业生涯中，高级系统工程师必须与自动化工具并肩工作。但请注意，期中与期末口试将全面考察你对架构权衡的独立辩护能力。”
+              </div>
+            </div>
+            <div class="policy-detail-row">
+              <div class="policy-detail-label">学生责任与学术诚信边界 (Student Responsibility)</div>
+              <div class="policy-detail-val" id="out-pol-resp">
+                学生对提交作业中的每一行代码与陈述负全责。AI 产生幻觉或逻辑错误不能作为免责理由。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p>
+          四种模板的共同点是<strong>规则必须说明理由</strong>。禁止 AI 时，教师要说明它会捷径化哪个基础学习过程；鼓励 AI 时，也要说明它如何扩展学生能做的工作。学生仍是所有提交内容的责任人。
+        </p>
+
+        <h3 class="section-h3" id="sec-transparency-literacy">双向透明、三维 AI 素养与负责任课程实验</h3>
+
+        <p>
+          透明还应该是双向的。报告鼓励教师披露自己在课程编排、作业创建和反馈中如何使用 AI；学生付出真实时间后，如果只收到机器生成的反馈，他们的负面感受并不难理解。对研究成果，报告建议所有学位论文声明 AI 如何被使用，<strong>AI 不应被列为共同作者</strong>，人类作者必须验证输出并对准确性负责。
+        </p>
+
+        <p>
+          课程规则之外，学校还要系统教授 AI 素养。The Tech 的调查中，超过三分之二的学生认为 AI 对职业生涯很重要，但只有 25% 认为 MIT 已充分帮助他们做好使用 AI 的准备。报告把三种相连但不同的能力拆开：
+        </p>
+        <ul>
+          <li><strong>有效使用（Effective Use）</strong>：会描述问题、验证输出、识别幻觉，并知道什么时候不该求助 AI。</li>
+          <li><strong>负责使用（Responsible Use）</strong>：分清增强人与替代人的界线，诚实披露 AI 的贡献与辅助轨迹。</li>
+          <li><strong>合乎伦理地使用（Ethical Use）</strong>：深入讨论训练数据来源、偏见、输出同质化、知识产权、环境成本，以及辅助与冒充作者之间的界线。</li>
+        </ul>
+        <p>
+          委员会建议从本科生和研究生迎新开始，把这些内容贯穿到各专业课程与研究训练中。
+        </p>
+
+        <p>
+          报告还收录了一个具体案例：一名教师介绍，为学习调解的学生提供个性化、课程专用的 AI coach，减少了当着他人练习公开表达的尴尬，增加了练习意愿，继而提高了技能。这是委员会听到的一个案例；报告没有进一步披露它的内部技术架构。
+        </p>
+
+        <p>
+          面对快速变化的技术，委员会还建议支持负责任的课程实验：院系可以更敏捷地探索课程调整，但必须认真评估结果，并保持整个培养体系的长期连贯性。报告提出，可以试办 <strong>AI-heavy</strong> 和严格的 <strong>AI-light</strong> 课程或路径；对于不愿使用 AI 的学生，只要学科条件允许，也应认真提供尽量少用 AI 的选择。
+        </p>
+      </section>
+
+      <!-- 章节四：作业改了，评估也要改：从一份答案转向多种证据 -->
+      <section id="sec-assessment">
+        <h2 class="section-h2">作业改了，评估也要改：从一份答案转向多种证据</h2>
+        
+        <p>
+          MIT 标志性的 Problem Sets（P-Sets）长期用于训练数理计算和工程推理。报告认为，许多用于强化学习和评估进展的问题与作业，已经可以由 AI 完成。所以，在无限制使用 AI 的情况下，单凭课后提交的正确答案，越来越难以证明学生个人的真实理解。
+        </p>
+
+        <p>
+          报告没有宣布一种新评估已普遍落地，而是提出多种可组合的选项：
+        </p>
+        <ul>
+          <li><strong>书面评估 + 口试（Oral Exams）</strong>：用口头问答检验学生能否解释解法、应用知识，而不只是提交完成品。</li>
+          <li><strong>课内、当面或实验室评估（In-person &amp; Lab）</strong>：为现场考试、实验操作、表演和演示提供足够的场地与时间。</li>
+          <li><strong>项目和亲身实作（Project-based Work）</strong>：增加情境化、开放式、依赖实际设计和团队协作的任务。AI 有时也可以扩大项目野心：报告提到，软件工程课可以让学生在一学期内构建更接近生产级的系统，再把时间放在现实环境中的设计权衡上。</li>
+          <li><strong>阶段节点与版本历史（Milestones &amp; History）</strong>：让学生分阶段展示项目进展，或提交版本记录，为思路如何演变提供过程证据。</li>
+        </ul>
+
+        <p>
+          评估重构不能简单退化成“把更多分数压到限时课内考试”。报告要求 MIT 重新考虑分数在整个体系里的作用，探索 competency-based、mastery-based assessment 和项目作品集，让能力证明不只剩一张成绩单。口试的即时反馈、项目书面反馈和持续作品记录，往往比一个分数更能告诉学生自己真正掌握了什么。
+        </p>
+
+        <h3 class="section-h3" id="sec-social-integrity">实体社交学习空间与审慎对待防作弊军备竞赛</h3>
+
+        <p>
+          当面互动也不能只发生在考场。委员会建议每门课都设置定期、结构化、服务于明确学习目标的社交学习，例如有阶段检查的团队项目、助教引导的协作解题、围绕统一量规的反馈讨论。相应地，学校还要提供有人支持的实验室和协作空间，包括纯线下空间或配备 AI-free、AI-limited 电脑的场地；否则增加实验、团队任务和当面评估只会停在课程设计文件里。
+        </p>
+
+        <p>
+          报告对“用更强的技术抓作弊”很警惕。AI 检测器不可靠，还可能把非英语母语者或神经多样性学生的写作误判为 AI 生成；MIT 的纪律委员会（COD）不把检测器输出单独当作学术诚信案件的足够证据。当前一代 lockdown browser 在报告看来容易出错、有监控感；在多数情况下，报告更倾向当面监考。它的思路是用更好的学习证据建立信任，尽量避免把课堂变成师生互相怀疑的地方。
+        </p>
+      </section>
+
+      <!-- 章节五：但大学不只是课程：住宿制共同体也是学习基础设施 -->
+      <section id="sec-residential">
+        <h2 class="section-h2">但大学不只是课程：住宿制共同体也是学习基础设施</h2>
+        
+        <p>
+          委员会听到了课后答疑、线上讨论以及宿舍、图书馆里的学习小组参与下降的反馈。报告明确把其中部分叙述标为 <strong>anecdotal（轶事性）</strong>：它提示风险，却不能证明 AI 就是唯一或直接原因。AI 进入校园时，学生焦虑、孤独和人际疏离早已是更广泛的背景问题。
+        </p>
+
+        <p>
+          对 MIT 而言，面对面互动不是可替换的装饰。和同学一起拆解证明、反复调试实验、当面争论，既支持知识建构，也训练沟通、求助、协作与建立信任的能力。
+        </p>
+
+        <p>
+          因此，学校不只要解释住宿制教育为何重要，还要主动重建共同规范、共同仪式和支持系统。报告提出的例子包括跨群体讨论人生与职业选择、为面对面连接预留的 <strong>Tech Free Times</strong>，以及扩大共同阅读和讨论；教师和工作人员也要能识别 AI 加剧的学业、社交与情绪困难，并把学生转介到合适的支持渠道。与此同时，MIT 需要承认从热情、怀疑到拒绝使用 AI 的不同立场，并支持减轻训练数据、社会、环境等负面影响的研究与政策工作。
+        </p>
+
+        <h3 class="section-h3" id="sec-urop">UROP 警示：严防以 AI Agent 取代本科科研学徒制</h3>
+
+        <p>
+          UROP（本科研究机会计划）是关键案例。报告称，它直接覆盖了 <strong>93% 的本科生和 58% 的教师</strong>。它不只让学生取得学分或薪酬，也让他们进入研究共同体：观察研究问题如何形成，判断力如何发展，错误如何被建设性地解释，功劳如何分配，分歧如何处理，知识又如何被集体生产。
+        </p>
+
+        <p>
+          <strong>如果教师因效率而用 AI agent 取代本科研究助理，可能会保住短期研究产出，却失去研究作为学徒训练的教育价值。</strong>因此报告建议保护并扩大 UROP 等经历，让更多学生能够参与，并考虑把类似体验延伸到实验室以外。
+        </p>
+      </section>
+
+      <!-- 章节六：最后建立治理：别把系统性改革留给单个教师 -->
+      <section id="sec-governance">
+        <h2 class="section-h2">最后建立治理：别把系统性改革留给单个教师</h2>
+        
+        <p>
+          重设一门课的目标、评估和活动已经是大量工作，在全校范围持续更新，更不能依赖一批教师的个人热情。报告因此提出一组相互衔接的组织设计：
+        </p>
+        <ul>
+          <li>设立长期运作的 <strong>AI 与教育委员会</strong>，追踪校内外影响、技术变化与新证据，负责战略、评估和政策协调。</li>
+          <li>在各学院或院系设置 <strong>AI Leads</strong>，让课程改造和政策适配贴近学科。</li>
+          <li>资助 <strong>AI Fellows 与 AI Implementation Team</strong>，由技术、AI 与学习科学专长支持教师、开发校级工具，并研究工具在现场怎样被用、造成什么效果。</li>
+          <li>建立 <strong>AI Pilot Fund</strong>，为 AI 点数、助教、UROP、夏季支持等成本提供资源，既支持 AI-enabled 实验，也支持有意为之的 AI-free 学习体验。</li>
+          <li>用培训、同行分享和校内实践社群（Communities of Practice），让教师之间传递有效做法；同时跟踪 AI 使用、校园参与、学生满意度和毕业后反馈。</li>
+        </ul>
+
+        <h3 class="section-h3" id="sec-infra-equity">技术公平入口、模型中立与环境财务审计</h3>
+
+        <p>
+          组织支持还包括公平的技术入口。报告指出，当时头部商业模型的高阶方案最高可达 200 美元/月，而研究者的 API 使用可能高得多。MIT 已运行 model-agnostic 的 Parley，为每位成员提供多模型访问和每月最高 30 美元的免费点数；报告同时承认，这对某些课程，特别是软件工程课，可能还不够。
+        </p>
+
+        <p>
+          “公平入口”也不只是给每个人一个聊天框。报告要求校级系统覆盖 agentic coding 和工作工具，并为需要训练或微调模型的课程提供足够的本地或云端算力；否则学生即使名义上都能访问 AI，实际能完成的任务仍会因经济条件和基础设施而分化。
+        </p>
+
+        <p>
+          公平访问和隐私不能分开。商业 AI 服务默认记录用户会话时，敏感课程数据或研究材料存在被纳入训练的可能；报告因此支持保持模型中立，并探索更多本地托管的开源模型访问。但校级平台又带来新问题：用户会向 AI 询问健康、关系、情绪和焦虑等私密内容，而教师又可能希望通过对话日志理解学习过程。谁可以看、保留多久、什么情况下可以干预，都需要公开、透明的日志与审计政策。
+        </p>
+
+        <p>
+          报告还要求 MIT 跟踪 AI 的财务与环境成本。训练和推理都消耗能源，数据中心还涉及用水、建设和硬件材料。企业数据不透明、成本分散在整个模型生命周期，意味着这些影响很难精确计算。委员会的建议是，公开不同模型的环境成本估算，审计学校自身的 AI 足迹，并投资更低能耗的方法。
+        </p>
+      </section>
+
+      <!-- 章节七：26 项建议怎样带走 与 MIT AI 教育改革带走包 -->
+      <section id="sec-takeaway-pack">
+        <h2 class="section-h2">26 项建议怎样带走：全景速查与落地工具箱</h2>
+        
+        <p>
+          报告特别提醒，这 26 项建议不是可以彼此割裂、逐项打勾的待办，而是一组需要协同推进的改变：<strong>教育过程 10 项，人与共同体 6 项，持续治理 10 项</strong>。正文已经解释其中的关键关系；文末的“MIT AI 教育改革带走包”提供完整 26 条速查表，以及附录 B 的四种课程 AI 政策选择卡，均可直接复制 Markdown 或导出文本。
+        </p>
+
+        <!-- 交互组件 3: MIT AI 教育改革带走包 (component:takeaway-pack) -->
+        <div class="takeaway-toolkit">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span>🎒 MIT AI 教育改革带走包 (Takeaway Pack &amp; Toolkit)</span>
+            </div>
+            <button class="copy-action-btn" id="btn-copy-markdown">
+              <span>📋</span>
+              <span id="stat-copy-label">复制 26 项完整 Markdown 清单</span>
+            </button>
+          </div>
+
+          <!-- 筛选与搜索工具栏 -->
+          <div class="toolkit-controls">
+            <div class="toolkit-filters">
+              <button class="filter-btn active" id="btn-filter-all">全部 (26项)</button>
+              <button class="filter-btn" id="btn-filter-edu">3.1 教育过程 (10项)</button>
+              <button class="filter-btn" id="btn-filter-comm">3.2 人与共同体 (6项)</button>
+              <button class="filter-btn" id="btn-filter-gov">3.3 持续治理 (10项)</button>
+            </div>
+            <div class="toolkit-search-box">
+              <input type="text" class="toolkit-search-input" id="inp-search-recs" placeholder="输入关键字搜索建议...">
+            </div>
+          </div>
+
+          <!-- 26 项建议卡片列表 -->
+          <div id="sec-26-recommendations">
+            <div class="recs-container" id="recs-list-container">
+              <!-- 由 JS 动态渲染或静态占位 -->
+            </div>
+          </div>
+
+          <!-- 课程大纲 Syllabus 政策声明生成器 -->
+          <div class="checklist-container" id="sec-syllabus-generator">
+            <div class="checklist-title">📄 附录 B 课程大纲（Syllabus）政策条款一键生成器</div>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+              选择课程政策，一键复制经过 MIT 特设委员会审核的中英双语标准 Syllabus 条款：
+            </p>
+            <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+              <button class="filter-btn active" id="btn-syl-1">Option 1: 不限制使用</button>
+              <button class="filter-btn" id="btn-syl-2">Option 2: 仅作支持工具</button>
+              <button class="filter-btn" id="btn-syl-3">Option 3: 强制要求使用</button>
+              <button class="filter-btn" id="btn-syl-4">Option 4: 严格禁止使用</button>
+            </div>
+            <div style="background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px; position: relative;">
+              <pre style="font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--text-main); white-space: pre-wrap;" id="out-syllabus-text">/* 加载中... */</pre>
+              <button class="copy-action-btn" id="btn-copy-syllabus" style="position: absolute; top: 10px; right: 10px; padding: 4px 10px; font-size: 11px;">复制条款</button>
+            </div>
+          </div>
+
+          <!-- 5 步逆向设计实施自查清单 -->
+          <div class="checklist-container">
+            <div class="checklist-title">
+              <span>✅ 教师课程重构 5 步实施自查清单 (Progress: </span>
+              <span id="stat-check-count" style="color: var(--c-teal);">0 / 5</span>
+              <span>)</span>
+            </div>
+            <div class="checklist-items">
+              <label class="check-item-label">
+                <input type="checkbox" id="chk-step-1">
+                <span><strong>第 1 步：剥离工具定义目标</strong> —— 明确学生在期末必须真正掌握的核心思维与技能，而非可由 AI 代劳的形式产物。</span>
+              </label>
+              <label class="check-item-label">
+                <input type="checkbox" id="chk-step-2">
+                <span><strong>第 2 步：构建多元评估证据</strong> —— 引入现场当面答辩、口试或版本历史，不再单一依赖课后完成的代码或文本。</span>
+              </label>
+              <label class="check-item-label">
+                <input type="checkbox" id="chk-step-3">
+                <span><strong>第 3 步：选定政策说明理由</strong> —— 从附录 B 四种模板选择一种，并在 Syllabus 中清晰阐述“为什么这样规定”。</span>
+              </label>
+              <label class="check-item-label">
+                <input type="checkbox" id="chk-step-4">
+                <span><strong>第 4 步：设计结构化社交互动</strong> —— 安排固定的面对面小组讨论或助教答疑，防止学生陷入社交孤立与认知屈从。</span>
+              </label>
+              <label class="check-item-label">
+                <input type="checkbox" id="chk-step-5">
+                <span><strong>第 5 步：践行双向透明披露</strong> —— 向学生坦诚披露自己在备课与作业反馈中的 AI 使用情况，建立双向信任。</span>
+              </label>
+            </div>
+            <div class="checklist-progress-bar-wrap">
+              <div class="checklist-progress-fill" id="stat-check-progress"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 章节八：这份报告最可复用的，是一个能够迭代的教育系统 -->
+      <section id="sec-system-loop">
+        <h2 class="section-h2">这份报告最可复用的，是一个能够迭代的教育系统</h2>
+        
+        <p>
+          MIT 没有宣称找到所有大学的标准答案。“谦逊”是报告的第一原则，持续修正也被写入组织设计。它最有价值的部分，是把原本容易分散的决策连成一个闭环：
+        </p>
+
+        <!-- 闭环流程图卡片 -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin: 24px 0;">
+          <svg viewBox="0 0 860 120" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
+            <!-- 节点 1: 教育目标 -->
+            <rect x="10" y="30" width="130" height="60" rx="6" fill="var(--bg-elevated)" stroke="var(--border-strong)" stroke-width="1.5"/>
+            <text x="75" y="56" font-size="13" font-weight="700" fill="var(--accent)" text-anchor="middle">教育目标</text>
+            <text x="75" y="74" font-size="11" fill="var(--text-muted)" text-anchor="middle">定义核心能力</text>
+
+            <!-- 箭头 1 -->
+            <path d="M 140 60 L 175 60" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)"/>
+
+            <!-- 节点 2: 评估证据 -->
+            <rect x="180" y="30" width="130" height="60" rx="6" fill="var(--bg-elevated)" stroke="var(--border-strong)" stroke-width="1.5"/>
+            <text x="245" y="56" font-size="13" font-weight="700" fill="var(--c-teal)" text-anchor="middle">评估证据</text>
+            <text x="245" y="74" font-size="11" fill="var(--text-muted)" text-anchor="middle">多元证明链</text>
+
+            <!-- 箭头 2 -->
+            <path d="M 310 60 L 345 60" stroke="var(--c-teal)" stroke-width="2"/>
+
+            <!-- 节点 3: 作业与政策 -->
+            <rect x="350" y="30" width="140" height="60" rx="6" fill="var(--bg-elevated)" stroke="var(--border-strong)" stroke-width="1.5"/>
+            <text x="420" y="56" font-size="13" font-weight="700" fill="var(--c-gold)" text-anchor="middle">作业与课程政策</text>
+            <text x="420" y="74" font-size="11" fill="var(--text-muted)" text-anchor="middle">四类附录B模板</text>
+
+            <!-- 箭头 3 -->
+            <path d="M 490 60 L 525 60" stroke="var(--c-gold)" stroke-width="2"/>
+
+            <!-- 节点 4: 人际与组织支持 -->
+            <rect x="530" y="30" width="140" height="60" rx="6" fill="var(--bg-elevated)" stroke="var(--border-strong)" stroke-width="1.5"/>
+            <text x="600" y="56" font-size="13" font-weight="700" fill="var(--c-rose)" text-anchor="middle">人际与组织支持</text>
+            <text x="600" y="74" font-size="11" fill="var(--text-muted)" text-anchor="middle">住宿社群与基金</text>
+
+            <!-- 箭头 4 -->
+            <path d="M 670 60 L 705 60" stroke="var(--c-rose)" stroke-width="2"/>
+
+            <!-- 节点 5: 动态修正 -->
+            <rect x="710" y="30" width="140" height="60" rx="6" fill="var(--bg-elevated)" stroke="var(--border-strong)" stroke-width="1.5"/>
+            <text x="780" y="56" font-size="13" font-weight="700" fill="var(--accent)" text-anchor="middle">指标与反思修正</text>
+            <text x="780" y="74" font-size="11" fill="var(--text-muted)" text-anchor="middle">闭环持续演进</text>
+          </svg>
+        </div>
+
+        <p>
+          对中文教育实践者而言，这个顺序比照搬任何一条“禁用”或“必用”政策更值得参考。<strong>先把这门课真正要培养的能力说清，再判断什么必须由学生亲自完成，什么适合借力 AI，怎样用多种证据确认学习，最后让组织对资源、公平、隐私和长期影响负责。</strong>
+        </p>
+
+        <p>
+          这些建议有明确的适用边界。它们深度依赖 MIT 的高强度实作文化、研究型大学资源和住宿制社群；问卷的回复率与自选样本也限制了数据的外推。报告的最终边界同样保持张力：AI 可以让学生更高效、支持学习和科学发现，也会冲击学习过程、教学实践与住宿制教育的社会织理。<strong>人类智慧、连接、判断和亲身实作，正是这轮教育重设计需要优先保护的对象。</strong>
+        </p>
+
+        <!-- 总结元注记与归档声明 -->
+        <div style="margin-top: 40px; padding: 20px; background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border); font-size: 13px; color: var(--text-dim); line-height: 1.7;">
+          <div><strong>交付物元信息声明：</strong></div>
+          <div>• 报告全称：Report of the Ad Hoc Committee on AI Use in Teaching, Learning, and Research Training</div>
+          <div>• 出品机构：Massachusetts Institute of Technology (MIT)</div>
+          <div>• 发布基准日：2026 年 8 月 | 知识库收录基准日：2026 年 9 月 15 日</div>
+          <div>• 治理归档规范：统一落盘于 <code>/Users/yangkejin/Documents/Openai/AIKnowledge/20260915_MIT人工智能教育重构26项行动白皮书.html</code></div>
+          <div>• 特性：单文件自包含、零外部依赖、原生内联 SVG 矢量图表、附录 B 政策生成器与 26 项建议交互带走包。</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- 原生 JavaScript 交互逻辑系统 (严格自包含、无外部依赖) -->
+  <script>
+    (function() {
+      // 辅助 DOM 查找助手 (绝不使用 $ 符号，严防 LaTeX 误判)
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // 1. 阅读进度条与侧边栏高亮监听
+      var progressBar = byId("reading-progress-bar");
+      var tocLinks = document.querySelectorAll(".toc-item a");
+      var sections = [];
+      for (var i = 0; i < tocLinks.length; i++) {
+        var href = tocLinks[i].getAttribute("href");
+        if (href && href.startsWith("#")) {
+          var target = byId(href.substring(1));
+          if (target) {
+            sections.push({ link: tocLinks[i], el: target });
+          }
+        }
+      }
+
+      window.addEventListener("scroll", function() {
+        var sTop = window.pageYOffset || document.documentElement.scrollTop;
+        var sHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        if (sHeight > 0 && progressBar) {
+          var pct = (sTop / sHeight) * 100;
+          progressBar.style.width = pct + "%";
+        }
+
+        // 高亮目录
+        var cur = null;
+        for (var j = 0; j < sections.length; j++) {
+          var rect = sections[j].el.getBoundingClientRect();
+          if (rect.top <= 120) {
+            cur = sections[j].link;
+          }
+        }
+        if (cur) {
+          for (var k = 0; k < tocLinks.length; k++) {
+            tocLinks[k].classList.remove("active");
+          }
+          cur.classList.add("active");
+        }
+      });
+
+      // 2. 主题切换 (黑曜石深色 / 暖羊皮纸浅色)
+      var themeBtn = byId("btn-toggle-theme");
+      var themeIcon = byId("theme-icon");
+      var themeText = byId("theme-text");
+
+      function applyTheme(isDark) {
+        if (isDark) {
+          document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.classList.add("dark");
+          document.documentElement.classList.remove("light");
+          if (themeIcon) themeIcon.textContent = "☀️";
+          if (themeText) themeText.textContent = "深色模式";
+        } else {
+          document.documentElement.setAttribute("data-theme", "light");
+          document.documentElement.classList.add("light");
+          document.documentElement.classList.remove("dark");
+          if (themeIcon) themeIcon.textContent = "🌙";
+          if (themeText) themeText.textContent = "浅色模式";
+        }
+      }
+
+      if (themeBtn) {
+        themeBtn.addEventListener("click", function() {
+          var current = document.documentElement.getAttribute("data-theme") || "dark";
+          var nextIsDark = (current === "light");
+          applyTheme(nextIsDark);
+          try {
+            localStorage.setItem("aike_theme", nextIsDark ? "dark" : "light");
+          } catch (e) {}
+        });
+      }
+
+      // 初始化读取存储主题，默认深色
+      var savedTheme = "dark";
+      try {
+        savedTheme = localStorage.getItem("aike_theme") || "dark";
+      } catch (e) {}
+      applyTheme(savedTheme === "dark");
+
+      // 3. 移动端目录折叠切换
+      var menuBtn = byId("btn-toggle-menu");
+      var sidebar = byId("sidebar-nav");
+      if (menuBtn && sidebar) {
+        menuBtn.addEventListener("click", function() {
+          sidebar.classList.toggle("mobile-open");
+        });
+      }
+
+      // 4. 交互沙盘 1: 逆向教学设计与能力证明沙盘 (education-loop)
+      var csTab = byId("btn-tab-cs");
+      var mathTab = byId("btn-tab-math");
+      var writingTab = byId("btn-tab-writing");
+      var engTab = byId("btn-tab-eng");
+
+      var outGoal = byId("out-step-goal");
+      var outVuln = byId("out-step-vulnerability");
+      var outEvid = byId("out-step-evidence");
+      var outTask = byId("out-step-task");
+      var outPolicy = byId("out-step-aipolicy");
+
+      var eduPresets = {
+        cs: {
+          goal: "掌握并发系统底层锁机制与数据结构设计，能独立分析复杂边界与竞态条件。",
+          vuln: "传统课后代码提交：AI 助手随手生成正确算法片段，掩盖学生未真正掌握并发逻辑的事实。",
+          evid: "口试答辩解释死锁恢复策略；现场黑盒故障调试；代码审查（Code Review）中准确找出人为注入的 Bug。",
+          task: "单学期构建接近工业级分布式存储系统，重点考核架构权衡、压力测试报告与现场当面答辩。",
+          policy: "要求使用或有限支持：允许 AI 辅助编写样板代码与单元测试，但核心架构必须口头答辩说明。"
+        },
+        math: {
+          goal: "理解代数拓扑或实分析公理化推导，具备严谨构造反例与形式化数学证明的能力。",
+          vuln: "证明题作业答案被大模型模式匹配解答，学生直接抄录结论跳过至关重要的‘认知挣扎’。",
+          evid: "黑板现场板书推导定理；口头辩护关键引理假设；独立解答变体引申问题。",
+          task: "每周小规模证明集，结合助教引导的习题讨论班（Recitation），学生上台互评证明漏洞。",
+          policy: "严格禁止使用：在基础推导训练阶段严禁 AI 生成证明，保护独立建立逻辑链条的心智磨砺。"
+        },
+        writing: {
+          goal: "培养批判性审视社会议题的独特视角、修辞说服力及多源史料交叉研读能力。",
+          vuln: "大语言模型生成结构工整但同质化平庸的论述文，抹杀学生个性化语言与尖锐思考。",
+          evid: "提供手写提纲与多轮构思草稿；针对文本论点展开课堂即兴圆桌辩论；递交版本演进历史。",
+          task: "长周期专题调研论文，分阶段提交问题陈述、反驳论据、文献对话与终稿作品集。",
+          policy: "有限使用或要求使用：可用于观点反驳演练与文字润色，禁止初稿代写，论文须附 AI 对话提示记录。"
+        },
+        eng: {
+          goal: "践行‘手脑并用’校训，具备物理传感器信号采集、电路调测与软硬件系统协同调试能力。",
+          vuln: "仿真代码与理论数据被 AI 一键合成，学生无法应对现实物理世界不可控的噪声与偏差。",
+          evid: "实体实验室现场操作演示；硬件样机台架测试数据验证；实验日志手写真实故障排查轨迹。",
+          task: "团队协作设计自主移动机器人或环境监测节点，必须完成现场实物联调与答辩。",
+          policy: "不限制使用或有限支持：允许利用 AI 辅助仿真与数据可视化，但必须在实验室完成实物验收。"
+        }
+      };
+
+      function setEduScene(key, activeBtn) {
+        var data = eduPresets[key];
+        if (!data) return;
+        if (outGoal) outGoal.textContent = data.goal;
+        if (outVuln) outVuln.textContent = data.vuln;
+        if (outEvid) outEvid.textContent = data.evid;
+        if (outTask) outTask.textContent = data.task;
+        if (outPolicy) outPolicy.innerHTML = data.policy;
+
+        var allTabs = [csTab, mathTab, writingTab, engTab];
+        for (var t = 0; t < allTabs.length; t++) {
+          if (allTabs[t]) allTabs[t].classList.remove("active");
+        }
+        if (activeBtn) activeBtn.classList.add("active");
+      }
+
+      if (csTab) csTab.addEventListener("click", function() { setEduScene("cs", csTab); });
+      if (mathTab) mathTab.addEventListener("click", function() { setEduScene("math", mathTab); });
+      if (writingTab) writingTab.addEventListener("click", function() { setEduScene("writing", writingTab); });
+      if (engTab) engTab.addEventListener("click", function() { setEduScene("eng", engTab); });
+
+      // 5. 交互沙盘 2: 课程 AI 政策四象限与决策矩阵 (policy-map)
+      var cardPolUnres = byId("card-pol-unrestricted");
+      var cardPolLimit = byId("card-pol-limited");
+      var cardPolReq = byId("card-pol-required");
+      var cardPolProh = byId("card-pol-prohibited");
+
+      var outPolDef = byId("out-pol-def");
+      var outPolFit = byId("out-pol-fit");
+      var outPolRationale = byId("out-pol-rationale");
+      var outPolResp = byId("out-pol-resp");
+
+      var polData = {
+        unrestricted: {
+          def: "学生在作业中可自由使用任何生成式 AI 工具。所有成果评估均通过现场闭卷考试、当面口试或物理实验操作完成，课外作业不作为独立能力评估的唯一依据。",
+          fit: "考核主要基于课内面对面评估的课程；或者评估、对齐、反思模型输出本身即为课程核心目标的进阶研讨课。",
+          rationale: "“本课程鼓励使用 AI，因为在真实职业生涯中，高级系统工程师必须与自动化工具并肩工作。但请注意，期中与期末口试将全面考察你对架构权衡的独立辩护能力。”",
+          resp: "学生对提交作业中的每一行代码与陈述负全责。AI 产生幻觉或逻辑错误不能作为免责理由。"
+        },
+        limited: {
+          def: "AI 仅被允许作为‘学习支持工具’（如语法润色、概念解释、代码除错或头脑风暴），严禁直接生成作业的核心结论、完整解答或关键段落。",
+          fit: "需要学生形成独立思考与论证框架的大多数课程，如人文写作、经济学案例分析、初级数据结构等。",
+          rationale: "“本课程允许 AI 充当‘私教’或‘纠错镜’，但作业的核心论点必须出自你自己的构思。若让 AI 代笔，你将失去建立批判思维的关键认知摩擦。”",
+          resp: "学生必须在附录中如实陈述使用了哪些工具、提示词思路，并在作业正文中明确区隔自主创作与 AI 辅助建议。"
+        },
+        required: {
+          def: "课程或作业显式要求学生按特定流程使用指定 AI 工具，并要求将提示词日志、人机对比分析或模型评估作为最终交付物的一部分。",
+          fit: "AI 辅助编程实验、大模型对齐与提示工程、翻译比对研讨课、大模型输出偏见与幻觉审计实验等。",
+          rationale: "“本作业的目标正是培养批判性评估 AI 输出的能力。你不仅要让 AI 给出解答，更要深入指出它遗漏了哪些边界情况与系统性偏见。”",
+          resp: "必须完整提交 AI 交互对话日志。若未按流程使用指定工具或未完成对输出的批判分析，将被判定未达成教学目标。"
+        },
+        prohibited: {
+          def: "在任何作业、习题集或准备环节严格禁止使用生成式 AI。学生必须在未经外部机器算法辅助的纯手工状态下完成全部思考与表达。",
+          fit: "需要打牢绝对扎实基本功的基础课程（如基础微积分、纯手工数据结构实现、入门外语翻译、原创诗歌写作）。",
+          rationale: "“正如学长跑不能骑电动车，掌握这些底层概念需要经历真实的智力磨砺。借助 AI 抄近道会彻底摧毁后续高阶课程所需的思维底座。”",
+          resp: "严禁任何形式的 AI 参与。违反该政策将直接提交校学术纪律委员会（COD）按学术诚信违规处理。"
+        }
+      };
+
+      function setPolicyDetail(key, activeCard) {
+        var p = polData[key];
+        if (!p) return;
+        if (outPolDef) outPolDef.textContent = p.def;
+        if (outPolFit) outPolFit.textContent = p.fit;
+        if (outPolRationale) outPolRationale.textContent = p.rationale;
+        if (outPolResp) outPolResp.textContent = p.resp;
+
+        var allCards = [cardPolUnres, cardPolLimit, cardPolReq, cardPolProh];
+        for (var c = 0; c < allCards.length; c++) {
+          if (allCards[c]) allCards[c].classList.remove("active");
+        }
+        if (activeCard) activeCard.classList.add("active");
+      }
+
+      if (cardPolUnres) cardPolUnres.addEventListener("click", function() { setPolicyDetail("unrestricted", cardPolUnres); });
+      if (cardPolLimit) cardPolLimit.addEventListener("click", function() { setPolicyDetail("limited", cardPolLimit); });
+      if (cardPolReq) cardPolReq.addEventListener("click", function() { setPolicyDetail("required", cardPolReq); });
+      if (cardPolProh) cardPolProh.addEventListener("click", function() { setPolicyDetail("prohibited", cardPolProh); });
+
+      // 6. 交互沙盘 3: 26项建议全景数据与交互渲染 (takeaway-pack)
+      var recommendationsData = [
+        // 3.1 教育过程 10 项
+        { id: "3.1.1", cat: "edu", catZh: "3.1 教育过程", zh: "重新审视课程目标", en: "Revisit course goals", actor: "任课教师 / 系所", desc: "以‘AI-aware’重新定义培养目标，淘汰纯手工低阶机械技能，确立利用 AI 分析复杂系统的高阶新目标。" },
+        { id: "3.1.2", cat: "edu", catZh: "3.1 教育过程", zh: "确保持久学习与抵御认知外包", en: "Ensure durable learning through new policies & assessments", actor: "任课教师", desc: "拒绝被动防作弊，保护‘有生产力的挣扎’。引入口试、学期作品集与现场面对面答辩，验证真实理解。" },
+        { id: "3.1.3", cat: "edu", catZh: "3.1 教育过程", zh: "强化体验式与项目制实作", en: "Emphasize experiential and project-based learning", actor: "实验室 / 系所", desc: "践行‘手脑并用’校训，借力 AI 放大项目雄心，支持学生在一学期内设计接近工业级真实系统并考核权衡。" },
+        { id: "3.1.4", cat: "edu", catZh: "3.1 教育过程", zh: "构建结构化实体社交学习", en: "Build structured in-person social learning", actor: "课程团队 / 助教", desc: "强制引入每周 Check-in 小组项目、助教研讨答疑与同行互评，打破学生完全退缩到与 AI 对话的社交孤立。" },
+        { id: "3.1.5", cat: "edu", catZh: "3.1 教育过程", zh: "捍卫并拓展 UROP 科研学徒制", en: "Preserve and expand UROP and career experiences", actor: "全体教师 / 本科科研", desc: "严禁因短期效率用 AI Agent 替代本科科研助理。UROP 覆盖 93% 本科生，其本质是学术共同体的学徒制育人。" },
+        { id: "3.1.6", cat: "edu", catZh: "3.1 教育过程", zh: "改革评分制度与评价激励机制", en: "Reconsider grades and incentives", actor: "教务长 / 评估委员会", desc: "反对机械化限制优秀率以缓解绩点内卷，探索基于能力与掌握度的多元评估，以即时口头反馈替代单一分数标签。" },
+        { id: "3.1.7", cat: "edu", catZh: "3.1 教育过程", zh: "扩展实验与线下考核物理空间", en: "Expand in-person spaces for experimentation", actor: "校园规划部 / 院系", desc: "投资建设能容纳长时间协作的实体空间，配备‘完全无 AI’或受限 AI 电脑的专用测试机房与实验室人员。" },
+        { id: "3.1.8", cat: "edu", catZh: "3.1 教育过程", zh: "制定附带充分理由的 AI 课程政策", en: "Provide AI use policies, with justification", actor: "全体任课教师", desc: "每门课醒目公布政策模板（附录 B 四选一），且必须详细向学生阐述教育理由。学生对提交内容负全责。" },
+        { id: "3.1.9", cat: "edu", catZh: "3.1 教育过程", zh: "审慎对待 AI 检测器与监考软件", en: "Exercise caution with AI detectors & lockdown tools", actor: "纪律委员会 / 教师", desc: "检测器误判率极高且严重伤害非英语母语者与神经多样性学生，禁止单独作为作弊定性证据。倾向当面监考与过程证据。" },
+        { id: "3.1.10", cat: "edu", catZh: "3.1 教育过程", zh: "支持敏捷且负责任的课程实验", en: "Support responsible curricular experimentation", actor: "院系 / 课程委员会", desc: "精简审批链路，允许院系敏捷探索 AI-heavy 与 AI-light 双轨路径，同时保障不愿使用 AI 的学生享有平等优质选项。" },
+        
+        // 3.2 人与共同体 6 项
+        { id: "3.2.1", cat: "comm", catZh: "3.2 人与共同体", zh: "明确住宿制教育的核心不可替代价值", en: "Define and communicate residential education value", actor: "校领导层 / 院系", desc: "打破把学位视作‘优化产物’的交易式心态，阐明实体校园非正式交流、同侪争论与隐性知识传递的不可替代性。" },
+        { id: "3.2.2", cat: "comm", catZh: "3.2 人与共同体", zh: "强化社交连接与设立无科技时段", en: "Strengthen social connection & establish Tech Free Times", actor: "学生事务部 / 宿舍", desc: "应对 AI 依赖带来的心理异化，设立全校定期‘Tech Free Times’，举办跨界人生抉择对话与 MIT Reads 全校共读。" },
+        { id: "3.2.3", cat: "comm", catZh: "3.2 人与共同体", zh: "教师端使用 AI 的双向透明披露", en: "Encourage instructor disclosure around AI use", actor: "任课教师 / 助教", desc: "教师在作业设计、批改反馈或辅导中使用 AI 时必须向学生坦诚披露，防止学生真实付出时间却仅换来冷漠机器打分。" },
+        { id: "3.2.4", cat: "comm", catZh: "3.2 人与共同体", zh: "将三维 AI 素养贯穿全周期培养", en: "Systematically teach 3D AI literacy", actor: "迎新团队 / 通识课", desc: "从迎新开始系统讲授 AI 素养：有效使用（提问与验证）、负责任使用（标明边界与主体负责）、合乎伦理使用（偏见与环境代价）。" },
+        { id: "3.2.5", cat: "comm", catZh: "3.2 人与共同体", zh: "学位论文与成果的 AI 署名声明", en: "Mandate AI disclosure in theses and research", actor: "研究生院 / 学位委员会", desc: "全校学位论文必须附带 AI 使用声明，严禁将 AI 列为共同作者，人类作者必须验证输出并承担全部学术责任。" },
+        { id: "3.2.6", cat: "comm", catZh: "3.2 人与共同体", zh: "尊重多元立场并投资社会与环境研究", en: "Respect diverse stances & fund mitigation research", actor: "科研办公室 / 人文社科", desc: "包容从拥抱到拒绝 AI 的多元学术立场，资助校内学者针对大模型数据侵权、算力能耗与劳动力替代开展高水平研究。" },
+
+        // 3.3 持续治理 10 项
+        { id: "3.3.1", cat: "gov", catZh: "3.3 持续治理", zh: "设立常设校级 AI 与教育委员会", en: "Establish permanent AI & Education Committee", actor: "校长 / 教师执行委员会", desc: "将特设委员会转为常设机构，持续追踪外部技术突变，评估校内教育成效并定期修正政策指南。" },
+        { id: "3.3.2", cat: "gov", catZh: "3.3 持续治理", zh: "在各学院与院系设立学科 AI Leads", en: "Appoint Departmental AI Leads", actor: "各院系主任", desc: "任命专职学科 AI 负责人，负责将校级高阶原则因地制宜本地化翻译为符合本专业特性的教学细则。" },
+        { id: "3.3.3", cat: "gov", catZh: "3.3 持续治理", zh: "组建复合型 AI 实施团队与 Fellows", en: "Fund AI Fellows & Implementation Team", actor: "TLL / IS&T 技术部", desc: "招募具备技术、AI 算法与学习科学专长的复合团队，协助教师重构课程、开发校级工具并开展严谨成效实证。" },
+        { id: "3.3.4", cat: "gov", catZh: "3.3 持续治理", zh: "设立校级 AI 改革试点专项基金", en: "Create the AI Pilot Fund", actor: "教务长办公室 / 财务", desc: "提供专项经费，为教师采购商业模型 API 点数、增聘专项助教、开展夏季课程改造提供资金，同等支持 AI-free 教学创新。" },
+        { id: "3.3.5", cat: "gov", catZh: "3.3 持续治理", zh: "搭建跨学科教师教学实践社群", en: "Build Communities of Practice", actor: "TLL / 教师发展中心", desc: "定期组织跨系研讨与教案分享，打破学科孤岛，在全校流转经过检验的逆向设计、口试评估与真实实践经验。" },
+        { id: "3.3.6", cat: "gov", catZh: "3.3 持续治理", zh: "建立多维度全生命周期动态追踪系统", en: "Establish longitudinal tracking systems", actor: "院校研究办公室", desc: "持续追踪全校师生 AI 使用频率、学业真实掌握度、住宿社交活跃度、心理健康与毕业后雇主反馈。" },
+        { id: "3.3.7", cat: "gov", catZh: "3.3 持续治理", zh: "建设公平且模型中立的基础平台 Parley", en: "Provide model-agnostic platform Parley", actor: "IS&T 技术部", desc: "扩大 Parley 平台，为每位学生提供基准免费额度，中立接入多厂商尖端模型与开源模型，杜绝经济分化。" },
+        { id: "3.3.8", cat: "gov", catZh: "3.3 持续治理", zh: "提供超越聊天框的 Agentic 算力支持", en: "Expand agentic tooling and compute", actor: "科研计算中心 / CSAIL", desc: "不仅提供 Web 对话框，更向课程和研究提供高级代码智能体工作流、本地工作站与 GPU 训练微调算力。" },
+        { id: "3.3.9", cat: "gov", catZh: "3.3 持续治理", zh: "制定公开透明的数据隐私与会话审计政策", en: "Establish privacy & audit policies", actor: "总法律顾问 / 安全部", desc: "确保敏感课程与研究数据不被外部商业大模型挪作训练；明确定制平台私密咨询的日志审计边界。" },
+        { id: "3.3.10", cat: "gov", catZh: "3.3 持续治理", zh: "建立全生命周期财务预算与环境足迹审计", en: "Audit financial & environmental costs", actor: "可持续发展办 / 财务", desc: "公开审计模型推理能耗、数据中心水耗与碳排放，定期公布环境足迹账单，优先投资低功耗计算方案。" }
+      ];
+
+      var recsContainer = byId("recs-list-container");
+      var curFilter = "all";
+      var curSearch = "";
+
+      function renderRecs() {
+        if (!recsContainer) return;
+        var filtered = recommendationsData.filter(function(r) {
+          var matchCat = (curFilter === "all") || (r.cat === curFilter);
+          var matchTxt = true;
+          if (curSearch) {
+            var q = curSearch.toLowerCase();
+            matchTxt = (r.id.indexOf(q) !== -1) || 
+                       (r.zh.toLowerCase().indexOf(q) !== -1) || 
+                       (r.en.toLowerCase().indexOf(q) !== -1) || 
+                       (r.desc.toLowerCase().indexOf(q) !== -1) || 
+                       (r.actor.toLowerCase().indexOf(q) !== -1);
+          }
+          return matchCat && matchTxt;
+        });
+
+        recsContainer.innerHTML = "";
+        if (filtered.length === 0) {
+          recsContainer.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-dim); font-size: 13px;">未找到匹配的建议条目</div>';
+          return;
+        }
+
+        for (var i = 0; i < filtered.length; i++) {
+          var item = filtered[i];
+          var card = document.createElement("div");
+          card.className = "rec-item-card";
+          card.innerHTML = 
+            '<div class="rec-header-line">' +
+              '<span class="rec-id-tag">REC ' + item.id + '</span>' +
+              '<span class="rec-cat-badge">' + item.catZh + '</span>' +
+              '<span class="rec-title-zh">' + item.zh + '</span>' +
+              '<span class="rec-title-en">(' + item.en + ')</span>' +
+            '</div>' +
+            '<div class="rec-body-desc">' + item.desc + '</div>' +
+            '<div class="rec-actor-tag">🏛️ 责任主体：' + item.actor + '</div>';
+          recsContainer.appendChild(card);
+        }
+      }
+
+      // 筛选按钮事件
+      var btnFiltAll = byId("btn-filter-all");
+      var btnFiltEdu = byId("btn-filter-edu");
+      var btnFiltComm = byId("btn-filter-comm");
+      var btnFiltGov = byId("btn-filter-gov");
+      var inpSearch = byId("inp-search-recs");
+
+      function setFilter(cat, btn) {
+        curFilter = cat;
+        var btns = [btnFiltAll, btnFiltEdu, btnFiltComm, btnFiltGov];
+        for (var b = 0; b < btns.length; b++) {
+          if (btns[b]) btns[b].classList.remove("active");
+        }
+        if (btn) btn.classList.add("active");
+        renderRecs();
+      }
+
+      if (btnFiltAll) btnFiltAll.addEventListener("click", function() { setFilter("all", btnFiltAll); });
+      if (btnFiltEdu) btnFiltEdu.addEventListener("click", function() { setFilter("edu", btnFiltEdu); });
+      if (btnFiltComm) btnFiltComm.addEventListener("click", function() { setFilter("comm", btnFiltComm); });
+      if (btnFiltGov) btnFiltGov.addEventListener("click", function() { setFilter("gov", btnFiltGov); });
+
+      if (inpSearch) {
+        inpSearch.addEventListener("input", function() {
+          curSearch = inpSearch.value.trim();
+          renderRecs();
+        });
+      }
+
+      // 初始化渲染列表
+      renderRecs();
+
+      // 一键复制 26 项 Markdown 清单
+      var copyMdBtn = byId("btn-copy-markdown");
+      var statCopyLabel = byId("stat-copy-label");
+      if (copyMdBtn) {
+        copyMdBtn.addEventListener("click", function() {
+          var lines = ["# MIT 关于教育与科研中 AI 使用的 26 项重构建议清单\n"];
+          lines.push("> 来源：MIT Ad Hoc Committee on AI Use in Teaching, Learning, and Research Training Report\n");
+          for (var i = 0; i < recommendationsData.length; i++) {
+            var it = recommendationsData[i];
+            lines.push("### " + it.id + " " + it.zh + " (" + it.en + ")");
+            lines.push("- **所属板块**：" + it.catZh);
+            lines.push("- **责任主体**：" + it.actor);
+            lines.push("- **核心建议**：" + it.desc + "\n");
+          }
+          var mdText = lines.join("\n");
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(mdText).then(function() {
+              if (statCopyLabel) statCopyLabel.textContent = "✓ 已成功复制 Markdown 清单！";
+              setTimeout(function() {
+                if (statCopyLabel) statCopyLabel.textContent = "复制 26 项完整 Markdown 清单";
+              }, 2500);
+            });
+          } else {
+            alert("剪贴板权限受限，请手动选中内容复制。");
+          }
+        });
+      }
+
+      // 7. Syllabus 政策声明生成器
+      var btnSyl1 = byId("btn-syl-1");
+      var btnSyl2 = byId("btn-syl-2");
+      var btnSyl3 = byId("btn-syl-3");
+      var btnSyl4 = byId("btn-syl-4");
+      var outSyllabusText = byId("out-syllabus-text");
+      var btnCopySyllabus = byId("btn-copy-syllabus");
+
+      var syllabusTemplates = {
+        s1: "【Option 1: Unrestricted GenAI Use / 不限制使用】\n\nStudents are permitted to use generative AI tools (such as ChatGPT, Claude, Copilot, etc.) without restriction for all assignments in this course. \n\nRationale: In professional practice, mastering modern automated tools is critical. Therefore, our assignments are designed around higher-order architectural decisions, and mastery will be verified primarily through in-person, unaided oral examinations and classroom assessments.\n\nAcademic Responsibility: You remain 100% accountable for everything you submit. If an AI generates factually incorrect code, hallucinates references, or introduces vulnerabilities, you bear full academic responsibility.",
+        s2: "【Option 2: Limited GenAI Use: Support Tool Only / 有限使用：仅作支持工具】\n\nGenerative AI may be used strictly as a support tool (e.g., brainstorming ideas, explaining complex concepts, editing prose, or debugging code). AI tools MAY NOT be used to generate substantial portions, initial drafts, or core solutions of any submitted assignment.\n\nRationale: This course aims to develop your authentic mental models and critical reasoning. Cognitive struggle is essential for durable learning. Outsourcing core synthesis to AI undermines your skill acquisition.\n\nDisclosure: You must cite any AI assistance, specifying the tool used and how it contributed. Clearly demarcate your original work from AI-assisted refinements.",
+        s3: "【Option 3: Required GenAI Use / 强制要求使用】\n\nThis assignment explicitly requires the use of designated generative AI tools. Students must engage with the AI following specified workflows and include interaction logs as part of the submission.\n\nRationale: Evaluating AI capabilities, prompt formulation, hallucination detection, and bias auditing are explicit learning outcomes of this module.\n\nDeliverables: You are required to submit your complete prompt history, critical evaluation notes, and an analysis comparing the AI's output against rigorous domain benchmarks.",
+        s4: "【Option 4: GenAI Use Strictly Prohibited / 严格禁止使用】\n\nGenerative AI tools of any kind are strictly prohibited for all work in this subject (including homework, problem sets, and take-home exercises).\n\nRationale: True foundational mastery of this discipline requires unassisted cognitive exertion. Just as physical strength cannot be built by riding an electric scooter, your intuition for these mathematical proofs and core mechanisms must be developed independently.\n\nEnforcement: Any use of AI tools constitutes a violation of MIT's Academic Integrity policy and will be referred immediately to the Committee on Discipline (COD)."
+      };
+
+      function setSyllabus(k, btn) {
+        if (outSyllabusText) outSyllabusText.textContent = syllabusTemplates[k];
+        var sBtns = [btnSyl1, btnSyl2, btnSyl3, btnSyl4];
+        for (var b = 0; b < sBtns.length; b++) {
+          if (sBtns[b]) sBtns[b].classList.remove("active");
+        }
+        if (btn) btn.classList.add("active");
+      }
+
+      if (btnSyl1) btnSyl1.addEventListener("click", function() { setSyllabus("s1", btnSyl1); });
+      if (btnSyl2) btnSyl2.addEventListener("click", function() { setSyllabus("s2", btnSyl2); });
+      if (btnSyl3) btnSyl3.addEventListener("click", function() { setSyllabus("s3", btnSyl3); });
+      if (btnSyl4) btnSyl4.addEventListener("click", function() { setSyllabus("s4", btnSyl4); });
+      setSyllabus("s1", btnSyl1);
+
+      if (btnCopySyllabus) {
+        btnCopySyllabus.addEventListener("click", function() {
+          if (outSyllabusText && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(outSyllabusText.textContent).then(function() {
+              var old = btnCopySyllabus.textContent;
+              btnCopySyllabus.textContent = "✓ 已复制！";
+              setTimeout(function() { btnCopySyllabus.textContent = old; }, 2000);
+            });
+          }
+        });
+      }
+
+      // 8. 5步自查清单动态统计
+      var chks = [
+        byId("chk-step-1"),
+        byId("chk-step-2"),
+        byId("chk-step-3"),
+        byId("chk-step-4"),
+        byId("chk-step-5")
+      ];
+      var statCheckCount = byId("stat-check-count");
+      var statCheckProgress = byId("stat-check-progress");
+
+      function updateCheckProgress() {
+        var count = 0;
+        for (var i = 0; i < chks.length; i++) {
+          if (chks[i] && chks[i].checked) count++;
+        }
+        if (statCheckCount) statCheckCount.textContent = count + " / " + chks.length;
+        if (statCheckProgress) statCheckProgress.style.width = ((count / chks.length) * 100) + "%";
+      }
+
+      for (var c = 0; c < chks.length; c++) {
+        if (chks[c]) {
+          chks[c].addEventListener("change", updateCheckProgress);
+        }
+      }
+      updateCheckProgress();
+
+    })();
+  </script>
+</body>
+</html>

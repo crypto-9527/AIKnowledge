@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anthropic 研究 40 万次 Claude Code 会话：专业度比会编程更决定 AI 编程成败</title>
+<meta name="description" content="Anthropic 对 2025 年 10 月至 2026 年 4 月约 40 万次 Claude Code 交互会话、23.5 万用户的隐私保护分析解读：任务特定专业度的持续回报、职业背景影响的收敛，以及工作模式构成的结构性迁移。">
+<style>
+:root{
+  --bg:#181715; --bg-soft:#1E1C19; --card:#23211D; --card2:#2A2723;
+  --line:#3A3630; --line-soft:#2E2B26;
+  --fg:#EDE9E1; --fg-mid:#B8B2A8; --fg-dim:#8B857C;
+  --accent:#E2886A; --accent-soft:rgba(226,136,106,.14);
+  --emerald:#7CC39A; --rose:#E07B72; --amber:#DCA84E; --cyan:#82B7C9; --violet:#A99AC9;
+  --sidebar-w:288px; --content-max:1180px;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+  --serif:"Songti SC","SimSun",Newsreader,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+html[data-theme="light"]{
+  --bg:#FAF7F2; --bg-soft:#F3EEE6; --card:#FFFFFF; --card2:#F7F3EC;
+  --line:#E2DACD; --line-soft:#EDE7DC;
+  --fg:#26221E; --fg-mid:#544E46; --fg-dim:#7A736A;
+  --accent:#C25E3A; --accent-soft:rgba(194,94,58,.10);
+  --emerald:#2F7A54; --rose:#B3453C; --amber:#9A7016; --cyan:#2B6D82; --violet:#6B5B95;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--sans); font-size:16.5px; line-height:1.85;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:90;transition:width .12s linear}
+
+/* ---------- 侧栏 ---------- */
+#sidebar{
+  position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh; overflow-y:auto;
+  background:var(--bg-soft); border-right:1px solid var(--line-soft);
+  padding:26px 16px 60px; z-index:60;
+}
+#sidebar .brand{font-family:var(--serif); font-size:15px; font-weight:700; color:var(--fg);
+  padding:0 10px 14px; border-bottom:1px solid var(--line-soft); margin-bottom:14px; letter-spacing:.02em}
+#sidebar .brand span{display:block; font-family:var(--sans); font-size:11.5px; font-weight:400;
+  color:var(--fg-dim); letter-spacing:.08em; margin-top:4px; text-transform:uppercase}
+.toc a{
+  display:block; padding:6px 10px; margin:1px 0; border-radius:6px; color:var(--fg-dim);
+  text-decoration:none; font-size:13.2px; line-height:1.5; border-left:2px solid transparent;
+}
+.toc a:hover{color:var(--fg); background:var(--card)}
+.toc a.active{color:var(--accent); border-left-color:var(--accent); background:var(--accent-soft); font-weight:600}
+.toc a.sub{padding-left:24px; font-size:12.6px}
+
+/* ---------- 正文 ---------- */
+#main{
+  max-width:var(--content-max);
+  margin-left:calc(var(--sidebar-w) + max(0px,(100% - var(--sidebar-w) - var(--content-max))/2));
+  margin-right:max(0px,(100% - var(--sidebar-w) - var(--content-max))/2);
+  padding:56px 44px 120px;
+}
+header.doc{border-bottom:1px solid var(--line); padding-bottom:30px; margin-bottom:38px}
+.eyebrow{font-size:12.5px; letter-spacing:.16em; color:var(--accent); text-transform:uppercase; font-weight:600; margin-bottom:16px}
+h1{font-family:var(--serif); font-size:35px; line-height:1.34; margin:0 0 16px; font-weight:700; letter-spacing:-.01em}
+.deck{font-size:18px; line-height:1.72; color:var(--fg-mid); margin:0 0 24px; font-weight:400}
+.meta{display:flex; flex-wrap:wrap; gap:8px 10px; font-size:12.8px}
+.meta span{background:var(--card); border:1px solid var(--line); border-radius:999px; padding:4px 13px; color:var(--fg-mid)}
+.meta a{color:var(--accent); text-decoration:none; border-bottom:1px solid transparent}
+.meta a:hover{border-bottom-color:var(--accent)}
+
+h2{font-family:var(--serif); font-size:26.5px; line-height:1.4; margin:64px 0 20px; padding-top:16px;
+   border-top:1px solid var(--line-soft); font-weight:700; letter-spacing:-.005em; scroll-margin-top:24px}
+h2 .num{color:var(--accent); font-family:var(--mono); font-size:16px; margin-right:12px; vertical-align:3px; font-weight:400}
+h3{font-size:19.5px; line-height:1.5; margin:38px 0 14px; font-weight:650; color:var(--fg); scroll-margin-top:24px}
+h4{font-size:15.5px; margin:26px 0 10px; font-weight:650; color:var(--fg-mid); letter-spacing:.04em}
+p{margin:0 0 17px}
+a{color:var(--accent)}
+strong{color:var(--fg); font-weight:650}
+em{color:var(--accent); font-style:normal; font-weight:600}
+ul,ol{margin:0 0 18px; padding-left:22px}
+li{margin-bottom:9px}
+li::marker{color:var(--fg-dim)}
+
+/* ---------- 组件 ---------- */
+.lede{background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent);
+  border-radius:10px; padding:20px 24px; margin:0 0 30px}
+.lede h4{margin:0 0 12px; font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent)}
+.lede ul{margin:0; padding-left:20px}
+.lede li{margin-bottom:8px; font-size:15.4px; line-height:1.72}
+
+blockquote{margin:22px 0; padding:14px 20px; background:var(--card); border-left:3px solid var(--fg-dim);
+  border-radius:0 8px 8px 0; color:var(--fg-mid); font-size:15px; line-height:1.75}
+blockquote strong{color:var(--fg)}
+
+.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); gap:14px; margin:26px 0}
+.card{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 16px; text-align:center}
+.card .v{font-family:var(--mono); font-size:26px; font-weight:700; color:var(--accent); line-height:1.2; letter-spacing:-.02em}
+.card .k{font-size:12.6px; color:var(--fg-dim); margin-top:7px; line-height:1.55}
+
+figure{margin:30px 0; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px 20px 16px}
+figcaption{font-size:12.8px; color:var(--fg-dim); line-height:1.7; margin-top:14px; padding-top:12px; border-top:1px solid var(--line-soft)}
+figure .ftitle{font-size:14.5px; font-weight:650; color:var(--fg); margin-bottom:4px}
+figure .fsub{font-size:12.4px; color:var(--fg-dim); margin-bottom:14px}
+svg{display:block; width:100%; height:auto; overflow:visible}
+svg text{font-family:var(--sans)}
+
+table{width:100%; border-collapse:collapse; margin:24px 0; font-size:14.6px}
+th,td{border:1px solid var(--line); padding:10px 13px; text-align:left; vertical-align:top; line-height:1.6}
+th{background:var(--card2); font-weight:650; color:var(--fg); font-size:13.6px; letter-spacing:.02em}
+td.num,th.num{font-family:var(--mono); text-align:right; white-space:nowrap}
+tbody tr:nth-child(even){background:var(--bg-soft)}
+
+.duo{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:24px 0}
+.pane{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 20px}
+.pane.ok{border-left:3px solid var(--emerald)}
+.pane.bad{border-left:3px solid var(--rose)}
+.pane h4{margin:0 0 12px; font-size:14px; letter-spacing:.04em}
+.pane.ok h4{color:var(--emerald)}
+.pane.bad h4{color:var(--rose)}
+.pane .say{font-family:var(--mono); font-size:13.6px; line-height:1.7; background:var(--bg-soft);
+  border:1px dashed var(--line); border-radius:7px; padding:11px 13px; margin-bottom:12px; color:var(--fg)}
+.pane ul{margin:0; padding-left:19px; font-size:14.2px; line-height:1.7}
+.pane li{margin-bottom:7px}
+
+.box{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:24px; margin:30px 0}
+.box.accent{border-top:3px solid var(--accent)}
+.box h3{margin-top:0}
+.rule{font-family:var(--mono); font-size:13.2px; line-height:1.8; background:var(--bg-soft);
+  border:1px solid var(--line-soft); border-radius:7px; padding:12px 14px; margin:12px 0; color:var(--fg-mid); overflow-x:auto}
+.note{font-size:13px; color:var(--fg-dim); line-height:1.7; background:var(--accent-soft);
+  border-left:3px solid var(--accent); border-radius:0 7px 7px 0; padding:11px 15px; margin:16px 0}
+
+/* ---------- 沙盘 ---------- */
+.sandbox{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:24px; margin:30px 0}
+.sandbox h3{margin-top:0; font-size:18px}
+.sb-desc{font-size:14px; color:var(--fg-mid); margin-bottom:18px; line-height:1.7}
+.ctl{display:flex; align-items:center; gap:14px; margin-bottom:14px; flex-wrap:wrap}
+.ctl label{font-size:13.6px; color:var(--fg-mid); min-width:120px; font-weight:600}
+.ctl input[type=range]{flex:1; min-width:180px; accent-color:var(--accent); height:22px}
+.ctl select{background:var(--bg-soft); color:var(--fg); border:1px solid var(--line);
+  border-radius:6px; padding:6px 10px; font-family:var(--sans); font-size:13.4px}
+.ctl .rd{font-family:var(--mono); font-size:15px; color:var(--accent); font-weight:700; min-width:64px; text-align:right}
+.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-top:18px}
+.slot{background:var(--bg-soft); border:1px solid var(--line-soft); border-radius:9px; padding:14px 12px; text-align:center}
+.slot .sv{font-family:var(--mono); font-size:22px; font-weight:700; color:var(--fg); line-height:1.25; letter-spacing:-.02em}
+.slot .sv.a{color:var(--accent)} .slot .sv.e{color:var(--emerald)} .slot .sv.r{color:var(--rose)} .slot .sv.c{color:var(--cyan)}
+.slot .sk{font-size:11.8px; color:var(--fg-dim); margin-top:6px; line-height:1.5}
+.track{height:10px; background:var(--bg-soft); border:1px solid var(--line-soft); border-radius:999px; overflow:hidden; margin-top:18px}
+.track .fill{height:100%; background:linear-gradient(90deg,var(--accent),var(--amber)); border-radius:999px; transition:width .18s ease}
+.verdict{margin-top:16px; font-size:13.6px; color:var(--fg-mid); line-height:1.75;
+  background:var(--bg-soft); border:1px dashed var(--line); border-radius:8px; padding:12px 15px}
+.verdict b{color:var(--accent)}
+
+.steps{counter-reset:s; list-style:none; padding:0; margin:22px 0}
+.steps li{counter-increment:s; position:relative; padding:16px 0 16px 62px; border-bottom:1px solid var(--line-soft)}
+.steps li:last-child{border-bottom:none}
+.steps li::before{content:counter(s,decimal-leading-zero); position:absolute; left:0; top:16px;
+  font-family:var(--mono); font-size:13px; color:var(--accent); background:var(--accent-soft);
+  border:1px solid var(--accent); border-radius:6px; width:38px; text-align:center; padding:2px 0; font-weight:700}
+.steps li h4{margin:0 0 7px; font-size:16px; color:var(--fg); letter-spacing:0}
+.steps li p{margin:0; font-size:14.8px; color:var(--fg-mid); line-height:1.78}
+
+.source{margin-top:56px; padding-top:24px; border-top:1px solid var(--line);
+  font-size:13.2px; color:var(--fg-dim); line-height:1.85}
+code{font-family:var(--mono); font-size:.9em; background:var(--bg-soft); border:1px solid var(--line-soft); border-radius:4px; padding:1px 5px}
+.source a{color:var(--accent); word-break:break-all}
+
+#btn-theme,#btn-top{position:fixed; right:20px; z-index:70; background:var(--card); color:var(--fg);
+  border:1px solid var(--line); border-radius:9px; padding:9px 14px; font-family:var(--sans);
+  font-size:13px; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.32)}
+#btn-theme{top:18px} #btn-top{bottom:20px; display:none}
+#btn-theme:hover,#btn-top:hover{border-color:var(--accent); color:var(--accent)}
+#btn-toc{display:none}
+
+@media (max-width:1080px){
+  #sidebar{transform:translateX(-100%); transition:transform .22s ease; z-index:80}
+  #sidebar.open{transform:translateX(0)}
+  #main{margin-left:0; margin-right:0; max-width:100%; padding:44px 20px 100px}
+  #btn-toc{display:block; position:fixed; top:18px; left:18px; z-index:85; background:var(--card);
+    color:var(--fg); border:1px solid var(--line); border-radius:9px; padding:9px 13px;
+    font-family:var(--sans); font-size:13px; cursor:pointer}
+  #btn-theme{top:18px; right:18px}
+  h1{font-size:27px} h2{font-size:22px} .duo{grid-template-columns:1fr}
+}
+@media print{
+  #sidebar,#btn-theme,#btn-top,#btn-toc,#progress{display:none !important}
+  body{background:#fff; color:#000; font-size:11pt}
+  #main{margin:0; max-width:100%; padding:0}
+  figure,.box,.sandbox,table{break-inside:avoid; border-color:#bbb}
+  h2{break-after:avoid} a{color:#000; text-decoration:underline}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<button id="btn-toc" type="button">目录</button>
+<button id="btn-theme" type="button">浅色</button>
+<button id="btn-top" type="button">↑ 顶部</button>
+
+<aside id="sidebar">
+  <div class="brand">40 万次会话的专业度回报<span>Agentic Coding &amp; Persistent Returns to Expertise</span></div>
+  <nav class="toc">
+    <a href="#sec-0">五句话看完</a>
+    <a href="#sec-1">一 · 40 万次对话里谁说了算</a>
+    <a href="#sec-1-1" class="sub">用户定方向，AI 干细活</a>
+    <a href="#sec-1-2" class="sub">怎么判断一个人是「专家」</a>
+    <a href="#sec-2">二 · 专业用户能换来更多产出</a>
+    <a href="#sec-3">三 · 专业度比编程背景更决定成败</a>
+    <a href="#sec-3-1" class="sub">两把尺子：判定与验证</a>
+    <a href="#sec-3-2" class="sub">职业背景的影响收敛</a>
+    <a href="#sec-4">四 · 翻车之后的恢复能力</a>
+    <a href="#sec-5">五 · 七个月里工作模式的迁移</a>
+    <a href="#sec-6">六 · 这些数字能说明什么</a>
+    <a href="#sec-7">七 · 翻成明天怎么用</a>
+    <a href="#sec-8">八 · 来源、口径与勘误</a>
+  </nav>
+</aside>
+
+<main id="main">
+
+<header class="doc">
+  <div class="eyebrow">研究解读 · 小互解读 · 编译自 Anthropic</div>
+  <h1>Anthropic 研究 40 万次 Claude Code 会话：专业度比会编程更决定 AI 编程成败</h1>
+  <p class="deck">23.5 万用户、跨 7 个月的会话分析：专家验证成功率是新手近两倍，但十大职业彼此只差 7 个百分点内</p>
+  <div class="meta">
+    <span>来源：Anthropic</span>
+    <span>编译日期：2026-07-05</span>
+    <span>原报告发布：2026-06-16</span>
+    <span><a href="https://www.anthropic.com/research/claude-code-expertise" target="_blank" rel="noopener">Anthropic 原文</a></span>
+    <span><a href="https://best.xiaohu.ai/article/claude-code-expertise/" target="_blank" rel="noopener">中文编译版</a></span>
+    <span>分类器：Claude Sonnet 4.6</span>
+  </div>
+</header>
+
+<section id="sec-0">
+  <div class="lede">
+    <h4>五句话看完</h4>
+    <ul>
+      <li>Anthropic 分析了 2025 年 10 月至 2026 年 4 月约 <strong>40 万次</strong> Claude Code 交互会话，覆盖约 <strong>23.5 万</strong>用户</li>
+      <li>典型会话里，用户做出约 <strong>70%</strong> 的「做什么」决策（规划），Claude 做出约 <strong>80%</strong> 的「怎么做」决策（执行）</li>
+      <li>用户在某任务上的<strong>专业程度</strong>（不是编程背景）越高，会话成功率越高：专家级验证成功率 28% 到 33%，新手级仅 15%</li>
+      <li>在能产出代码的会话里，10 大职业类别的成功率彼此相差不超过 <strong>7 个百分点</strong>，都和软件工程师十分接近</li>
+      <li>7 个月间，花在修 bug 上的会话占比从 33% 降到 19%，运维、写文档、数据分析类会话翻倍，平均任务估值涨约 25% 到 27%</li>
+    </ul>
+  </div>
+</section>
+
+<h2 id="sec-1"><span class="num">01</span>40 万次对话里，人和 AI 到底谁说了算</h2>
+
+<p>Anthropic 近日发布研究报告，对 2025 年 10 月至 2026 年 4 月间约 40 万次 Claude Code 交互会话做了分析，想回答一个问题：<strong>没有编程背景的人，能不能指挥 AI 智能体完成复杂技术工作？</strong></p>
+
+<p>这是迄今对真实 Claude Code 使用情况规模最大的一次公开分析，约 40 万次交互会话、约 23.5 万名用户、横跨 7 个月。研究盯着一件事看：用得好不好，到底取决于什么。</p>
+
+<p><strong>为什么值得看：</strong>两条结论彼此呼应。能产出代码的会话里，10 个最大职业的成功率都和软件工程师相差不到 <em>7 个百分点</em>；而专家级用户拿到「验证成功」的比例（<em>28% 到 33%</em>），接近新手（15%）的两倍。按这份数据，决定成败的是一个人对手头这件事有多懂，而不是他会不会写代码。</p>
+
+<p>怎么在不侵犯隐私的前提下分析这么多真实对话？研究用的是<strong>隐私保护分析</strong>：让 Claude 模型自动阅读每一场脱敏后的会话记录，打上标签，再和系统自动记录的遥测数据（比如这场会话到底有没有增删代码行）交叉核对。研究者不读任何一个人的具体聊天记录，只看跨越大量用户后的整体规律。两套数据吻合度很高，被 AI 判定为「创建或改动了代码」的会话里，超过 90% 在遥测里确实有代码变动。</p>
+
+<div class="cards">
+  <div class="card"><div class="v">~40 万</div><div class="k">分析的 Claude Code 交互会话数<br>（2025-10 到 2026-04）</div></div>
+  <div class="card"><div class="v">~23.5 万</div><div class="k">覆盖的用户数，只统计跨越<br>足够多用户后的聚合结果</div></div>
+  <div class="card"><div class="v">90%+</div><div class="k">AI 分类为「改了代码」的会话，<br>遥测里确实有代码变动的比例</div></div>
+  <div class="card"><div class="v">7.7%</div><div class="k">被判为「没有明确目标」、<br>后续成功率分析中剔除的会话占比</div></div>
+</div>
+
+<blockquote>
+<strong>范围说明：</strong>本研究只看命令行、Claude.ai 和 Claude Code 桌面端的交互会话，不含 <code>claude -p</code> 单条命令的 headless 模式，也不含通过第三方开发环境、软件工具包跑的批量使用。
+</blockquote>
+
+<h3 id="sec-1-1">用户定方向，AI 干细活</h3>
+
+<p>研究把会话里的每个决策拆成两类。<strong>规划决策</strong>管「做什么、走哪条路、什么算完成」，<strong>执行决策</strong>管「改哪个文件、写什么代码、用什么语言、跑哪条命令」。再让分类器判断每个决策是人拍板还是 Claude 拍板，给每场会话算出两个数。</p>
+
+<p>说白了：人定方向，AI 干细活。这个分工在会话里稳定地反复出现。</p>
+
+<figure>
+  <div class="ftitle">图 1 · 会话中规划决策与执行决策各有多少归 Claude</div>
+  <div class="fsub">重构自原报告 Figure 2 所载比例；典型会话里用户做约 70% 规划决策，Claude 做约 80% 执行决策</div>
+  <svg viewBox="0 0 680 190" role="img" aria-label="规划决策用户占70%、执行决策Claude占80%的堆叠条形图">
+    <text x="0" y="60" font-size="13.5" fill="var(--fg-mid)" font-weight="600">规划决策</text>
+    <text x="0" y="76" font-size="11.5" fill="var(--fg-dim)">做什么</text>
+    <rect x="110" y="40" width="378" height="40" fill="var(--accent)" rx="3"/>
+    <rect x="488" y="40" width="162" height="40" fill="var(--cyan)" rx="3"/>
+    <text x="299" y="65" font-size="15" fill="#181715" text-anchor="middle" font-weight="700">用户 70%</text>
+    <text x="569" y="65" font-size="14" fill="#181715" text-anchor="middle" font-weight="600">Claude 30%</text>
+
+    <text x="0" y="130" font-size="13.5" fill="var(--fg-mid)" font-weight="600">执行决策</text>
+    <text x="0" y="146" font-size="11.5" fill="var(--fg-dim)">怎么做</text>
+    <rect x="110" y="110" width="108" height="40" fill="var(--accent)" rx="3"/>
+    <rect x="218" y="110" width="432" height="40" fill="var(--cyan)" rx="3"/>
+    <text x="164" y="135" font-size="13.5" fill="#181715" text-anchor="middle" font-weight="600">用户 20%</text>
+    <text x="434" y="135" font-size="15" fill="#181715" text-anchor="middle" font-weight="700">Claude 80%</text>
+
+    <rect x="110" y="172" width="11" height="11" fill="var(--accent)" rx="2"/>
+    <text x="128" y="182" font-size="12" fill="var(--fg-dim)">用户拍板</text>
+    <rect x="200" y="172" width="11" height="11" fill="var(--cyan)" rx="2"/>
+    <text x="218" y="182" font-size="12" fill="var(--fg-dim)">Claude 拍板</text>
+  </svg>
+  <figcaption>数据来源：Anthropic 原报告 Figure 2。数值为原报告直接给出的比例，非本文推算。</figcaption>
+</figure>
+
+<p>再换个角度看，把「决策」换成「动作」。一场 Claude Code 会话是人和 Claude 一来一回：用户写一条指令，Claude 就跑去干一串活，然后用户再写下一条。典型会话来回约 <strong>4 轮</strong>，历史数据里，每条用户指令平均引发约 <strong>10 个 Claude 动作</strong>，有时超过 100 个。Claude 每一轮要读文件、改代码、跑命令，平均写下约 <strong>2400 词</strong>的输出。</p>
+
+<div class="note">口径提示：原报告此处单位为英文 <b>words</b>（词），中文编译稿译作「字」。按 4 轮 × 10 动作推算，典型会话约产生 40 个 Claude 动作、约 9600 词输出——此推算为本文依据原报告三个分项数字相乘所得，原报告未直接给出会话级总量。</div>
+
+<p>放权多少，基本跟着「谁做决策」走：</p>
+
+<table>
+  <thead><tr><th>控制权归属</th><th>Claude 每轮动作数</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>用户攥紧执行权（自己做 ≥80% 执行决策）</td><td class="num">~8</td><td>人盯得紧，动作链条最短</td></tr>
+    <tr><td>典型会话（Claude 做 ~80% 执行决策）</td><td class="num">~10</td><td>基线情形</td></tr>
+    <tr><td>Claude 主导规划（做 ≥80% 规划决策）</td><td class="num">~16</td><td>放权最彻底，动作最多，约为前者的 2 倍</td></tr>
+  </tbody>
+</table>
+
+<h3 id="sec-1-2">怎么判断一个人是不是「专家」</h3>
+
+<p>这里说的「专家」，衡量的是<strong>对手头这个具体任务懂不懂</strong>，和职业头衔、会不会编程都没关系。它是<strong>任务特定</strong>的：一位资深工程师第一次问 Rust 的问题，在 Rust 这件事上就是新手；一位从没用过 Python 的会计，只要能精确说清对账规则、还能抓出 Claude 在月末结账时漏掉的特殊情况，在这件事上就是专家。</p>
+
+<p>分类器给每场会话在「新手到专家」的<strong>五档量表</strong>上打分，只看三个信号：指令说得多精确、要求 Claude 去验证什么、以及是人在纠正 Claude 还是 Claude 在纠正人。</p>
+
+<div class="duo">
+  <div class="pane bad">
+    <h4>新手会话 · 示意</h4>
+    <div class="say">「帮我写个脚本，把这些账目对一下。」</div>
+    <ul>
+      <li>指令笼统，不带任何领域细节</li>
+      <li>不说验收标准，也不点明要检查什么</li>
+      <li>更多是 Claude 在替他补规则、猜意图</li>
+    </ul>
+  </div>
+  <div class="pane ok">
+    <h4>专家会话 · 示意</h4>
+    <div class="say">「用 Python 写对账脚本，按这三条规则匹配，月末跨月挂账的条目要单独处理，跑完把不平的明细单独列出来给我核对。」</div>
+    <ul>
+      <li>说清领域规则和验收标准</li>
+      <li>主动点出要检查的边界情况</li>
+      <li>是他在纠正 Claude，而不是反过来</li>
+    </ul>
+  </div>
+</div>
+
+<div class="note">上面两段为示意，用来说明分类器看的三个信号，非原文原句。原报告的分级示例，取自公开的智能体编程会话数据集 SWE-chat，经改写、匿名、压缩后使用。</div>
+
+<h2 id="sec-2"><span class="num">02</span>专业用户，能让 Claude 干更多活</h2>
+
+<p>专业度越高，同一条指令能换来的 Claude 产出越多。典型新手会话里，每条指令引发约 <strong>5 个</strong> Claude 动作、约 <strong>600 词</strong>输出；专家会话里，动作链条翻倍到 <strong>12 个</strong>，文字产出是 5 倍，约 <strong>3200 词</strong>。</p>
+
+<figure>
+  <div class="ftitle">图 2 · 每条指令引发的 Claude 动作数与文字产出</div>
+  <div class="fsub">重构自原报告 Figure 3 锚点值；左图刻度 0–14 动作，右图刻度 0–3600 词</div>
+  <svg viewBox="0 0 680 250" role="img" aria-label="新手与专家每条指令引发的动作数与文字产出对比">
+    <text x="60" y="18" font-size="13" fill="var(--fg-mid)" font-weight="600">每条指令的动作数</text>
+    <text x="370" y="18" font-size="13" fill="var(--fg-mid)" font-weight="600">每条指令的文字产出（词）</text>
+
+    <line x1="60" y1="200" x2="330" y2="200" stroke="var(--line)" stroke-width="1"/>
+    <line x1="60" y1="115" x2="330" y2="115" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,4"/>
+    <line x1="60" y1="30" x2="330" y2="30" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,4"/>
+    <text x="52" y="204" font-size="11" fill="var(--fg-dim)" text-anchor="end">0</text>
+    <text x="52" y="119" font-size="11" fill="var(--fg-dim)" text-anchor="end">7</text>
+    <text x="52" y="34" font-size="11" fill="var(--fg-dim)" text-anchor="end">14</text>
+    <rect x="90" y="139.29" width="70" height="60.71" fill="var(--accent)" rx="3"/>
+    <rect x="210" y="54.29" width="70" height="145.71" fill="var(--emerald)" rx="3"/>
+    <text x="125" y="131" font-size="15" fill="var(--fg)" text-anchor="middle" font-weight="700">5</text>
+    <text x="245" y="46" font-size="15" fill="var(--fg)" text-anchor="middle" font-weight="700">12</text>
+    <text x="125" y="220" font-size="12" fill="var(--fg-dim)" text-anchor="middle">新手</text>
+    <text x="245" y="220" font-size="12" fill="var(--fg-dim)" text-anchor="middle">专家</text>
+
+    <line x1="370" y1="200" x2="650" y2="200" stroke="var(--line)" stroke-width="1"/>
+    <line x1="370" y1="115" x2="650" y2="115" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,4"/>
+    <line x1="370" y1="30" x2="650" y2="30" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,4"/>
+    <text x="362" y="204" font-size="11" fill="var(--fg-dim)" text-anchor="end">0</text>
+    <text x="362" y="119" font-size="11" fill="var(--fg-dim)" text-anchor="end">1800</text>
+    <text x="362" y="34" font-size="11" fill="var(--fg-dim)" text-anchor="end">3600</text>
+    <rect x="410" y="171.67" width="70" height="28.33" fill="var(--accent)" rx="3"/>
+    <rect x="530" y="48.89" width="70" height="151.11" fill="var(--emerald)" rx="3"/>
+    <text x="445" y="163" font-size="15" fill="var(--fg)" text-anchor="middle" font-weight="700">600</text>
+    <text x="565" y="40" font-size="15" fill="var(--fg)" text-anchor="middle" font-weight="700">3200</text>
+    <text x="445" y="220" font-size="12" fill="var(--fg-dim)" text-anchor="middle">新手</text>
+    <text x="565" y="220" font-size="12" fill="var(--fg-dim)" text-anchor="middle">专家</text>
+  </svg>
+  <figcaption>数据来源：Anthropic 原报告 Figure 3（几何平均锚点）。左图 2.4 倍、右图 5.33 倍为本文由锚点实算，原报告表述为「两倍多」与「五倍」。</figcaption>
+</figure>
+
+<p>这条趋势在每一种工作类型、每一档任务价值里都出现。控制了工作类型、任务价值、月份、职业和模型版本之后，专业度每升一级，动作数仍 <strong>+9%</strong>、文字产出仍 <strong>+13%</strong>，统计上明显（<em>p&lt;0.001</em>）。</p>
+
+<div class="box accent">
+  <h3>沙盘 A · 产出杠杆：原始差距 vs 控制后弹性</h3>
+  <p class="sb-desc">
+    原报告同时给出两组数字：<b>未控制的锚点值</b>（5→12 动作、600→3200 词）与<b>控制工作类型、任务价值、月份、职业、模型版本后的边际弹性</b>（每级 +9% / +13%）。
+    两者并不一致——控制后的弹性远小于原始差距。下面用同一条公式把两种口径并排放，滑块调整专业度档位 <b>L</b>（1=新手，5=专家）。
+  </p>
+  <div class="ctl">
+    <label for="lev-lvl">专业度档位 L</label>
+    <input type="range" id="lev-lvl" min="1" max="5" step="0.5" value="5">
+    <span class="rd" id="out-lev-lvl">5.0</span>
+  </div>
+  <div class="grid">
+    <div class="slot"><div class="sv a" id="out-lev-rawact">12.00</div><div class="sk">原始口径动作数<br>5 × 2.4^((L−1)/4)</div></div>
+    <div class="slot"><div class="sv e" id="out-lev-ctlact">7.06</div><div class="sk">控制后动作数<br>5 × 1.09^(L−1)</div></div>
+    <div class="slot"><div class="sv r" id="out-lev-dact">4.94</div><div class="sk">两者差额<br>= 构成因素贡献</div></div>
+    <div class="slot"><div class="sv a" id="out-lev-rawword">3200</div><div class="sk">原始口径文字（词）<br>600 × 5.3333^((L−1)/4)</div></div>
+    <div class="slot"><div class="sv e" id="out-lev-ctlword">978</div><div class="sk">控制后文字（词）<br>600 × 1.13^(L−1)</div></div>
+    <div class="slot"><div class="sv r" id="out-lev-dword">2222</div><div class="sk">两者差额<br>= 构成因素贡献</div></div>
+  </div>
+  <div class="verdict">
+    两条曲线之间的缺口，是<b>工作构成差异</b>，不是专业度本身的功效。取对数分解：动作维度上，控制后弹性只解释了原始 2.4 倍差距的
+    <b>39.37%</b>，其余 <b>60.63%</b> 来自「专家更常拿 Claude 去做本来就更重、更长的活」这一构成效应；文字维度更极端，控制后弹性仅解释
+    <b>29.20%</b>，构成效应占 <b>70.80%</b>。换句话说：<b>把同一个人从新手练到专家，产出大约涨 1.41 倍（动作）／1.63 倍（文字）；而专家与新手之间的实测差距有 2.4 倍／5.33 倍，多出来的部分来自任务选择本身。</b>
+  </div>
+  <div class="rule">原始每级增幅：动作 +24.47%（2.4^(1/4)）、文字 +51.97%（5.3333^(1/4)）　｜　控制后每级增幅：动作 +9%、文字 +13%</div>
+  <div class="note">公式绑定说明：所有回显值均由上式实时运算，不含任何虚构参数；锚点 5 / 12 / 600 / 3200 与弹性 +9% / +13% 全部取自原报告。档位 2–4 为锚点间几何插值，原报告未逐档披露。</div>
+</div>
+
+<h2 id="sec-3"><span class="num">03</span>专业度比编程背景更能决定成败</h2>
+
+<h3 id="sec-3-1">先说清成功怎么算</h3>
+
+<p>研究看不到用户真实世界的结果，也没法直接问，只能靠两把尺子读会话记录。</p>
+
+<table>
+  <thead><tr><th style="width:22%">尺子</th><th>定义</th></tr></thead>
+  <tbody>
+    <tr><td><strong>judged success</strong><br>判断成功</td><td>Claude 通读完整对话记录后，主观判断这人有没有达到目的，选项是成功、部分成功、失败、没有明确目标。</td></tr>
+    <tr><td><strong>verified success</strong><br>验证成功</td><td>更严格。除了判断为成功，还必须有硬证据：代码真的提交了、测试真的跑通了，或者用户明确说了「搞定了」。证据强度从「无信号」到「多个硬信号」打 1 到 5 分。</td></tr>
+  </tbody>
+</table>
+
+<p>用这两把尺子量下来，规律很清楚：一个人在会话里表现出的专业度越高，会话越可能成功。而且<strong>大部分收益集中在量表的低端</strong>，新手到中级的差距，比中级到专家的差距更大。</p>
+
+<figure>
+  <div class="ftitle">图 3 · 验证成功率随专业度上升：前段陡、后段缓</div>
+  <div class="fsub">纵轴为验证成功率；L1 为原报告实测值，L2–L5 落在原报告合并口径「28–33%」区间内</div>
+  <svg viewBox="0 0 680 300" role="img" aria-label="验证成功率随专业度五档上升的阶梯图，前段陡后段缓">
+    <line x1="70" y1="250" x2="650" y2="250" stroke="var(--line)" stroke-width="1"/>
+    <line x1="70" y1="192.5" x2="650" y2="192.5" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="135" x2="650" y2="135" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="77.5" x2="650" y2="77.5" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="20" x2="650" y2="20" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <text x="62" y="254" font-size="11" fill="var(--fg-dim)" text-anchor="end">0%</text>
+    <text x="62" y="196.5" font-size="11" fill="var(--fg-dim)" text-anchor="end">10%</text>
+    <text x="62" y="139" font-size="11" fill="var(--fg-dim)" text-anchor="end">20%</text>
+    <text x="62" y="81.5" font-size="11" fill="var(--fg-dim)" text-anchor="end">30%</text>
+    <text x="62" y="24" font-size="11" fill="var(--fg-dim)" text-anchor="end">40%</text>
+
+    <rect x="100" y="163.75" width="56" height="86.25" fill="var(--rose)" rx="3"/>
+    <text x="128" y="156" font-size="14" fill="var(--rose)" text-anchor="middle" font-weight="700">15%</text>
+
+    <rect x="216" y="89" width="56" height="161" fill="var(--accent)" rx="3"/>
+    <rect x="332" y="89" width="56" height="161" fill="var(--accent)" rx="3"/>
+    <rect x="448" y="89" width="56" height="161" fill="var(--accent)" rx="3"/>
+    <rect x="564" y="89" width="56" height="161" fill="var(--accent)" rx="3"/>
+    <rect x="216" y="60.25" width="404" height="28.75" fill="var(--accent)" opacity="0.28" rx="3"/>
+    <line x1="216" y1="60.25" x2="620" y2="60.25" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4,4"/>
+    <text x="418" y="52" font-size="12.5" fill="var(--accent)" text-anchor="middle" font-weight="600">区间上沿 33%</text>
+    <text x="418" y="106" font-size="12.5" fill="var(--fg)" text-anchor="middle" font-weight="600">区间下沿 28%</text>
+
+    <path d="M128,163.75 C 176,124 196,89 244,89 L620,89" fill="none" stroke="var(--fg-dim)" stroke-width="1.6" stroke-dasharray="5,4"/>
+
+    <text x="128" y="270" font-size="12.5" fill="var(--rose)" text-anchor="middle" font-weight="700">新手</text>
+    <text x="244" y="270" font-size="12.5" fill="var(--fg-mid)" text-anchor="middle">中级</text>
+    <text x="360" y="270" font-size="12.5" fill="var(--fg-mid)" text-anchor="middle">·</text>
+    <text x="476" y="270" font-size="12.5" fill="var(--fg-mid)" text-anchor="middle">·</text>
+    <text x="592" y="270" font-size="12.5" fill="var(--accent)" text-anchor="middle" font-weight="700">专家</text>
+    <line x1="216" y1="280" x2="620" y2="280" stroke="var(--line)" stroke-width="1"/>
+    <text x="418" y="295" font-size="11.5" fill="var(--fg-dim)" text-anchor="middle">中级及以上：28%–33%（原报告合并口径，未逐档披露）</text>
+  </svg>
+  <figcaption>数据来源：Anthropic 原报告 Figure 5 左图。15%（新手）与 28–33%（中级及以上）为实测值；L2–L5 各档为区间内示意，本文不作逐档断言。</figcaption>
+</figure>
+
+<div class="cards">
+  <div class="card"><div class="v">15% / 77%</div><div class="k">新手会话：验证成功率 /<br>至少部分成功率</div></div>
+  <div class="card"><div class="v">28-33% / 91-92%</div><div class="k">中级及以上会话：验证成功率 /<br>至少部分成功率</div></div>
+  <div class="card"><div class="v">1.87× – 2.20×</div><div class="k">专家相对新手的验证成功倍数<br>（区间下端／上端实测）</div></div>
+  <div class="card"><div class="v">14.5 pp</div><div class="k">「至少部分成功」维度上<br>中高级相对新手的差距</div></div>
+</div>
+
+<p>专家级会话拿到验证成功的比例，是新手的两倍还多。但从中级迈到专家，坡度明显变缓，<strong>收益的大头，来自从新手爬到「够用的熟练」这一段</strong>。</p>
+
+<div class="note"><b>精度勘误：</b>中高级区间为 28%–33%，相对新手 15% 的倍数是 <b>1.87× – 2.20×</b>。也就是说，只有取区间上端 33% 时「两倍还多」才成立；取下端 28% 时是 1.87 倍，应表述为「接近两倍」。原报告用 “more than twice as often”，对应的是上端口径。</div>
+
+<div class="box accent">
+  <h3>沙盘 B · 专业度 → 成功率与抗挫恢复</h3>
+  <p class="sb-desc">
+    把「验证成功率随专业度上升」与「遇到困难后还剩多少」合到一处。滑块调整专业度档位 <b>L</b>，下拉框切换「全部会话」与「只看遇到困难的会话」两种口径。
+  </p>
+  <div class="ctl">
+    <label for="exp-lvl">专业度档位 L</label>
+    <input type="range" id="exp-lvl" min="1" max="5" step="0.5" value="1">
+    <span class="rd" id="out-exp-lvl">1.0</span>
+  </div>
+  <div class="ctl">
+    <label for="exp-mode">会话口径</label>
+    <select id="exp-mode">
+      <option value="all">全部会话</option>
+      <option value="trouble">只看遇到困难的会话</option>
+    </select>
+  </div>
+  <div class="grid">
+    <div class="slot"><div class="sv a" id="out-exp-verified">15.00</div><div class="sk">验证成功率（%）</div></div>
+    <div class="slot"><div class="sv e" id="out-exp-partial">77.00</div><div class="sk">至少部分成功率（%）</div></div>
+    <div class="slot"><div class="sv c" id="out-exp-conv">19.48</div><div class="sk">验证转化率（%）<br>验证成功 ÷ 至少部分成功</div></div>
+    <div class="slot"><div class="sv r" id="out-exp-retain">26.67</div><div class="sk">抗挫保留率（%）<br>困难成功率 ÷ 全量成功率</div></div>
+    <div class="slot"><div class="sv r" id="out-exp-abandon">19.0</div><div class="sk">放弃率（%）<br>判失败且零行代码</div></div>
+  </div>
+  <div class="track"><div class="fill" id="out-exp-bar" style="width:37.50%"></div></div>
+  <div class="verdict" id="out-exp-note">当前：全部会话 · L = 1.0。新手在同档位上，遇到困难后只能保住约 <b>26.67%</b> 的验证成功率，且放弃率高达 19.0%。</div>
+  <div class="note">公式绑定说明：锚点全部取自原报告——全部会话 15 / 28–33（验证）、77 / 91–92（至少部分）；困难会话 4（新手）→ 15（专家）、60 → 80–81；放弃率 19% → 5–7%。档位之间为线性插值，非回归估计。抗挫保留率 = 同档位困难成功率 ÷ 同档位全量成功率。</div>
+</div>
+
+<h3 id="sec-3-2">那职业背景呢</h3>
+
+<p>研究从会话记录里推断用户职业，映射到美国劳工统计局 23 个大类。结果是，在能产出代码的会话里，职业背景的影响比想象中小得多。</p>
+
+<figure>
+  <div class="ftitle">图 4 · 能产出代码的会话里，软件相关职业 vs 其他职业</div>
+  <div class="fsub">左图：验证成功率（纵轴 0–45%）；右图：至少部分成功率（纵轴截断至 80%–100%）</div>
+  <svg viewBox="0 0 680 270" role="img" aria-label="软件相关职业与其他职业的成功率对比">
+    <text x="70" y="18" font-size="12.5" fill="var(--fg-mid)" font-weight="600">验证成功率</text>
+    <text x="390" y="18" font-size="12.5" fill="var(--fg-mid)" font-weight="600">至少部分成功率（纵轴 80%–100% 截断）</text>
+
+    <rect x="70" y="25.5" width="280" height="63" fill="var(--accent)" opacity="0.13"/>
+    <line x1="70" y1="25.5" x2="350" y2="25.5" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4,4"/>
+    <line x1="70" y1="88.5" x2="350" y2="88.5" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4,4"/>
+    <text x="342" y="40" font-size="11" fill="var(--accent)" text-anchor="end">+7pp</text>
+    <text x="342" y="103" font-size="11" fill="var(--accent)" text-anchor="end">−7pp</text>
+
+    <line x1="70" y1="210" x2="350" y2="210" stroke="var(--line)" stroke-width="1"/>
+    <line x1="70" y1="165" x2="350" y2="165" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="120" x2="350" y2="120" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="75" x2="350" y2="75" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="30" x2="350" y2="30" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <text x="62" y="214" font-size="11" fill="var(--fg-dim)" text-anchor="end">0</text>
+    <text x="62" y="169" font-size="11" fill="var(--fg-dim)" text-anchor="end">10</text>
+    <text x="62" y="124" font-size="11" fill="var(--fg-dim)" text-anchor="end">20</text>
+    <text x="62" y="79" font-size="11" fill="var(--fg-dim)" text-anchor="end">30</text>
+    <text x="62" y="34" font-size="11" fill="var(--fg-dim)" text-anchor="end">40</text>
+
+    <rect x="120" y="57" width="90" height="153" fill="var(--cyan)" rx="3"/>
+    <rect x="225" y="79.5" width="90" height="130.5" fill="var(--accent)" rx="3"/>
+    <text x="165" y="50" font-size="15" fill="var(--cyan)" text-anchor="middle" font-weight="700">34%</text>
+    <text x="270" y="72" font-size="15" fill="var(--accent)" text-anchor="middle" font-weight="700">29%</text>
+    <text x="165" y="228" font-size="12" fill="var(--fg-dim)" text-anchor="middle">软件相关职业</text>
+    <text x="270" y="228" font-size="12" fill="var(--fg-dim)" text-anchor="middle">其他所有职业</text>
+
+    <line x1="390" y1="210" x2="660" y2="210" stroke="var(--line)" stroke-width="1"/>
+    <line x1="390" y1="165" x2="660" y2="165" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="390" y1="120" x2="660" y2="120" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="390" y1="75" x2="660" y2="75" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="390" y1="30" x2="660" y2="30" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <text x="382" y="214" font-size="11" fill="var(--fg-dim)" text-anchor="end">80</text>
+    <text x="382" y="169" font-size="11" fill="var(--fg-dim)" text-anchor="end">85</text>
+    <text x="382" y="124" font-size="11" fill="var(--fg-dim)" text-anchor="end">90</text>
+    <text x="382" y="79" font-size="11" fill="var(--fg-dim)" text-anchor="end">95</text>
+    <text x="382" y="34" font-size="11" fill="var(--fg-dim)" text-anchor="end">100</text>
+
+    <rect x="430" y="129" width="90" height="81" fill="var(--cyan)" rx="3"/>
+    <rect x="535" y="138" width="90" height="72" fill="var(--accent)" rx="3"/>
+    <text x="475" y="122" font-size="15" fill="var(--cyan)" text-anchor="middle" font-weight="700">89%</text>
+    <text x="580" y="131" font-size="15" fill="var(--accent)" text-anchor="middle" font-weight="700">88%</text>
+    <text x="475" y="228" font-size="12" fill="var(--fg-dim)" text-anchor="middle">软件相关职业</text>
+    <text x="580" y="228" font-size="12" fill="var(--fg-dim)" text-anchor="middle">其他所有职业</text>
+  </svg>
+  <figcaption>数据来源：Anthropic 原报告 Figure 6 及正文。差距仅 5 个百分点（验证成功）与 1 个百分点（至少部分成功），且 7 个月里既没扩大也没缩小。阴影带为「十大职业均落在软件从业者 ±7pp 以内」的示意区间。</figcaption>
+</figure>
+
+<p>更进一步：在能产出代码的会话里，数据集里 <strong>10 大职业全部落在软件工程师 7 个百分点以内</strong>。管理类职业的验证成功率甚至略高于软件工程师，这可能因为管理技能天然适合指挥智能体，也可能只是管理者更爱在对话里明确说「达到了」，而验证成功部分依赖这种明确确认。</p>
+
+<h2 id="sec-4"><span class="num">04</span>翻车之后，专业用户更容易爬起来</h2>
+
+<p>专业度不只影响顺风局，在会话「翻车」时差距更明显。</p>
+
+<h4>怎么算翻车</h4>
+<p>不看任务本身难不难，而看过程里有没有留下「翻车证据」：报错、测试失败、反复重试、用户表达不满。这些证据强度打 1 到 5 分，分越高说明中途越不顺。<strong>分数超过 3 分，就算这场会话真的遇到了困难。</strong></p>
+
+<figure>
+  <div class="ftitle">图 5 · 全部会话 vs 遇到困难的会话：验证成功率</div>
+  <div class="fsub">两个面板使用同一纵轴刻度（0–35%），可直接比高低</div>
+  <svg viewBox="0 0 680 300" role="img" aria-label="全部会话与困难会话下新手和中高级的验证成功率对比">
+    <text x="70" y="18" font-size="13" fill="var(--fg-mid)" font-weight="600">全部会话</text>
+    <text x="390" y="18" font-size="13" fill="var(--rose)" font-weight="600">只看遇到困难的会话</text>
+
+    <line x1="70" y1="230" x2="350" y2="230" stroke="var(--line)" stroke-width="1"/>
+    <line x1="70" y1="172.86" x2="350" y2="172.86" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="115.71" x2="350" y2="115.71" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="58.57" x2="350" y2="58.57" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <text x="62" y="234" font-size="11" fill="var(--fg-dim)" text-anchor="end">0</text>
+    <text x="62" y="177" font-size="11" fill="var(--fg-dim)" text-anchor="end">10</text>
+    <text x="62" y="120" font-size="11" fill="var(--fg-dim)" text-anchor="end">20</text>
+    <text x="62" y="63" font-size="11" fill="var(--fg-dim)" text-anchor="end">30</text>
+
+    <rect x="120" y="144.29" width="80" height="85.71" fill="var(--rose)" rx="3"/>
+    <rect x="220" y="70" width="80" height="160" fill="var(--accent)" rx="3"/>
+    <rect x="220" y="41.43" width="80" height="28.57" fill="var(--accent)" opacity="0.28" rx="3"/>
+    <line x1="220" y1="41.43" x2="300" y2="41.43" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4,4"/>
+    <text x="160" y="136" font-size="14.5" fill="var(--rose)" text-anchor="middle" font-weight="700">15%</text>
+    <text x="260" y="62" font-size="13.5" fill="var(--accent)" text-anchor="middle" font-weight="700">28–33%</text>
+    <text x="160" y="252" font-size="12" fill="var(--fg-dim)" text-anchor="middle">新手</text>
+    <text x="260" y="252" font-size="12" fill="var(--fg-dim)" text-anchor="middle">中级到专家</text>
+
+    <line x1="390" y1="230" x2="650" y2="230" stroke="var(--line)" stroke-width="1"/>
+    <line x1="390" y1="172.86" x2="650" y2="172.86" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="390" y1="115.71" x2="650" y2="115.71" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="390" y1="58.57" x2="650" y2="58.57" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <text x="382" y="234" font-size="11" fill="var(--fg-dim)" text-anchor="end">0</text>
+    <text x="382" y="177" font-size="11" fill="var(--fg-dim)" text-anchor="end">10</text>
+    <text x="382" y="120" font-size="11" fill="var(--fg-dim)" text-anchor="end">20</text>
+    <text x="382" y="63" font-size="11" fill="var(--fg-dim)" text-anchor="end">30</text>
+
+    <rect x="430" y="207.14" width="80" height="22.86" fill="var(--rose)" rx="3"/>
+    <rect x="530" y="144.29" width="80" height="85.71" fill="var(--accent)" rx="3"/>
+    <text x="470" y="199" font-size="14.5" fill="var(--rose)" text-anchor="middle" font-weight="700">4%</text>
+    <text x="570" y="136" font-size="14.5" fill="var(--accent)" text-anchor="middle" font-weight="700">15%</text>
+    <text x="470" y="252" font-size="12" fill="var(--fg-dim)" text-anchor="middle">新手</text>
+    <text x="570" y="252" font-size="12" fill="var(--fg-dim)" text-anchor="middle">专家</text>
+
+    <text x="418" y="285" font-size="11.5" fill="var(--fg-dim)" text-anchor="middle">放宽到「至少部分成功」：全部会话 77% → 91–92%；困难会话 60% → 80–81%</text>
+  </svg>
+  <figcaption>数据来源：Anthropic 原报告 Figure 5。困难会话面板数值已经工作类型、任务价值、月份、主题、职业的对齐控制。</figcaption>
+</figure>
+
+<p>更极端的一头是「直接放弃」，也就是会话被判为失败、而且一行代码都没写出来。这上面新手和其他人拉开得最狠：</p>
+
+<figure>
+  <div class="ftitle">图 6 · 放弃率：判为失败且零行代码的会话占比</div>
+  <div class="fsub">纵轴 0–25%；「其他所有人」为原报告给出的 5%–7% 区间</div>
+  <svg viewBox="0 0 680 250" role="img" aria-label="新手与其他用户的放弃率对比">
+    <line x1="70" y1="220" x2="650" y2="220" stroke="var(--line)" stroke-width="1"/>
+    <line x1="70" y1="184" x2="650" y2="184" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="148" x2="650" y2="148" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="112" x2="650" y2="112" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="76" x2="650" y2="76" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <line x1="70" y1="40" x2="650" y2="40" stroke="var(--line-soft)" stroke-width="1" stroke-dasharray="3,5"/>
+    <text x="62" y="224" font-size="11" fill="var(--fg-dim)" text-anchor="end">0</text>
+    <text x="62" y="188" font-size="11" fill="var(--fg-dim)" text-anchor="end">5</text>
+    <text x="62" y="152" font-size="11" fill="var(--fg-dim)" text-anchor="end">10</text>
+    <text x="62" y="116" font-size="11" fill="var(--fg-dim)" text-anchor="end">15</text>
+    <text x="62" y="80" font-size="11" fill="var(--fg-dim)" text-anchor="end">20</text>
+    <text x="62" y="44" font-size="11" fill="var(--fg-dim)" text-anchor="end">25</text>
+
+    <rect x="170" y="83.2" width="110" height="136.8" fill="var(--rose)" rx="3"/>
+    <rect x="400" y="169.6" width="110" height="50.4" fill="var(--accent)" rx="3"/>
+    <rect x="400" y="184" width="110" height="14.4" fill="var(--accent)" opacity="0.28" rx="3"/>
+    <line x1="400" y1="184" x2="510" y2="184" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4,4"/>
+    <text x="225" y="75" font-size="16" fill="var(--rose)" text-anchor="middle" font-weight="700">19%</text>
+    <text x="455" y="161" font-size="15" fill="var(--accent)" text-anchor="middle" font-weight="700">5–7%</text>
+    <text x="225" y="242" font-size="12.5" fill="var(--rose)" text-anchor="middle" font-weight="600">新手</text>
+    <text x="455" y="242" font-size="12.5" fill="var(--fg-dim)" text-anchor="middle">其他所有人</text>
+  </svg>
+  <figcaption>数据来源：Anthropic 原报告。最缺经验的用户，卡壳时放弃的比例是别人的 2.7–3.8 倍（19% ÷ 7% 至 19% ÷ 5%）。</figcaption>
+</figure>
+
+<blockquote>
+一个口径细节：「遇到困难」这个条件，对不同人筛出的是<strong>不同的会话</strong>。专家整体上更少遇到困难，所以他们真卡住的那些会话，往往是更难的问题。用任务估值当复杂度的代理来看，翻车会话的平均估值，从专业度最低到最高翻了大约一倍。所以恢复率的差距，一部分可能是因为新手卡在常规问题上，而专家卡在硬骨头上，不全是抗挫折能力的差别。
+</blockquote>
+
+<h2 id="sec-5"><span class="num">05</span>7 个月里，人们用 Claude Code 做的事变了</h2>
+
+<p>研究把每场会话归入九种工作模式里最贴切的一种，其中四种直接写或维护代码（建东西、修东西、测试、编排其他智能体），另外几种是运维软件、摸清系统怎么运作、动手前先规划，以及和代码无关的数据分析与写文档。7 个月里，这套构成变了。</p>
+
+<p>最明显的是，花在修坏代码上的会话占比从 <strong>33% 掉到 19%</strong>，几乎腰斩。腾出来的份额，流向了代码周边的活。</p>
+
+<figure>
+  <div class="ftitle">图 7 · 2025 年 10 月到 2026 年 4 月，各工作模式的会话占比变化</div>
+  <div class="fsub">每根柱为 100% 堆叠；四类之和为 100%</div>
+  <svg viewBox="0 0 680 280" role="img" aria-label="2025年10月与2026年4月工作模式构成对比的堆叠柱状图">
+    <rect x="70" y="8" width="11" height="11" fill="var(--rose)" rx="2"/>
+    <text x="88" y="18" font-size="11.5" fill="var(--fg-dim)">修 bug</text>
+    <rect x="152" y="8" width="11" height="11" fill="var(--cyan)" rx="2"/>
+    <text x="170" y="18" font-size="11.5" fill="var(--fg-dim)">运维软件</text>
+    <rect x="244" y="8" width="11" height="11" fill="var(--amber)" rx="2"/>
+    <text x="262" y="18" font-size="11.5" fill="var(--fg-dim)">数据分析 + 写文档</text>
+    <rect x="392" y="8" width="11" height="11" fill="var(--fg-dim)" rx="2"/>
+    <text x="410" y="18" font-size="11.5" fill="var(--fg-dim)">其他</text>
+
+    <rect x="120" y="40" width="150" height="66" fill="var(--rose)"/>
+    <text x="195" y="78" font-size="13.5" fill="#181715" text-anchor="middle" font-weight="700">修 bug 33%</text>
+    <rect x="120" y="106" width="150" height="28" fill="var(--cyan)"/>
+    <text x="195" y="125" font-size="12" fill="#181715" text-anchor="middle" font-weight="600">运维 14%</text>
+    <rect x="120" y="134" width="150" height="20" fill="var(--amber)"/>
+    <text x="195" y="148" font-size="11.5" fill="#181715" text-anchor="middle" font-weight="600">写作+分析 10%</text>
+    <rect x="120" y="154" width="150" height="86" fill="var(--fg-dim)"/>
+    <text x="195" y="200" font-size="13.5" fill="#181715" text-anchor="middle" font-weight="700">其他 43%</text>
+    <text x="195" y="258" font-size="13" fill="var(--fg-mid)" text-anchor="middle" font-weight="600">2025 年 10 月</text>
+
+    <rect x="400" y="40" width="150" height="38" fill="var(--rose)"/>
+    <text x="475" y="64" font-size="13.5" fill="#181715" text-anchor="middle" font-weight="700">修 bug 19%</text>
+    <rect x="400" y="78" width="150" height="42" fill="var(--cyan)"/>
+    <text x="475" y="104" font-size="12.5" fill="#181715" text-anchor="middle" font-weight="600">运维 21%</text>
+    <rect x="400" y="120" width="150" height="40" fill="var(--amber)"/>
+    <text x="475" y="144" font-size="12.5" fill="#181715" text-anchor="middle" font-weight="600">写作+分析 20%</text>
+    <rect x="400" y="160" width="150" height="80" fill="var(--fg-dim)"/>
+    <text x="475" y="204" font-size="13.5" fill="#181715" text-anchor="middle" font-weight="700">其他 40%</text>
+    <text x="475" y="258" font-size="13" fill="var(--fg-mid)" text-anchor="middle" font-weight="600">2026 年 4 月</text>
+  </svg>
+  <figcaption>数据来源：Anthropic 原报告 Figure 4 与正文。<b>「其他」为残差项</b>——原报告只披露了修 bug、运维、写作+分析三类的占比变化，未给出第四类数字，此处由 100% 减去前三类得出。</figcaption>
+</figure>
+
+<p>运维软件（部署、配置、跑流水线、盯系统）从 14% 涨到 21%；写文档和数据分析加起来，从约 10% 翻倍到 20%。人们越来越多地把 Claude Code 用在从头到尾的完整场景，而不只是敲代码那一段。</p>
+
+<p>任务本身也更值钱了。研究把每场会话对标自由职业市场的报价来估价，典型会话的估值在 7 个月里涨了约 <strong>25% 到 27%</strong>，而且几乎各类工作都在涨。</p>
+
+<div class="cards">
+  <div class="card"><div class="v">+25~27%</div><div class="k">典型任务估值的平均涨幅<br>（对标自由职业市场报价）</div></div>
+  <div class="card"><div class="v">+43%</div><div class="k">建站、建东西类任务的估值涨幅</div></div>
+  <div class="card"><div class="v">+34%</div><div class="k">运维类任务的估值涨幅</div></div>
+  <div class="card"><div class="v">+32%</div><div class="k">修 bug 类任务的估值涨幅</div></div>
+</div>
+
+<div class="note">这些价格是粗略估计，只用来比较任务之间和随时间的相对变化，不能当真实美元金额直接读。</div>
+
+<div class="box accent">
+  <h3>沙盘 C · 任务价值分解：反解「其他」类涨幅</h3>
+  <p class="sb-desc">
+    原报告给出了修 bug（+32%）、运维（+34%）、建东西（+43%）三类各自的估值涨幅，也给出了全样本平均涨幅，但没有第四类「其他」的数字。
+    用 2026 年 4 月的构成权重把这三条已知曲线加总，就能<b>把「其他」类的涨幅反解出来</b>。滑块调整全样本涨幅 G，观察反解结果。
+  </p>
+  <div class="ctl">
+    <label for="rg-growth">全样本涨幅 G（%）</label>
+    <input type="range" id="rg-growth" min="25" max="27.5" step="0.1" value="26">
+    <span class="rd" id="out-grow-g">26.0</span>
+  </div>
+  <div class="grid">
+    <div class="slot"><div class="sv e" id="out-grow-known">21.82</div><div class="sk">三类已知模式贡献（pp）<br>含构成迁移效应</div></div>
+    <div class="slot"><div class="sv a" id="out-grow-other">10.45</div><div class="sk">反解「其他」类涨幅（%）<br>原报告未披露</div></div>
+    <div class="slot"><div class="sv c" id="out-grow-contrib">4.18</div><div class="sk">「其他」类贡献（pp）<br>0.40 × 反解涨幅</div></div>
+    <div class="slot"><div class="sv" id="out-grow-total">26.00</div><div class="sk">合计（pp）<br>应等于 G</div></div>
+  </div>
+  <div class="track"><div class="fill" id="out-grow-bar" style="width:52.25%"></div></div>
+  <div class="verdict" id="out-grow-note">反解得「其他」类涨幅 <b>10.45%</b>，为正——即便在 G 取区间下端 25% 时，反解值仍有 <b>7.95%</b>。</div>
+  <div class="rule">反解式：g_other = ( (1 + G/100) − 1.2182 ) / 0.40 × 100　｜　1.2182 = 0.19×1.32 + 0.21×1.34 + 0.20×1.43 + 0.40×1.00</div>
+  <div class="note"><b>假设与稳健性：</b>该反解假设 2025 年 10 月四类模式的单会话价值相等并归一为 1，且各模式涨幅口径与全样本一致——这是<strong>为可解而设的基准假设，非原报告口径</strong>。稳健性检验：令反解值为 0 的阈值是 G = 21.82%；原报告给出的 G ∈ [25%, 27%] 全域高于该阈值，故「其他类亦为正增长」这一结论在全部参数域内成立，不依赖具体取值。ΔG 每 ±1pp，反解涨幅变动 ±2.5pp，敏感度偏高，不宜外推到区间之外。</div>
+</div>
+
+<h2 id="sec-6"><span class="num">06</span>这些数字目前能说明什么</h2>
+
+<p>把这份数据能支撑的结论列一下，只说尺子量到的，不往外推。</p>
+
+<p><strong>第一</strong>，在能产出代码的会话里，各行各业的成功率都逼近软件从业者，编程背景对写代码成败的影响正在变小。<strong>第二</strong>，用得好不好，更多取决于一个人对问题本身的理解，不论他在哪个领域。<strong>第三</strong>，也是这份报告反复强调的一点：收益的大头来自「够用的熟练度」，从新手爬到中级的成功率跃升，远大于从中级到专家的那一小段。</p>
+
+<div class="note">图 3 那条阶梯画的就是这个形状：前段陡、后段缓，正是这份数据里回报的形状。</div>
+
+<p>需要留住的几条边界：研究<strong>看不到真实世界的结果</strong>，比如一场会话写出来的代码后来到底被用了还是丢了；本文排除的非交互使用（headless 与 API 批量）是相当大的一块，怎么衡量它是下一步的重点；所有分类都依赖 AI 模型对会话记录的阅读，大规模验证本身就难，而 Claude Code 会话又长又复杂，人工标注很难当作标准答案。</p>
+
+<p>随着模型、用户和两者的分工继续变化，这幅图景会被持续更新。研究者说，往后要盯的信号包括：专业度带来的回报会不会开始下降，以及软件类以外职业的成功会话占比会不会继续增长。</p>
+
+<h2 id="sec-7"><span class="num">07</span>把这些发现，翻成你明天怎么用</h2>
+
+<p>原报告到这里就结束了，它是纯数据分析，不给操作建议。但它测量「专业度」用的三个信号，反过来读，就是一份「怎么把 Claude Code 用得更顺」的清单。下面几条是从研究特征反推的用法，供你参考。</p>
+
+<ol class="steps">
+  <li>
+    <h4>把需求说清楚</h4>
+    <p>别只丢一句「帮我搞定这个」。说清领域规则、约束条件、什么算完成，研究里专家会话的第一个特征就是「指令给得精确」。你说得越具体，同一条指令换来的 Claude 产出越多（专家约是新手的两倍动作、五倍文字）。</p>
+  </li>
+  <li>
+    <h4>明确告诉它要验证什么</h4>
+    <p>专家会主动要求 Claude 自查，比如跑通测试、检查边界情况、核对特殊场景，而不是跑完就信。点名让它验证什么，「验证成功」需要的硬证据（提交、测试通过、你确认）也更容易攒齐。</p>
+  </li>
+  <li>
+    <h4>是你纠正它，不是它替你猜</h4>
+    <p>区分新手和专家的第三个信号：谁在纠正谁。你对问题越懂，越能一眼看出它哪里跑偏、当场拽回来；而不是让它替你补规则、猜意图，而它猜错了你也未必发现。</p>
+  </li>
+  <li>
+    <h4>卡住了别急着放弃</h4>
+    <p>数据里最扎眼的一条：新手一遇困难，直接放弃的比例是别人的 2.7 到 3.8 倍。卡壳时把问题拆小、换个说法、补更多上下文，往往比推倒重来更管用。</p>
+  </li>
+</ol>
+
+<blockquote>
+编程智能体并没有取代领域专业度：一个人带着越多的理解来用它，它能做出的高质量工作就越多。<br>—— Anthropic 研究报告《Agentic coding and persistent returns to expertise》
+</blockquote>
+
+<h2 id="sec-8"><span class="num">08</span>来源、口径与勘误</h2>
+
+<h3>二次编译稿 vs 原报告：口径对照</h3>
+
+<p>本文主体依中文编译稿整理，但与 Anthropic 原报告逐项核对后，发现若干需要标注或更正之处。下表列出全部差异，供引用时判读。</p>
+
+<table>
+  <thead><tr><th style="width:20%">项目</th><th style="width:30%">中文编译稿口径</th><th style="width:32%">Anthropic 原报告口径</th><th>判读</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>任务估值涨幅</td>
+      <td>「涨了约 25% 到 27%」，作为单一区间呈现</td>
+      <td>正文为 <strong>27%</strong>，关键摘要为 <strong>约 25%</strong>，两个数字各自成立</td>
+      <td>并非一个区间的两端，而是原文两处的表述不一致。引用时应说明取哪一处。</td>
+    </tr>
+    <tr>
+      <td>「两倍还多」</td>
+      <td>「专家级会话……是新手的两倍还多」，紧接 28–33% 区间</td>
+      <td>原文 “more than twice as often”，对应区间上端</td>
+      <td>取 28% 时为 <strong>1.87 倍</strong>，只有取 33% 时才达 <strong>2.20 倍</strong>。区间表述与「两倍还多」不完全自洽。</td>
+    </tr>
+    <tr>
+      <td>每轮输出量</td>
+      <td>「约 2400 字」</td>
+      <td>“2,400 <strong>words</strong>”（英文词）</td>
+      <td>单位不同。中文语境下按「字」读取会低估约一倍，应回译为「词」。</td>
+    </tr>
+    <tr>
+      <td>「其他」类占比</td>
+      <td>给出 43%（2025-10）/ 40%（2026-04）</td>
+      <td>原报告 Figure 4 未披露第四类数字</td>
+      <td>系编译者由 100% 减前三类得出的<strong>残差项</strong>，非原报告实测值。</td>
+    </tr>
+    <tr>
+      <td>职业对比</td>
+      <td>仅给能产出代码的会话：34% vs 29%</td>
+      <td>另给全样本口径：软件相关 <strong>30%</strong> vs 其他 <strong>26%</strong></td>
+      <td>两组数字均成立，口径不同。编译稿只取了一组。</td>
+    </tr>
+    <tr>
+      <td>九类工作模式基线</td>
+      <td>未给出</td>
+      <td>全期构成：建 25%、修 26%、测试+编排 5%、运维 17%、规划+理解 14%、分析+写作 13%</td>
+      <td>编译稿只给首尾两月的变化，缺全期基线。</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>原报告有、编译稿未收录的三项数据</h3>
+
+<table>
+  <thead><tr><th style="width:26%">指标</th><th class="num" style="width:16%">数值</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>可推断职业的会话比例</td><td class="num">约 70%</td><td>职业标签只覆盖约七成会话，其余无法归类；这限制了职业维度结论的外推范围。</td></tr>
+    <tr><td>用户周使用时长</td><td class="num">平均 20 小时/周</td><td>衡量的是 Claude Code 实际运行的小时数，不是用户动手输入的时间。</td></tr>
+    <tr><td>动作数长尾分布</td><td class="num">2% / 1/270 / 1/2300</td><td>约 2% 的会话平均每条指令超 100 个动作；约 1/270 超 200 个；约 1/2300 超 500 个。</td></tr>
+  </tbody>
+</table>
+
+<div class="note">本文所有图表均为<b>依据原报告披露数值重建</b>的矢量图形，非原报告 Figure 原件；每张图下方均标注了数据来源与推算口径。凡本文自行推算的数字（如验证转化率、抗挫保留率、反解涨幅），均已在对应位置标明算式与假设。</div>
+
+<p class="source">
+<strong>来源：</strong>Anthropic 研究报告《Agentic coding and persistent returns to expertise》（2026-06-16 发布），基于对约 40 万次、约 23.5 万用户、2025 年 10 月至 2026 年 4 月的 Claude Code 交互会话所做的隐私保护分析。本文由小互解读站编译整理，数据与结论均来自原报告；成功率、专业度、职业、任务估值等标签由 Claude 模型自动生成，非人工核验。原报告分类器默认使用 Claude Sonnet 4.6。<br>
+原文链接：<a href="https://www.anthropic.com/research/claude-code-expertise" target="_blank" rel="noopener">https://www.anthropic.com/research/claude-code-expertise</a><br>
+中文编译：<a href="https://best.xiaohu.ai/article/claude-code-expertise/" target="_blank" rel="noopener">https://best.xiaohu.ai/article/claude-code-expertise/</a>
+</p>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+  function byId(id){ return document.getElementById(id); }
+
+  /* ---------- 主题 ---------- */
+  var root = document.documentElement;
+  var tBtn = byId("btn-theme");
+  function applyTheme(t){
+    root.setAttribute("data-theme", t);
+    if (tBtn) { tBtn.textContent = (t === "dark") ? "浅色" : "深色"; }
+  }
+  applyTheme(root.getAttribute("data-theme") || "dark");
+  if (tBtn) {
+    tBtn.addEventListener("click", function(){
+      var cur = root.getAttribute("data-theme") || "dark";
+      applyTheme(cur === "dark" ? "light" : "dark");
+    });
+  }
+
+  /* ---------- 目录 / 进度条 ---------- */
+  var side = byId("sidebar");
+  var tocBtn = byId("btn-toc");
+  if (tocBtn && side) {
+    tocBtn.addEventListener("click", function(){ side.classList.toggle("open"); });
+  }
+  var topBtn = byId("btn-top");
+  if (topBtn) {
+    topBtn.addEventListener("click", function(){
+      if (window.scrollTo) { window.scrollTo(0, 0); }
+    });
+  }
+
+  var links = document.querySelectorAll(".toc a");
+  var secs = [];
+  for (var li = 0; li < links.length; li++) {
+    var hr = links[li].getAttribute("href");
+    if (hr && hr.charAt(0) === "#") {
+      var tgt = byId(hr.substring(1));
+      if (tgt) { secs.push({ el: tgt, a: links[li] }); }
+    }
+  }
+  function onScroll(){
+    var pick = 0;
+    for (var i = 0; i < secs.length; i++) {
+      var r = secs[i].el.getBoundingClientRect();
+      if (r.top <= 150) { pick = i; }
+    }
+    for (var j = 0; j < secs.length; j++) {
+      secs[j].a.classList.toggle("active", j === pick);
+    }
+    var de = document.documentElement;
+    var span = de.scrollHeight - de.clientHeight;
+    var top = de.scrollTop || 0;
+    var pct = span > 0 ? (top / span) * 100 : 0;
+    if (pct < 0) { pct = 0; }
+    if (pct > 100) { pct = 100; }
+    var bar = byId("progress");
+    if (bar) { bar.style.width = pct.toFixed(2) + "%"; }
+    if (topBtn) { topBtn.style.display = top > 600 ? "block" : "none"; }
+  }
+  window.addEventListener("scroll", onScroll);
+
+  /* ---------- 沙盘 A：产出杠杆 ---------- */
+  var levLvl = byId("lev-lvl");
+  function levRender(){
+    var L = parseFloat(levLvl.value);
+    var t = (L - 1) / 4;
+    var rawA = 5 * Math.pow(2.4, t);
+    var ctlA = 5 * Math.pow(1.09, L - 1);
+    var rawW = 600 * Math.pow(3200 / 600, t);
+    var ctlW = 600 * Math.pow(1.13, L - 1);
+    byId("out-lev-lvl").textContent = L.toFixed(1);
+    byId("out-lev-rawact").textContent = rawA.toFixed(2);
+    byId("out-lev-ctlact").textContent = ctlA.toFixed(2);
+    byId("out-lev-dact").textContent = (rawA - ctlA).toFixed(2);
+    byId("out-lev-rawword").textContent = String(Math.round(rawW));
+    byId("out-lev-ctlword").textContent = String(Math.round(ctlW));
+    byId("out-lev-dword").textContent = String(Math.round(rawW - ctlW));
+  }
+  if (levLvl) {
+    levLvl.addEventListener("input", levRender);
+    levRender();
+  }
+
+  /* ---------- 沙盘 B：专业度 → 成功率与抗挫恢复 ---------- */
+  var expLvl = byId("exp-lvl");
+  var expMode = byId("exp-mode");
+  function vAll(L){ return L <= 1 ? 15 : (L < 2 ? 15 + 13 * (L - 1) : 28 + (L - 2) / 3 * 5); }
+  function pAll(L){ return L <= 1 ? 77 : (L < 2 ? 77 + 14 * (L - 1) : 91 + (L - 2) / 3 * 1); }
+  function vTro(L){ return 4 + 2.75 * (L - 1); }
+  function pTro(L){ return L <= 1 ? 60 : (L < 2 ? 60 + 20 * (L - 1) : 80 + (L - 2) / 3 * 1); }
+  function abandon(L){ return L <= 1 ? 19 : 5 + (L - 2) / 3 * 2; }
+
+  function expRender(){
+    var L = parseFloat(expLvl.value);
+    var trouble = expMode.value === "trouble";
+    var v = trouble ? vTro(L) : vAll(L);
+    var p = trouble ? pTro(L) : pAll(L);
+    var conv = (v / p) * 100;
+    var retain = (vTro(L) / vAll(L)) * 100;
+    var ab = abandon(L);
+    byId("out-exp-lvl").textContent = L.toFixed(1);
+    byId("out-exp-verified").textContent = v.toFixed(2);
+    byId("out-exp-partial").textContent = p.toFixed(2);
+    byId("out-exp-conv").textContent = conv.toFixed(2);
+    byId("out-exp-retain").textContent = retain.toFixed(2);
+    byId("out-exp-abandon").textContent = ab.toFixed(1);
+    var w = (v / 40) * 100;
+    if (w < 0) { w = 0; }
+    if (w > 100) { w = 100; }
+    byId("out-exp-bar").style.width = w.toFixed(2) + "%";
+    var vn = byId("out-exp-note");
+    if (vn) {
+      var scope = trouble ? "只看遇到困难的会话" : "全部会话";
+      vn.innerHTML = "当前：" + scope + " · L = " + L.toFixed(1) +
+        "。该档位下遇到困难后只能保住约 <b>" + retain.toFixed(2) +
+        "%</b> 的验证成功率，放弃率 " + ab.toFixed(1) + "%，验证转化率 " + conv.toFixed(2) + "%。";
+    }
+  }
+  if (expLvl && expMode) {
+    expLvl.addEventListener("input", expRender);
+    expMode.addEventListener("change", expRender);
+    expRender();
+  }
+
+  /* ---------- 沙盘 C：任务价值分解 ---------- */
+  var rgG = byId("rg-growth");
+  var BASE = 1.2182;
+  var WO = 0.40;
+  function growRender(){
+    var G = parseFloat(rgG.value);
+    var go = ((1 + G / 100) - BASE) / WO * 100;
+    var cOther = WO * go;
+    var cKnown = (BASE - 1) * 100;
+    var total = cKnown + cOther;
+    byId("out-grow-g").textContent = G.toFixed(1);
+    byId("out-grow-known").textContent = cKnown.toFixed(2);
+    byId("out-grow-other").textContent = go.toFixed(2);
+    byId("out-grow-contrib").textContent = cOther.toFixed(2);
+    byId("out-grow-total").textContent = total.toFixed(2);
+    var bw = (go / 20) * 100;
+    if (bw < 0) { bw = 0; }
+    if (bw > 100) { bw = 100; }
+    byId("out-grow-bar").style.width = bw.toFixed(2) + "%";
+    var gn = byId("out-grow-note");
+    if (gn) {
+      var tail = go > 0
+        ? "，为正——即便在 G 取区间下端 25% 时，反解值仍有 <b>7.95%</b>。"
+        : "，为负——但该情形不在原报告给出的 G 区间内。";
+      gn.innerHTML = "反解得「其他」类涨幅 <b>" + go.toFixed(2) + "%</b>" + tail;
+    }
+  }
+  if (rgG) {
+    rgG.addEventListener("input", growRender);
+    growRender();
+  }
+
+  onScroll();
+})();
+</script>
+</body>
+</html>

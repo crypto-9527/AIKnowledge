@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Claude Code 验证循环与技能四层接入：把手动检查写成技能，四个位置决定开火时机。来源 Delba de Oliveira 2026-07-22 实操指南的小互解读全文结构化重排。">
+<title>Claude Code 验证循环：把手动检查写成技能 · 四层接入指南</title>
+<style>
+:root{--aike-content-max:1180px;--aike-sidebar-w:280px}
+html[data-theme="dark"]{--bg:#181715;--bg2:#201e1c;--card:#23211e;--line:#3a3632;--ink:#ece5d8;--muted:#b8ab96;--accent:#E2886A;--emerald:#6fbf8f;--rose:#e0706a;--amber:#d9a441;--cyan:#6fb7bf;--code-bg:#141312;--quote-bg:#23211e}
+html[data-theme="light"]{--bg:#FAF7F2;--bg2:#f1ebe1;--card:#ffffff;--line:#e3d9c8;--ink:#26231f;--muted:#6b6257;--accent:#D97757;--emerald:#1e7a4c;--rose:#b34038;--amber:#96690f;--cyan:#0f6f7a;--code-bg:#f4efe6;--quote-bg:#f4efe6}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;line-height:1.75;font-size:16px}
+a{color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+a:hover{text-decoration:underline}
+.app-sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--aike-sidebar-w);background:var(--bg2);border-right:1px solid var(--line);padding:20px 16px;overflow-y:auto;z-index:20}
+.app-sidebar h2{font-family:"Songti SC","SimSun",Georgia,serif;font-size:15px;margin:0 0 10px;letter-spacing:.05em}
+.app-sidebar .brand{font-size:12px;color:var(--muted);margin-bottom:12px}
+.app-sidebar nav a{display:block;border:0;color:var(--muted);font-size:13.5px;padding:6px 10px;border-radius:8px;margin:1px 0}
+.app-sidebar nav a:hover{background:var(--card);color:var(--ink)}
+.app-sidebar nav a.active{background:var(--card);color:var(--accent);font-weight:700}
+.app-sidebar .meta{font-size:12px;color:var(--muted);border-top:1px dashed var(--line);margin-top:14px;padding-top:12px}
+.app-main{display:block;max-width:var(--aike-content-max);width:auto;margin-left:calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));margin-right:max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));padding:28px 36px 120px}
+.topbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.badge{display:inline-block;font-size:12px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);background:var(--card)}
+.badge.hot{color:var(--accent);border-color:var(--accent)}
+h1{font-family:"Songti SC","SimSun",Georgia,serif;font-size:32px;line-height:1.35;margin:10px 0 8px}
+.dek{font-size:17px;color:var(--muted);border-left:4px solid var(--accent);padding-left:14px;margin:12px 0 18px}
+:is(body,main,.content,.page) h2{font-family:"Songti SC","SimSun",Georgia,serif;font-size:24px;margin:44px 0 12px;padding-top:8px;border-top:1px solid var(--line)}
+:is(body,main,.content,.page) h3{font-size:18px;margin:26px 0 8px;color:var(--accent)}
+.kicker{font-size:12.5px;letter-spacing:.18em;color:var(--accent);font-weight:700;margin-bottom:-6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:14px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.pos{cursor:pointer;transition:transform .15s ease,border-color .15s ease}
+.pos:hover{transform:translateY(-2px);border-color:var(--accent)}
+.pos.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.pos .n{font-size:26px;font-weight:800;color:var(--accent)}
+.pos code{font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{border-bottom:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+th{background:var(--bg2);font-size:13px;letter-spacing:.04em}
+tr:last-child td{border-bottom:0}
+code,pre{font-family:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto;font-size:13.5px;line-height:1.65;position:relative}
+pre code{background:transparent}
+p code,li code,td code{background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:.88em}
+.callout{border:1px solid var(--line);border-left:4px solid var(--amber);background:var(--quote-bg);border-radius:10px;padding:12px 16px;margin:14px 0;font-size:14.5px}
+.callout.green{border-left-color:var(--emerald)}
+.callout.rose{border-left-color:var(--rose)}
+.callout.cyan{border-left-color:var(--cyan)}
+blockquote{margin:14px 0;padding:12px 18px;border-left:4px solid var(--accent);background:var(--quote-bg);border-radius:0 10px 10px 0;color:var(--ink)}
+ul.tight li,ol.tight li{margin:6px 0}
+.btn{display:inline-block;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 14px;font-size:14px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#1a1512;font-weight:700}
+html[data-theme="light"] .btn.primary{color:#fff}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap}
+#bar-progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:50}
+#btn-top{position:fixed;right:18px;bottom:18px;z-index:50}
+.checklist{list-style:none;padding:0;margin:10px 0}
+.checklist li{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:8px 0}
+.checklist input{width:18px;height:18px;margin-top:4px;accent-color:var(--accent)}
+.simrow{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.simrow label{font-size:13px;color:var(--muted);min-width:150px}
+input[type="range"]{accent-color:var(--accent);width:220px}
+.stat{font-size:22px;font-weight:800;color:var(--accent)}
+.fig{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px;margin:14px 0}
+.figcap{font-size:12.5px;color:var(--muted);margin-top:8px}
+.tag{font-size:11.5px;border:1px solid var(--line);border-radius:6px;padding:1px 7px;color:var(--muted);white-space:nowrap}
+.src-table td:first-child{white-space:nowrap;font-weight:700}
+.footer{margin-top:40px;border-top:1px solid var(--line);padding-top:16px;color:var(--muted);font-size:13px}
+@media (max-width:1080px){
+.app-sidebar{transform:translateX(-105%);transition:transform .2s ease}
+.app-sidebar.open{transform:none}
+.app-main{margin-left:0;margin-right:0;max-width:100%;width:100%;padding:20px 20px 120px}
+.grid2,.grid4{grid-template-columns:1fr}
+h1{font-size:25px}
+}
+@media print{
+.app-sidebar,#btn-top,#bar-progress,.toolbar{display:none !important}
+body{background:#fff;color:#000}
+.app-main{margin:0;max-width:100%}
+.card,table,pre,.fig{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div id="bar-progress" aria-hidden="true"></div>
+<aside class="app-sidebar" id="sidebar" aria-label="目录">
+<h2>目录 · 验证循环技能</h2>
+<div class="brand">Claude Code 官方博客实操指南 · 小互解读结构化重排<br>原作者 Delba de Oliveira · 2026-07-22</div>
+<nav id="box-toc">
+<a href="#sec-overview">一分钟速览</a>
+<a href="#sec-loop">AI 改完代码的检查分界</a>
+<a href="#sec-builtin">六种现成检查</a>
+<a href="#sec-start">把检查写下来</a>
+<a href="#sec-template">十几行的验证技能</a>
+<a href="#sec-layers">四个接入位置</a>
+<a href="#sec-l1">第一档 · 单独调用</a>
+<a href="#sec-l2">第二档 · 嵌进去</a>
+<a href="#sec-l3">第三档 · 串起来</a>
+<a href="#sec-l4">第四档 · 挂到每个 PR</a>
+<a href="#sec-cost">Token 成本与两个开关</a>
+<a href="#sec-steps">照着做的六步</a>
+<a href="#sec-source">来源与延伸</a>
+</nav>
+<div class="meta">文档类型：工具教程 · 解读重排<br>一手源与本站补已分区标注<br>断网双击可用 · 零外部依赖</div>
+</aside>
+<main class="app-main" id="main">
+<div class="topbar">
+<span class="badge">工具教程 · 小互解读</span>
+<span class="badge hot">Claude 官方博客</span>
+<span class="badge">2026-07-25 归档</span>
+</div>
+<div class="toolbar">
+<button class="btn" id="btn-theme" type="button">切换浅色 / 深色</button>
+<button class="btn" id="btn-toc" type="button">目录</button>
+</div>
+<h1>Claude Code 团队：把你每次手动做的检查写成技能，四个位置决定它什么时候开火</h1>
+<p class="dek">他们内部四个技能接力跑：抓 bug、清理 diff、把 app 跑起来看，改动碰了界面再核一遍设计规范。</p>
+<div class="card">
+<div><span class="tag">SLUG</span> verification-loops-skills &nbsp; <span class="tag">LANG</span> zh &nbsp; <span class="tag">付费解读稿</span> paid</div>
+<div style="margin-top:8px;font-size:14px;color:var(--muted)">一手源：<a href="https://claude.com/blog/building-verification-loops-in-claude-code-with-skills">claude.com 官方博客原文</a> · 解读页：<a href="https://best.xiaohu.ai/article/verification-loops-skills/">best.xiaohu.ai 解读页</a> · 配套视频 <code>Stop babysitting your agents</code>（Claude 官方频道 5 月 20 日，37 分钟，复用素材非配套新录）。本文为解读稿的完整结构化转写，凡标注「本站补」者均来自官方文档或本站制图，非原文口径。</div>
+</div>
+
+<p class="kicker">一分钟速览</p>
+<h2 id="sec-overview">一分钟速览：结论先行</h2>
+<ul class="tight">
+<li>AI 改完代码，编译报错、类型检查、测试、linter 这些信号它自己看得见；剩下那几步只有你知道的检查，每次都得你亲手点一遍。</li>
+<li>Claude Code 团队给的做法：把你每次都在点的那几步用大白话写下来，存成一个技能，它就能自己跑、自己修。最小的一个只有十几行。</li>
+<li>检查写得好只是一半，另一半是它装在哪一层：你想起来才叫、嵌进生成代码的那个技能里、一个技能干完自动叫下一个、挂到每个 PR 上。四层越往后越省心，也越难改。</li>
+<li>Anthropic 自己的 Claude Code 团队日常跑的是四个技能接力：<code>/code-review</code> 找 bug，<code>/simplify</code> 清理 diff，<code>/verify</code> 把 app 真跑起来看效果，改动碰了界面就再叫一个自定义的 <code>/design</code> 对着 DESIGN.md 核一遍。</li>
+<li>代价也写在明处：技能一旦加载就常驻上下文到会话结束，串得越长 token 烧得越多；而且 <code>/verify</code> 和 <code>/code-review</code> 从 v2.1.215 起只在你开口叫的时候才跑，不会自己开火。</li>
+</ul>
+
+<p class="kicker">循环长什么样</p>
+<h2 id="sec-loop">AI 改完代码，哪些检查它自己会做，哪些还得你来</h2>
+<p>你让 AI 改一个功能，它说改好了。然后你打开页面点一遍，翻一眼日志，再把浏览器拖窄到手机宽度试试。这几下，你每次都得自己做。</p>
+<p>Claude Code 团队的 Delba de Oliveira 在 7 月 22 日发了一篇实操指南，讲的就是怎么把这几下交出去。文末嵌着一个官方视频，名字叫 <code>Stop babysitting your agents</code>，直译过来是「别再给你的 Agent 当保姆」。说的就是这里要解决的事：让它自己检查、自己修，你不用一直守在旁边当监工。</p>
+<p>先看 AI 干活的完整流程长什么样：你给一句提示，Claude 去收集上下文（Gather context）、动手改（Take action）、验证结果（Verify results），最后回话给你。虚线框圈住的中间三步就是它自己在转的那个圈。</p>
+<div class="fig" role="img" aria-label="Gather Take action Verify 循环示意图">
+<svg viewBox="0 0 680 220" width="100%" height="auto" role="img" aria-label="验证循环示意">
+<rect x="8" y="8" width="664" height="204" rx="14" fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-dasharray="7 6"></rect>
+<text x="24" y="32" font-size="12" fill="currentColor" opacity="0.7">Agent loop：中间三步自己转圈</text>
+<rect x="40" y="70" width="160" height="70" rx="12" fill="none" stroke="currentColor" stroke-width="1.6"></rect>
+<text x="120" y="98" font-size="14" text-anchor="middle" fill="currentColor">Gather context</text>
+<text x="120" y="118" font-size="12" text-anchor="middle" fill="currentColor" opacity="0.7">收集上下文</text>
+<rect x="260" y="70" width="160" height="70" rx="12" fill="none" stroke="currentColor" stroke-width="1.6"></rect>
+<text x="340" y="98" font-size="14" text-anchor="middle" fill="currentColor">Take action</text>
+<text x="340" y="118" font-size="12" text-anchor="middle" fill="currentColor" opacity="0.7">动手改</text>
+<rect x="480" y="70" width="160" height="70" rx="12" fill="none" stroke="#E2886A" stroke-width="2"></rect>
+<text x="560" y="98" font-size="14" text-anchor="middle" fill="currentColor">Verify results</text>
+<text x="560" y="118" font-size="12" text-anchor="middle" fill="currentColor" opacity="0.7">验证结果</text>
+<line x1="200" y1="105" x2="258" y2="105" stroke="currentColor" stroke-width="1.6"></line>
+<line x1="420" y1="105" x2="478" y2="105" stroke="currentColor" stroke-width="1.6"></line>
+<path d="M 560 140 L 560 178 L 120 178 L 120 142" fill="none" stroke="#E2886A" stroke-width="1.8" stroke-dasharray="6 5"></path>
+<text x="340" y="198" font-size="12" text-anchor="middle" fill="currentColor">验证没过：先回「收集上下文」，不直接硬改第二遍</text>
+</svg>
+<div class="figcap">示意重绘：原文配图逻辑。图片来源为 Claude 官方博客。关键细节是验证失败的回边指向「收集上下文」而非「动手改」：它不会拿着同一份信息硬改第二遍，而是先回去把情况重新摸一遍，再决定怎么动。</div>
+</div>
+<p>验证这一环，它本来就在做一部分。因为代码库里有一批信号是机器能直接读的：编译器报错、类型检查不通过、测试跑挂了、linter 的警告。这些东西一出现它就看得见，也知道该回头。</p>
+<p>麻烦的是另一半。</p>
+<div class="grid2">
+<div class="card">
+<h3>它自己看得见</h3>
+<p style="color:var(--muted);font-size:13px;margin-top:-6px">代码库里的确定性信号，出错就有明确的报文</p>
+<ul class="tight">
+<li>编译器报错</li>
+<li>类型检查不通过</li>
+<li>测试没跑过</li>
+<li>linter 的警告</li>
+</ul>
+</div>
+<div class="card">
+<h3>只有你知道</h3>
+<p style="color:var(--muted);font-size:13px;margin-top:-6px">没有任何工具会为此报错，它推不出来</p>
+<ul class="tight">
+<li>这个按钮在手机宽度下会不会被挡住</li>
+<li>这条错误日志有没有把用户的请求体一起写进去</li>
+<li>这次迁移删了一列，数据有没有补进新结构</li>
+<li>这个改动合不合团队那份设计规范</li>
+</ul>
+</div>
+</div>
+<p>右边这一列，没有任何机器信号会替你报警。所以它们每次都落回你手上，变成你亲手点的那几下。这篇文章讲的就是怎么把右边那一列写下来，让它也变成能被读到的信号。</p>
+<div class="callout cyan">站内相关：Claude Code 官方讲透循环设计（4 级递进到无人值守）。同一个官方博客系列的前一篇，讲整个循环怎么从手动确认一路放手到无人值守。验证是那四级里的一环，这里展开的就是它。</div>
+
+<p class="kicker">现成的</p>
+<h2 id="sec-builtin">Claude Code 里已经装好的六种检查，各管什么</h2>
+<p>从零开始写之前，先看看现成的。文章列了六种，各自站在不同的位置，有的要你开口叫，有的自己就跑。</p>
+<table>
+<thead><tr><th>检查</th><th>开火方式</th><th>管什么</th></tr></thead>
+<tbody>
+<tr><td><code>/verify</code></td><td>你叫才跑</td><td>把你项目的 app 构建出来、真跑起来、观察结果，用看到的东西判断改动对不对，而不是靠测试或类型检查。需要 Claude Code v2.1.145 以上。</td></tr>
+<tr><td>写进 CLAUDE.md</td><td>一直生效</td><td>Claude 会接住你提供的工具报出来的错误码和警告并跟着动作。把项目确切的构建和测试命令写进 CLAUDE.md，它就不用自己猜该敲哪一条。</td></tr>
+<tr><td>Code Review（研究预览）</td><td>自动跑</td><td>一个托管的多 Agent 服务，在你开启的仓库里对 PR 跑一遍自动审查。发现的问题你可以自己改了推上去，也可以在那条发现下面回一句 @claude 让它闭环，前提是 GitHub Actions 已经配好。</td></tr>
+<tr><td>GitHub Actions</td><td>每次推送都跑</td><td>定义一个 job，让它调用带着验证技能的 Claude，你本地跑的那套检查就会在每次推送或者每个 PR 上同样开火。</td></tr>
+<tr><td>Spec validation</td><td>你叫才跑</td><td>一个技能，拿仓库里的 markdown 规格文档当标准，逐条核对每次改动，并尝试把违反的地方修掉。</td></tr>
+<tr><td>Managed Agents 的评分表（beta）</td><td>不合格自动打回</td><td>一个托管的 Agent 服务，让另一个独立的阅卷 Agent 按一份评分表核对产出。没达标的自动退回去重做。</td></tr>
+</tbody>
+</table>
+<div class="callout"><strong>本站补 · 来自官方文档：</strong><code>/verify</code> 和 <code>/code-review</code> 从 Claude Code v2.1.215 起，只在你主动调用时才跑；在那个版本之前，Claude 可以自己决定要不要跑它们。文章把 <code>/verify</code> 列在内置验证循环的第一条，容易让人以为它会自己开火，实际上得你开口叫。</div>
+<p>还有两个常跟它们一起用的：<code>/simplify</code> 会派四个审查 Agent 并行跑，分别看能不能复用已有的辅助函数、能不能写得更简单、效率如何、以及这个改动是不是做在了正确的抽象层级上；从 v2.1.154 起它不再负责找正确性 bug，找 bug 归 <code>/code-review</code>。<code>/run-skill-generator</code> 则是专门教 <code>/run</code> 和 <code>/verify</code> 怎么在你这个项目上从干净环境把 app 构建、启动、驱动起来。</p>
+
+<p class="kicker">起手</p>
+<h2 id="sec-start">怎么把你每次都在做的检查写下来</h2>
+<p>起手第一步是写字。把你每次都在做的那几个小纠正，一条条记下来。</p>
+<p>文章给的口径是：用大白话把「最佳做法」的那个版本写出来，就像你要把它交给一个第一天来的新同事。不用写成文档的语气，写成交代事情的语气就行。</p>
+<p>如果你发现自己说不清这个检查到底在查什么，还有个反过来的办法：先问 Claude 这类事情的通行做法是什么，拿它给的版本当底稿，再往上改成你的。你的做法跟通行做法不一样的那几点，恰恰是最该被写下来的，因为那些正是没人会替你记着的部分。</p>
+<h3>检查不必是那种需要品味判断的</h3>
+<p>文章里举的例子是这么一条规矩：<strong>任何一个删了列、却没有回填步骤的数据库迁移，一律打回。</strong>回填指的是把数据补进新的结构里，跟备份是两回事，备份是留后路，回填是保证数据不丢在半路上。</p>
+<p>这条规矩死得不能再死，判断标准清清楚楚，但通用 linter 抓不到它，只有你项目自己的检查抓得到。凡是你老得用手盯着执行的规矩，都够格变成一个循环。</p>
+
+<p class="kicker">成品</p>
+<h2 id="sec-template">一个能直接抄的验证技能，一共十几行</h2>
+<p>最省事的做法是让 Claude 反过来采访你。装上 skill-creator 插件，然后敲这么一句：</p>
+<div class="card"><strong>让 Claude 采访你，直接生成技能</strong>
+<blockquote>中文意思：给我做一个技能，用来端到端地验证前端改动，就我的工作流采访我。它会一条条问你平时都怎么做，再把答案写成技能文件。</blockquote>
+<pre><code>/skill-creator Create a skill for verifying frontend changes end-to-end. Interview me about my workflow.</code></pre>
+<div class="toolbar"><button class="btn" id="btn-copy-1" type="button">复制采访指令</button></div>
+</div>
+<p>手写也不难。在项目里的 <code>.claude/skills/</code> 放一个 markdown 文件，那就是一个技能。文章给的最小例子只有十几行，查的是错误日志有没有带上请求 ID、有没有把请求体写进日志：</p>
+<p><strong>.claude/skills/verify-log-hygiene/SKILL.md</strong></p>
+<pre><code>---
+name: verify-log-hygiene
+description: Check that error logs include the request ID and never
+  include the request body. Use when the diff touches error handling
+  or logging.
+allowed-tools: [Read, Edit, Grep]
+---
+Read the error-handling paths in the current diff.
+
+For each log call on an error path, confirm it includes the request ID
+and does not pass the request body, headers, or any user-supplied payload.
+
+Report each violation with file:line, then fix it: add the request ID
+where it is missing and strip the payload from the log call.</code></pre>
+<div class="toolbar"><button class="btn" id="btn-copy-2" type="button">复制日志检查模板</button></div>
+<div class="grid2">
+<div class="card"><h3>description</h3><p>Claude 靠它判断什么时候该用这个技能。这里写清了触发条件：当改动碰到错误处理或者日志的时候用。</p></div>
+<div class="card"><h3>allowed-tools</h3><p>调用这个技能的那一轮里，Read、Edit、Grep 这三个工具它可以不问你直接用。你发出下一条消息之后，这个授权就失效了。（本站补）</p></div>
+</div>
+<div class="card"><h3>正文三段</h3><p>先读这次改动里的错误处理路径，再逐个核对每一处日志调用，最后带着文件名和行号报出每一处违规。</p>
+<p>最后那句是整个技能的关键：<strong>报完不算完，报完接着修。</strong>它先给你一份带行号的清单，然后把缺的请求 ID 补上，把不该写进日志的内容从调用里剥掉。少了这半句，它就只是个报警器，报完停在那儿等你动手。</p></div>
+
+<p class="kicker">核心</p>
+<h2 id="sec-layers">检查放在哪跑，四个位置</h2>
+<p>检查写出来之后，紧接着的问题是它什么时候开火。文章给了四个位置，从你想起来才叫，一路到挂在每个 PR 上。位置一变，同一份检查的性质就变了。</p>
+<p style="color:var(--muted);font-size:13px">下方小字是「谁来开火」。越往右，开火这件事离你越远。</p>
+<div class="grid4">
+<div class="card pos" id="box-pos-1" role="button" tabindex="0"><div class="n">1</div><h3>单独调用</h3><p><code>standalone</code></p><p style="font-size:13px">谁开火：你，手动敲。适合横跨多条工作流、但不需要每次都做的检查。代价：每一次都是你要记得去做的动作。</p><div class="toolbar"><button class="btn" id="btn-pos-1" type="button">查看判据</button></div></div>
+<div class="card pos" id="box-pos-2" role="button" tabindex="0"><div class="n">2</div><h3>嵌进去</h3><p><code>embedded</code></p><p style="font-size:13px">谁开火：生成那个东西的技能，自动带着跑。适合绑死在一条工作流上的检查。代价：只对你能编辑的技能有效。</p><div class="toolbar"><button class="btn" id="btn-pos-2" type="button">查看判据</button></div></div>
+<div class="card pos" id="box-pos-3" role="button" tabindex="0"><div class="n">3</div><h3>串起来</h3><p><code>chained</code></p><p style="font-size:13px">谁开火：上一个技能干完，自己叫下一个。适合整条开发流程从头跑到尾。代价：不能再单跑其中一步，token 也花得更多。</p><div class="toolbar"><button class="btn" id="btn-pos-3" type="button">查看判据</button></div></div>
+<div class="card pos" id="box-pos-4" role="button" tabindex="0"><div class="n">4</div><h3>挂到每个 PR</h3><p><code>on every PR</code></p><p style="font-size:13px">谁开火：CI，谁提交的改动都跑。适合要让全团队都遵守的标准。代价：每次调整都变成团队可见的事件。</p><div class="toolbar"><button class="btn" id="btn-pos-4" type="button">查看判据</button></div></div>
+</div>
+<div class="card" id="box-pos-detail"><h3>四档判据速查</h3><p id="box-pos-meta">点上面任意一档，查看原文的适用与代价口径。默认展示第一档。</p></div>
+<div class="fig" role="img" aria-label="四档自动化轴线">
+<svg viewBox="0 0 680 150" width="100%" height="auto" role="img" aria-label="四档轴线">
+<line x1="40" y1="70" x2="640" y2="70" stroke="currentColor" stroke-width="2" stroke-opacity="0.5"></line>
+<circle cx="130" cy="70" r="16" fill="none" stroke="#E2886A" stroke-width="2"></circle>
+<text x="130" y="75" font-size="13" text-anchor="middle" fill="currentColor">1</text>
+<text x="130" y="105" font-size="12" text-anchor="middle" fill="currentColor">单独调用</text>
+<circle cx="300" cy="70" r="16" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+<text x="300" y="75" font-size="13" text-anchor="middle" fill="currentColor">2</text>
+<text x="300" y="105" font-size="12" text-anchor="middle" fill="currentColor">嵌进去</text>
+<circle cx="470" cy="70" r="16" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+<text x="470" y="75" font-size="13" text-anchor="middle" fill="currentColor">3</text>
+<text x="470" y="105" font-size="12" text-anchor="middle" fill="currentColor">串起来</text>
+<circle cx="620" cy="70" r="16" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+<text x="620" y="75" font-size="13" text-anchor="middle" fill="currentColor">4</text>
+<text x="620" y="105" font-size="12" text-anchor="middle" fill="currentColor">每 PR</text>
+<text x="40" y="130" font-size="12" fill="currentColor" opacity="0.7">离你最近</text>
+<text x="640" y="130" font-size="12" text-anchor="end" fill="currentColor" opacity="0.7">离你最远 · 越省心越难改</text>
+</svg>
+<div class="figcap">示意重绘：四档轴线。原文小字「谁来开火」越往右离你越远。</div>
+</div>
+
+<h2 id="sec-l1">第一档 · 单独调用：你想起来才跑</h2>
+<p>这一档是东西已经做出来之后，你主动敲一下它才跑。</p>
+<p>它适合那种横跨很多条工作流、但不需要每次改代码都做的检查。文章给的三个例子是：提交前的一次安全扫描、发 PR 前的一次无障碍审查、整个仓库的许可证头核对。这类检查你希望在任何场景下都能随手叫出来，但不希望它每改一行代码就跳出来一次。</p>
+<p>代价很实在：每一次调用都是你要记得去做的一个动作，忘了就是没做。</p>
+<div class="callout">什么时候该往上升，文章给的信号很干脆：<strong>当你每改完一次都在跑它，说明它不该再靠你记着了。</strong>到这个时候，这个流程已经挣到了一个固定的位置，该往下面两档挪，要么嵌进去，要么串起来。</div>
+
+<h2 id="sec-l2">第二档 · 嵌进去：在生成代码的那个技能末尾加一行</h2>
+<p>这一档是让检查跟着生产它的那条工作流一起跑，你不用开口。</p>
+<p>做法比想象中简单，在那个技能的正文末尾追加一句话就行。文章拿一个生成 React 组件的技能举例，前面都是它原本的内容，加的只有最后那两行：</p>
+<p><strong>.claude/skills/scaffold-component/SKILL.md</strong></p>
+<blockquote>高亮那两行的意思：创建完组件文件之后，对它跑一遍 eslint，把错误处理掉，再报告完成。</blockquote>
+<pre><code>---
+name: scaffold-component
+description: Scaffold a new React component under src/components/, including the component file, its co-located test, and an index export. Use when the user asks to create a new component.
+allowed-tools: [Read, Write, Edit, Bash, Glob]
+---
+
+# Scaffold a new React component
+
+Given a component name (PascalCase), create the following under `src/components/&lt;Name&gt;/`:
+
+1. `&lt;Name&gt;.tsx`: function component with a typed props interface and a default export.
+2. `&lt;Name&gt;.test.tsx`: React Testing Library test that renders the component and asserts it mounts without throwing.
+3. `index.ts`: re-export the default and any named exports.
+
+Follow the patterns in `src/components/Button/` as the reference. Match the import alias style (`@/components/...`) used throughout the codebase.
+
+# code continues...
+
+After creating the component file, run eslint on it and
+address any errors before reporting completion.</code></pre>
+<div class="toolbar"><button class="btn" id="btn-copy-3" type="button">复制嵌入模板</button></div>
+<p>怎么确认它真的生效？文章给的办法是拿一个全新的任务调用一次这个技能，看新加的这一步有没有出现在输出里。<strong>没出现，说明这个技能的 description 或者前面那些指令没能把这一段带进来</strong>，得回去改。</p>
+<p>这一档有个明确的边界：只对你能编辑的技能有效。你自己写的可以，装在项目层、SKILL.md 文件在你手上的也可以。内置技能和插件管理的技能不行，后者会在更新时被整个覆盖掉，你加的东西会丢。这两类要接检查，得用下一档的串联。</p>
+<p>还有一条反过来的：跨工作流的检查不要嵌。那种东西你希望从任何上下文都能叫出来，留在单独调用那一档。</p>
+<div class="callout cyan">站内相关：Claude Skill 装了却不触发？先改这两处。上面说的「没出现说明 description 没把它带进来」，具体该怎么改，这篇拆得更细，附一份可抄的模板。</div>
+
+<h2 id="sec-l3">第三档 · 串起来：Anthropic 内部四个技能接力</h2>
+<p>一个技能在自己结尾处叫下一个，几段验证过的交接就连成了一条能端到端跑完的链。</p>
+<p>Anthropic 的 Claude Code 团队日常就在用这个模式，链条是四段：<code>/code-review</code> → <code>/simplify</code> → <code>/verify</code> → <code>/design</code>。最后一段是虚线：只有这次改动碰了界面才走，而且 <code>/design</code> 是他们自己写的技能，不是内置的。</p>
+<div class="fig" role="img" aria-label="四段接力链">
+<svg viewBox="0 0 680 140" width="100%" height="auto" role="img" aria-label="接力链">
+<rect x="20" y="40" width="130" height="52" rx="10" fill="none" stroke="currentColor" stroke-width="1.6"></rect>
+<text x="85" y="62" font-size="12" text-anchor="middle" fill="currentColor">code-review</text>
+<text x="85" y="79" font-size="11" text-anchor="middle" fill="currentColor" opacity="0.7">找 bug</text>
+<rect x="185" y="40" width="130" height="52" rx="10" fill="none" stroke="currentColor" stroke-width="1.6"></rect>
+<text x="250" y="62" font-size="12" text-anchor="middle" fill="currentColor">simplify</text>
+<text x="250" y="79" font-size="11" text-anchor="middle" fill="currentColor" opacity="0.7">清理 diff</text>
+<rect x="350" y="40" width="130" height="52" rx="10" fill="none" stroke="#E2886A" stroke-width="2"></rect>
+<text x="415" y="62" font-size="12" text-anchor="middle" fill="currentColor">verify</text>
+<text x="415" y="79" font-size="11" text-anchor="middle" fill="currentColor" opacity="0.7">真跑起来看</text>
+<rect x="515" y="40" width="145" height="52" rx="10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="6 5"></rect>
+<text x="587" y="62" font-size="12" text-anchor="middle" fill="currentColor">design（自研）</text>
+<text x="587" y="79" font-size="11" text-anchor="middle" fill="currentColor" opacity="0.7">碰界面才走</text>
+<line x1="150" y1="66" x2="183" y2="66" stroke="currentColor" stroke-width="1.6"></line>
+<line x1="315" y1="66" x2="348" y2="66" stroke="currentColor" stroke-width="1.6"></line>
+<line x1="480" y1="66" x2="513" y2="66" stroke="#E2886A" stroke-width="1.6" stroke-dasharray="5 4"></line>
+</svg>
+<div class="figcap">示意重绘：Anthropic 内部四段接力。前三段必走，第四段仅界面改动走虚线。</div>
+</div>
+<p>串联还有一个作用：<strong>给你改不了的那些技能补上验证。</strong>做一个包装技能，让它先调原来那个，跑完再调你的检查：</p>
+<p><strong>.claude/skills/safe-refactor/SKILL.md</strong></p>
+<blockquote>先对当前 diff 跑 /simplify。等它跑完，再调用 /verify-no-public-api-changes（一个自定义的检查，确认公开接口没被改动）。</blockquote>
+<pre><code>Run /simplify on the current diff first.
+When /simplify finishes, invoke /verify-no-public-api-changes.</code></pre>
+<p>这一步的性质变化，文章说得很准：原来那是一个习惯，我每次跑完 <code>/simplify</code> 都会跑 <code>/verify</code>；现在它成了一条约定，<code>/simplify</code> 跑完一定会跑 <code>/verify</code>。链条自己把整个开发循环走完，只有需要你拍板的事情才会升上来。</p>
+<p>代价也写在明处。步骤之间足够独立、你有时候想单独跑其中一个的话，就别串，串联是拿灵活性换自动化。另外串起来会明显多花 token，所以大范围铺开之前先小范围测一测。这笔 token 花在哪，下一节讲。</p>
+<div class="callout">文末嵌的这个视频叫 Stop babysitting your agents，Claude 官方频道 5 月 20 日发布，37 分钟，走一遍 Claude Code 工程师日常在用的工作流。比这篇文章早两个月，是复用的素材，不是配套录的。</div>
+
+<h2 id="sec-l4">第四档 · 挂到每个 PR：同事的改动也过一样的关卡</h2>
+<p>链条在你自己的改动上跑顺了之后，同一套流程可以搬到每个 PR 上。</p>
+<p>底层的东西一点没变：同样的技能、同样的评分表、同样的标准。变的是它作用在谁身上。</p>
+<div class="grid2">
+<div class="card"><h3>挂上去之前</h3><p>链条在你的机器上跑，你的改动过这几道关。别人的改动过不过，取决于他记不记得调用。</p></div>
+<div class="card"><h3>挂上去之后</h3><p>改动进了 PR 就过这几道关，谁提交的都一样。作者的自觉不再是变量。</p></div>
+</div>
+<p>文章用一个说法概括这个变化：验证到这一步就不再是你个人的基础设施，成了团队的基础设施。你当初为了给自己省两分钟才写下来的那条检查，现在每一次改动都在给每个人省两分钟。</p>
+<div class="callout rose">紧接着它给了一条告诫：<strong>链条还在反复调的时候，先别挂到全团队。</strong>挂上去之后，你每调整一次都会变成一个全团队都能看见的事件。</div>
+
+<p class="kicker">成本 · 本站补</p>
+<h2 id="sec-cost">串起来为什么更费 token，以及能省的两个开关</h2>
+<p>文章说串联会增加 token 花费，没说这笔钱花在哪。官方文档里有答案。</p>
+<p>你或者 Claude 调用一个技能时，渲染后的 SKILL.md 内容会作为一条消息进入对话，并且<strong>在这次会话剩下的时间里一直待着</strong>。它不是用完就走的。</p>
+<div class="fig" role="img" aria-label="上下文常驻示意">
+<svg viewBox="0 0 680 190" width="100%" height="auto" role="img" aria-label="上下文常驻">
+<rect x="20" y="20" width="640" height="150" rx="12" fill="none" stroke="currentColor" stroke-opacity="0.35"></rect>
+<rect x="40" y="45" width="140" height="34" rx="7" fill="none" stroke="#E2886A" stroke-width="1.6"></rect>
+<text x="110" y="67" font-size="12" text-anchor="middle" fill="currentColor">第1轮 code-review</text>
+<rect x="40" y="85" width="290" height="34" rx="7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.7"></rect>
+<text x="185" y="107" font-size="12" text-anchor="middle" fill="currentColor">第2轮 simplify（上轮正文仍在）</text>
+<rect x="40" y="125" width="440" height="34" rx="7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.5"></rect>
+<text x="260" y="147" font-size="12" text-anchor="middle" fill="currentColor">第3轮 verify（前两份仍在，逐轮重带）</text>
+<text x="500" y="70" font-size="12" fill="currentColor" opacity="0.75">第4轮 design 再叠一份</text>
+<text x="500" y="90" font-size="12" fill="currentColor" opacity="0.75">浅灰即对话本身</text>
+</svg>
+<div class="figcap">本站画：链条上每加载一个技能，它的正文就留在上下文里，之后每一轮都要重新带一遍。浅灰是对话本身占的位置。</div>
+</div>
+<p>所以技能正文的每一行都是一笔重复开销：链条上串了四个技能，这四份正文就一直躺在那儿，往后每一轮都得再带一遍。这也是官方反复强调技能正文要写短的原因，写清楚「做什么」，不要叙述「怎么做、为什么」。</p>
+<h3>两个能省的开关</h3>
+<table>
+<thead><tr><th>开关</th><th>做法与效果</th></tr></thead>
+<tbody>
+<tr><td><code>context: fork</code></td><td>把这个技能丢进一个独立的子代理里跑。技能正文变成驱动那个子代理的提示，它看不到你的对话历史，也不占你主对话的上下文。默认在后台跑，你可以接着干别的，它跑完了结果回到对话里。</td></tr>
+<tr><td>正文只写做什么</td><td>官方给的判据跟写 CLAUDE.md 一样：直接说该做什么，不要叙述过程和理由。长的参考材料可以放进技能目录下的配套文件，用到时才读。</td></tr>
+</tbody>
+</table>
+<p>还有两个数字，动手写技能之前值得先知道：</p>
+<div class="grid2">
+<div class="card"><div class="stat">1,536 字符</div><p><code>description</code> 和 <code>when_to_use</code> 合起来，在技能清单里被截断到这个长度。超出的部分，Claude 在决定要不要用这个技能的时候看不到，所以最关键的使用场景要放在最前面。</p></div>
+<div class="card"><div class="stat">25,000 token</div><p>对话被自动压缩之后，调用过的技能会被重新附着回来，但有预算：每个技能保留前 5,000 token，所有技能共享 25,000 token 的总额，从最近调用的那个开始填。一次会话里调用过很多技能的话，早期那些可能在压缩后被整个丢掉。</p></div>
+</div>
+<div class="card">
+<h3>串联开销估算沙盘（公式透明 · 基线假设值）</h3>
+<p style="font-size:13px;color:var(--muted)">以下不是实测数据，而是按「每份技能正文常驻并逐轮重带」的机制算出的示意量。假设每份技能正文平均 L 行、每行约 18 token，对话本身每轮新增 D token，仅用于理解「越长越贵」的形状。</p>
+<div class="simrow"><label for="rng-chain">串联技能数（1 到 6）</label><input type="range" id="rng-chain" min="1" max="6" step="1" value="4"><span id="out-chain-val">4 个</span></div>
+<div class="simrow"><label for="rng-lines">平均每份正文行数</label><input type="range" id="rng-lines" min="10" max="120" step="5" value="40"><span id="out-lines-val">40 行</span></div>
+<p>估算的常驻技能正文总量：<span class="stat" id="out-token-est">2880 token</span></p>
+<p style="font-size:13px;color:var(--muted)" id="out-token-note">公式：总量 = 技能数 × 行数 × 18 token/行。随轮数累积的重带开销约为总量 × 剩余轮数。</p>
+</div>
+
+<p class="kicker">上手</p>
+<h2 id="sec-steps">照着做的六步</h2>
+<p>文章最后给了一条能照着走的路。不管你要自动化的是什么、在什么环境里，流程都是这一套。</p>
+<div class="card green callout"><strong>把一个手动检查变成验证循环</strong> · 勾选即记进度，状态仅保存在本页不上传。</div>
+<ul class="checklist" id="box-checklist">
+<li><input type="checkbox" id="chk-step1"><label for="chk-step1"><strong>先挑一个</strong> · 你这一周做得最频繁的那个手动收尾动作</label></li>
+<li><input type="checkbox" id="chk-step2"><label for="chk-step2"><strong>先试现成的</strong> · 敲一次内置的 <code>/verify</code>，看它对你的流程管不管用</label></li>
+<li><input type="checkbox" id="chk-step3"><label for="chk-step3"><strong>写下来</strong> · 用大白话，像交给一个第一天来的新同事</label></li>
+<li><input type="checkbox" id="chk-step4"><label for="chk-step4"><strong>变成技能</strong> · 交给 skill-creator，或者自己把 markdown 文件丢进 <code>.claude/skills/</code></label></li>
+<li><input type="checkbox" id="chk-step5"><label for="chk-step5"><strong>验一次</strong> · 拿一个全新任务调用它，确认检查真的出现在输出里，不对就回去改</label></li>
+<li><input type="checkbox" id="chk-step6"><label for="chk-step6"><strong>再串起来</strong> · 把几个技能接成一条端到端跑完的验证流程</label></li>
+</ul>
+<p>已完成：<span class="stat" id="out-check-progress">0 / 6</span></p>
+<p>本文三个 SKILL.md 模板可以直接抄走用：最小的日志检查（十几行）、把 eslint 嵌进组件生成技能、给改不了的技能套一层壳。加上四个接入位置的判据和 frontmatter 里跟验证相关的六个字段。</p>
+<blockquote>你越是能把要求写下来交给 Claude 遵守，它第一次给出的东西就越接近你想要的。那些你不用再反复纠正的地方，腾出来的注意力可以放到那些没有任何技能能替你写下来的事情上。<br>—— Delba de Oliveira，本文结尾</blockquote>
+
+<h2 id="sec-source">来源 · 延伸 · 本站说明</h2>
+<table class="src-table">
+<tbody>
+<tr><td>来源</td><td><a href="https://claude.com/blog/building-verification-loops-in-claude-code-with-skills">Claude 官方博客原文</a></td></tr>
+<tr><td>延伸 · 技能文档</td><td>官方技能文档（随原文引用，未在解读稿中展开链接）</td></tr>
+<tr><td>延伸 · 内置命令参考</td><td>官方内置命令参考（随原文引用）</td></tr>
+<tr><td>延伸 · GitHub Actions</td><td>官方 GitHub Actions 接入说明（随原文引用）</td></tr>
+<tr><td>延伸 · 官方视频</td><td>Stop babysitting your agents（5 月 20 日，37 分钟）</td></tr>
+</tbody>
+</table>
+<div class="callout"><strong>本站说明：</strong>标注「本站补」的段落来自 code.claude.com 官方文档，原文没有展开，包括 <code>/verify</code> 与 <code>/code-review</code> 的调用限制、<code>/simplify</code> 的四个审查 Agent、技能内容常驻上下文的机制、frontmatter 字段与两个数字上限。上下文占用示意图为本站所画。原文全文未给出任何效果数据。</div>
+<div class="footer">转写归档：2026-07-25 解读稿全文转写 · 单文件零依赖 · 深色默认 · 本页交互均为本地计算，不联网。<br>忠实度声明：标题层级、段落、列表、代码块、引用与链接均按原稿保留；配图按原稿文字描述重绘为内联 SVG 并明确标注，非原图复制。</div>
+</main>
+<button class="btn primary" id="btn-top" type="button">回到顶部</button>
+<script>
+(function(){
+function byId(id){return document.getElementById(id);}
+var posText={
+"btn-pos-1":"第一档 · 单独调用：横跨多条工作流但低频。例子为安全扫描、无障碍审查、许可证头核对。升级信号：每改完一次都在跑，就该嵌进去或串起来。",
+"btn-pos-2":"第二档 · 嵌进去：在生成技能末尾追加检查。验证法：用全新任务调一次，看新步骤是否出现在输出里。边界：只对你能编辑的技能有效；跨工作流检查不要嵌。",
+"btn-pos-3":"第三档 · 串起来：上一个技能结尾调用下一个。Anthropic 链为 code-review、simplify、verify、design（界面才走）。性质从习惯变约定；代价是灵活性下降与 token 上升。",
+"btn-pos-4":"第四档 · 挂到每个 PR：同一套技能与标准作用于所有提交者。链条调稳前不要全团队挂载，否则每次调整都是团队可见事件。"
+};
+function setPos(key){
+var d=byId("box-pos-detail");
+var m=byId("box-pos-meta");
+var t=posText[key]||posText["btn-pos-1"];
+if(m){m.textContent=t;}
+var cards=document.querySelectorAll(".pos");
+for(var i=0;i<cards.length;i++){cards[i].classList.remove("sel");}
+var map={"btn-pos-1":"box-pos-1","btn-pos-2":"box-pos-2","btn-pos-3":"box-pos-3","btn-pos-4":"box-pos-4"};
+var c=byId(map[key]);
+if(c){c.classList.add("sel");}
+}
+var b1=byId("btn-pos-1");if(b1){b1.addEventListener("click",function(){setPos("btn-pos-1");});}
+var b2=byId("btn-pos-2");if(b2){b2.addEventListener("click",function(){setPos("btn-pos-2");});}
+var b3=byId("btn-pos-3");if(b3){b3.addEventListener("click",function(){setPos("btn-pos-3");});}
+var b4=byId("btn-pos-4");if(b4){b4.addEventListener("click",function(){setPos("btn-pos-4");});}
+var c1=byId("box-pos-1");if(c1){c1.addEventListener("click",function(){setPos("btn-pos-1");});}
+var c2=byId("box-pos-2");if(c2){c2.addEventListener("click",function(){setPos("btn-pos-2");});}
+var c3=byId("box-pos-3");if(c3){c3.addEventListener("click",function(){setPos("btn-pos-3");});}
+var c4=byId("box-pos-4");if(c4){c4.addEventListener("click",function(){setPos("btn-pos-4");});}
+setPos("btn-pos-1");
+function copyText(t,btn){
+function done(msg){var old=btn.textContent;btn.textContent=msg;setTimeout(function(){btn.textContent=old;},1400);}
+if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){done("已复制");},function(){done("复制失败");});}
+else{var ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);try{ta.select();document.execCommand("copy");done("已复制");}catch(e){done("复制失败");}document.body.removeChild(ta);}
+}
+var cb1=byId("btn-copy-1");if(cb1){cb1.addEventListener("click",function(){copyText("/skill-creator Create a skill for verifying frontend changes end-to-end. Interview me about my workflow.",cb1);});}
+var cb2=byId("btn-copy-2");if(cb2){cb2.addEventListener("click",function(){copyText("--- name: verify-log-hygiene --- Read the error-handling paths in the current diff. Report each violation with file:line, then fix it.",cb2);});}
+var cb3=byId("btn-copy-3");if(cb3){cb3.addEventListener("click",function(){copyText("After creating the component file, run eslint on it and address any errors before reporting completion.",cb3);});}
+var ids=["chk-step1","chk-step2","chk-step3","chk-step4","chk-step5","chk-step6"];
+function refreshCheck(){
+var n=0;for(var i=0;i<ids.length;i++){var el=byId(ids[i]);if(el&&el.checked){n++;}}
+var o=byId("out-check-progress");if(o){o.textContent=n+" / 6";}
+}
+for(var k=0;k<ids.length;k++){var e=byId(ids[k]);if(e){e.addEventListener("change",refreshCheck);}}
+refreshCheck();
+function refreshToken(){
+var r1=byId("rng-chain");var r2=byId("rng-lines");
+var n1=r1?parseInt(r1.value,10):4;var n2=r2?parseInt(r2.value,10):40;
+var v1=byId("out-chain-val");if(v1){v1.textContent=n1+" 个";}
+var v2=byId("out-lines-val");if(v2){v2.textContent=n2+" 行";}
+var total=n1*n2*18;
+var o=byId("out-token-est");if(o){o.textContent=total+" token";}
+var note=byId("out-token-note");if(note){note.textContent="公式：总量 = "+n1+" × "+n2+" × 18 token/行 = "+total+" token。随轮数累积的重带开销约为总量 × 剩余轮数。";}
+}
+var g1=byId("rng-chain");if(g1){g1.addEventListener("input",refreshToken);}
+var g2=byId("rng-lines");if(g2){g2.addEventListener("input",refreshToken);}
+refreshToken();
+function setTheme(t){document.documentElement.setAttribute("data-theme",t);try{if(window.localStorage){window.localStorage.setItem("aike-theme",t);}}catch(e){}}
+var initTheme="dark";
+try{if(window.localStorage){var s=window.localStorage.getItem("aike-theme");if(s==="light"||s==="dark"){initTheme=s;}}}catch(e){}
+setTheme(initTheme);
+var bt=byId("btn-theme");if(bt){bt.addEventListener("click",function(){var cur=document.documentElement.getAttribute("data-theme");setTheme(cur==="dark"?"light":"dark");});}
+var tocBtn=byId("btn-toc");if(tocBtn){tocBtn.addEventListener("click",function(){var sb=byId("sidebar");if(sb){sb.classList.toggle("open");}});}
+var topBtn=byId("btn-top");if(topBtn){topBtn.addEventListener("click",function(){if(window.scrollTo){window.scrollTo(0,0);}document.documentElement.scrollTop=0;document.body.scrollTop=0;});}
+function onScroll(){
+var h=document.documentElement;
+var max=h.scrollHeight-h.clientHeight;
+var bar=byId("bar-progress");
+if(bar){var p=max>0?(h.scrollTop/max*100):0;bar.style.width=p+"%";}
+}
+if(window.addEventListener){window.addEventListener("scroll",onScroll);}
+onScroll();
+if(typeof IntersectionObserver!=="undefined"){
+var links=document.querySelectorAll("#box-toc a");
+var secs=[];
+for(var q=0;q<links.length;q++){var href=links[q].getAttribute("href");if(href&&href.indexOf("#")===0){var t=byId(href.slice(1));if(t){secs.push(t);}}}
+try{
+var ob=new IntersectionObserver(function(es){for(var j=0;j<es.length;j++){if(es[j].isIntersecting){var id=es[j].target.getAttribute("id");for(var m=0;m<links.length;m++){if(links[m].getAttribute("href")==="#"+id){links[m].classList.add("active");}else{links[m].classList.remove("active");}}}}},{rootMargin:"-30% 0px -60% 0px"});
+for(var z=0;z<secs.length;z++){ob.observe(secs[z]);}
+}catch(e){}
+}
+})();
+</script>
+</body>
+</html>

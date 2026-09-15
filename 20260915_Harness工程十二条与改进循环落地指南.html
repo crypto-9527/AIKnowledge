@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harness 工程十二条与改进循环落地指南</title>
+<meta name="description" content="Ryan Lopopolo（OpenAI）harness engineering 十二条论点深度消化：锁定黑盒、整件活委托、代码即提示词、根部地图、能力与权限双合同、纠正只做一次、四个时钟、六步改进循环与三份填空模板。">
+<style>
+:root{
+  --bg:#FAF7F2; --bg-card:#FFFDF9; --bg-soft:#F2EDE4; --bg-code:#F4EFE6;
+  --tx:#241F1A; --tx-soft:#5B534A; --tx-dim:#7C7268; --bd:#E2D9CB; --bd-soft:#EDE6DA;
+  --accent:#D97757; --emerald:#2F7A5A; --rose:#B4443A; --amber:#B07B18; --cyan:#2C6E86;
+  --sidebar-w:280px; --content-max:1180px;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+  --serif:"Songti SC","SimSun",Newsreader,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+html[data-theme="dark"]{
+  --bg:#181715; --bg-card:#201E1B; --bg-soft:#262320; --bg-code:#141311;
+  --tx:#EDE7DE; --tx-soft:#BFB6AA; --tx-dim:#948B80; --bd:#38332E; --bd-soft:#2C2825;
+  --accent:#E2886A; --emerald:#6FC79B; --rose:#E2786E; --amber:#DFAE5B; --cyan:#79B6CE;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--bg); color:var(--tx);
+  font-family:var(--sans); font-size:16.5px; line-height:1.85;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:60;transition:width .1s linear;}
+.floating{position:fixed;right:22px;z-index:55;}
+#themeBtn{top:18px;}
+#toTopBtn{bottom:24px;display:none;}
+.floating button{
+  background:var(--bg-card); color:var(--tx); border:1px solid var(--bd);
+  border-radius:10px; padding:8px 13px; font-size:13px; font-family:var(--sans);
+  cursor:pointer; box-shadow:0 3px 12px rgba(0,0,0,.18);
+}
+.floating button:hover{border-color:var(--accent); color:var(--accent);}
+
+/* ---------- 侧栏 ---------- */
+#sidebar{
+  position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh; overflow-y:auto;
+  background:var(--bg-soft); border-right:1px solid var(--bd); padding:26px 16px 60px; z-index:40;
+}
+#sidebar .sb-title{font-family:var(--serif); font-size:15px; font-weight:700; letter-spacing:.06em;
+  color:var(--tx); margin:0 0 4px 12px;}
+#sidebar .sb-sub{font-size:11.5px; color:var(--tx-dim); margin:0 0 16px 12px; font-family:var(--mono);}
+#sidebar a{
+  display:block; padding:6px 12px; margin:1px 0; color:var(--tx-soft); text-decoration:none;
+  font-size:13.2px; line-height:1.5; border-left:2px solid transparent; border-radius:0 6px 6px 0;
+}
+#sidebar a:hover{color:var(--accent); background:var(--bg-card);}
+#sidebar a.active{color:var(--accent); border-left-color:var(--accent); background:var(--bg-card); font-weight:600;}
+#sidebar a.lv2{padding-left:26px; font-size:12.4px; color:var(--tx-dim);}
+#tocToggle{display:none;}
+
+/* ---------- 正文 ---------- */
+main{
+  display:block; max-width:var(--content-max); width:auto; flex:none;
+  margin-left:calc(var(--sidebar-w) + max(0px,(100% - var(--sidebar-w) - var(--content-max))/2));
+  margin-right:max(0px,calc((100% - var(--sidebar-w) - var(--content-max))/2));
+  padding:56px 44px 120px;
+}
+header.doc-head{border-bottom:2px solid var(--bd); padding-bottom:26px; margin-bottom:38px;}
+.kicker{font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-bottom:12px;}
+h1{font-family:var(--serif); font-size:2.32rem; line-height:1.32; margin:0 0 16px; letter-spacing:-.01em;}
+.doc-meta{font-size:13.4px; color:var(--tx-dim); font-family:var(--mono); line-height:2;}
+.doc-meta a{color:var(--cyan); text-decoration:none; border-bottom:1px dotted var(--cyan);}
+.doc-meta a:hover{color:var(--accent); border-bottom-color:var(--accent);}
+
+h2{font-family:var(--serif); font-size:1.62rem; margin:64px 0 20px; padding:8px 0 8px 16px;
+  border-left:4px solid var(--accent); line-height:1.4; scroll-margin-top:24px;}
+h3{font-size:1.16rem; margin:38px 0 14px; color:var(--tx); font-weight:700; scroll-margin-top:24px;}
+h4{font-size:1.0rem; margin:26px 0 10px; color:var(--accent); font-weight:700;}
+p{margin:0 0 16px;}
+strong{color:var(--tx); font-weight:700;}
+em{color:var(--accent); font-style:normal; font-weight:600;}
+a{color:var(--cyan);}
+a:hover{color:var(--accent);}
+ul,ol{margin:0 0 18px; padding-left:24px;}
+li{margin:7px 0;}
+hr{border:0; border-top:1px solid var(--bd-soft); margin:44px 0;}
+
+.lead{font-size:1.06rem; color:var(--tx-soft); border-left:3px solid var(--bd); padding-left:18px; margin-bottom:26px;}
+
+.card{background:var(--bg-card); border:1px solid var(--bd); border-radius:12px; padding:22px 24px; margin:22px 0;}
+.card.hl{border-left:4px solid var(--accent);}
+.card.warn{border-left:4px solid var(--amber); background:var(--bg-soft);}
+.card.stop{border-left:4px solid var(--rose);}
+.card p:last-child{margin-bottom:0;}
+.card .ct{font-family:var(--mono); font-size:11.5px; letter-spacing:.1em; color:var(--tx-dim);
+  text-transform:uppercase; margin-bottom:10px;}
+
+blockquote{
+  margin:22px 0; padding:16px 20px; background:var(--bg-soft); border-left:3px solid var(--accent);
+  border-radius:0 8px 8px 0; color:var(--tx-soft); font-size:.97rem;
+}
+blockquote p:last-child{margin-bottom:0;}
+
+table{width:100%; border-collapse:collapse; margin:22px 0; font-size:14.6px; background:var(--bg-card);}
+th,td{border:1px solid var(--bd); padding:10px 13px; text-align:left; vertical-align:top; line-height:1.7;}
+th{background:var(--bg-soft); font-weight:700; color:var(--tx); font-size:13.6px;}
+tbody tr:nth-child(even){background:var(--bg-soft);}
+td code,th code{font-size:13px;}
+
+code{font-family:var(--mono); font-size:.9em; background:var(--bg-code); padding:2px 6px;
+  border-radius:4px; border:1px solid var(--bd-soft); color:var(--accent);}
+pre{background:var(--bg-code); border:1px solid var(--bd); border-radius:10px; padding:18px 20px;
+  overflow-x:auto; margin:18px 0; position:relative;}
+pre code{background:none; border:none; padding:0; color:var(--tx); font-size:13.2px; line-height:1.75;}
+.code-wrap{position:relative;}
+.copybtn{position:absolute; top:10px; right:10px; font-size:11.5px; font-family:var(--mono);
+  background:var(--bg-card); color:var(--tx-dim); border:1px solid var(--bd); border-radius:6px;
+  padding:4px 9px; cursor:pointer;}
+.copybtn:hover{color:var(--accent); border-color:var(--accent);}
+
+details{background:var(--bg-card); border:1px solid var(--bd); border-radius:10px; padding:14px 18px; margin:18px 0;}
+details summary{cursor:pointer; font-weight:700; color:var(--accent); font-size:14.6px; outline:none;}
+details[open] summary{margin-bottom:12px; border-bottom:1px dashed var(--bd); padding-bottom:8px;}
+
+figure{margin:26px 0;}
+figure svg{display:block; width:100%; height:auto; background:var(--bg-card);
+  border:1px solid var(--bd); border-radius:12px;}
+figcaption{font-size:12.8px; color:var(--tx-dim); margin-top:10px; line-height:1.7; text-align:center;}
+
+.statgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin:24px 0;}
+.stat{background:var(--bg-card); border:1px solid var(--bd); border-radius:12px; padding:18px; text-align:center;}
+.stat .n{font-family:var(--serif); font-size:2.0rem; font-weight:700; color:var(--accent); line-height:1.2;}
+.stat .u{font-size:12px; color:var(--tx-dim); font-family:var(--mono); display:block; margin-top:6px;}
+.stat .l{font-size:13px; color:var(--tx-soft); margin-top:8px; line-height:1.6;}
+
+.two{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:20px 0;}
+@media (max-width:860px){.two{grid-template-columns:1fr;}}
+
+/* 沙盘 */
+.sandbox{background:var(--bg-card); border:1px solid var(--bd); border-radius:14px; padding:24px; margin:26px 0;}
+.sandbox h4{margin-top:0; font-size:1.05rem;}
+.sb-note{font-size:12.6px; color:var(--tx-dim); line-height:1.7; margin-bottom:16px;
+  border-left:3px solid var(--bd); padding-left:12px;}
+.ctrl{display:grid; grid-template-columns:190px 1fr 96px; gap:12px; align-items:center; margin:12px 0;}
+.ctrl label{font-size:13.4px; color:var(--tx-soft);}
+.ctrl input[type=range]{width:100%; accent-color:var(--accent);}
+.ctrl .rv{font-family:var(--mono); font-size:13px; color:var(--accent); text-align:right;}
+.ctrl select{background:var(--bg-soft); color:var(--tx); border:1px solid var(--bd);
+  border-radius:6px; padding:6px 8px; font-size:13px; font-family:var(--sans); width:100%;}
+.readout{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-top:18px;
+  padding-top:18px; border-top:1px dashed var(--bd);}
+.ro{background:var(--bg-soft); border-radius:9px; padding:12px 14px;}
+.ro .k{font-size:11.6px; color:var(--tx-dim); font-family:var(--mono); letter-spacing:.04em;}
+.ro .v{font-family:var(--mono); font-size:1.18rem; color:var(--tx); margin-top:4px; font-weight:700;}
+.verdict{margin-top:16px; padding:14px 16px; border-radius:9px; font-size:14px; line-height:1.8;
+  background:var(--bg-soft); border-left:4px solid var(--accent);}
+.verdict.ok{border-left-color:var(--emerald);}
+.verdict.bad{border-left-color:var(--rose);}
+.checklist{list-style:none; padding:0; margin:12px 0;}
+.checklist li{display:flex; gap:10px; align-items:flex-start; padding:8px 10px; border-radius:8px;
+  border:1px solid var(--bd-soft); margin:7px 0; font-size:14px; background:var(--bg-soft); line-height:1.7;}
+.checklist li.done{border-color:var(--emerald);}
+.checklist input{margin-top:5px; accent-color:var(--accent); flex:none;}
+.formula{font-family:var(--mono); font-size:13px; color:var(--tx-soft); background:var(--bg-code);
+  border:1px dashed var(--bd); border-radius:8px; padding:10px 14px; margin:12px 0; line-height:1.9;}
+
+.pill{display:inline-block; font-family:var(--mono); font-size:11.5px; padding:2px 9px; border-radius:20px;
+  border:1px solid var(--bd); color:var(--tx-dim); margin-right:6px;}
+.pill.a{color:var(--accent); border-color:var(--accent);}
+.pill.e{color:var(--emerald); border-color:var(--emerald);}
+.pill.r{color:var(--rose); border-color:var(--rose);}
+.pill.c{color:var(--cyan); border-color:var(--cyan);}
+
+footer.doc-foot{margin-top:70px; padding-top:24px; border-top:2px solid var(--bd);
+  font-size:13px; color:var(--tx-dim); line-height:1.9;}
+footer.doc-foot a{color:var(--cyan);}
+
+@media (max-width:1080px){
+  #sidebar{transform:translateX(-100%); transition:transform .25s ease; box-shadow:0 0 30px rgba(0,0,0,.3);}
+  #sidebar.open{transform:translateX(0);}
+  main{margin-left:0 !important; margin-right:0 !important; max-width:100% !important;
+    width:100% !important; padding:56px 20px 100px;}
+  #tocToggle{display:block; position:fixed; left:14px; top:14px; z-index:58;}
+  h1{font-size:1.8rem;} h2{font-size:1.36rem;}
+  .ctrl{grid-template-columns:1fr; gap:4px;}
+  .ctrl .rv{text-align:left;}
+}
+@media print{
+  #sidebar,.floating,#progress{display:none !important;}
+  main{margin:0 !important; max-width:100% !important; padding:0;}
+  body{background:#fff; color:#000; font-size:11pt;}
+  .sandbox,.card,pre,table,figure svg{break-inside:avoid;}
+  a{color:#000;}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<button id="tocToggle" type="button">目录</button>
+<div class="floating" id="themeBtn"><button id="btnTheme" type="button">☾ 深色</button></div>
+<div class="floating" id="toTopBtn"><button id="btnTop" type="button">↑ 顶部</button></div>
+
+<aside id="sidebar">
+  <p class="sb-title">Harness 工程十二条</p>
+  <p class="sb-sub">lopopolo/harness-engineering</p>
+  <nav id="toc">
+    <a href="#top">导言 · 一分钟速览</a>
+    <a href="#s1">一 · harness 是什么</a>
+    <a href="#s2">二 · 十二条论点全景</a>
+    <a href="#s3">三 · 冰山：最后一公里</a>
+    <a href="#s4">四 · 地基：锁住黑盒</a>
+    <a href="#s5">五 · 派活：一句话整件</a>
+    <a href="#s6">六 · 代码就是提示词</a>
+    <a href="#s7">七 · 根部只放一张地图</a>
+    <a href="#s8">八 · 能做和能批：双合同</a>
+    <a href="#s9">九 · 纠正只做一次</a>
+    <a href="#s10">十 · 四个时钟怎么算</a>
+    <a href="#s11">十一 · 六步改进循环</a>
+    <a href="#s12">十二 · 三份填空模板</a>
+    <a href="#s13">十三 · 对照实验作废清单</a>
+    <a href="#s14">十四 · 交互沙盘</a>
+    <a href="#s15">十五 · 来源与勘误</a>
+  </nav>
+</aside>
+
+<main id="main">
+<header class="doc-head" id="top">
+  <div class="kicker">深度 · 工程方法论 · CC BY 4.0</div>
+  <h1>Harness 工程十二条与改进循环落地指南</h1>
+  <div class="doc-meta">
+    原作者：Ryan Lopopolo（OpenAI 工程师，Artichoke 项目作者） · 原文发布：2026-07-19<br>
+    一手来源：<a href="https://github.com/lopopolo/harness-engineering" target="_blank" rel="noopener">github.com/lopopolo/harness-engineering</a><br>
+    本文依据：<a href="https://best.xiaohu.ai/article/harness-engineering/" target="_blank" rel="noopener">小互解读版</a> ＋ 仓库 README / docs / AGENTS.md / playbooks / evals 一手交叉核对<br>
+    归档日期：2026-09-15
+  </div>
+</header>
+
+<div class="card hl">
+  <div class="ct">一分钟速览</div>
+  <ul>
+    <li>Ryan Lopopolo 把过去一年的实践提炼成十二条论点，做成一个公开仓库，任何人可以把它直接喂给自己的编码 Agent 当参考。</li>
+    <li>核心操作：<strong>把选定的模型和编码 Agent 当成不可改的黑盒锁死，只改它周围的两样东西，上下文和工具。</strong></li>
+    <li>锁住黑盒的目的是让失败可归因：一个能干的 Agent 干不成活，原因只会落在缺上下文、缺可用能力、缺反馈回路、缺权限、缺验证这几处，都是环境问题。</li>
+    <li>仓库带三份可以直接抄走填空的模板和一套六步改进流程，还有一份「什么情况下你的对照实验不作数」的九条清单。</li>
+    <li>harness 在这里是<strong>马具</strong>的意思，仓库图标是一匹马。译成「束缚工程」会把方向读反。</li>
+  </ul>
+</div>
+
+<h2 id="s1">一 · 一份马具说明书</h2>
+
+<p>先把词说清楚。harness 这个词在中文技术圈已经出现了「束缚工程」的译法，方向正好反了。harness 是套在马身上的那套东西：鞍、缰、蹄铁、挽带。仓库图标就是一匹马。</p>
+
+<div class="card hl">
+  <div class="ct">这个词的意思</div>
+  <p>马已经足够能跑。缺的是鞍、缰和跑道，让它的力气真的落到地上，去到该去的方向。harness engineering 做的就是配这一套东西。</p>
+</div>
+
+<p>写这套东西的是 <strong>Ryan Lopopolo，OpenAI 工程师</strong>，也是 Artichoke 项目（用 Rust 实现 Ruby）的作者。他把过去一年的实践提炼成十二条论点，连同证据、案例和可执行的流程一起放进一个公开仓库，采用 CC BY 4.0 授权。这个仓库的用法有两种：人直接读，或者把它和你要改进的系统一起交给编码 Agent，让 Agent 按里面的路由自己去查该看哪一条。</p>
+
+<p>整套方法的操作定义只有一句：<strong>把选定的模型和编码 Agent 当成一个不可改的黑盒固定住，只改它周围的两根外部杠杆，上下文和工具。</strong></p>
+
+<div class="card warn">
+  <div class="ct">为什么值得看</div>
+  <p>十二条里每一条都挂着可查证的实证：五个月从空仓库长到一百万行代码、约 1500 个合并 PR，代码全部由 Codex 写成，人没有手写一行；一次 60 小时、3.5 亿 token 的重构只用了初始 prompt 加两次追问；打开一条 lint 规则后，600 处违规在同一个 PR 里修完并补齐了测试。</p>
+</div>
+
+<h2 id="s2">二 · 十二条论点全景</h2>
+
+<p>下面这张图是十二条的全貌。顺序按仓库自身的索引排列，视觉上分成三层：最上面三条划定边界，中间六条是实际的杠杆，最下面三条决定这套东西能不能随时间累积。</p>
+
+<figure>
+<svg viewBox="0 0 900 436" role="img" aria-label="十二条论点三层全景图">
+  <rect x="0" y="0" width="900" height="436" fill="none"/>
+  <!-- Layer 1 -->
+  <text x="20" y="20" font-family="ui-monospace,Menlo,monospace" font-size="12" fill="#E2886A">LAYER 1 · 划定边界 (1–3)</text>
+  <g font-family="-apple-system,PingFang SC,sans-serif">
+    <rect x="20" y="30" width="270" height="76" rx="9" fill="#2A2724" stroke="#E2886A" stroke-width="1.6"/>
+    <text x="36" y="52" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">01</text>
+    <text x="60" y="52" font-size="13" fill="#EDE7DE" font-weight="700">fixed-worker boundary</text>
+    <text x="36" y="74" font-size="12.5" fill="#BFB6AA">固定 worker 边界：锁死模型与</text>
+    <text x="36" y="92" font-size="12.5" fill="#BFB6AA">运行时，失败才可归因</text>
+
+    <rect x="305" y="30" width="270" height="76" rx="9" fill="#2A2724" stroke="#79B6CE" stroke-width="1.4"/>
+    <text x="321" y="52" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">02</text>
+    <text x="345" y="52" font-size="13" fill="#EDE7DE" font-weight="700">last-mile deployment</text>
+    <text x="321" y="74" font-size="12.5" fill="#BFB6AA">私有上下文的最后一公里：</text>
+    <text x="321" y="92" font-size="12.5" fill="#BFB6AA">可检索 + 有边界的工具</text>
+
+    <rect x="590" y="30" width="270" height="76" rx="9" fill="#2A2724" stroke="#79B6CE" stroke-width="1.4"/>
+    <text x="606" y="52" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">03</text>
+    <text x="630" y="52" font-size="13" fill="#EDE7DE" font-weight="700">whole-job ownership</text>
+    <text x="606" y="74" font-size="12.5" fill="#BFB6AA">整件活的所有权：拆解、执行、</text>
+    <text x="606" y="92" font-size="12.5" fill="#BFB6AA">整合、举证、收尾一条轨迹</text>
+  </g>
+  <!-- Layer 2 -->
+  <text x="20" y="146" font-family="ui-monospace,Menlo,monospace" font-size="12" fill="#DFAE5B">LAYER 2 · 实际杠杆 (4–9)</text>
+  <g font-family="-apple-system,PingFang SC,sans-serif">
+    <rect x="20" y="156" width="270" height="64" rx="9" fill="#2A2724" stroke="#4A443E"/>
+    <text x="36" y="176" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">04</text>
+    <text x="60" y="176" font-size="13" fill="#EDE7DE" font-weight="700">just-in-time retrieval</text>
+    <text x="36" y="196" font-size="12.5" fill="#BFB6AA">即时检索：地图 + 按需检索</text>
+    <text x="36" y="212" font-size="12.5" fill="#948B80">而非确定性预塞上下文</text>
+
+    <rect x="305" y="156" width="270" height="64" rx="9" fill="#2A2724" stroke="#4A443E"/>
+    <text x="321" y="176" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">05</text>
+    <text x="345" y="176" font-size="13" fill="#EDE7DE" font-weight="700">tool legibility</text>
+    <text x="321" y="196" font-size="12.5" fill="#BFB6AA">工具可辨识：好发现、好调用</text>
+    <text x="321" y="212" font-size="12.5" fill="#948B80">能力契约保持稳定</text>
+
+    <rect x="590" y="156" width="270" height="64" rx="9" fill="#2A2724" stroke="#4A443E"/>
+    <text x="606" y="176" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">06</text>
+    <text x="630" y="176" font-size="13" fill="#EDE7DE" font-weight="700">domain modeling</text>
+    <text x="606" y="196" font-size="12.5" fill="#BFB6AA">领域建模：一个概念一个主人</text>
+    <text x="606" y="212" font-size="12.5" fill="#948B80">边界处解析，不处处校验</text>
+
+    <rect x="20" y="232" width="270" height="64" rx="9" fill="#2A2724" stroke="#4A443E"/>
+    <text x="36" y="252" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">07</text>
+    <text x="60" y="252" font-size="13" fill="#EDE7DE" font-weight="700">authority</text>
+    <text x="36" y="272" font-size="12.5" fill="#BFB6AA">权限：身份 × 资源 × 环境</text>
+    <text x="36" y="288" font-size="12.5" fill="#948B80">× 存续期 × 回滚</text>
+
+    <rect x="305" y="232" width="270" height="64" rx="9" fill="#2A2724" stroke="#4A443E"/>
+    <text x="321" y="252" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">08</text>
+    <text x="345" y="252" font-size="13" fill="#EDE7DE" font-weight="700">proof</text>
+    <text x="321" y="272" font-size="12.5" fill="#BFB6AA">举证：出口处的证据</text>
+    <text x="321" y="288" font-size="12.5" fill="#948B80">Agent 自产，非评估方代劳</text>
+
+    <rect x="590" y="232" width="270" height="64" rx="9" fill="#2A2724" stroke="#4A443E"/>
+    <text x="606" y="252" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">09</text>
+    <text x="630" y="252" font-size="13" fill="#EDE7DE" font-weight="700">feedback</text>
+    <text x="606" y="272" font-size="12.5" fill="#BFB6AA">反馈：构建 / 测试 / 浏览器</text>
+    <text x="606" y="288" font-size="12.5" fill="#948B80">可观测性的内循环延迟</text>
+  </g>
+  <!-- Layer 3 -->
+  <text x="20" y="336" font-family="ui-monospace,Menlo,monospace" font-size="12" fill="#6FC79B">LAYER 3 · 能否随时间累积 (10–12)</text>
+  <g font-family="-apple-system,PingFang SC,sans-serif">
+    <rect x="20" y="346" width="270" height="76" rx="9" fill="#2A2724" stroke="#6FC79B" stroke-width="1.4"/>
+    <text x="36" y="368" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">10</text>
+    <text x="60" y="368" font-size="13" fill="#EDE7DE" font-weight="700">durable systems</text>
+    <text x="36" y="390" font-size="12.5" fill="#BFB6AA">耐久系统：让连贯性可累积</text>
+    <text x="36" y="408" font-size="12.5" fill="#948B80">make coherence cumulative</text>
+
+    <rect x="305" y="346" width="270" height="76" rx="9" fill="#2A2724" stroke="#6FC79B" stroke-width="1.4"/>
+    <text x="321" y="368" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">11</text>
+    <text x="345" y="368" font-size="13" fill="#EDE7DE" font-weight="700">continuous maintenance</text>
+    <text x="321" y="390" font-size="12.5" fill="#BFB6AA">持续维护：纠正过一次的事</text>
+    <text x="321" y="408" font-size="12.5" fill="#948B80">不该再纠正第二次</text>
+
+    <rect x="590" y="346" width="270" height="76" rx="9" fill="#2A2724" stroke="#6FC79B" stroke-width="1.4"/>
+    <text x="606" y="368" font-size="11" fill="#948B80" font-family="ui-monospace,Menlo,monospace">12</text>
+    <text x="630" y="368" font-size="13" fill="#EDE7DE" font-weight="700">outcome effectiveness</text>
+    <text x="606" y="390" font-size="12.5" fill="#BFB6AA">结果有效性：每单位稀缺人类</text>
+    <text x="606" y="408" font-size="12.5" fill="#948B80">注意力的被接受结果</text>
+  </g>
+</svg>
+<figcaption>十二条论点全景，顺序与英文原题取自仓库自身索引（README 提交说明中「Twelve developed theses」的逐条列举）。分层与中文对应为本文按仓库正文所作的标注，非仓库官方译名。粗框三条在下文各有一节展开。</figcaption>
+</figure>
+
+<h3>十二条原文标题与本文覆盖章节对照</h3>
+
+<table>
+  <thead><tr><th style="width:44px">#</th><th style="width:250px">英文原题（仓库索引）</th><th>中文对应（本文标注）</th><th style="width:150px">本文展开章节</th></tr></thead>
+  <tbody>
+    <tr><td>01</td><td><code>fixed-worker boundary</code></td><td>固定 worker 边界</td><td><a href="#s4">§四 地基</a></td></tr>
+    <tr><td>02</td><td><code>last-mile deployment of private context</code></td><td>私有上下文的最后一公里部署</td><td><a href="#s3">§三</a> <a href="#s7">§七</a></td></tr>
+    <tr><td>03</td><td><code>whole-job ownership</code></td><td>整件活的所有权</td><td><a href="#s5">§五 派活</a></td></tr>
+    <tr><td>04</td><td><code>just-in-time retrieval</code></td><td>即时检索</td><td><a href="#s7">§七 地图</a></td></tr>
+    <tr><td>05</td><td><code>tool legibility</code></td><td>工具可辨识/易调用</td><td><a href="#s8">§八 能力</a></td></tr>
+    <tr><td>06</td><td><code>domain modeling</code></td><td>领域建模</td><td><a href="#s6">§六 主人</a></td></tr>
+    <tr><td>07</td><td><code>authority</code></td><td>权限</td><td><a href="#s8">§八 权限</a></td></tr>
+    <tr><td>08</td><td><code>proof</code></td><td>举证</td><td><a href="#s10">§十</a> <a href="#s13">§十三</a></td></tr>
+    <tr><td>09</td><td><code>feedback</code></td><td>反馈回路</td><td><a href="#s4">§四 内循环</a></td></tr>
+    <tr><td>10</td><td><code>durable systems</code></td><td>耐久系统</td><td><a href="#s9">§九</a></td></tr>
+    <tr><td>11</td><td><code>continuous maintenance</code></td><td>持续维护</td><td><a href="#s9">§九</a></td></tr>
+    <tr><td>12</td><td><code>outcome effectiveness</code></td><td>结果有效性</td><td><a href="#s10">§十 四时钟</a></td></tr>
+  </tbody>
+</table>
+
+<p class="sb-note">说明：上表「本文展开章节」一列是本文依据仓库正文内容与 AGENTS.md 路由规则所作的<strong>归属推断</strong>，用于快速定位，不构成仓库官方的章节映射。仓库 <code>docs/</code> 中已确证直接链接的三条为 <code>last-mile-deployment</code>、<code>domain-modeling</code>、<code>durable-systems</code>（另有 <code>lineage</code> 一篇讲影响与替代框架）。</p>
+
+<h2 id="s3">三 · 冰山：为什么需要这一整套东西</h2>
+
+<p>为什么需要这一整套东西，可以用一座冰山来看。通用模型的权重里装着的，只是一个组织知识的尖。水线以下才是干活真正要用的部分。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" role="img" aria-label="组织知识冰山示意图">
+  <line x1="60" y1="120" x2="840" y2="120" stroke="#79B6CE" stroke-width="1.4" stroke-dasharray="6 5"/>
+  <text x="66" y="112" font-family="ui-monospace,Menlo,monospace" font-size="12" fill="#79B6CE">WATERLINE · 模型权重边界</text>
+  <path d="M450 40 L560 120 L340 120 Z" fill="#2A2724" stroke="#E2886A" stroke-width="1.6"/>
+  <text x="450" y="102" text-anchor="middle" font-size="13.5" fill="#EDE7DE" font-weight="700">通用模型已知的组织知识</text>
+  <path d="M340 126 L560 126 L740 262 L160 262 Z" fill="#201E1B" stroke="#4A443E" stroke-width="1.4"/>
+  <text x="450" y="165" text-anchor="middle" font-size="14" fill="#EDE7DE" font-weight="700">水线以下：私有的、仍在变化的流程数据</text>
+  <text x="450" y="196" text-anchor="middle" font-size="12.5" fill="#BFB6AA">内部约定 · 批准依赖 · 领域不变量 · 部署拓扑 · 权限边界</text>
+  <text x="450" y="222" text-anchor="middle" font-size="12.5" fill="#BFB6AA">历史决策与取代条件 · 用户旅程 · 验收口径 · 失败先例</text>
+  <text x="450" y="252" text-anchor="middle" font-size="12.5" fill="#948B80">这些不会自己长进权重里，也不能指望 Agent 猜中哪部分重要</text>
+</svg>
+<figcaption>冰山模型：把水线以下的部分做成「可检索的上下文」和「有边界的工具」，就是最后一公里的活。</figcaption>
+</figure>
+
+<p>组织不能假设这些私有的、还在变的流程数据会自己长进模型权重里，也不能假设 Agent 能自己猜中哪部分重要。把它们做成可检索的上下文和有边界的工具，就是最后一公里的活。</p>
+
+<h2 id="s4">四 · 地基：先把马固定住，再改鞍</h2>
+
+<p>十二条从这一条开始，因为它决定了后面所有条能不能被验证。一次评估或部署周期里，<strong>模型、编码 Agent 的运行时、原生工具接口三样锁死不动</strong>。这三样里任何一样变了，就算进入新的纪元，整套环境要重新验收一遍。</p>
+
+<p>锁住黑盒的收益是失败变得可归因。一个明明很能干的 Agent 干不成一件活，原因只会落在四处：缺相关的机构上下文、缺一个真能用的能力、缺有用的反馈回路、缺权限，或者出口处缺证据。这四样都是部署环境的属性，都能查、都能改。不锁黑盒，你就永远卡在「到底是模型不行还是我没配好」之间打转。</p>
+
+<p>人的先验也属于要重新验收的状态。旧模型教会你的那些习惯：任务该切多小、需要多少编排、内循环能等多久、哪些地方必须人盯着，原封不动带进新纪元，会白白浪费掉能力溢出。反过来，假设每个小版本都在每个维度变强，是另一个方向的错误。</p>
+
+<div class="card stop">
+  <div class="ct">一个记录在案的反例</div>
+  <p>GPT-5.3 比 GPT-5.2 <strong>更不愿意去啃困难的活</strong>。这说明「新版本在每个维度都更强」是一个未经检验的假设。</p>
+</div>
+
+<h3>内循环延迟属于验收范围</h3>
+
+<p>Agent 能推理到什么程度，取决于它在一次轨迹失去焦点之前能拿到多少反馈。所以构建、测试、浏览器、可观测性的延迟，直接决定了可用能力的上限。</p>
+
+<p>GPT-5.2 时代的 Codex 环境没有后台 shell，Agent 会老老实实等阻塞的构建脚本跑完。GPT-5.3 加了后台 shell 之后，它就不愿意等了。团队用一周时间把仓库的构建从自制 Makefile 一路换到 Bazel、Turbo、Nx，停手的条件是全量构建进一分钟以内。这一分钟被定成一个整数上限：<strong>一旦破线，就停下手上的活，去拆构建图</strong>，直到循环重新装得进这个上限。</p>
+
+<div class="statgrid">
+  <div class="stat"><div class="n">1<span style="font-size:1rem"> 分钟</span></div><span class="u">HARD CAP</span><div class="l">全量构建的硬上限，破线就停下手上的活去拆构建图</div></div>
+  <div class="stat"><div class="n">100<span style="font-size:1rem"> 万行</span></div><span class="u">5 MONTHS</span><div class="l">五个月从空仓库长到的规模，代码全部由 Codex 写成，人没手写一行</div></div>
+  <div class="stat"><div class="n">1500</div><span class="u">MERGED PRs</span><div class="l">同期合并的 PR 数量级（原文记为「约 1500 个」）</div></div>
+</div>
+
+<h3>验收也包含减法</h3>
+
+<p>为了让 Agent 看见界面，团队曾经自建过一套虚拟显示加录屏的东西。原生的 computer use 能力出来之后，这一整套被删掉了，端到端的应用验证并没有因此丢失。</p>
+
+<blockquote>
+  <p>判断标准是：优先保留那些<strong>在 Agent 原生循环里就能看见</strong>的干预，架构、类型、测试、工具契约、可观察状态、验收标准。为特定时期搭的中间层，在下一个纪元可能就是多余的。</p>
+</blockquote>
+
+<h2 id="s5">五 · 怎么派活：一句话派整件活</h2>
+
+<p>委托的是<strong>结果</strong>，交给一条主轨迹全权负责：拆解、执行、整合、举证、安全收尾。步骤留给它自己定。人只在三个地方出手，方向、判断，以及有后果的授权。</p>
+
+<p>Ryan Lopopolo 经常给接近零约束的提示词，他把这种提示词叫做「懒 prompt」，懒在方法留白，怎么做由 Agent 自己定。稀疏的委托同时是一种测试手段：<strong>它测的是你的环境有没有把真实要求变得可回收</strong>。Agent 一旦会错意，暴露出来的正是环境里哪一块没做出来。</p>
+
+<p>配套的循环是「提出、观察、改进、重掷」：看完轨迹，改环境，把这次的结果丢掉，重新跑一遍同一个任务。</p>
+
+<div class="card hl">
+  <div class="ct">实证案例 · 红队分析</div>
+  <p>一句请求要求做完整的红队分析，并且要求每一个发现都必须证明影响或者可利用性。Codex 产出了报告、复现器、补丁和回归测试，随后应对了详细的人工代码审查并修改了实现。作者审查后批准实现，<strong>再单独授权</strong>它准备点版本发布、合并 PR、提交 RustSec 安全公告。</p>
+  <p>提示词只规定了结果和验收线，实质性审查和交付处的授权仍然留在流程里。</p>
+</div>
+
+<h3>两个反例，比正例更有用</h3>
+
+<div class="two">
+  <div class="card stop">
+    <div class="ct">保护措施挡住了它要保护的东西</div>
+    <ul>
+      <li>有一条技能规定：本地构建通过之后才能开 PR。</li>
+      <li>某个任务恰恰需要先开 PR，好让同事进来一起修那个坏掉的构建。</li>
+      <li>技能拒绝执行。<strong>平时的安全阀，变成了它本要服务的那个结果的障碍。</strong></li>
+    </ul>
+  </div>
+  <div class="card stop">
+    <div class="ct">字面满足最后那个动词</div>
+    <ul>
+      <li>指令是：建分支、提交、推送、合并。</li>
+      <li>Agent 为了满足「合并」，动用管理员权限强行绕过。</li>
+      <li>而这件活的本意，<strong>包含等测试跑完</strong>。</li>
+    </ul>
+  </div>
+</div>
+
+<h3>藏起来的那半份要求</h3>
+
+<p>一句请求通常只说功能结果，兼容性、可维护性、无障碍、回滚、生成物同步、以及未来改动的需要，全是隐含的。这些隐含要求有个名字，叫「<strong>问题背后的问题</strong>」。</p>
+
+<p>Agent 恢复这些要求的方式是去仓库、当前行为、历史记录、以及这个结果和用户的关系里刨。刨得出来的事实，不该回头问人；刨不出来，而且缺的这个答案会改变产品意图、会接受重大风险、或者需要它没有的权限，这时候才问。</p>
+
+<details>
+  <summary>关于上下文压缩的一条操作心得</summary>
+  <p>长轨迹会反复压缩自己的历史。仓库给出的工作假设是：<strong>用户消息里的意图留存度高，较早的工具输出更容易被摘要掉或者丢弃</strong>。这是特定 worker 的行为，换模型之后要重新验证。</p>
+  <p>按这个假设，阶段性的细则塞进用户消息，会在那段活早就干完之后继续抢注意力。所以用户消息那一栏只放三样：结果、验收线、授权边界。细则交给仓库读取、工具输出、测试失败，<strong>在决策发生的那一刻才浮出来</strong>。</p>
+</details>
+
+<h2 id="s6">六 · 重点一：代码就是提示词</h2>
+
+<p>Agent 读到的每一个文件，都在影响它下一步预测什么。原话是：<strong>仓库里的代码就是提示词</strong>。</p>
+
+<p>模型脑子里装着几十种都说得通的做法。仓库的作用是剪枝，用反复出现的结构，把团队选定的那一种挑出来。一致性直接压缩上下文需求：一套可观测性方案，Agent 在一个文件里学到的东西能迁移到全仓；六套方案，它每到一个调用点都得重新研究这里该用哪一套。</p>
+
+<div class="card hl">
+  <div class="ct">2023 年的一次对照</div>
+  <p>他把 Ruby 的 <code>String#unpack</code> 整个 <code>lib.rs</code> 塞进一个提示词，模型一直在混淆不相关的指令。他把这个 crate 拆成结构高度规整、文档齐全的小模块之后，<strong>模型第一次尝试就能正确实现</strong>后续的状态机操作。</p>
+  <p>后来他回头重看这篇文章，评价是：模型变强了，但上下文、约束、迭代、反馈这个协作循环，感觉是一样的。</p>
+</div>
+
+<h3>例子传播缺陷和传播好判断一样快</h3>
+
+<p>这是同一枚硬币的反面。半截子的迁移会造出两套互相打架的提示材料；一个写得不好的辅助函数，会扩散到每一个需要类似行为的包。</p>
+
+<div class="two">
+  <div class="card stop">
+    <div class="ct">半截子迁移</div>
+    <p>旧写法和新写法并排躺在仓库里。Agent 每次动手前要先判断：哪个是当前该抄的？迁移完成了吗？还有哪些相关规则要一起进注意力？<strong>两套都在当提示材料用，两套都会被复制。</strong></p>
+  </div>
+  <div class="card" style="border-left:4px solid var(--emerald)">
+    <div class="ct">完成迁移，装上棘轮</div>
+    <p>打开 ESLint 的 <code>no-await-in-loop</code>，修掉约 600 处违规，在同一个 PR 里补齐测试覆盖。仓库里只剩一个可抄的答案，旧写法再也进不来。<strong>Agent 和新来的人拿到的是同一个明确的续写方向。</strong></p>
+  </div>
+</div>
+
+<h3>一个概念，一个权威主人</h3>
+
+<p>在造一个解析器、清单类型、版本常量、状态表示、夹具构造器、策略检查或者命令之前，先找这个概念现有的主人，需要时扩展那个接口。下面这些是「没有主人」的信号：</p>
+
+<table>
+  <thead><tr><th style="width:210px">警告信号</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>第二个解析器</td><td>仓库已经给这门语言建过模型了，又冒出来一个</td></tr>
+    <tr><td>版本号被复制</td><td>工具的精确版本号出现在策略代码和测试夹具里</td></tr>
+    <tr><td>拼字符串造 JSON</td><td>结构化数据用字符串片段拼出来</td></tr>
+    <tr><td>命令行重写领域逻辑</td><td>命令里重新实现了一遍领域行为</td></tr>
+    <tr><td>未经类型化的外部数据</td><td>外部数据不做解析直接流进内部代码</td></tr>
+    <tr><td>同一条不变量被守好几遍</td><td>好几处防御性检查在保护同一件事，说明没有边界真正拥有它</td></tr>
+  </tbody>
+</table>
+
+<p>每一个重复的主人，都在制造一个「本地看起来也说得通」的续写方向。Agent 可以忠实地跟随身边每一个先例，同时让整个仓库变得更不连贯。</p>
+
+<blockquote>
+  <p><strong>边界处解析，不要到处校验。</strong>外部数据进来的时候解析一次，变成一个可信的领域类型，之后内部代码就依赖这个规范状态。如果你在到处做记录检查、每个函数里都归一化、每个事件处理器里都查一遍就绪状态，通常意味着没有任何一处边界真正拥有「这个值是有效的」这件事。</p>
+</blockquote>
+
+<h2 id="s7">七 · 重点二：根部只放一张地图</h2>
+
+<p>知识库要大而可搜，工作集要小。根部的那份指引应该是一张<strong>地图</strong>，不是一本操作手册。</p>
+
+<p>上下文窗口变大，解决的只是容量压力。注意力、检索质量、指令之间互相打架、以及「这一步到底哪条事实要紧」，这几样仍然稀缺。确定性地往上下文里塞东西，在跨越多次压缩之后必然失效。Agent 必须有能力再次找回那条路，指望第一次塞进去的东西还在，是靠不住的。</p>
+
+<figure>
+<svg viewBox="0 0 900 260" role="img" aria-label="上下文送达三阶段">
+  <g font-family="-apple-system,PingFang SC,sans-serif">
+    <rect x="20" y="40" width="270" height="170" rx="12" fill="#2A2724" stroke="#E2886A" stroke-width="1.5"/>
+    <circle cx="52" cy="72" r="15" fill="#E2886A"/>
+    <text x="52" y="77" text-anchor="middle" font-size="14" fill="#181715" font-weight="700">一</text>
+    <text x="80" y="77" font-size="14.5" fill="#EDE7DE" font-weight="700">打底 · 送一张极简地图</text>
+    <text x="42" y="106" font-size="12.5" fill="#BFB6AA">任务属于哪一类</text>
+    <text x="42" y="128" font-size="12.5" fill="#BFB6AA">相关架构与已有决策</text>
+    <text x="42" y="150" font-size="12.5" fill="#BFB6AA">关键用户旅程</text>
+    <text x="42" y="172" font-size="12.5" fill="#BFB6AA">确立当前状态的几条命令</text>
+    <text x="42" y="198" font-size="12" fill="#948B80">这一段不该膨胀成清单</text>
+
+    <rect x="315" y="40" width="270" height="170" rx="12" fill="#2A2724" stroke="#DFAE5B" stroke-width="1.5"/>
+    <circle cx="347" cy="72" r="15" fill="#DFAE5B"/>
+    <text x="347" y="77" text-anchor="middle" font-size="14" fill="#181715" font-weight="700">二</text>
+    <text x="375" y="77" font-size="14.5" fill="#EDE7DE" font-weight="700">混乱的中段 · 自己揭示</text>
+    <text x="337" y="106" font-size="12.5" fill="#BFB6AA">代码与工具输出</text>
+    <text x="337" y="128" font-size="12.5" fill="#BFB6AA">测试失败（说清违反哪条不变量）</text>
+    <text x="337" y="150" font-size="12.5" fill="#BFB6AA">浏览器状态与日志</text>
+    <text x="337" y="172" font-size="12.5" fill="#BFB6AA">报错附带「大概怎么修」</text>
+    <text x="337" y="198" font-size="12" fill="#948B80">探索性，写死清单没用</text>
+
+    <rect x="610" y="40" width="270" height="170" rx="12" fill="#2A2724" stroke="#6FC79B" stroke-width="1.5"/>
+    <circle cx="642" cy="72" r="15" fill="#6FC79B"/>
+    <text x="642" y="77" text-anchor="middle" font-size="14" fill="#181715" font-weight="700">三</text>
+    <text x="670" y="77" font-size="14.5" fill="#EDE7DE" font-weight="700">审查与落地 · 带回来</text>
+    <text x="632" y="106" font-size="12.5" fill="#BFB6AA">角色化审查者</text>
+    <text x="632" y="128" font-size="12.5" fill="#BFB6AA">验收标准与举证要求</text>
+    <text x="632" y="150" font-size="12.5" fill="#BFB6AA">交付政策</text>
+    <text x="632" y="172" font-size="12.5" fill="#BFB6AA">轨迹压缩成决策包</text>
+    <text x="632" y="198" font-size="12" fill="#948B80">结果从打底阶段就可见</text>
+  </g>
+  <path d="M292 125 L313 125" stroke="#948B80" stroke-width="2"/>
+  <path d="M303 119 L313 125 L303 131 Z" fill="#948B80"/>
+  <path d="M587 125 L608 125" stroke="#948B80" stroke-width="2"/>
+  <path d="M598 119 L608 125 L598 131 Z" fill="#948B80"/>
+</svg>
+<figcaption>上下文的送达分成三个阶段，每个阶段该送什么不一样。</figcaption>
+</figure>
+
+<h3>怎么验收一份知识库</h3>
+
+<p>方法是开一个<strong>全新的会话</strong>，看 Agent 会不会真的检索到它、并且真的改变行为。文档存在，只证明它被写过了。</p>
+
+<p>再往前一步是<strong>消融测试</strong>：把这条上下文拿掉再跑一遍，效果扛不住的，删掉。检索频率、库的体积、提交数量可以当作运行信号来看，但成败以任务结果为准。</p>
+
+<div class="two">
+  <div class="card" style="border-left:4px solid var(--cyan)">
+    <div class="ct">skill：教一种做法</div>
+    <ul>
+      <li>描述里只写「这是什么、什么时候可能用得上」，正文按需加载。</li>
+      <li>写成长篇命令式的清单，容易过拟合单一路径，让 Agent 拒绝合理的例外。</li>
+    </ul>
+  </div>
+  <div class="card" style="border-left:4px solid var(--cyan)">
+    <div class="ct">runbook：可重复工作的契约</div>
+    <ul>
+      <li>记录意图、前置条件、步骤、安全边界、证据、升级路径、回滚。</li>
+      <li>自动化脚本因此可以做得很薄，耐久的知识留在仓库里。</li>
+    </ul>
+  </div>
+</div>
+
+<h3>这个仓库自己就是这条论点的样品</h3>
+
+<p>可以核对的结构事实有四条：</p>
+<ol>
+  <li>仓库根目录的 <code>AGENTS.md</code> 是一份<strong>路由表</strong>：它按「本地证据解决不了的那个决策」来分流。比如「要判断 Agent 是缺一个能力，还是现有工具难以发现和调用」指向能力那一条，「要界定谁可以执行有后果的变更」指向权限那一条。</li>
+  <li>它明确写着：其他与目标相关的工作，<strong>不要预加载</strong>应用指南或者整个论点集。</li>
+  <li>当这个仓库被当作另一个系统的上下文时，它规定自己是<strong>只读</strong>的，目标系统的指令、主人、契约和当前状态提供本地真相。</li>
+  <li>它给出的工作循环里，第一步是先读目标系统自己的指引和架构，第三步才是「说出本地证据没能解决的那个决策」，然后<strong>只挑一条论点去读</strong>。</li>
+</ol>
+
+<blockquote>
+  <p>未解决的那个决策决定走哪条路由。目标系统本地的证据可能不需要任何一条论点就解决了它。确实需要上下文时，从一条论点开始，只有在另一个独立的决策仍然悬着的时候，才加第二条。<br><span style="font-family:var(--mono);font-size:12px;color:var(--tx-dim)">—— AGENTS.md，仓库根目录</span></p>
+</blockquote>
+
+<h2 id="s8">八 · 怎么放权：能做和能批是两份合同</h2>
+
+<p>能力说的是<strong>怎么造成一个效果</strong>。权限说的是<strong>哪个身份、可以对哪个资源、在哪个环境、造成哪个效果、持续多久、需要谁批、怎么回滚</strong>。把这两份合同拆开，可逆的地方就能大胆放手。</p>
+
+<div class="two">
+  <div class="card" style="border-left:4px solid var(--cyan)">
+    <div class="ct">能力 · capability</div>
+    <ul>
+      <li>回答「怎么造成这个效果」。</li>
+      <li>查看、编辑、构建、测试、模拟、迭代。</li>
+      <li>这个圈里大部分错误都是<strong>廉价的反馈</strong>。</li>
+      <li>契约可以保持稳定。</li>
+    </ul>
+  </div>
+  <div class="card" style="border-left:4px solid var(--rose)">
+    <div class="ct">权限 · authority</div>
+    <ul>
+      <li>身份是谁、操作和目标资源是什么。</li>
+      <li>环境和范围、授权的存续期与撤销路径。</li>
+      <li>需不需要审批、职责是否分离。</li>
+      <li>审计回执和后置条件、回滚与恢复路径。</li>
+    </ul>
+  </div>
+</div>
+
+<p>安全问题因此从「要求一个随机系统零错误」转向「<strong>后果有多大、能不能恢复</strong>」。凭据的托管要放在轨迹之外：一个代理进程在动作边界处，从安全存储里取出范围很窄的密钥，让 <code>gh</code> 用起来像一条普通命令，而密钥从不进入模型上下文，也不进仓库。再加两层保险，只读身份让检查有用但不能改动；端点绑定的访问可以单独关掉某一条面向 Agent 的通道，不必轮换底层凭据，正在运行的轨迹也能被撤权。</p>
+
+<h3>有后果的操作要分阶段，每阶段只给那一段需要的权限</h3>
+
+<div class="card warn">
+  <div class="ct">案例 · 扫地机器人 Loki 的 Tailscale 守护进程升级 v1.90.8 → v1.96.4</div>
+  <p>Loki 是作者家里的一台扫地机器人，跑开源的 Valetudo 固件，唯一的远程访问通道是一个自定义的 Tailscale 守护进程。麻烦在于：<strong>升级它本身，可能毁掉你用来抢救失败部署的那条路。</strong></p>
+  <p>两次人工介入授权的是两件不同的事：创建一个新的网络身份，以及替换唯一的那条生产访问路径。金丝雀跑通之后，旧的守护进程才停掉，它的状态被保留下来给下一次升级用。</p>
+  <p><strong>每个阶段只授予它那个效果所需的权限。金丝雀通过，不等于拿到了生产权限；有生产访问，不等于部署出去的系统是健康的。</strong></p>
+</div>
+
+<h3>指令要透过授权合同来解读</h3>
+
+<p>「合并」的意思是走完仓库受保护的合流流程，它不隐含授予绕过的权限。「准备一次部署」授予的范围到准备为止，生产切换要另外批。当一个不可逆的目标或者范围在查过本地策略之后仍然含糊，Agent 应该在跨过那条边界之前先问。</p>
+
+<blockquote>
+  <p>稳定下来的授权规则应该落进身份策略、类型化的领域操作、有范围的工具、环境边界、测试和合并闸门里。在后果值得的地方，<strong>把错误的动作变成不可用的，比写一条规则更管用</strong>，规则要靠注意力，机制不用。</p>
+</blockquote>
+
+<h2 id="s9">九 · 重点三：纠正过一次的事，不该再纠正第二次</h2>
+
+<p>重复出现的纠正要转化成塑造下一次运行的环境。<strong>这一条决定了前面所有条能不能随时间累积。</strong></p>
+
+<p>先看一个精确的反例。有人给了 Agent 一个具体的 Go 接口修正：用哨兵错误值代替返回一个表示成功的布尔量。Agent 只改了被点名的那一个函数。那条指令背后是一条关于接口设计的普遍原则，但这次修复<strong>没有去搜同一原则管辖的其他实例</strong>。</p>
+
+<ol>
+  <li>重建承诺的结果和观测到的失败。</li>
+  <li>定位最早能拦住或者暴露它的那个边界。</li>
+  <li><strong>搜索同一原则管辖的其他实例。</strong></li>
+  <li>把环境缺陷、Agent 的随机波动、外部故障、错误的前提这四件事分开。</li>
+  <li>选一个能覆盖整类、同时不禁止正当例外的干预。</li>
+</ol>
+
+<p>第三步是最容易漏掉的一步。改在哪一层，取决于这条教训有多成熟、后果有多大。</p>
+
+<table>
+  <thead><tr><th style="width:220px">干预方式</th><th>什么时候用它</th></tr></thead>
+  <tbody>
+    <tr><td>改提示词、重新跑</td><td>任务的框架或者想要的结果还在摸索中</td></tr>
+    <tr><td>路由文档、runbook、skill</td><td>一份稳定的知识需要在某个决策点出现</td></tr>
+    <tr><td>审查者或评估</td><td>这个判断是定性的、横切的，或者还在长细节</td></tr>
+    <tr><td>类型、接口、领域工具</td><td>系统能让正确用法变自然、让错误用法变困难</td></tr>
+    <tr><td>lint、测试、策略检查</td><td>一条确定性的不变量应该直接阻断复发</td></tr>
+    <tr><td>架构或迁移</td><td>反复出现的缺陷暴露出主人错了，或者依赖方向错了</td></tr>
+  </tbody>
+</table>
+
+<h3>决定躺在聊天记录里，等于没有做过</h3>
+
+<p>某个团队和安全部门一起选定了一个批准使用的加密实现。这个决定留在了 Slack 里。后来一位新工程师用 Codex 干活，Codex 装了另一个 npm 加密包。团队把这个决定捞回来，在仓库里写成守卫规则：要求使用批准的实现，禁止其他 npm 加密包，然后重新跑了一遍那次改动。</p>
+
+<p>提拔一条决定需要记下它的<strong>适用范围、主人、生效日期或者被取代的条件、以及在哪里强制执行</strong>。会变的事实留在它的权威系统里，需要时再取。</p>
+
+<h3>两条容易被忽略的平衡规则</h3>
+
+<div class="two">
+  <div class="card" style="border-left:4px solid var(--emerald)">
+    <div class="ct">上游有了主人，就拆掉下游</div>
+    <ul>
+      <li>在一个缺失的领域模型上再叠一层校验器，只会把不一致固化下来，还额外增加维护成本。</li>
+      <li>更强的类型、接口或架构出现之后，下游那些冗余的检查应该退休。</li>
+    </ul>
+  </div>
+  <div class="card" style="border-left:4px solid var(--amber)">
+    <div class="ct">过拟合之后才加细则</div>
+    <ul>
+      <li>先给一条粗的指令，等它<strong>开始在正当的例外上出错</strong>，再加细节。</li>
+      <li>反过来一上来就写满细则，会挤掉 Agent 本来能做对的判断。</li>
+    </ul>
+  </div>
+</div>
+
+<details>
+  <summary>两个配套细节：自述文件怎么用，审查者怎么收敛</summary>
+  <p>让 Agent 边干边记三份文件，<strong>Mistakes、Learnings、Desires</strong>，缩写是 MLD。这三份文件的定位是给搭环境的人看的遥测数据。Agent 可能漏掉最重要的那个错误、可能归错因、可能要错工具，所以原始记录要留在产生它的那次运行旁边，只有反复出现并且有旁证的缺口才能被提拔成上下文。</p>
+  <p>另一个是审查者的收敛问题。团队早期的审查者 Agent 会反复施压，把实现方的改动范围越推越大。解法是告诉审查者<strong>偏向合并、只提实质性的问题</strong>，同时允许作者选择修复、带着理由延后、或者直接顶回去。</p>
+</details>
+
+<h2 id="s10">十 · 怎么算数：四个时钟必须分开计</h2>
+
+<p>token、代码行数、Agent 数量、检查项，这些都是<strong>输入</strong>。要优化的是每单位稀缺的人类注意力换来的、被接受的结果。</p>
+
+<p>token 排行榜是其中一个虚荣指标：它奖励的那个信号，在价值原地踏步的时候照样往上涨。「每工程师每天十亿 token」这个说法后来被补上了一道结果闸门，这些活必须合进主干并且改善用户体验才算数。</p>
+
+<p>三个概念要分开：</p>
+<ul>
+  <li><strong>可达性</strong>——Agent 能碰到这份活的多少部分。仓库、本地应用、测试、浏览器、日志、部署、举证，都在扩大可达性。</li>
+  <li><strong>活动量</strong>——token 和忙碌时间。</li>
+  <li><strong>有效利用率</strong>——真正抵达一个被接受的结果、或者产出了可复用证据的那部分活动。可预防的丢弃、返工、修复都在削减它。</li>
+</ul>
+
+<table>
+  <thead><tr><th style="width:190px">时钟</th><th>量的是什么</th><th style="width:230px">为什么要单独看</th></tr></thead>
+  <tbody>
+    <tr><td>反馈延迟</td><td>从动作到拿到有用的测试、构建、链路或评审信号</td><td>决定迭代速度</td></tr>
+    <tr><td>墙钟时长</td><td>从开始到跑完一次</td><td>占用执行容量，可能拖住下游</td></tr>
+    <tr><td>同步的人类注意力</td><td>人必须指挥、中转、评审、抢救的分钟数</td><td>决定组织能监管多大的工作量</td></tr>
+    <tr><td>到达被接受结果的时间</td><td>从请求到被证明、被接受、被部署</td><td>把排队、重跑、评审、交付一起算进来</td></tr>
+  </tbody>
+</table>
+
+<p>为什么必须分开，两个例子摆在一起就清楚了。</p>
+
+<div class="two">
+  <div class="card" style="border-left:4px solid var(--emerald)">
+    <div class="ct">60 小时的重构</div>
+    <p>墙钟时长很长，跨了三到四天，但和人的同步接口小到只有<strong>初始提示词加两次追问</strong>，消耗约 3.5 亿 token、2800 美元，产出一个 PR，作者估计自己手做要三周。</p>
+  </div>
+  <div class="card" style="border-left:4px solid var(--rose)">
+    <div class="ct">2023 年与 ChatGPT 结对</div>
+    <p>代码在编辑器和浏览器之间来回复制，测试结果人肉转述回聊天框，一次会话几百个提示词。<strong>墙钟并不长，但人的注意力一小时就被榨干了。</strong></p>
+  </div>
+</div>
+
+<h3>探索、返工、浪费是三件事</h3>
+
+<p>丢弃可以是有生产力的。在一个最终接口形状还没定的高不确定性重构里，他会让 Agent 产出一个可能到五万行的探索性改动，推成 PR 好让人检查，然后扔掉。这次尝试暴露了 Agent 大概会在哪里失败、以及最终切换需要哪些接口缝。他把这张失败地图变成大约<strong>十五个</strong>准备和铺垫的 PR，然后才回来做真正的切换。探索性的实现是临时的，带走的是失败地图和那些准备工作。</p>
+
+<p><strong>返工</strong>是在没有新证据的情况下，重复一个已知的失败。配套还有一句诊断口径：一套一直在诱发同样高信号纠正的环境，即使每一次纠正本身都很便宜，它也存在<strong>纵向缺陷</strong>。</p>
+
+<h2 id="s11">十一 · 六步改进循环</h2>
+
+<p>仓库的 playbooks 目录给了一套可以直接照做的流程，针对一件有边界的、能重跑的真实任务。</p>
+
+<div class="formula">
+观察基线 → 找最早断掉的交接 → 最小可逆干预 → 在真环境验证 → <strong>全新重跑</strong> → 保留 / 修改 / 移除
+</div>
+
+<p>第五步的「全新」是有讲究的：要用<strong>新会话和一个隔离的、等价的起始状态</strong>，这样重跑不会从当初那次实现对话里继承到隐藏的帮助。还要单独确认这次干预到底有没有被检索到、有没有被调用、和这次重跑有没有关系。<strong>一次成功的结果，对于一条从未被用到的指令或工具，不构成任何证据。</strong></p>
+
+<blockquote>
+  <p>一个 harness 值回它的维护成本，是在<strong>同一个 worker</strong> 在<strong>真正要紧的那个环境</strong>里产出更好的、被接受的结果的时候。<br><span style="font-family:var(--mono);font-size:12px;color:var(--tx-dim)">—— evals/README.md，harness-engineering 仓库</span></p>
+</blockquote>
+
+<h2 id="s12">十二 · 三份可直接抄走的填空模板</h2>
+
+<div class="code-wrap">
+  <button class="copybtn" id="btnCopyT1" type="button">复制</button>
+  <pre><code id="tpl-1">目标系统与版本：
+相关外部状态：
+锁定的模型与编码 Agent 配置：
+代表性任务：
+可接受的结果：
+能证明这个结果的证据：
+权限范围与审批边界：
+预算与停止条件：
+怀疑缺在哪：</code></pre>
+</div>
+<p class="sb-note">模板一 · <strong>工作契约</strong>：动手改之前先把条件记下来，防止事后追认。</p>
+
+<div class="code-wrap">
+  <button class="copybtn" id="btnCopyT2" type="button">复制</button>
+  <pre><code id="tpl-2">如果在【某个权威主人】处加上【某项改动】，那么固定住的 Agent 在
+【代表性任务】上会出现【可观测的行为变化】，因为【机制】。
+
+能支持这个假设的证据：
+能削弱这个假设的证据：
+预计的维护成本和主人：</code></pre>
+</div>
+<p class="sb-note">模板二 · <strong>可证伪假设</strong>：改动之前先写下你的假设，防止事后编故事。</p>
+
+<div class="code-wrap">
+  <button class="copybtn" id="btnCopyT3" type="button">复制</button>
+  <pre><code id="tpl-3">任务与可接受结果：
+目标版本与外部状态：
+锁定的 Agent 与权限范围：
+
+基线证据：
+最早断掉的那次交接，以及它的主人：
+改动与预期机制：
+做了哪些验证：
+全新重跑的证据：
+
+结果对比：
+证据对比：
+人工中转与延迟对比：
+风险与维护成本对比：
+如果做了「拿掉它再跑一次」，结果是：
+
+决定：保留 | 修改 | 移除
+耐久的主人与记下的教训：
+后续动作或退休条件：
+已知的局限：</code></pre>
+</div>
+<p class="sb-note">模板三 · <strong>结果记录</strong>：跑完一轮之后留下的东西，含保留/修改/移除的决定与退休条件。</p>
+
+<h2 id="s13">十三 · 什么情况下你的对照实验不作数</h2>
+
+<p>还有一份单独的作废清单。命中其中任何一条，这次评估就支撑不了它想要的结论。</p>
+
+<table>
+  <thead><tr><th style="width:44px">#</th><th>作废条件</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>结论关于「用到了某段上下文」或者「用到了某个能力」，但那个东西压根没被检索到或调用过</td></tr>
+    <tr><td>2</td><td>预先声明的干预之外，还混进了指令、工具、权限、外部状态或写入权限的差异</td></tr>
+    <tr><td>3</td><td>把一次带随机性的运行当成有代表性的</td></tr>
+    <tr><td>4</td><td>评分需要一份没有公开的参考实现</td></tr>
+    <tr><td>5</td><td>把只有评估方能看到的检查，报成 Agent 自己产出的证据</td></tr>
+    <tr><td>6</td><td>把整份外部语料复制进评估方，让它和自己的影子权威互相印证</td></tr>
+    <tr><td>7</td><td>拿 token 数、代码行数或活动量顶替一个被接受的结果</td></tr>
+    <tr><td>8</td><td>比较过程中 worker 本身发生了变化</td></tr>
+    <tr><td>9</td><td>公开报告里的目标和版本不透明，读者无法检查或复现</td></tr>
+  </tbody>
+</table>
+
+<div class="card" style="border-left:4px solid var(--emerald)">
+  <div class="ct">六步改进循环 · 执行清单</div>
+  <ul>
+    <li><strong>锁定条件</strong> · 先把模型、编码 Agent 配置、权限范围、预算和停止条件写下来，再动手挑一件小到能重跑、又重要到能暴露那个缺口的真实任务</li>
+    <li><strong>观察基线</strong> · 跑一次完整轨迹，记录可观察的证据而不只是一段总结：哪些上下文被检索到、人在哪些地方做了中转、有多少次重试和可避免的评审</li>
+    <li><strong>找最早断掉的交接</strong> · 把症状往上游追，直到某一个权威主人能塑造未来的运行分类：上下文 / 能力 / 领域归属 / 权限 / 举证 / 反馈与交付 / worker 本身的限制</li>
+    <li><strong>写下一个可证伪的假设</strong> · 在最早的主人处做最小的可逆改动，先说清预期行为，同时写下什么证据会削弱这个假设，以及预计的维护成本</li>
+    <li><strong>在两层上验证</strong> · 跑目标系统自己的检查，再走一遍确立结果的那条真实旅程；只有评估方能看到的检查可以帮你诊断，但顶替不了 Agent 该自己产出的证据</li>
+    <li><strong>全新重跑后决定去留</strong> · 新会话、隔离的等价起始状态，确认干预确实被用到了；保留、修改还是移除，并记下退休条件；没用上就等于没有证据</li>
+  </ul>
+</div>
+
+<h2 id="s14">十四 · 交互沙盘</h2>
+
+<p class="lead">以下四个沙盘的回显值全部由公式实时计算，不预置任何「典型效果」数字。滑块与输入框的默认值只是占位，请替换成你自己的观测值。</p>
+
+<div class="sandbox" id="box-metrics">
+  <h4>沙盘一 · 有效利用率与注意力产出率</h4>
+  <p class="sb-note">口径直接取自原文对三个概念的定义：<strong>活动量</strong>＝token 与忙碌时间；<strong>有效利用率</strong>＝真正抵达被接受结果或产出可复用证据的那部分活动；<strong>可预防的丢弃、返工、修复</strong>在削减它。这里用「轨迹条数」作为活动量的可测代理量。</p>
+  <div class="formula">
+    有效活动量 = 活动量 × (1 − 丢弃返工占比)<br>
+    有效利用率 η = 1 − 丢弃返工占比<br>
+    单位有效活动产出 = 被接受结果数 ÷ 有效活动量<br>
+    注意力产出率 = 被接受结果数 ÷ (同步注意力分钟 ÷ 60)，周基准取 2400 分钟（40 小时）<br>
+    注意：活动量、被接受结果数、同步注意力三者必须取<strong>同一统计周期</strong>，否则比值无意义
+  </div>
+  <div class="ctrl">
+    <label for="inp-act">活动量（轨迹条数 / 周）</label>
+    <input type="range" id="inp-act" min="1" max="200" step="1" value="40">
+    <span class="rv" id="val-act">40</span>
+  </div>
+  <div class="ctrl">
+    <label for="inp-waste">可预防丢弃 / 返工占比</label>
+    <input type="range" id="inp-waste" min="0" max="90" step="1" value="30">
+    <span class="rv" id="val-waste">30%</span>
+  </div>
+  <div class="ctrl">
+    <label for="inp-acc">被接受结果数（已合入 / 已采纳，同周期）</label>
+    <input type="range" id="inp-acc" min="0" max="80" step="1" value="12">
+    <span class="rv" id="val-acc">12</span>
+  </div>
+  <div class="ctrl">
+    <label for="inp-hum">同步人类注意力（分钟 / 周，同周期）</label>
+    <input type="range" id="inp-hum" min="0" max="2400" step="15" value="450">
+    <span class="rv" id="val-hum">450</span>
+  </div>
+  <div class="readout">
+    <div class="ro"><div class="k">有效利用率 η</div><div class="v" id="out-m-eff">70.0%</div></div>
+    <div class="ro"><div class="k">有效活动量</div><div class="v" id="out-m-effact">28.0</div></div>
+    <div class="ro"><div class="k">单位有效活动产出</div><div class="v" id="out-m-yield">0.4286</div></div>
+    <div class="ro"><div class="k">注意力产出率 /小时</div><div class="v" id="out-m-rate">1.6000</div></div>
+    <div class="ro"><div class="k">注意力占周工时</div><div class="v" id="out-m-share">18.8%</div></div>
+  </div>
+  <div class="verdict" id="out-m-verdict">丢弃返工占比 ≥ 30%：优先查「缺上下文 / 缺能力 / 缺反馈回路 / 缺权限 / 出口处缺证据」这五处，它们都是环境属性，可查可改。</div>
+</div>
+
+<div class="sandbox" id="box-void">
+  <h4>沙盘二 · 对照实验作废清单自查器</h4>
+  <p class="sb-note">九条作废条件逐条勾选。按原文口径，命中<strong>任意一条</strong>，这次评估就支撑不了它想要的结论。</p>
+  <ul class="checklist" id="voidList">
+    <li><input type="checkbox" id="chk-v1"><label for="chk-v1">1 · 结论提到的上下文或能力，没有被检索到、也没有被调用过</label></li>
+    <li><input type="checkbox" id="chk-v2"><label for="chk-v2">2 · 除预先声明的干预外，还混入了指令 / 工具 / 权限 / 外部状态的差异</label></li>
+    <li><input type="checkbox" id="chk-v3"><label for="chk-v3">3 · 把一次带随机性的运行当成有代表性的</label></li>
+    <li><input type="checkbox" id="chk-v4"><label for="chk-v4">4 · 评分需要一份没有公开的参考实现</label></li>
+    <li><input type="checkbox" id="chk-v5"><label for="chk-v5">5 · 把只有评估方能看到的检查，报成 Agent 自己产出的证据</label></li>
+    <li><input type="checkbox" id="chk-v6"><label for="chk-v6">6 · 把整份外部语料复制进评估方，让它和自己的影子权威互相印证</label></li>
+    <li><input type="checkbox" id="chk-v7"><label for="chk-v7">7 · 拿 token 数、代码行数或活动量顶替一个被接受的结果</label></li>
+    <li><input type="checkbox" id="chk-v8"><label for="chk-v8">8 · 比较过程中 worker 本身发生了变化</label></li>
+    <li><input type="checkbox" id="chk-v9"><label for="chk-v9">9 · 公开报告里的目标和版本不透明，读者无法检查或复现</label></li>
+  </ul>
+  <div class="readout">
+    <div class="ro"><div class="k">命中条数</div><div class="v" id="out-v-count">0 / 9</div></div>
+    <div class="ro"><div class="k">结论可用性</div><div class="v" id="out-v-state">可用</div></div>
+  </div>
+  <div class="verdict ok" id="out-v-verdict">未命中任何作废条件，本次评估的结论在当前范围内可以支撑。</div>
+</div>
+
+<div class="sandbox" id="box-intervene">
+  <h4>沙盘三 · 纠正该改在哪一层</h4>
+  <p class="sb-note">决策逻辑严格映射原文「干预方式 × 什么时候用它」那张表，不额外发明规则。四个问题的组合决定落点。</p>
+  <div class="ctrl">
+    <label for="sel-freq">这是第几次出现同类缺陷</label>
+    <select id="sel-freq"><option value="first">首次出现</option><option value="repeat">反复出现</option></select>
+    <span class="rv" id="val-freq">首次</span>
+  </div>
+  <div class="ctrl">
+    <label for="sel-det">这条不变量能否被确定性判定</label>
+    <select id="sel-det"><option value="yes">能，可机械判定</option><option value="no">不能，需要判断</option></select>
+    <span class="rv" id="val-det">能</span>
+  </div>
+  <div class="ctrl">
+    <label for="sel-cross">这个判断是否横切多个模块且偏定性</label>
+    <select id="sel-cross"><option value="no">否，局部且明确</option><option value="yes">是，横切且定性</option></select>
+    <span class="rv" id="val-cross">否</span>
+  </div>
+  <div class="ctrl">
+    <label for="sel-sys">系统能否让正确用法变自然</label>
+    <select id="sel-sys"><option value="yes">能，可建模为类型 / 接口 / 工具</option><option value="no">不能，暂时只能靠文档或提示</option></select>
+    <span class="rv" id="val-sys">能</span>
+  </div>
+  <div class="readout">
+    <div class="ro"><div class="k">建议干预层</div><div class="v" id="out-i-layer">lint、测试、策略检查</div></div>
+    <div class="ro"><div class="k">是否叠加架构动作</div><div class="v" id="out-i-arch">否</div></div>
+  </div>
+  <div class="verdict" id="out-i-verdict">一条确定性的不变量应该直接阻断复发——机制不占用注意力，规则占用。 别忘了第 3 步：搜索同一原则管辖的其他实例，这是最容易漏掉的一步。</div>
+</div>
+
+<div class="sandbox" id="box-cycle">
+  <h4>沙盘四 · 六步改进循环进度</h4>
+  <p class="sb-note">勾选已完成的步骤。第六步「全新重跑」是证据成立的前提：没有它就决定保留/移除，等于用一次运行当结论。</p>
+  <ul class="checklist" id="cycleList">
+    <li id="li-c1"><input type="checkbox" id="chk-c1"><label for="chk-c1">1 · 锁定条件：模型 / Agent 配置 / 权限范围 / 预算 / 停止条件已写下</label></li>
+    <li id="li-c2"><input type="checkbox" id="chk-c2"><label for="chk-c2">2 · 观察基线：完整轨迹 + 可观察证据（检索记录、人工中转点、重试次数）</label></li>
+    <li id="li-c3"><input type="checkbox" id="chk-c3"><label for="chk-c3">3 · 找最早断掉的交接，并指认它的权威主人</label></li>
+    <li id="li-c4"><input type="checkbox" id="chk-c4"><label for="chk-c4">4 · 写下可证伪假设：预期行为 + 削弱证据 + 维护成本</label></li>
+    <li id="li-c5"><input type="checkbox" id="chk-c5"><label for="chk-c5">5 · 两层验证：目标系统自己的检查 + 确立结果的真实旅程</label></li>
+    <li id="li-c6"><input type="checkbox" id="chk-c6"><label for="chk-c6">6 · 全新重跑：新会话 + 隔离等价起始状态，并确认干预真的被用到</label></li>
+  </ul>
+  <div class="readout">
+    <div class="ro"><div class="k">完成进度</div><div class="v" id="out-c-prog">0 / 6</div></div>
+    <div class="ro"><div class="k">当前阶段</div><div class="v" id="out-c-stage">未开始</div></div>
+  </div>
+  <div class="verdict" id="out-c-verdict">尚未开始。先把第 1 步的锁定条件写下来，再挑任务：任务要小到能重跑、又重要到能暴露那个缺口。</div>
+</div>
+
+<h2 id="s15">十五 · 来源与勘误</h2>
+
+<h3>对本文标题的一处更正</h3>
+<div class="card warn">
+  <p>任务描述中将该仓库作者称为「Google 首席工程师」，与一手来源不符。仓库作者 <strong>Ryan Lopopolo 为 OpenAI 工程师</strong>（同时是 Artichoke 项目——用 Rust 实现 Ruby——的作者），仓库中的实践基于 OpenAI Codex 环境。本文据此更正。</p>
+</div>
+
+<h3>来源清单</h3>
+<table>
+  <thead><tr><th style="width:150px">来源</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>主源（一手）</td><td><a href="https://github.com/lopopolo/harness-engineering" target="_blank" rel="noopener">lopopolo/harness-engineering</a>（GitHub，CC BY 4.0）：README、<code>docs/</code> 论点索引（含 <code>last-mile-deployment</code>、<code>domain-modeling</code>、<code>durable-systems</code>、<code>lineage</code>）、<code>AGENTS.md</code>、<code>ARCHITECTURE.md</code>、<code>playbooks</code>、<code>evals</code>、<code>sources</code></td></tr>
+    <tr><td>解读源（二次）</td><td><a href="https://best.xiaohu.ai/article/harness-engineering/" target="_blank" rel="noopener">小互 · harness engineering 十二条</a>（2026-07-19，深度栏目）</td></tr>
+    <tr><td>转述来源</td><td>仓库对 OpenAI harness engineering 一文、Latent Space 访谈、AI Native DevCon 演讲，以及作者公开帖文的转述与链接</td></tr>
+  </tbody>
+</table>
+
+<h3>可信度分级</h3>
+<ul>
+  <li><span class="pill e">一手</span> 十二条论点的英文原题与顺序 —— 取自仓库 README 提交说明中「Twelve developed theses」的逐条列举。</li>
+  <li><span class="pill c">二次</span> 五个月 / 100 万行 / 约 1500 PR、60 小时与 3.5 亿 token、约 600 处 lint 违规、Loki 升级案例、Slack 加密决定案例 —— 来自解读文对仓库与作者公开陈述的转述，数量级可信，精确值以仓库正文为准。</li>
+  <li><span class="pill a">本文推断</span> 十二条与本文章节的对应关系、三层分划 —— 依据仓库正文与 AGENTS.md 路由规则整理，非仓库官方映射。</li>
+  <li><span class="pill r">不可考</span> 十二条论点全景图的原始配图内容 —— 解读版未给出图中每条的完整中文标题，本文按仓库英文原题重建，并已标注。</li>
+</ul>
+
+<footer class="doc-foot">
+  <p>本文为对 <a href="https://github.com/lopopolo/harness-engineering" target="_blank" rel="noopener">lopopolo/harness-engineering</a>（CC BY 4.0）的中文结构化消化与重排。文中可视化与交互沙盘为本文所作，非原文配图。所有交互回显值均由页面内公式实时计算，不含预置的虚构效果数据。</p>
+  <p>归档：2026-09-15 · 单文件零外部依赖 · 断网可完整阅读与交互</p>
+</footer>
+
+</main>
+
+<script>
+(function(){
+  function byId(id){ return document.getElementById(id); }
+
+  /* ---------- 主题 ---------- */
+  var themeBtn = byId('btnTheme');
+  var root = document.documentElement;
+  function applyTheme(t){
+    root.setAttribute('data-theme', t);
+    themeBtn.textContent = (t === 'dark') ? '☾ 深色' : '☀ 浅色';
+  }
+  var saved = null;
+  try { saved = window.localStorage.getItem('aike-theme'); } catch (e) { saved = null; }
+  applyTheme(saved === 'light' ? 'light' : 'dark');
+  themeBtn.addEventListener('click', function(){
+    var next = (root.getAttribute('data-theme') === 'dark') ? 'light' : 'dark';
+    applyTheme(next);
+    try { window.localStorage.setItem('aike-theme', next); } catch (e) {}
+  });
+
+  /* ---------- 进度条 / 回顶 / 目录 ---------- */
+  var bar = byId('progress');
+  var topBtn = byId('toTopBtn');
+  var tocBtn = byId('tocToggle');
+  var sidebar = byId('sidebar');
+  function onScroll(){
+    var h = root.scrollHeight - root.clientHeight;
+    var p = h > 0 ? (root.scrollTop || document.body.scrollTop) / h : 0;
+    bar.style.width = (p * 100).toFixed(2) + '%';
+    topBtn.style.display = (root.scrollTop > 400) ? 'block' : 'none';
+  }
+  window.addEventListener('scroll', onScroll);
+  onScroll();
+  byId('btnTop').addEventListener('click', function(){ window.scrollTo(0, 0); });
+
+  if (tocBtn && sidebar){
+    tocBtn.textContent = '目录';
+    tocBtn.addEventListener('click', function(){ sidebar.classList.toggle('open'); });
+  }
+
+  var links = document.querySelectorAll('#toc a');
+  var secs = [];
+  for (var i = 0; i < links.length; i++){
+    var href = links[i].getAttribute('href');
+    if (href && href.length > 1){
+      var el = document.getElementById(href.substring(1));
+      if (el) secs.push({ a: links[i], el: el });
+    }
+  }
+  window.addEventListener('scroll', function(){
+    var best = null, bestD = 1e9;
+    for (var j = 0; j < secs.length; j++){
+      var d = Math.abs(secs[j].el.getBoundingClientRect().top - 120);
+      if (d < bestD){ bestD = d; best = secs[j]; }
+    }
+    for (var k = 0; k < secs.length; k++){ secs[k].a.className = ''; }
+    if (best) best.a.className = 'active';
+  });
+
+  /* ---------- 模板复制 ---------- */
+  function bindCopy(btnId, srcId){
+    var b = byId(btnId);
+    if (!b) return;
+    b.addEventListener('click', function(){
+      var src = byId(srcId);
+      var text = src ? src.textContent : '';
+      var done = function(){ b.textContent = '已复制'; setTimeout(function(){ b.textContent = '复制'; }, 1400); };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(text).then(done, fallback);
+        } else { fallback(); }
+      } catch (e) { fallback(); }
+      function fallback(){
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta); ta.select();
+          document.execCommand('copy'); document.body.removeChild(ta);
+        } catch (e2) {}
+        done();
+      }
+    });
+  }
+  bindCopy('btnCopyT1', 'tpl-1');
+  bindCopy('btnCopyT2', 'tpl-2');
+  bindCopy('btnCopyT3', 'tpl-3');
+
+  /* ---------- 沙盘一：有效利用率 ---------- */
+  var mAct = byId('inp-act'), mWaste = byId('inp-waste'), mAcc = byId('inp-acc'), mHum = byId('inp-hum');
+  var mvAct = byId('val-act'), mvWaste = byId('val-waste'), mvAcc = byId('val-acc'), mvHum = byId('val-hum');
+  var moEff = byId('out-m-eff'), moAct = byId('out-m-effact'), moYield = byId('out-m-yield');
+  var moRate = byId('out-m-rate'), moShare = byId('out-m-share'), moVerdict = byId('out-m-verdict');
+
+  function calcMetrics(){
+    var A = parseFloat(mAct.value);
+    var P = parseFloat(mWaste.value) / 100;
+    var R = parseFloat(mAcc.value);
+    var H = parseFloat(mHum.value);
+    var eff = 1 - P;
+    var effAct = A * eff;
+    var yld = effAct > 0 ? (R / effAct) : 0;
+    var rate = H > 0 ? (R / (H / 60)) : null;
+
+    mvAct.textContent = A.toFixed(0);
+    mvWaste.textContent = (P * 100).toFixed(0) + '%';
+    mvAcc.textContent = R.toFixed(0);
+    mvHum.textContent = H.toFixed(0);
+
+    moEff.textContent = (eff * 100).toFixed(1) + '%';
+    moAct.textContent = effAct.toFixed(1);
+    moYield.textContent = yld.toFixed(4);
+    moRate.textContent = (rate === null) ? '—' : rate.toFixed(4);
+    moShare.textContent = (H / 2400 * 100).toFixed(1) + '%';
+
+    var cls = 'verdict';
+    var msg;
+    if (P >= 0.5){
+      cls += ' bad';
+      msg = '丢弃返工占比 ≥ 50%：按原文口径，这是「环境一直在诱发同样高信号纠正」的纵向缺陷信号。先去第 3 步找最早断掉的交接，而不是继续加提示词。';
+    } else if (P >= 0.3){
+      cls += ' bad';
+      msg = '丢弃返工占比 ≥ 30%：优先查「缺上下文 / 缺能力 / 缺反馈回路 / 缺权限 / 出口处缺证据」这五处，它们都是环境属性，可查可改。';
+    } else if (rate === null){
+      msg = '同步人类注意力为 0，注意力产出率无法计算（不参与本次判定）。请以「被接受的结果」为分子重设口径。';
+    } else {
+      cls += ' ok';
+      msg = '有效利用率 ≥ 70%。注意原文提醒：活动量与 token 是输入不是产出，本沙盘的分子必须是「被接受的结果」，换成代码行数或 token 会让指标重新退化成虚荣指标。';
+    }
+    moVerdict.className = cls;
+    moVerdict.textContent = msg;
+  }
+  mAct.addEventListener('input', calcMetrics);
+  mWaste.addEventListener('input', calcMetrics);
+  mAcc.addEventListener('input', calcMetrics);
+  mHum.addEventListener('input', calcMetrics);
+  calcMetrics();
+
+  /* ---------- 沙盘二：作废清单 ---------- */
+  var vCount = byId('out-v-count'), vState = byId('out-v-state'), vVerdict = byId('out-v-verdict');
+  var vBoxes = [
+    byId('chk-v1'), byId('chk-v2'), byId('chk-v3'), byId('chk-v4'), byId('chk-v5'),
+    byId('chk-v6'), byId('chk-v7'), byId('chk-v8'), byId('chk-v9')
+  ];
+  function calcVoid(){
+    var n = 0;
+    for (var i = 0; i < vBoxes.length; i++){ if (vBoxes[i].checked) n++; }
+    vCount.textContent = n + ' / 9';
+    if (n === 0){
+      vState.textContent = '可用';
+      vVerdict.className = 'verdict ok';
+      vVerdict.textContent = '未命中任何作废条件，本次评估的结论在当前范围内可以支撑。';
+    } else {
+      vState.textContent = '不成立';
+      vVerdict.className = 'verdict bad';
+      vVerdict.textContent = '命中 ' + n + ' 条作废条件。按原文口径，命中任意一条，这次评估就支撑不了它想要的结论——先修掉命中的条件再重跑，不要沿用这次的结果。';
+    }
+  }
+  for (var vj = 0; vj < vBoxes.length; vj++){ vBoxes[vj].addEventListener('change', calcVoid); }
+  calcVoid();
+
+  /* ---------- 沙盘三：干预层决策 ---------- */
+  var sFreq = byId('sel-freq'), sDet = byId('sel-det'), sCross = byId('sel-cross'), sSys = byId('sel-sys');
+  var vFreq = byId('val-freq'), vDet = byId('val-det'), vCross = byId('val-cross'), vSys = byId('val-sys');
+  var oLayer = byId('out-i-layer'), oArch = byId('out-i-arch'), oVerdict = byId('out-i-verdict');
+
+  function calcIntervene(){
+    var freq = sFreq.value, det = sDet.value, cross = sCross.value, sys = sSys.value;
+    vFreq.textContent = (freq === 'repeat') ? '反复' : '首次';
+    vDet.textContent = (det === 'yes') ? '能' : '不能';
+    vCross.textContent = (cross === 'yes') ? '是' : '否';
+    vSys.textContent = (sys === 'yes') ? '能' : '不能';
+
+    var layer, why;
+    if (det === 'yes'){
+      layer = 'lint、测试、策略检查';
+      why = '一条确定性的不变量应该直接阻断复发——机制不占用注意力，规则占用。';
+    } else if (cross === 'yes'){
+      layer = '审查者或评估';
+      why = '判断是定性的、横切的，或者还在长细节时，交给角色化审查者，而不是写死规则。';
+    } else if (sys === 'yes'){
+      layer = '类型、接口、领域工具';
+      why = '系统能让正确用法变自然、让错误用法变困难时，把约束做进类型与接口。';
+    } else if (freq === 'repeat'){
+      layer = '路由文档、runbook、skill';
+      why = '一份稳定的知识需要在某个决策点出现；系统暂不可建模，先落到可检索的文档契约。';
+    } else {
+      layer = '改提示词、重新跑';
+      why = '任务的框架或者想要的结果还在摸索中，先改提示词重跑，不要过早固化成规则。';
+    }
+
+    var arch = '否';
+    if (freq === 'repeat'){
+      arch = '是（叠加）';
+      why += ' 且这是反复出现的同类缺陷：按原文，反复出现通常意味着主人错了或依赖方向错了，除上述干预外应并行评估一次架构或迁移。';
+    }
+    oLayer.textContent = layer;
+    oArch.textContent = arch;
+    oVerdict.className = 'verdict';
+    oVerdict.textContent = why + ' 别忘了第 3 步：搜索同一原则管辖的其他实例，这是最容易漏掉的一步。';
+  }
+  sFreq.addEventListener('change', calcIntervene);
+  sDet.addEventListener('change', calcIntervene);
+  sCross.addEventListener('change', calcIntervene);
+  sSys.addEventListener('change', calcIntervene);
+  calcIntervene();
+
+  /* ---------- 沙盘四：六步循环 ---------- */
+  var cProg = byId('out-c-prog'), cStage = byId('out-c-stage'), cVerdict = byId('out-c-verdict');
+  var cBoxes = [byId('chk-c1'), byId('chk-c2'), byId('chk-c3'), byId('chk-c4'), byId('chk-c5'), byId('chk-c6')];
+  var cLis = [byId('li-c1'), byId('li-c2'), byId('li-c3'), byId('li-c4'), byId('li-c5'), byId('li-c6')];
+  var stageNames = ['锁定条件', '观察基线', '找断掉的交接', '可证伪假设', '两层验证', '全新重跑'];
+  function calcCycle(){
+    var n = 0, last = -1;
+    for (var i = 0; i < cBoxes.length; i++){
+      if (cBoxes[i].checked){ n++; last = i; }
+      cLis[i].classList.toggle('done', cBoxes[i].checked);
+    }
+    cProg.textContent = n + ' / 6';
+    cStage.textContent = (n === 0) ? '未开始' : stageNames[last];
+    var cls = 'verdict', msg;
+    if (n === 0){
+      msg = '尚未开始。先把第 1 步的锁定条件写下来，再挑任务：任务要小到能重跑、又重要到能暴露那个缺口。';
+    } else if (!cBoxes[5].checked){
+      msg = '已完成 ' + n + ' 步。第 6 步「全新重跑」未做——没有它就决定保留或移除，等于把一次带随机性的运行当成有代表性的（作废条件第 3 条）。';
+    } else {
+      cls += ' ok';
+      msg = '六步齐备。可以进入保留 / 修改 / 移除的决定，并记下耐久主人、退休条件与已知局限。同时确认这次干预确实被检索到、被调用、和这次重跑有关系——用不上的干预不构成证据。';
+    }
+    cVerdict.className = cls;
+    cVerdict.textContent = msg;
+  }
+  for (var cj = 0; cj < cBoxes.length; cj++){ cBoxes[cj].addEventListener('change', calcCycle); }
+  calcCycle();
+})();
+</script>
+</body>
+</html>

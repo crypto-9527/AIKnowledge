@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Thinking Machines Lab 与 Bridgewater AIA Labs 联合研究深度消化：用专家标注数据微调 Qwen3-235B，在六项金融信息筛选任务上把平均准确率从前沿最优的 78.2% 提升到 84.7%，单任务推理成本降到 1/13.8。">
+<title>Tinker 金融信息筛选定制模型 · 专家判断复刻深度消化</title>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --bg:#181715; --bg-soft:#1F1D1A; --card:#232120; --card2:#2A2725; --line:#3A3531;
+  --text:#E9E3DA; --dim:#A79F94; --dim2:#6E665D;
+  --accent:#E2886A; --emerald:#7BC79A; --rose:#E1707A; --amber:#E0B25F; --cyan:#84BFD0;
+  --sidebar-w:286px; --content-max:1180px;
+  --serif:"Songti SC","SimSun","Newsreader",Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+}
+html[data-theme="light"]{
+  --bg:#FAF7F2; --bg-soft:#F3EEE6; --card:#FFFFFF; --card2:#F7F3EC; --line:#E3DAD0;
+  --text:#242019; --dim:#6B635A; --dim2:#A0968B;
+  --accent:#D97757; --emerald:#2F855A; --rose:#C4453F; --amber:#A9711A; --cyan:#2C7A8C;
+}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.78;
+     -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
+a:hover{border-bottom-color:var(--accent)}
+/* ---------- 侧栏 ---------- */
+#sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;overflow-y:auto;
+  background:var(--bg-soft);border-right:1px solid var(--line);padding:26px 16px 40px;z-index:50}
+#sidebar .toc-brand{font-family:var(--serif);font-size:15px;font-weight:700;letter-spacing:.4px;
+  color:var(--text);padding:0 10px 6px;border-bottom:1px solid var(--line);margin-bottom:14px}
+#sidebar .toc-brand small{display:block;font-family:var(--sans);font-size:11px;font-weight:400;color:var(--dim);letter-spacing:0;margin-top:3px}
+#sidebar nav a{display:block;padding:7px 11px;margin:2px 0;border-radius:7px;color:var(--dim);
+  font-size:13.2px;line-height:1.5;border-bottom:none;transition:background .15s,color .15s}
+#sidebar nav a:hover{background:var(--card);color:var(--text)}
+#sidebar nav a.is-active{background:var(--card2);color:var(--accent);font-weight:600}
+#sidebar nav a .n{display:inline-block;min-width:22px;color:var(--dim2);font-family:var(--mono);font-size:11.5px}
+#sidebar nav a.is-active .n{color:var(--accent)}
+#tocToggle{display:none}
+/* ---------- 主体 ---------- */
+#main{display:block;max-width:var(--content-max);width:auto;
+  margin-left:calc(var(--sidebar-w) + max(0px,(100% - var(--sidebar-w) - var(--content-max))/2));
+  margin-right:max(0px,calc((100% - var(--sidebar-w) - var(--content-max))/2));
+  padding:52px 44px 120px;box-sizing:border-box}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:90;transition:width .1s linear}
+/* ---------- 头部 ---------- */
+.hero{border-bottom:1px solid var(--line);padding-bottom:30px;margin-bottom:12px}
+.hero .kicker{font-size:12.5px;letter-spacing:2.4px;color:var(--accent);text-transform:uppercase;font-weight:700}
+.hero h1{font-family:var(--serif);font-size:38px;line-height:1.28;margin:14px 0 12px;font-weight:700;letter-spacing:.4px}
+.hero .sub{font-size:17px;color:var(--dim);line-height:1.75;max-width:960px}
+.hero .meta{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.tag{font-size:12px;padding:3px 11px;border-radius:999px;border:1px solid var(--line);
+  background:var(--bg-soft);color:var(--dim);font-family:var(--mono)}
+.tag.key{border-color:var(--accent);color:var(--accent)}
+/* ---------- 指标卡 ---------- */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin:26px 0 8px}
+.metric{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.metric .v{font-family:var(--serif);font-size:29px;font-weight:700;line-height:1.15;color:var(--accent)}
+.metric .v.sm{font-size:24px}
+.metric .l{font-size:12.5px;color:var(--dim);margin-top:6px;line-height:1.55}
+.metric .d{font-size:11.5px;color:var(--dim2);margin-top:4px;font-family:var(--mono)}
+/* ---------- 章节 ---------- */
+section{margin-top:56px;scroll-margin-top:24px}
+h2{font-family:var(--serif);font-size:26px;line-height:1.42;margin:0 0 6px;font-weight:700;letter-spacing:.3px}
+h2 .secnum{display:inline-block;font-family:var(--mono);font-size:13px;color:var(--accent);
+  border:1px solid var(--line);border-radius:6px;padding:2px 8px;margin-right:10px;vertical-align:3px;background:var(--bg-soft)}
+h2 + .lead{color:var(--dim);font-size:15.5px;margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+h3{font-family:var(--serif);font-size:19.5px;margin:30px 0 10px;font-weight:700;line-height:1.45}
+h4{font-size:15.5px;margin:20px 0 8px;font-weight:700;color:var(--text)}
+p{margin:0 0 14px}
+strong{color:var(--text);font-weight:700}
+em{color:var(--amber);font-style:normal}
+code{font-family:var(--mono);font-size:.88em;background:var(--card2);border:1px solid var(--line);
+  border-radius:5px;padding:1.5px 6px;color:var(--cyan)}
+ul,ol{margin:0 0 16px;padding-left:22px}
+li{margin:6px 0}
+/* ---------- 表格 ---------- */
+.tw{overflow-x:auto;margin:18px 0 22px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
+thead th{background:var(--card2);text-align:left;padding:11px 14px;font-weight:700;font-size:13px;
+  color:var(--text);border-bottom:1px solid var(--line);white-space:nowrap}
+tbody td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.65}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--bg-soft)}
+td.num,th.num{text-align:right;font-family:var(--mono);white-space:nowrap}
+tr.hl td{background:var(--card2);font-weight:600}
+.pill{display:inline-block;font-size:11px;padding:1.5px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim);font-family:var(--mono)}
+.pill.c{color:var(--cyan);border-color:var(--cyan)}
+.pill.l{color:var(--amber);border-color:var(--amber)}
+.pill.best{color:var(--emerald);border-color:var(--emerald)}
+caption{caption-side:bottom;font-size:12.5px;color:var(--dim2);padding:10px 14px;text-align:left;line-height:1.6}
+/* ---------- 引用块 ---------- */
+blockquote{margin:20px 0;padding:14px 20px;border-left:3px solid var(--accent);
+  background:var(--card);border-radius:0 10px 10px 0;color:var(--text);font-size:15.5px}
+blockquote p:last-child{margin-bottom:0}
+blockquote cite{display:block;margin-top:8px;font-size:12.5px;color:var(--dim);font-style:normal}
+/* ---------- 图 ---------- */
+figure{margin:22px 0 26px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px 12px}
+figure .ftitle{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;letter-spacing:.3px}
+figure svg{width:100%;height:auto;display:block}
+figcaption{font-size:12.5px;color:var(--dim2);margin-top:12px;line-height:1.65;padding-top:10px;border-top:1px solid var(--line)}
+/* ---------- 双卡片（FT 示例） ---------- */
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0 6px}
+.newscard{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--bg-soft)}
+.newscard .art{height:96px;display:flex;align-items:center;justify-content:center;font-size:11.5px;
+  color:var(--dim2);letter-spacing:1.5px;background:
+  repeating-linear-gradient(135deg,var(--card2) 0 8px,var(--bg-soft) 8px 16px)}
+.newscard .body{padding:13px 15px}
+.newscard .body .src{font-size:11.5px;color:var(--dim2);font-family:var(--mono);margin-bottom:6px}
+.newscard .body .hl{font-family:var(--serif);font-size:15px;line-height:1.5;font-weight:700}
+.newscard .body .verdict{margin-top:10px;font-size:12px;font-family:var(--mono)}
+.v-no{color:var(--rose)} .v-yes{color:var(--emerald)}
+/* ---------- 流程 ---------- */
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin:16px 0 6px}
+.flow .step{flex:1 1 150px;background:var(--card);border:1px solid var(--line);border-top:3px solid var(--cyan);
+  border-radius:9px;padding:12px 13px;position:relative}
+.flow .step .sn{font-family:var(--mono);font-size:11px;color:var(--cyan);letter-spacing:1px}
+.flow .step .st{font-size:13.5px;font-weight:700;margin-top:4px;line-height:1.45}
+.flow .step .sd{font-size:12px;color:var(--dim);margin-top:5px;line-height:1.55}
+.flow .step.hot{border-top-color:var(--accent)}
+.flow .step.hot .sn{color:var(--accent)}
+/* ---------- 公式 ---------- */
+.eqbox{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:16px 0;
+  font-family:var(--mono);font-size:15px;line-height:2.1;overflow-x:auto}
+.eqbox .lbl{font-family:var(--sans);font-size:11.5px;color:var(--dim2);display:block;margin-bottom:4px}
+.eqbox .var{color:var(--cyan);font-style:italic}
+.eqbox .op{color:var(--dim)}
+.eqbox sub{font-size:.72em;color:var(--dim)}
+.eqbox .cmt{font-family:var(--sans);font-size:12.5px;color:var(--dim);display:block;margin-top:8px;line-height:1.6}
+/* ---------- 代码块 ---------- */
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px 17px;overflow-x:auto;
+  font-family:var(--mono);font-size:12.8px;line-height:1.72;color:var(--text);margin:16px 0}
+pre .k{color:var(--accent)} pre .s{color:var(--emerald)} pre .c{color:var(--dim2)}
+/* ---------- 提示条 ---------- */
+.note{border:1px solid var(--line);border-left:3px solid var(--cyan);background:var(--bg-soft);
+  border-radius:0 9px 9px 0;padding:13px 17px;margin:16px 0;font-size:14.2px;line-height:1.72}
+.note.warn{border-left-color:var(--rose)}
+.note.ok{border-left-color:var(--emerald)}
+.note .nt{font-weight:700;font-size:13px;margin-bottom:4px;color:var(--text)}
+.note.warn .nt{color:var(--rose)} .note.ok .nt{color:var(--emerald)}
+/* ---------- 沙盘 ---------- */
+.sandbox{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:20px 22px;margin:20px 0}
+.sandbox h3{margin-top:0}
+.sb-grid{display:grid;grid-template-columns:minmax(230px,300px) 1fr;gap:24px;align-items:start}
+.ctrl{margin-bottom:15px}
+.ctrl label{display:block;font-size:12.8px;color:var(--dim);margin-bottom:5px;line-height:1.5}
+.ctrl label b{color:var(--text);font-family:var(--mono);font-weight:700;font-size:13.5px}
+.ctrl input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.ro{background:var(--bg-soft);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+.ro .rv{font-family:var(--serif);font-size:22px;font-weight:700;color:var(--accent);line-height:1.2;word-break:break-all}
+.ro .rl{font-size:11.8px;color:var(--dim);margin-top:5px;line-height:1.5}
+.ro.ok .rv{color:var(--emerald)} .ro.bad .rv{color:var(--rose)}
+.verdict{margin-top:14px;padding:11px 15px;border-radius:9px;font-size:14px;
+  background:var(--bg-soft);border:1px solid var(--line);line-height:1.7}
+.verdict b{color:var(--emerald)}
+.assume{font-size:11.8px;color:var(--dim2);margin-top:12px;line-height:1.65;font-family:var(--mono)}
+/* ---------- 任务浏览器 ---------- */
+.tabs{display:flex;flex-wrap:wrap;gap:7px;margin:14px 0 16px}
+.tabs button{font-family:var(--mono);font-size:12.2px;padding:6px 12px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--line);background:var(--bg-soft);color:var(--dim);transition:all .15s}
+.tabs button:hover{color:var(--text);border-color:var(--dim2)}
+.tabs button.is-active{background:var(--accent);border-color:var(--accent);color:#1A1714;font-weight:700}
+.taskpanel{background:var(--bg-soft);border:1px solid var(--line);border-radius:11px;padding:18px 20px}
+.taskpanel .tp-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin-bottom:8px}
+.taskpanel .tp-zh{font-family:var(--serif);font-size:20px;font-weight:700}
+.taskpanel .tp-en{font-family:var(--mono);font-size:12.5px;color:var(--dim2)}
+.taskpanel p{margin-bottom:10px}
+/* ---------- 工具条 ---------- */
+#tools{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:9px;z-index:80}
+#tools button{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);
+  color:var(--dim);cursor:pointer;font-size:12.5px;font-family:var(--sans);box-shadow:0 3px 12px rgba(0,0,0,.28)}
+#tools button:hover{color:var(--accent);border-color:var(--accent)}
+/* ---------- 页脚 ---------- */
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-size:13px;color:var(--dim2);line-height:1.8}
+/* ---------- 响应式 ---------- */
+@media (max-width:1180px){
+  #main{margin-left:var(--sidebar-w);margin-right:0;max-width:100%;padding:44px 30px 110px}
+}
+@media (max-width:900px){
+  #sidebar{transform:translateX(-100%);transition:transform .22s ease;box-shadow:0 0 40px rgba(0,0,0,.5)}
+  body.toc-open #sidebar{transform:translateX(0)}
+  #main{margin-left:0;margin-right:0;padding:40px 20px 110px}
+  #tocToggle{display:flex;position:fixed;left:14px;bottom:18px;z-index:85;align-items:center;justify-content:center;
+    width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--dim);
+    font-size:17px;cursor:pointer}
+  .hero h1{font-size:28px}
+  h2{font-size:22px}
+  .sb-grid{grid-template-columns:1fr}
+  .duo{grid-template-columns:1fr}
+  .metrics{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+}
+@media print{
+  #sidebar,#tools,#tocToggle,#progress{display:none !important}
+  #main{margin:0 !important;max-width:100% !important;padding:0 !important}
+  body{background:#fff;color:#111;font-size:11.5pt}
+  .tw,figure,pre,.sandbox,.metric,.note,blockquote{break-inside:avoid;box-shadow:none}
+  section{margin-top:26px}
+  a{color:#111;border-bottom:none}
+  .hero h1{font-size:22pt}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<aside id="sidebar">
+  <div class="toc-brand">专家判断复刻工程<small>Thinking Machines × Bridgewater AIA Labs</small></div>
+  <nav><a href="#s1"><span class="n">01</span>任务定义<br><span style="font-size:11.5px;color:var(--dim2)">投资经理每天在做的六件小事</span></a><a href="#s2"><span class="n">02</span>前沿基线<br><span style="font-size:11.5px;color:var(--dim2)">从抛硬币到 78.2% 的天花板</span></a><a href="#s3"><span class="n">03</span>数据工程<br><span style="font-size:11.5px;color:var(--dim2)">分歧路由与专家清洗</span></a><a href="#s4"><span class="n">04</span>训练配方<br><span style="font-size:11.5px;color:var(--dim2)">GRPO 地基与三项改进</span></a><a href="#s5"><span class="n">05</span>方法解剖<br><span style="font-size:11.5px;color:var(--dim2)">CISPO 与在线策略蒸馏</span></a><a href="#s6"><span class="n">06</span>结果对照<br><span style="font-size:11.5px;color:var(--dim2)">准确率与成本双维</span></a><a href="#s7"><span class="n">07</span>结论外延<br><span style="font-size:11.5px;color:var(--dim2)">差异化智能</span></a><a href="#s8"><span class="n">08</span>事实核验<br><span style="font-size:11.5px;color:var(--dim2)">口径订正与检错清单</span></a><a href="#s9"><span class="n">09</span>交互沙盘<br><span style="font-size:11.5px;color:var(--dim2)">错误率压缩与标注路由测算</span></a><a href="#s10"><span class="n">10</span>来源引用<br><span style="font-size:11.5px;color:var(--dim2)">原文出处与 BibTeX</span></a></nav>
+</aside>
+<main id="main">
+<header class="hero">
+  <div class="kicker">研究解读 · 深度消化</div>
+  <h1>前沿模型的倒挂：一个开源基座微调出的小模型，<br>如何在金融信息筛选上赢过所有前沿大模型</h1>
+  <p class="sub">Thinking Machines Lab 联合桥水（Bridgewater）旗下 AIA Labs，用自家微调平台 Tinker，以
+  <strong>Qwen3-235B</strong> 为基座训练了一个专门做金融信息筛选的定制模型。最终平均准确率
+  <strong>84.7%</strong>，比受测最优前沿模型（78.2%）少犯 <strong>29.8%</strong> 的错，
+  单任务推理成本降到它的 <strong>1/13.8</strong>。</p>
+  <div class="meta">
+    <span class="tag key">平均准确率 84.66%</span>
+    <span class="tag">前沿最优 78.2%</span>
+    <span class="tag">错误率 −29.8%</span>
+    <span class="tag">成本 1/13.8</span>
+    <span class="tag">基座 Qwen3-235B</span>
+    <span class="tag">6 项任务</span>
+    <span class="tag">2026 年 6 月</span>
+  </div>
+</header>
+<div class="metrics">
+  <div class="metric"><div class="v">84.7%</div><div class="l">定制模型平均准确率（正文口径）</div><div class="d">消融表精确值 84.66%</div></div>
+  <div class="metric"><div class="v">78.2%</div><div class="l">最优前沿模型（GPT 5.5，专家提示）</div><div class="d">距 80% 门槛仍差 1.80 pp</div></div>
+  <div class="metric"><div class="v">29.8%</div><div class="l">相对前沿最优的错误率降幅</div><div class="d">按 84.66% 口径为 29.63%</div></div>
+  <div class="metric"><div class="v">1/13.8</div><div class="l">单任务推理成本占比</div><div class="d">成本下降 92.75%</div></div>
+  <div class="metric"><div class="v">44.8% → 84.66%</div><div class="l">基座 → 全配方的准确率跃迁</div><div class="d">正类 F1 55.24% → 92.99%</div></div>
+</div>
+<div class="note ok"><div class="nt">本文的数据口径</div>
+本文所有数值均经一手源文（Thinking Machines Lab 官方博客，2026 年 6 月）逐项核验。对来源稿件中一处
+<strong>表格列含义误读</strong>，本文已在 <a href="#s8">§8 事实核验</a> 中显式订正并给出依据。
+源文未公开的数值（如图表的精确成本坐标）一律标注为「未公开」，不作推测填补。</div>
+<section id="s1">
+<h2><span class="secnum">01</span>任务定义：投资经理每天在做的六件小事</h2>
+<p class="lead">要自动化的不是「写投研报告」，而是投资经理每天重复无数遍的信息分拣——从新闻、研报、公司文件、邮件里挑出真正值得读的那部分。</p>
+<p>读本身不难，难的是这一层层贴身的判断，它吃掉了大量时间。团队把这六件事逐条拆出来做评测：
+它们对投资经理是<strong>本能</strong>，一秒判完；可一旦要讲清「我凭什么这么判」，人就卡壳了——
+也正因如此，它们最难教给 AI。原文的表述很精准：</p>
+<blockquote><p>These tasks are trivial for investors, but they get stuck when articulating their decision process.</p>
+<cite>Thinking Machines Lab × Bridgewater AIA Labs</cite></blockquote>
+<p>前三项是<em>分类任务</em>（评测看准确率 + 正类 F1），后三项是<em>定位任务</em>（评测看精确匹配准确率）。
+源文强调：内部还有很多类似任务，规律完全一致——<strong>前沿模型在这类活儿上普遍不如自家训练的模型</strong>。</p>
+
+<div class="tabs"><button type="button" id="tab-t1">TASK 01</button><button type="button" id="tab-t2">TASK 02</button><button type="button" id="tab-t3">TASK 03</button><button type="button" id="tab-t4">TASK 04</button><button type="button" id="tab-t5">TASK 05</button><button type="button" id="tab-t6">TASK 06</button></div>
+<div class="taskpanel" id="box-taskpanel">
+  <div class="tp-head">
+    <span class="tp-zh" id="out-task-zh">财经文章相关性</span>
+    <span class="tp-en" id="out-task-en">Financial Article Relevancy</span>
+    <span class="pill c" id="out-task-kind">分类</span>
+    <span class="pill" id="out-task-idx">TASK 01</span>
+  </div>
+  <p id="out-task-desc">给定一篇财经文章，判断它是否与一位投资高管（C-suite investment professional）相关。</p>
+  <p id="out-task-why">难点在于「相关」不等于「有意义」：一条小型 IPO 新闻在字面上属于财经相关，却不具备宏观投资者所需的大局意义。评测口径正是被这一点卡住。</p>
+  <p style="margin-bottom:0;color:var(--dim);font-size:13.5px">评测指标：<span id="out-task-metric" style="color:var(--text)">准确率 + 正类 F1</span></p>
+</div>
+<div class="tw"><table>
+<thead><tr><th style="width:52px">编号</th><th>任务</th><th>类型</th><th>评测指标</th></tr></thead>
+<tbody>
+<tr><td class="num">01</td><td><strong>财经文章相关性</strong><br><span style="color:var(--dim2);font-size:12.5px;font-family:var(--mono)">Financial Article Relevancy</span></td><td><span class="pill c">分类</span></td><td>准确率 + 正类 F1</td></tr>
+<tr><td class="num">02</td><td><strong>央行文件利率方向</strong><br><span style="color:var(--dim2);font-size:12.5px;font-family:var(--mono)">Central Bank Document Relevancy</span></td><td><span class="pill c">分类</span></td><td>准确率 + 正类 F1</td></tr>
+<tr><td class="num">03</td><td><strong>研报是否答题</strong><br><span style="color:var(--dim2);font-size:12.5px;font-family:var(--mono)">Generic Document Relevancy</span></td><td><span class="pill c">分类</span></td><td>准确率 + 正类 F1</td></tr>
+<tr><td class="num">04</td><td><strong>一次性内容标记</strong><br><span style="color:var(--dim2);font-size:12.5px;font-family:var(--mono)">Ad Hoc Content Labeling</span></td><td><span class="pill">分类 + 定位</span></td><td>准确率</td></tr>
+<tr><td class="num">05</td><td><strong>文档截断</strong><br><span style="color:var(--dim2);font-size:12.5px;font-family:var(--mono)">Document Truncation</span></td><td><span class="pill l">定位</span></td><td>精确匹配准确率</td></tr>
+<tr><td class="num">06</td><td><strong>邮件截断</strong><br><span style="color:var(--dim2);font-size:12.5px;font-family:var(--mono)">Email Truncation</span></td><td><span class="pill l">定位</span></td><td>精确匹配准确率</td></tr>
+</tbody></table></div>
+</section>
+<section id="s2">
+<h2><span class="secnum">02</span>前沿基线：从抛硬币到 78.2%，仍差 1.8 个百分点</h2>
+<p class="lead">团队先走了最省事的路：靠提示词工程救场。结果把准确率从抛硬币水平拉到了 70 多，但再往上就到顶了。</p>
+<p>Gemini、Claude、GPT 各系列前沿模型，在<strong>只简单陈述任务</strong>的提示下，六项任务平均准确率仅约
+<strong>47.72%</strong>（原文表述为「a mere ~50% accuracy」），跟抛硬币差不多。
+随后由专家按真实任务描述重写指令，并重新定义部分任务的口径——例如把文章分类从「相关 / 不相关」两类
+改成<strong>「相关且有趣 / 相关但无趣 / 不相关」三类</strong>，因为一条小型 IPO 新闻虽然算财经相关，
+却没有宏观投资者要的那种大局意义。这一轮改造把准确率拉到了 mid-70s，五个受测模型的专家提示均值为
+<strong>76.70%</strong>。</p>
+<p>但自动提示词优化再往上压不出空间。<strong>最优前沿模型（GPT 5.5）停在 78.2%</strong>，
+距离投资者愿意在日常工作流中信任一个系统的 <strong>80% 门槛</strong>还差
+<strong>1.80 个百分点</strong>，没跨过去。原文还点了一句「贵不一定更准」：
+GPT 5.4 比 5.2 贵 43%，准确率却只小幅提升。</p>
+<figure>
+  <div class="ftitle">图 1 · 前沿模型在两种提示条件下的平均准确率（六项任务均值）</div>
+  <svg viewBox="0 0 680 330" role="img" aria-label="前沿模型在简单提示与专家提示下的平均准确率对比">
+<rect x="0" y="0" width="680" height="330" fill="none"/>
+<line x1="58.0" y1="258.0" x2="664.0" y2="258.0" stroke="var(--line)" stroke-width="1"/>
+<text x="48.0" y="262.0" text-anchor="end" font-size="11" fill="var(--dim)">0%</text>
+<line x1="58.0" y1="211.6" x2="664.0" y2="211.6" stroke="var(--line)" stroke-width="1"/>
+<text x="48.0" y="215.6" text-anchor="end" font-size="11" fill="var(--dim)">20%</text>
+<line x1="58.0" y1="165.2" x2="664.0" y2="165.2" stroke="var(--line)" stroke-width="1"/>
+<text x="48.0" y="169.2" text-anchor="end" font-size="11" fill="var(--dim)">40%</text>
+<line x1="58.0" y1="118.8" x2="664.0" y2="118.8" stroke="var(--line)" stroke-width="1"/>
+<text x="48.0" y="122.8" text-anchor="end" font-size="11" fill="var(--dim)">60%</text>
+<line x1="58.0" y1="72.4" x2="664.0" y2="72.4" stroke="var(--line)" stroke-width="1"/>
+<text x="48.0" y="76.4" text-anchor="end" font-size="11" fill="var(--dim)">80%</text>
+<line x1="58.0" y1="26.0" x2="664.0" y2="26.0" stroke="var(--line)" stroke-width="1"/>
+<text x="48.0" y="30.0" text-anchor="end" font-size="11" fill="var(--dim)">100%</text>
+<line x1="58.0" y1="72.4" x2="664.0" y2="72.4" stroke="var(--rose)" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="660.0" y="64.4" text-anchor="end" font-size="11.5" fill="var(--rose)">80% 投资者可信门槛</text>
+<rect x="85.6" y="148.5" width="30.0" height="109.5" rx="3" fill="var(--dim2)"/>
+<text x="100.6" y="142.5" text-anchor="middle" font-size="10.5" fill="var(--text)">47.2</text>
+<rect x="121.6" y="78.9" width="30.0" height="179.1" rx="3" fill="var(--accent)"/>
+<text x="136.6" y="72.9" text-anchor="middle" font-size="10.5" fill="var(--text)">77.2</text>
+<text x="118.6" y="278.0" text-anchor="middle" font-size="11" fill="var(--text)">Opus 4.6</text>
+<text x="118.6" y="293.0" text-anchor="middle" font-size="9.5" fill="var(--dim)">2月5日</text>
+<rect x="206.8" y="141.8" width="30.0" height="116.2" rx="3" fill="var(--dim2)"/>
+<text x="221.8" y="135.8" text-anchor="middle" font-size="10.5" fill="var(--text)">50.1</text>
+<rect x="242.8" y="85.6" width="30.0" height="172.4" rx="3" fill="var(--accent)"/>
+<text x="257.8" y="79.6" text-anchor="middle" font-size="10.5" fill="var(--text)">74.3</text>
+<text x="239.8" y="278.0" text-anchor="middle" font-size="11" fill="var(--text)">Gemini 3.1 Pro</text>
+<text x="239.8" y="293.0" text-anchor="middle" font-size="9.5" fill="var(--dim)">2月19日</text>
+<rect x="328.0" y="148.5" width="30.0" height="109.5" rx="3" fill="var(--dim2)"/>
+<text x="343.0" y="142.5" text-anchor="middle" font-size="10.5" fill="var(--text)">47.2</text>
+<rect x="364.0" y="82.1" width="30.0" height="175.9" rx="3" fill="var(--accent)"/>
+<text x="379.0" y="76.1" text-anchor="middle" font-size="10.5" fill="var(--text)">75.8</text>
+<text x="361.0" y="278.0" text-anchor="middle" font-size="11" fill="var(--text)">GPT 5.4</text>
+<text x="361.0" y="293.0" text-anchor="middle" font-size="9.5" fill="var(--dim)">3月5日</text>
+<rect x="449.2" y="145.5" width="30.0" height="112.5" rx="3" fill="var(--dim2)"/>
+<text x="464.2" y="139.5" text-anchor="middle" font-size="10.5" fill="var(--text)">48.5</text>
+<rect x="485.2" y="76.6" width="30.0" height="181.4" rx="3" fill="var(--accent)"/>
+<text x="500.2" y="70.6" text-anchor="middle" font-size="10.5" fill="var(--text)">78.2</text>
+<text x="482.2" y="278.0" text-anchor="middle" font-size="11" fill="var(--text)">GPT 5.5</text>
+<text x="482.2" y="293.0" text-anchor="middle" font-size="9.5" fill="var(--dim)">4月23日</text>
+<rect x="570.4" y="152.2" width="30.0" height="105.8" rx="3" fill="var(--dim2)"/>
+<text x="585.4" y="146.2" text-anchor="middle" font-size="10.5" fill="var(--text)">45.6</text>
+<rect x="606.4" y="77.0" width="30.0" height="181.0" rx="3" fill="var(--accent)"/>
+<text x="621.4" y="71.0" text-anchor="middle" font-size="10.5" fill="var(--text)">78.0</text>
+<text x="603.4" y="278.0" text-anchor="middle" font-size="11" fill="var(--text)">Opus 4.8</text>
+<text x="603.4" y="293.0" text-anchor="middle" font-size="9.5" fill="var(--dim)">5月28日</text>
+<rect x="62.0" y="6.0" width="12" height="9" rx="2" fill="var(--dim2)"/>
+<text x="80.0" y="14.0" font-size="11" fill="var(--dim)">简单提示词</text>
+<rect x="154.0" y="6.0" width="12" height="9" rx="2" fill="var(--accent)"/>
+<text x="172.0" y="14.0" font-size="11" fill="var(--dim)">专家优化提示词</text>
+</svg>
+  <figcaption>数据：源文图表（纵轴 Average accuracy，0–100%；图例 Naive prompt / Expert prompt）。
+  五组柱从左至右为 Opus 4.6、Gemini 3.1 Pro、GPT 5.4、GPT 5.5、Opus 4.8，括号内为源文标注的模型发布日。
+  源文图注同时说明正类 F1 取 3 项分类任务均值、准确率取全部 6 项任务均值，但<strong>公开可读的数值序列只有准确率一列</strong>，
+  F1 的具体数值未在页面中以文本形式给出，故本表不列。</figcaption>
+</figure>
+<div class="tw"><table>
+<caption>表 1 · 前沿模型提示词工程前后对照（源文图表数值，单位：平均准确率 %）</caption>
+<thead><tr><th>模型</th><th>发布日</th><th class="num">简单提示词</th><th class="num">专家优化提示词</th><th class="num">提升</th></tr></thead>
+<tbody>
+<tr><td><strong>Opus 4.6</strong></td><td style="color:var(--dim);font-family:var(--mono)">2月5日</td><td class="num">47.2</td><td class="num"><strong>77.2</strong></td><td class="num">+30.0</td></tr>
+<tr><td><strong>Gemini 3.1 Pro</strong></td><td style="color:var(--dim);font-family:var(--mono)">2月19日</td><td class="num">50.1</td><td class="num"><strong>74.3</strong></td><td class="num">+24.2</td></tr>
+<tr><td><strong>GPT 5.4</strong></td><td style="color:var(--dim);font-family:var(--mono)">3月5日</td><td class="num">47.2</td><td class="num"><strong>75.8</strong></td><td class="num">+28.6</td></tr>
+<tr class="hl"><td><strong>GPT 5.5</strong></td><td style="color:var(--dim);font-family:var(--mono)">4月23日</td><td class="num">48.5</td><td class="num"><strong>78.2</strong></td><td class="num">+29.7</td></tr>
+<tr><td><strong>Opus 4.8</strong></td><td style="color:var(--dim);font-family:var(--mono)">5月28日</td><td class="num">45.6</td><td class="num"><strong>78.0</strong></td><td class="num">+32.4</td></tr>
+<tr><td colspan="2" style="color:var(--dim)">五模型均值</td><td class="num">47.72</td><td class="num">76.70</td><td class="num">+28.98</td></tr>
+</tbody></table></div>
+<div class="note warn"><div class="nt">口径订正提示</div>
+流传的中文解读稿把这组数字标注为「准确率 / 正类 F1」两列，属误读：
+<strong>47.2 与 77.2 是同一模型（Opus 4.6）在简单提示与专家提示下的准确率</strong>，不是准确率与 F1 的配对。
+详见 <a href="#s8">§8 事实核验</a>。</div>
+<h3>两条都沾政治和财经，为什么一条相关一条不相关</h3>
+<p>拿「财经文章相关性」举个源文给出的真实例子。下面两条标题<strong>同时踩着地缘政治和财经</strong>，
+可对一个宏观投资者来说，一条值得看，一条该直接划走。</p>
+<div class="duo">
+  <div class="newscard">
+    <div class="art">FT 文章配图</div>
+    <div class="body">
+      <div class="src">ft.com · 标题 A</div>
+      <div class="hl">「特朗普坚称格陵兰岛归他所有」</div>
+      <div class="verdict v-no">✕ Not relevant（不相关）</div>
+    </div>
+  </div>
+  <div class="newscard">
+    <div class="art">FT 文章配图</div>
+    <div class="body">
+      <div class="src">ft.com · 标题 B</div>
+      <div class="hl">「特朗普威胁对华加征新关税，美股尾盘大跌」</div>
+      <div class="verdict v-yes">✓ Relevant（相关）</div>
+    </div>
+  </div>
+</div>
+<p>放在文章语境里，格陵兰岛那条更像政治姿态，不太会被市场当真；而对华关税直接砸出了
+<strong>标普 500 自 4 月以来最大的单日跌幅</strong>，数周涨势就此中断，是硬邦邦的市场信号。
+两条都同时沾着地缘政治和财经，光看关键词根本分不开——<em>模型也正是在这种地方翻车</em>。
+这类判断考的是投资语境，不是词面匹配。</p>
+</section>
+<section id="s3">
+<h2><span class="secnum">03</span>数据工程：只让专家看「模型自己也说不清」的样本</h2>
+<p class="lead">提示词到顶后，团队转向微调。但第一道坎不在训练，在数据——这些判断只有过投资专家的眼才有价值。</p>
+<p>团队最初从供应商采购的是<strong>非专家标注</strong>数据，拿去训练，模型照样很差。
+翻看模型的推理轨迹（reasoning traces）才发现：<strong>数据集里的标签本身就经常是错的</strong>。</p>
+<p>全找专家重标太贵。于是他们设计了一套巧妙的路由机制——让模型自己揪出「可疑」的样本，只把这些送专家。
+判断逻辑非常直接（原文照录）：</p>
+<blockquote><p>if a model couldn’t match an example from its own training set then either the example is genuinely difficult, or the original label was wrong.</p>
+<cite>Thinking Machines Lab —— 如果一个模型连自己训练集里的样本都对不上，那么要么这题是真难，要么原标签就标错了</cite></blockquote>
+<p>两种情况都值得专家看一眼。这样一来，专家人力只花在真正有争议的样本上，其余沿用，
+既清了数据又控住了成本。</p>
+<div class="flow"><div class="step"><div class="sn">S1</div><div class="st">非专家标注数据</div><div class="sd">从供应商采购，成本低但标签错误率高</div></div><div class="step"><div class="sn">S2</div><div class="st">训练初始模型</div><div class="sd">在有噪数据集上先训一版模型</div></div><div class="step"><div class="sn">S3</div><div class="st">同源自评</div><div class="sd">把模型拿去评估它自己的训练集</div></div><div class="step hot"><div class="sn">S4</div><div class="st">抽取分歧样本</div><div class="sd">模型答案 ≠ 标注者答案的样本</div></div><div class="step hot"><div class="sn">S5</div><div class="st">专家复核</div><div class="sd">只把分歧样本送投资专家重判</div></div><div class="step hot"><div class="sn">S6</div><div class="st">留出集终评</div><div class="sd">在未参与清洗的 held-out 测试集上评估</div></div></div>
+<div class="note"><div class="nt">关键隔离：留出集</div>
+清洗训练集的这套流程<strong>绝不能污染最终评测</strong>。源文明确：最终评估在一个
+<em>held-out test set</em>（留出测试集）上完成——该集合没有参与过任何清洗环节，避免「自己给自己放水」。</div>
+<h3>为什么这一步是整套方法的前提</h3>
+<p>原文对提示词路线的失败给了一句很到位的总结：<strong>显式提示词只能承载专家「说得出」的那部分直觉，
+而最要紧的判断往往恰是最难言说的</strong>。微调绕开了这个瓶颈——不再把专家直觉硬塞进一段静态文本，
+而是让训练过程自己长出判断力。</p>
+</section>
+<section id="s4">
+<h2><span class="secnum">04</span>训练配方：GRPO 打地基，三项改进推过 80% 门槛</h2>
+<p class="lead">基座选了学术界微调研究得最透的开源模型 Qwen3-235B，训练全在 Tinker 上跑，不必操心 GPU 基础设施。</p>
+<p>第一步用<strong>标准 GRPO + 重要性采样损失</strong>作为「无 critic」的起点。
+GRPO 不额外训练评委模型：让模型对同一道题给出一批候选答案，互相比较谁更接近标准答案，
+做得好的以后就多学着做——像一群人做同一道题，不找老师打分，而是彼此比对谁答得更对。</p>
+<p>这一步把准确率从基座的 <strong>44.8%</strong> 一把拉到 <strong>73.48%</strong>
+（正类 F1 从 55.24% 拉到 88.95%），涨幅 <strong>28.68 个百分点</strong>，
+但还没摸到 80% 门槛。真正把它推过线的，是叠在上面的三项改进，合计再贡献
+<strong>11.18 个百分点</strong>。</p>
+<figure>
+  <div class="ftitle">图 2 · 准确率阶梯：44.8% → 73.48% → 84.66%</div>
+  <svg viewBox="0 0 680 320" role="img" aria-label="准确率阶梯：基座 44.8%，GRPO 73.48%，全配方 84.66%">
+<line x1="74.0" y1="262.0" x2="640.0" y2="262.0" stroke="var(--line)" stroke-width="1"/>
+<text x="64.0" y="266.0" text-anchor="end" font-size="11" fill="var(--dim)">0%</text>
+<line x1="74.0" y1="214.8" x2="640.0" y2="214.8" stroke="var(--line)" stroke-width="1"/>
+<text x="64.0" y="218.8" text-anchor="end" font-size="11" fill="var(--dim)">20%</text>
+<line x1="74.0" y1="167.6" x2="640.0" y2="167.6" stroke="var(--line)" stroke-width="1"/>
+<text x="64.0" y="171.6" text-anchor="end" font-size="11" fill="var(--dim)">40%</text>
+<line x1="74.0" y1="120.4" x2="640.0" y2="120.4" stroke="var(--line)" stroke-width="1"/>
+<text x="64.0" y="124.4" text-anchor="end" font-size="11" fill="var(--dim)">60%</text>
+<line x1="74.0" y1="73.2" x2="640.0" y2="73.2" stroke="var(--line)" stroke-width="1"/>
+<text x="64.0" y="77.2" text-anchor="end" font-size="11" fill="var(--dim)">80%</text>
+<line x1="74.0" y1="26.0" x2="640.0" y2="26.0" stroke="var(--line)" stroke-width="1"/>
+<text x="64.0" y="30.0" text-anchor="end" font-size="11" fill="var(--dim)">100%</text>
+<line x1="74.0" y1="77.4" x2="640.0" y2="77.4" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="638.0" y="70.4" text-anchor="end" font-size="11" fill="var(--amber)">前沿最优 78.2%</text>
+<line x1="74.0" y1="73.2" x2="640.0" y2="73.2" stroke="var(--rose)" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="638.0" y="66.2" text-anchor="end" font-size="11" fill="var(--rose)">80% 可信门槛</text>
+<polyline points="74.0,156.3 357.0,88.6 640.0,62.2" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="74.0" cy="156.3" r="5.5" fill="var(--bg)" stroke="var(--accent)" stroke-width="3"/>
+<text x="74.0" y="140.3" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent)">44.8%</text>
+<text x="74.0" y="286.0" text-anchor="middle" font-size="11" fill="var(--text)">Qwen3-235B 基座</text>
+<circle cx="357.0" cy="88.6" r="5.5" fill="var(--bg)" stroke="var(--accent)" stroke-width="3"/>
+<text x="357.0" y="72.6" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent)">73.48%</text>
+<text x="357.0" y="286.0" text-anchor="middle" font-size="11" fill="var(--text)">+ 标准 GRPO</text>
+<circle cx="640.0" cy="62.2" r="5.5" fill="var(--bg)" stroke="var(--accent)" stroke-width="3"/>
+<text x="640.0" y="46.2" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent)">84.66%</text>
+<text x="640.0" y="286.0" text-anchor="middle" font-size="11" fill="var(--text)">+ 全配方三项改进</text>
+<text x="215.5" y="310.0" text-anchor="middle" font-size="11" fill="var(--emerald)">▲ +28.68 pp</text>
+<text x="498.5" y="310.0" text-anchor="middle" font-size="11" fill="var(--emerald)">▲ +11.18 pp</text>
+</svg>
+  <figcaption>三个数据点均为源文表格原值。两条虚线为外部参照：前沿最优模型 78.2%（GPT 5.5 专家提示），
+  以及投资者信任门槛 80%。注意 GRPO 一步贡献 28.68 pp，三项改进合计再贡献 11.18 pp。</figcaption>
+</figure>
+<h3>三项改进逐条拆解</h3>
+<div class="tw"><table>
+<caption>表 2 · 消融实验（leave-one-out）：从全配方中<strong>移除</strong>某一项后的成绩，源文原值</caption>
+<thead><tr><th>训练配置</th><th class="num">平均准确率</th><th class="num">正类 F1</th><th class="num">准确率回落</th><th>回退到什么</th></tr></thead>
+<tbody>
+<tr class="hl"><td><strong>全配方（参照系）</strong></td><td class="num">84.66%</td><td class="num">92.99%</td><td class="num"><span class="pill best">参照系</span></td><td style="color:var(--dim)">Qwen3-235B + GRPO + 交错批次 + CISPO + OPD(动态提拔教师)</td></tr>
+<tr><td><strong>移除 交错批次训练</strong></td><td class="num">72.18%</td><td class="num">89.01%</td><td class="num"><span style="color:var(--rose);font-family:var(--mono)">−12.48 pp</span></td><td style="color:var(--dim)">回退到批次内任务完全混合</td></tr>
+<tr><td><strong>移除 CISPO 非对称裁剪</strong></td><td class="num">74.56%</td><td class="num">90.64%</td><td class="num"><span style="color:var(--rose);font-family:var(--mono)">−10.10 pp</span></td><td style="color:var(--dim)">回退到标准重要性采样损失</td></tr>
+<tr><td><strong>移除 在线策略蒸馏 OPD</strong></td><td class="num">72.39%</td><td class="num">87.93%</td><td class="num"><span style="color:var(--rose);font-family:var(--mono)">−12.27 pp</span></td><td style="color:var(--dim)">完全去掉蒸馏正则项</td></tr>
+<tr><td><strong>移除 教师动态提拔</strong></td><td class="num">81.55%</td><td class="num">89.41%</td><td class="num"><span style="color:var(--rose);font-family:var(--mono)">−3.11 pp</span></td><td style="color:var(--dim)">改用冻结的基座模型当教师</td></tr>
+</tbody></table></div>
+<figure>
+  <div class="ftitle">图 3 · 消融瀑布：抽掉任意一项，成绩都明显回落</div>
+  <svg viewBox="0 0 680 300" role="img" aria-label="消融实验：从全配方中逐项移除后的平均准确率">
+<line x1="196.0" y1="22.0" x2="196.0" y2="264.0" stroke="var(--line)" stroke-width="1"/>
+<text x="196.0" y="16.0" text-anchor="middle" font-size="10.5" fill="var(--dim)">0%</text>
+<line x1="284.8" y1="22.0" x2="284.8" y2="264.0" stroke="var(--line)" stroke-width="1"/>
+<text x="284.8" y="16.0" text-anchor="middle" font-size="10.5" fill="var(--dim)">20%</text>
+<line x1="373.6" y1="22.0" x2="373.6" y2="264.0" stroke="var(--line)" stroke-width="1"/>
+<text x="373.6" y="16.0" text-anchor="middle" font-size="10.5" fill="var(--dim)">40%</text>
+<line x1="462.4" y1="22.0" x2="462.4" y2="264.0" stroke="var(--line)" stroke-width="1"/>
+<text x="462.4" y="16.0" text-anchor="middle" font-size="10.5" fill="var(--dim)">60%</text>
+<line x1="551.2" y1="22.0" x2="551.2" y2="264.0" stroke="var(--line)" stroke-width="1"/>
+<text x="551.2" y="16.0" text-anchor="middle" font-size="10.5" fill="var(--dim)">80%</text>
+<line x1="640.0" y1="22.0" x2="640.0" y2="264.0" stroke="var(--line)" stroke-width="1"/>
+<text x="640.0" y="16.0" text-anchor="middle" font-size="10.5" fill="var(--dim)">100%</text>
+<text x="186.0" y="56.0" text-anchor="end" font-size="11.5" fill="var(--text)">全配方（参照系）</text>
+<rect x="196.0" y="42.0" width="375.9" height="24" rx="3" fill="var(--accent)"/>
+<text x="580.9" y="59.0" font-size="12" font-weight="700" fill="var(--text)">84.66%</text>
+<text x="633.9" y="59.0" font-size="11" fill="var(--emerald)">参照系</text>
+<text x="186.0" y="102.0" text-anchor="end" font-size="11.5" fill="var(--text)">移除 交错批次训练</text>
+<rect x="196.0" y="88.0" width="320.5" height="24" rx="3" fill="var(--rose)"/>
+<text x="525.5" y="105.0" font-size="12" font-weight="700" fill="var(--text)">72.18%</text>
+<text x="578.5" y="105.0" font-size="11" fill="var(--rose)">−12.48 pp</text>
+<text x="186.0" y="148.0" text-anchor="end" font-size="11.5" fill="var(--text)">移除 CISPO 非对称裁剪</text>
+<rect x="196.0" y="134.0" width="331.0" height="24" rx="3" fill="var(--rose)"/>
+<text x="536.0" y="151.0" font-size="12" font-weight="700" fill="var(--text)">74.56%</text>
+<text x="589.0" y="151.0" font-size="11" fill="var(--rose)">−10.10 pp</text>
+<text x="186.0" y="194.0" text-anchor="end" font-size="11.5" fill="var(--text)">移除 在线策略蒸馏 OPD</text>
+<rect x="196.0" y="180.0" width="321.4" height="24" rx="3" fill="var(--rose)"/>
+<text x="526.4" y="197.0" font-size="12" font-weight="700" fill="var(--text)">72.39%</text>
+<text x="579.4" y="197.0" font-size="11" fill="var(--rose)">−12.27 pp</text>
+<text x="186.0" y="240.0" text-anchor="end" font-size="11.5" fill="var(--text)">移除 教师动态提拔</text>
+<rect x="196.0" y="226.0" width="362.1" height="24" rx="3" fill="var(--rose)"/>
+<text x="567.1" y="243.0" font-size="12" font-weight="700" fill="var(--text)">81.55%</text>
+<text x="620.1" y="243.0" font-size="11" fill="var(--rose)">−3.11 pp</text>
+</svg>
+  <figcaption>注意<strong>数字不可简单相加</strong>：四项回落的算术和为
+  37.96 pp，远大于全配方相对 GRPO 的 11.18 pp，
+  因为 leave-one-out 的每一项都是在「其余三项仍在」的前提下测的，彼此高度重叠。
+  原文正文给出的两个增益数字（交错批次 +12.1%、CISPO +10.1%）与表内差值
+  （12.48 pp / 10.10 pp）口径略有差异，前者为受控对比下的相对提升，后者为留一法实测差。</figcaption>
+</figure>
+<div class="note"><div class="nt">三项改进的一句话版本</div>
+<strong>① 交错批次训练</strong>：六个任务不再完全混在一批里训，而是每批只练一个任务、按任务轮流交错。<br>
+<strong>② CISPO 非对称裁剪</strong>：换掉标准重要性采样损失，用非对称裁剪控制每步更新幅度。<br>
+<strong>③ 在线策略蒸馏 + 教师动态提拔</strong>：学生一边练一边对齐教师分布，且每 20 步查验一次——
+只要学生创了新高，就把学生本身提拔成新教师。</div>
+</section>
+<section id="s5">
+<h2><span class="secnum">05</span>方法解剖：CISPO 与在线策略蒸馏到底在干什么</h2>
+<p class="lead">上面三招里，CISPO 和在线策略蒸馏两个名字最唬人。不懂强化学习也没关系——它们要解决的其实是同一类朴素问题。</p>
+<h3>CISPO 非对称裁剪损失</h3>
+<p>它管的是<strong>模型每一步能改多大</strong>。对「往好方向学」和「往坏方向学」给不同的容忍度：
+像纠正学生，允许他大步迈向正确答案，可一旦发现他在往错误方向走，立刻拉紧缰绳。
+这样既不学过头，也不至于太保守缩手缩脚。源文表述为：在他们试过的所有损失函数与裁剪方案组合中，
+这一组表现最好，相对重要性采样基线<strong>提升 10.1%</strong>。</p>
+<h3>在线策略蒸馏（OPD）与动态提拔教师</h3>
+<p>学生模型一边自己练习，一边参考一个「教师模型」的答案分布，偏离老师太远就会被扣分拉回来。
+源文给出的优势构造如下（公式照录自原文）：</p>
+<div class="eqbox">
+<span class="lbl">式 1 · 带蒸馏惩罚的奖励构造（源文原式）</span>
+<span class="var">r</span> <span class="op">=</span> <span class="var">reward</span> <span class="op">−</span> <span class="var">β</span> <span class="op">·</span> avg( <span class="var">student</span><sub>lp</sub> <span class="op">−</span> <span class="var">teacher</span><sub>lp</sub> )
+<span class="lbl" style="margin-top:12px">式 2 · 优势（advantage）中心化</span>
+<span class="var">adv</span><sub>i</sub> <span class="op">=</span> <span class="var">r</span><sub>i</sub> <span class="op">−</span> avg( <span class="var">r</span> )
+<span class="cmt">奖励在学生偏离教师分布时被惩罚，从而在学任务的同时对策略做正则。<em>β</em> 为惩罚强度系数；源文未公开其具体取值。</span>
+</div>
+<p>关键在于<strong>教师不是死的</strong>：每 20 步查一次验证集准确率，只要学生创了新高，就把当前 checkpoint
+提拔为新教师，因此永远不会朝着一个更弱的模型做蒸馏式倒退。原文给出的收益是：相对「冻结基座模型当教师」，
+这一改动额外带来 <strong>3.1%</strong> 的提升（表内实测差值 3.11 pp，81.55% → 84.66%）。</p>
+<blockquote><p>像学徒定期考核：一旦学徒水平超过当前师傅，师傅的位置就换成这个学徒本人，由「更强的自己」继续往前教下一阶段。</p></blockquote>
+</section>
+<section id="s6">
+<h2><span class="secnum">06</span>结果对照：错误率降三成，推理成本砍到十四分之一</h2>
+<p class="lead">所有改进叠完，定制模型把平均准确率从最优前沿模型的 78.2% 提到 84.7%——团队认为这个水平已经够日常用了。</p>
+<div class="tw"><table>
+<caption>表 3 · 最终成绩单（源文 Results 段 + 消融表）</caption>
+<thead><tr><th>维度</th><th>最优前沿模型</th><th>自研定制模型</th><th>差值</th></tr></thead>
+<tbody>
+<tr><td>六项任务平均准确率</td><td class="num">78.2%</td><td class="num"><strong>84.7%</strong>（表值 84.66%）</td><td class="num">+6.46 pp</td></tr>
+<tr><td>相对错误率</td><td class="num">21.80%</td><td class="num"><strong>15.34%</strong></td><td class="num">−29.82%（相对）</td></tr>
+<tr class="hl"><td>每千次任务误判数</td><td class="num">218.0 次</td><td class="num">153.4 次</td><td class="num">−64.6 次</td></tr>
+<tr><td>正类 F1（3 项分类均值）</td><td class="num">未公开</td><td class="num"><strong>92.99%</strong></td><td class="num">基座 55.24% → +37.75 pp</td></tr>
+<tr><td>单任务推理成本</td><td class="num">1×（基准）</td><td class="num"><strong>1/13.8</strong></td><td class="num">−92.75%</td></tr>
+<tr><td>是否跨过 80% 可信门槛</td><td class="num" style="color:var(--rose)">否（差 1.80 pp）</td><td class="num" style="color:var(--emerald)">是</td><td class="num">—</td></tr>
+</tbody></table></div>
+<div class="note"><div class="nt">关于成本图的一句说明</div>
+源文的「准确率—价格」散点图（纵轴 Average accuracy 72%–86%，横轴 Cost per 1,000 tasks 0–100 美元）
+只给出了坐标轴刻度与七个模型的相对位置，<strong>具体坐标数值未在页面文本中公开</strong>。
+因此本文只引用源文明写的两个结论——错误率相对下降 29.8%、单任务推理成本下降 13.8 倍——不反推任何绝对金额。</div>
+</section>
+<section id="s7">
+<h2><span class="secnum">07</span>结论外延：从「更聪明的通用模型」到「差异化智能」</h2>
+<p class="lead">原文说，这个结论远不止这里公开的 6 项任务成立——内部大量类似任务规律一致。</p>
+<p>方法论不绑定金融。一套「<strong>用模型分歧路由筛出难样本 → 请专家清洗数据 → 再做强化学习微调</strong>」的做法，
+原文认为可以推广到其他机构自己的具体判断任务上。他们给这条路起了个名字：</p>
+<blockquote><p>Our results show the possibility of a future of <strong>differentiated intelligence</strong>,
+where custom models tuned to specific organizational needs outperform frontier models.</p>
+<cite>Thinking Machines Lab（与 Bridgewater AIA Labs 联合），2026 年 6 月</cite></blockquote>
+<h3>三条可迁移的工程结论</h3>
+<ol>
+<li><strong>先修数据，再谈训练。</strong>提示词到顶往往不是模型能力问题，而是「专家直觉无法言说」的结构性瓶颈。
+把标注预算集中投在模型与标注者<em>分歧</em>的样本上，是性价比最高的清洗路径。</li>
+<li><strong>「贵不一定更准」在同一代际内成立。</strong>源文实测 GPT 5.4 比 5.2 贵 43%，准确率仅小幅提升——
+对这类窄口径判断任务，换更强的前沿模型收益递减明显。</li>
+<li><strong>评测隔离是 credibility 的底线。</strong>训练集用分歧路由清洗过，最终成绩就必须落在
+未参与清洗的留出集上，否则整套数字失去意义。</li>
+</ol>
+<div class="note warn"><div class="nt">适用边界（本文判断，非源文结论）</div>
+① 结果均为<strong>发布方自评口径</strong>，基于其内部数据的公开子集，第三方无法复核；
+② 基座 Qwen3-235B 属大体量开源模型，其「小模型更便宜」的成本优势来自<em>相对前沿 API 的推理定价</em>，
+自建部署时须重算；③ 六项任务的标签分布未公开，正类 F1 的可比性受此限制。</div>
+</section>
+<section id="s8">
+<h2><span class="secnum">08</span>事实核验：三处口径订正与检错清单</h2>
+<p class="lead">本文对来源稿件中的每一处硬指标都回溯了一手源文。发现三处需要显式订正的口径问题。</p>
+<div class="tw"><table>
+<caption>表 4 · 口径订正清单（一手源文核验结论）</caption>
+<thead><tr><th style="width:60px">编号</th><th>流传稿件的表述</th><th>订正结论</th><th>依据</th></tr></thead>
+<tbody>
+<tr><td class="num">C1</td>
+<td>前沿模型表列为「准确率 / 正类 F1」两列，如「模型族一：准确率 ~47.2%、正类 F1 77.2%」，并把最优「模型四」标为 48.5% / 78.2%。</td>
+<td><strong>两列含义应为「简单提示词 / 专家优化提示词」下的平均准确率</strong>，不是准确率与 F1 的配对。
+按此订正，最优前沿模型是 <strong>GPT 5.5</strong>（源文标注 4 月 23 日），专家提示下 <strong>78.2%</strong>。</td>
+<td>源文图表纵轴为 Average accuracy（0–100%），图例为 Naive prompt / Expert prompt；
+且 Results 段明写「improves average accuracy from 78.2% to 84.7%」——78.2% 是准确率而非 F1。</td></tr>
+<tr><td class="num">C2</td>
+<td>消融表各行理解为「加入该项后的成绩」。</td>
+<td><strong>每行是「从全配方中移除该单项」后的成绩</strong>（源文原话：leave one out ablations）。
+因此 72.18% / 74.56% / 72.39% / 81.55% 是<em>退化后</em>的分数，不是增量后的分数。</td>
+<td>源文表注：「Each row shows the final recipe with that single component removed」。</td></tr>
+<tr><td class="num">C3</td>
+<td>把 12.1% / 10.1% / 3.1% 直接当作表内差值相加。</td>
+<td>正文的三个增益数字是<strong>受控对比</strong>下的相对提升；表内 leave-one-out 实测差值为
+<strong>12.48 / 10.10 / 3.11 pp</strong>。二者口径不同，且四项之和
+（37.96 pp）与全配方相对 GRPO 的 11.18 pp 不可相加。</td>
+<td>源文正文「improving accuracy by 12.1% over fully mixed batches」「improving accuracy by 10.1%
+over the importance-sampling baseline」「a further 3.1% gain over a frozen base-model teacher」。</td></tr>
+</tbody></table></div>
+<div class="note ok"><div class="nt">核验通过项</div>
+以下数字与源文逐字一致，无需订正：基座 44.8% / 55.24%；GRPO 73.48% / 88.95%；全配方 84.66% / 92.99%；
+前沿最优 78.2%；错误率相对下降 29.8%；成本下降 13.8 倍；教师每 20 步提拔一次；
+GPT 5.4 比 5.2 贵 43%；基座选型 Qwen3-235B；六项任务的名称与评测指标。</div>
+<div class="note warn"><div class="nt">29.8% 的口径细节</div>
+源文以正文四舍五入值 84.7% 计算：错误率由 21.80% 降至 15.30%，相对下降 <strong>29.82%</strong>（源文写 29.8%）。
+若改用消融表的精确值 84.66%，则为 <strong>29.63%</strong>。两者都对，只是取值精度不同——本文统一标注口径。</div>
+</section>
+<section id="s9">
+<h2><span class="secnum">09</span>交互沙盘：错误率压缩与标注路由测算</h2>
+<p class="lead">下列两个沙盘的全部回显值均由公式实时解算，不含任何虚构数据；可调参数的默认值均为演示基线，已显式标注。</p>
+<div class="sandbox">
+  <h3>沙盘 A · 错误率压缩决策器</h3>
+  <p style="color:var(--dim);font-size:14.5px">相对错误率压缩的定义与源文一致：以「1 − 准确率」为错误率，
+  比较定制模型相对前沿基线的错误率下降幅度。拖动滑块观察门槛跨越与绝对误判数的变化。</p>
+  <div class="sb-grid">
+    <div>
+      <div class="ctrl"><label>定制模型平均准确率：<b id="lbl-acc-cust">84.66%</b></label>
+        <input type="range" id="in-acc-cust" min="60" max="95" step="0.01" value="84.66"></div>
+      <div class="ctrl"><label>前沿基线平均准确率：<b id="lbl-acc-front">78.20%</b></label>
+        <input type="range" id="in-acc-front" min="60" max="90" step="0.01" value="78.20"></div>
+    </div>
+    <div>
+      <div class="readout">
+        <div class="ro"><div class="rv" id="out-err-cust">15.34%</div><div class="rl">定制模型错误率</div></div>
+        <div class="ro"><div class="rv" id="out-err-front">21.80%</div><div class="rl">前沿基线错误率</div></div>
+        <div class="ro ok"><div class="rv" id="out-err-cut">29.63%</div><div class="rl">相对错误率压缩</div></div>
+        <div class="ro"><div class="rv" id="out-miss-cut">64.6</div><div class="rl">每千次任务少误判（次）</div></div>
+      </div>
+      <div class="verdict" id="out-gate">定制模型 84.66% ≥ 80% 门槛，已跨越；相对前沿基线 78.20% 高出 6.46 pp。</div>
+    </div>
+  </div>
+  <div class="assume">公式：错误率 E = 100% − A；相对压缩 = (E<sub>front</sub> − E<sub>cust</sub>) / E<sub>front</sub>；
+  每千次少误判 = (A<sub>cust</sub> − A<sub>front</sub>) / 100 × 1000。默认 84.66 / 78.20 为源文实测值，其余取值为假设推演。</div>
+</div>
+<div class="sandbox">
+  <h3>沙盘 B · 专家标注路由成本测算</h3>
+  <p style="color:var(--dim);font-size:14.5px">复现 §3 的分歧路由策略：<strong>全量专家重标</strong>对比
+  <strong>非专家全量标注 + 仅分歧样本送专家</strong>。这是源文方法的成本核心，但源文<em>未公开任何成本数值</em>，
+  故下列单价与比例均为演示基线假设，请替换为自家口径后再读结论。</p>
+  <div class="sb-grid">
+    <div>
+      <div class="ctrl"><label>样本总量 N：<b id="lbl-samples">50,000</b> 条</label>
+        <input type="range" id="in-samples" min="1000" max="200000" step="1000" value="50000"></div>
+      <div class="ctrl"><label>模型与标注者分歧率 d：<b id="lbl-disagree">15%</b></label>
+        <input type="range" id="in-disagree" min="1" max="40" step="1" value="15"></div>
+      <div class="ctrl"><label>非专家标注单价：<b id="lbl-cost-vendor">0.05</b> 元 / 条</label>
+        <input type="range" id="in-cost-vendor" min="0.01" max="1" step="0.01" value="0.05"></div>
+      <div class="ctrl"><label>专家复核单价：<b id="lbl-cost-expert">3.00</b> 元 / 条</label>
+        <input type="range" id="in-cost-expert" min="0.5" max="20" step="0.5" value="3"></div>
+    </div>
+    <div>
+      <div class="readout">
+        <div class="ro"><div class="rv" id="out-cost-full">150,000</div><div class="rl">全量专家重标（元）</div></div>
+        <div class="ro ok"><div class="rv" id="out-cost-route">25,000</div><div class="rl">分歧路由方案（元）</div></div>
+        <div class="ro ok"><div class="rv" id="out-save">83.33%</div><div class="rl">成本节省比例</div></div>
+        <div class="ro"><div class="rv" id="out-expert-n">7,500</div><div class="rl">专家实际复核量（条）</div></div>
+        <div class="ro"><div class="rv" id="out-roi">6.00×</div><div class="rl">成本杠杆倍数</div></div>
+      </div>
+      <div class="verdict" id="out-cost-verdict">在基线假设下，分歧路由把专家工作量压到全量的 15%，总成本降至 1/6.00。</div>
+    </div>
+  </div>
+  <div class="assume">公式：C<sub>full</sub> = N · c<sub>expert</sub>；C<sub>route</sub> = N · c<sub>vendor</sub> + N · d · c<sub>expert</sub>；
+  节省 = (1 − C<sub>route</sub>/C<sub>full</sub>) × 100%。<strong>N / d / 单价均为演示基线假设值，非源文数据。</strong></div>
+</div>
+</section>
+<section id="s10">
+<h2><span class="secnum">10</span>来源与引用</h2>
+<div class="tw"><table>
+<thead><tr><th style="width:130px">项目</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>标题</td><td>Learning to Replicate Expert Judgment in Financial Tasks</td></tr>
+<tr><td>机构</td><td>Thinking Machines Lab × Bridgewater AIA Labs</td></tr>
+<tr><td>作者</td><td>Su, Sarah；Zhu, Kevin；Xiao, Emily；Alur, Rohan；Kang, Daniel</td></tr>
+<tr><td>发布时间</td><td>2026 年 6 月</td></tr>
+<tr><td>原文链接</td><td><a href="https://thinkingmachines.ai/news/learning-to-replicate-expert-judgment-in-financial-tasks/" target="_blank" rel="noopener noreferrer">thinkingmachines.ai/news/learning-to-replicate-expert-judgment-in-financial-tasks/</a></td></tr>
+<tr><td>训练平台</td><td>Tinker（Thinking Machines Lab）</td></tr>
+<tr><td>基座模型</td><td>Qwen3-235B</td></tr>
+</tbody></table></div>
+<h3>BibTeX</h3>
+<pre><span class="k">@article</span>{su2026expertjudgment,
+  author  = {Sarah Su, Kevin Zhu, Emily Xiao, Rohan Alur, Daniel Kang (Bridgewater AIA Labs)},
+  title   = <span class="s">{Learning to replicate expert judgment in financial tasks}</span>,
+  journal = <span class="s">{Thinking Machines Lab: News}</span>,
+  year    = {2026},
+  note    = <span class="s">{https://thinkingmachines.ai/news/learning-to-replicate-expert-judgment-in-financial-tasks/}</span>
+}</pre>
+<div class="note"><div class="nt">本文性质</div>
+本文为基于上述一手源文的中文深度消化与可视化重述，全部模型、数据与对比结论均为<strong>发布方自评口径</strong>，
+基于其内部数据的公开子集。§8 列出的三处订正针对的是流传中文解读稿的口径问题，不涉及源文本身的结论。</div>
+</section>
+<footer>
+  <p>单文件零依赖文档 · 断网可完整阅读与交互 · 全部图表为内联 SVG 矢量渲染<br>
+  生成日期基准：2026-09-15 · 存储目录：/Users/yangkejin/Documents/Openai/AIKnowledge</p>
+</footer>
+</main>
+<button id="tocToggle" type="button" aria-label="目录">☰</button>
+<div id="tools"><button id="btn-theme" type="button" title="切换深浅色">浅色</button><button id="btn-top" type="button" title="回到顶部">↑</button></div>
+<script>
+(function () {
+  function byId(id) { return document.getElementById(id); }
+  function fmt(n) {
+    var s = String(Math.round(n));
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  function safe(fn) { try { fn(); } catch (e) { } }
+
+  /* ---------- 主题 ---------- */
+  var KEY = "aike-theme-tinker-fin";
+  var root = document.documentElement;
+  function applyTheme(t) {
+    root.setAttribute("data-theme", t);
+    try { window.localStorage.setItem(KEY, t); } catch (e) { }
+    var b = byId("btn-theme");
+    if (b) { b.textContent = (t === "dark") ? "浅色" : "深色"; }
+  }
+  safe(function () {
+    var saved = null;
+    try { saved = window.localStorage.getItem(KEY); } catch (e) { saved = null; }
+    applyTheme(saved === "light" ? "light" : "dark");
+    var b = byId("btn-theme");
+    if (b) {
+      b.addEventListener("click", function () {
+        applyTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+      });
+    }
+  });
+
+  /* ---------- 目录开关 / 回顶 / 进度 ---------- */
+  safe(function () {
+    var t = byId("tocToggle");
+    if (t) { t.addEventListener("click", function () { document.body.classList.toggle("toc-open"); }); }
+    var tp = byId("btn-top");
+    if (tp) { tp.addEventListener("click", function () { window.scrollTo(0, 0); }); }
+    var bar = byId("progress");
+    window.addEventListener("scroll", function () {
+      if (!bar) { return; }
+      var de = document.documentElement;
+      var h = (de.scrollHeight || 0) - (de.clientHeight || 0);
+      var p = h > 0 ? (de.scrollTop || document.body.scrollTop || 0) / h * 100 : 0;
+      bar.style.width = p.toFixed(2) + "%";
+    });
+  });
+
+  /* ---------- 侧栏高亮 ---------- */
+  safe(function () {
+    var links = document.querySelectorAll("#sidebar nav a");
+    if (!links || !links.length) { return; }
+    function mark() {
+      var best = null, bestTop = -1e9;
+      for (var i = 0; i < links.length; i++) {
+        var id = (links[i].getAttribute("href") || "").slice(1);
+        var el = id ? byId(id) : null;
+        if (!el) { continue; }
+        var top = el.getBoundingClientRect().top;
+        if (top <= 140 && top > bestTop) { bestTop = top; best = links[i]; }
+      }
+      for (var j = 0; j < links.length; j++) {
+        var on = (links[j] === best);
+        if (on) { links[j].classList.add("is-active"); } else { links[j].classList.remove("is-active"); }
+      }
+    }
+    window.addEventListener("scroll", mark);
+    mark();
+    if (typeof IntersectionObserver !== "undefined") { /* 高亮已由 scroll 覆盖 */ }
+  });
+
+  /* ---------- 任务浏览器 ---------- */
+  var TASKS = [{"btn": "tab-t1", "idx": "TASK 01", "zh": "财经文章相关性", "en": "Financial Article Relevancy", "kind": "分类", "desc": "给定一篇财经文章，判断它是否与一位投资高管（C-suite investment professional）相关。", "why": "难点在于「相关」不等于「有意义」：一条小型 IPO 新闻在字面上属于财经相关，却不具备宏观投资者所需的大局意义。评测口径正是被这一点卡住。", "metric": "准确率 + 正类 F1"}, {"btn": "tab-t2", "idx": "TASK 02", "zh": "央行文件利率方向", "en": "Central Bank Document Relevancy", "kind": "分类", "desc": "给定一份央行文件，判断它是否暗示了未来利率变化的方向。", "why": "要读出字缝里的政策倾向。人类专家凭经验一秒判完，但很难把判断依据完整讲清楚。", "metric": "准确率 + 正类 F1"}, {"btn": "tab-t3", "idx": "TASK 03", "zh": "研报是否答题", "en": "Generic Document Relevancy", "kind": "分类", "desc": "给定一个投资者的问题与一份研究文档，判断这份文档是否有助于回答该问题。", "why": "判断的是「有没有答案」，而不是「有没有提到」。关键词命中不等于答题。", "metric": "准确率 + 正类 F1"}, {"btn": "tab-t4", "idx": "TASK 04", "zh": "一次性内容标记", "en": "Ad Hoc Content Labeling", "kind": "分类 + 定位", "desc": "研报分为两类：recurring（通篇重复样板）与 mixed（样板之中夹着一次性的、针对本期议题的分析）。需先判定类别，再找出一次性分析内容结束于第几页。", "why": "既要分清是哪一类，又要给出精确页码。源文把这一项归入 Accuracy 评测。", "metric": "准确率"}, {"btn": "tab-t5", "idx": "TASK 05", "zh": "文档截断", "en": "Document Truncation", "kind": "定位", "desc": "识别一份文档中，样板内容（boilerplate）从何处开始。", "why": "人扫一眼就知道正文到哪儿结束，模型却必须精确定位到边界。", "metric": "精确匹配准确率"}, {"btn": "tab-t6", "idx": "TASK 06", "zh": "邮件截断", "en": "Email Truncation", "kind": "定位", "desc": "识别一封邮件中，样板内容（签名档、免责声明等）从何处开始。", "why": "与上一项同构，都是「正文到哪儿为止」的一秒判断，只是载体换成了邮件。", "metric": "精确匹配准确率"}];
+  safe(function () {
+    function render(item) {
+      byId("out-task-zh").textContent = item.zh;
+      byId("out-task-en").textContent = item.en;
+      byId("out-task-kind").textContent = item.kind;
+      byId("out-task-idx").textContent = item.idx;
+      byId("out-task-desc").textContent = item.desc;
+      byId("out-task-why").textContent = item.why;
+      byId("out-task-metric").textContent = item.metric;
+    }
+    for (var i = 0; i < TASKS.length; i++) {
+      (function (item) {
+        var b = byId(item.btn);
+        if (!b) { return; }
+        b.addEventListener("click", function () {
+          for (var k = 0; k < TASKS.length; k++) {
+            var ob = byId(TASKS[k].btn);
+            if (ob) { ob.classList.remove("is-active"); }
+          }
+          b.classList.add("is-active");
+          render(item);
+        });
+      })(TASKS[i]);
+    }
+    var first = byId("tab-t1");
+    if (first) { first.classList.add("is-active"); }
+  });
+
+  /* ---------- 沙盘 A：错误率压缩 ---------- */
+  safe(function () {
+    var ic = byId("in-acc-cust"), ifr = byId("in-acc-front");
+    if (!ic || !ifr) { return; }
+    function calc() {
+      var ac = parseFloat(ic.value), af = parseFloat(ifr.value);
+      var ec = 100 - ac, ef = 100 - af;
+      var cut = ef > 0 ? (ef - ec) / ef * 100 : 0;
+      var miss = (ac - af) / 100 * 1000;
+      byId("lbl-acc-cust").textContent = ac.toFixed(2) + "%";
+      byId("lbl-acc-front").textContent = af.toFixed(2) + "%";
+      byId("out-err-cust").textContent = ec.toFixed(2) + "%";
+      byId("out-err-front").textContent = ef.toFixed(2) + "%";
+      byId("out-err-cut").textContent = cut.toFixed(2) + "%";
+      byId("out-miss-cut").textContent = miss.toFixed(1);
+      var g = byId("out-gate");
+      var pass = ac >= 80;
+      var g1 = pass ? "已跨越" : "未跨越";
+      var col = pass ? "#7BC79A" : "#E1707A";
+      g.innerHTML = "定制模型 <b>" + ac.toFixed(2) + "%</b> " + g1 +
+        " 80% 门槛；相对前沿基线 " + af.toFixed(2) + "% " +
+        (ac >= af ? "高出 " : "低出 ") + Math.abs(ac - af).toFixed(2) + " pp，" +
+        "每千次任务" + (miss >= 0 ? "少" : "多") + "误判 " + Math.abs(miss).toFixed(1) + " 次。";
+      g.style.borderColor = col;
+      var rc = byId("out-err-cut");
+      if (rc && rc.parentElement) {
+        rc.parentElement.className = "ro " + (cut > 0 ? "ok" : "bad");
+      }
+    }
+    ic.addEventListener("input", calc);
+    ifr.addEventListener("input", calc);
+    calc();
+  });
+
+  /* ---------- 沙盘 B：标注路由成本 ---------- */
+  safe(function () {
+    var iN = byId("in-samples"), iD = byId("in-disagree"),
+        iV = byId("in-cost-vendor"), iE = byId("in-cost-expert");
+    if (!iN || !iD || !iV || !iE) { return; }
+    function calc() {
+      var n = parseFloat(iN.value), d = parseFloat(iD.value),
+          cv = parseFloat(iV.value), ce = parseFloat(iE.value);
+      var full = n * ce;
+      var route = n * cv + n * (d / 100) * ce;
+      var save = full > 0 ? (1 - route / full) * 100 : 0;
+      var roi = route > 0 ? full / route : 0;
+      byId("lbl-samples").textContent = fmt(n);
+      byId("lbl-disagree").textContent = d.toFixed(0) + "%";
+      byId("lbl-cost-vendor").textContent = cv.toFixed(2);
+      byId("lbl-cost-expert").textContent = ce.toFixed(2);
+      byId("out-cost-full").textContent = fmt(full);
+      byId("out-cost-route").textContent = fmt(route);
+      byId("out-save").textContent = save.toFixed(2) + "%";
+      byId("out-expert-n").textContent = fmt(n * d / 100);
+      byId("out-roi").textContent = roi.toFixed(2) + "×";
+      var v = byId("out-cost-verdict");
+      v.innerHTML = "在基线假设下，分歧路由把专家工作量压到全量的 <b>" + d.toFixed(0) + "%</b>" +
+        "（" + fmt(n * d / 100) + " / " + fmt(n) + " 条），总成本降至 1/" + roi.toFixed(2) +
+        "，节省 <b>" + save.toFixed(2) + "%</b>。";
+      var rs = byId("out-save");
+      if (rs && rs.parentElement) { rs.parentElement.className = "ro " + (save > 0 ? "ok" : "bad"); }
+    }
+    iN.addEventListener("input", calc);
+    iD.addEventListener("input", calc);
+    iV.addEventListener("input", calc);
+    iE.addEventListener("input", calc);
+    calc();
+  });
+})();
+</script>
+</body>
+</html>

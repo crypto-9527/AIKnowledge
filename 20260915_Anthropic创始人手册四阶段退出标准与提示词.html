@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anthropic 创始人手册四阶段退出标准与提示词 · 深度消化</title>
+<style>
+:root{
+  --bg-canvas:#FAF7F2; --bg-card:#FFFFFF; --bg-soft:#F3EEE7; --bg-code:#F5F1EA;
+  --tx-main:#2A2724; --tx-soft:#5C564E; --tx-faint:#8A8279; --bd-line:#E2D9CD; --bd-strong:#CFC4B4;
+  --accent:#D97757; --accent-soft:rgba(217,119,87,.12);
+  --emerald:#2F7A5E; --rose:#B23A48; --amber:#A8761B; --cyan:#2E6D86;
+  --sbw:280px; --cmax:1180px;
+  --fs-body:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --fs-head:"Songti SC","SimSun",Georgia,"Times New Roman",serif;
+  --fs-mono:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+}
+html[data-theme="dark"]{
+  --bg-canvas:#181715; --bg-card:#211F1C; --bg-soft:#1D1B19; --bg-code:#141311;
+  --tx-main:#EDE8E0; --tx-soft:#B5AEA3; --tx-faint:#8B8378; --bd-line:#332F2A; --bd-strong:#4A443C;
+  --accent:#E2886A; --accent-soft:rgba(226,136,106,.14);
+  --emerald:#6FCF97; --rose:#E8737F; --amber:#E0B252; --cyan:#7CC3D8;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--bg-canvas); color:var(--tx-main);
+  font-family:var(--fs-body); font-size:16px; line-height:1.85;
+  -webkit-font-smoothing:antialiased;
+}
+#progressBar{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:60;transition:width .1s linear;}
+
+/* ---------- 侧栏 ---------- */
+#sidebar{
+  position:fixed; top:0; left:0; width:var(--sbw); height:100vh; overflow-y:auto;
+  background:var(--bg-soft); border-right:1px solid var(--bd-line); padding:22px 14px 60px 18px; z-index:50;
+}
+#sidebar .sb-title{font-family:var(--fs-head); font-size:15px; font-weight:700; letter-spacing:.5px;
+  color:var(--tx-main); margin:0 0 4px 8px;}
+#sidebar .sb-sub{font-size:11.5px; color:var(--tx-faint); margin:0 0 16px 8px; letter-spacing:.3px;}
+#sidebar a{
+  display:block; padding:6px 10px; margin:1px 0; border-radius:6px; text-decoration:none;
+  color:var(--tx-soft); font-size:13.2px; line-height:1.55; border-left:2px solid transparent;
+}
+#sidebar a:hover{background:var(--accent-soft); color:var(--tx-main);}
+#sidebar a.active{color:var(--accent); border-left-color:var(--accent); background:var(--accent-soft); font-weight:600;}
+#sidebar a.lv2{padding-left:22px; font-size:12.4px;}
+#tocBtn{display:none;}
+
+/* ---------- 主体 ---------- */
+#main{
+  display:block; max-width:var(--cmax); width:auto;
+  margin-left:calc(var(--sbw) + max(0px, (100% - var(--sbw) - var(--cmax)) / 2));
+  margin-right:max(0px, (100% - var(--sbw) - var(--cmax)) / 2);
+  padding:56px 44px 120px 44px;
+}
+#themeBtn{
+  position:fixed; top:16px; right:20px; z-index:60; cursor:pointer;
+  background:var(--bg-card); color:var(--tx-main); border:1px solid var(--bd-strong);
+  border-radius:999px; padding:7px 15px; font-size:12.5px; font-family:var(--fs-body);
+}
+#themeBtn:hover{border-color:var(--accent); color:var(--accent);}
+#toTopBtn{
+  position:fixed; bottom:26px; right:24px; z-index:60; cursor:pointer; display:none;
+  background:var(--bg-card); color:var(--tx-main); border:1px solid var(--bd-strong);
+  border-radius:8px; padding:9px 13px; font-size:14px;
+}
+#toTopBtn:hover{border-color:var(--accent); color:var(--accent);}
+
+/* ---------- 头部 ---------- */
+.doc-head{border-bottom:1px solid var(--bd-line); padding-bottom:26px; margin-bottom:34px;}
+.kicker{font-size:12px; letter-spacing:2px; color:var(--accent); text-transform:uppercase; margin-bottom:12px;}
+h1{font-family:var(--fs-head); font-size:33px; line-height:1.35; margin:0 0 14px; font-weight:700; letter-spacing:.5px;}
+.lede{font-size:17px; color:var(--tx-soft); margin:0 0 20px; line-height:1.8;}
+.meta-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:18px;}
+.meta-cell{background:var(--bg-soft); border:1px solid var(--bd-line); border-radius:8px; padding:9px 12px;}
+.meta-cell .k{display:block; font-size:11px; color:var(--tx-faint); letter-spacing:.6px; margin-bottom:2px;}
+.meta-cell .v{font-size:13.5px; color:var(--tx-main); font-weight:600;}
+.meta-cell a{color:var(--accent); text-decoration:none; word-break:break-all;}
+.meta-cell a:hover{text-decoration:underline;}
+
+/* ---------- 标题层级 ---------- */
+h2{font-family:var(--fs-head); font-size:25px; margin:56px 0 18px; padding-bottom:10px;
+   border-bottom:1px solid var(--bd-line); font-weight:700; letter-spacing:.4px;}
+h3{font-family:var(--fs-head); font-size:19.5px; margin:36px 0 12px; font-weight:700; color:var(--tx-main);}
+h4{font-size:16px; margin:24px 0 8px; font-weight:700; color:var(--accent);}
+p{margin:0 0 15px;}
+a{color:var(--accent);}
+ul,ol{margin:0 0 16px; padding-left:24px;}
+li{margin:6px 0;}
+strong{font-weight:700; color:var(--tx-main);}
+em{color:var(--accent); font-style:normal; font-weight:600;}
+
+/* ---------- 组件 ---------- */
+.callout{background:var(--bg-soft); border:1px solid var(--bd-line); border-left:3px solid var(--accent);
+  border-radius:8px; padding:16px 18px; margin:20px 0;}
+.callout .ct{font-size:12px; letter-spacing:1.4px; color:var(--accent); font-weight:700; margin-bottom:8px;}
+.callout p:last-child{margin-bottom:0;}
+
+.stat-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin:22px 0;}
+.stat{background:var(--bg-card); border:1px solid var(--bd-line); border-radius:10px; padding:16px 18px; text-align:center;}
+.stat .num{font-family:var(--fs-head); font-size:34px; font-weight:700; color:var(--accent); line-height:1.15;}
+.stat .lbl{font-size:12.5px; color:var(--tx-soft); margin-top:6px; line-height:1.6;}
+
+table{width:100%; border-collapse:collapse; margin:20px 0; font-size:14.5px; background:var(--bg-card);}
+th,td{border:1px solid var(--bd-line); padding:10px 13px; text-align:left; vertical-align:top; line-height:1.7;}
+th{background:var(--bg-soft); font-weight:700; font-size:13.5px; letter-spacing:.3px;}
+tbody tr:nth-child(even){background:var(--bg-soft);}
+
+.two-col{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0;}
+.panel{background:var(--bg-card); border:1px solid var(--bd-line); border-radius:10px; padding:16px 18px;}
+.panel h4{margin-top:0;}
+.panel.bad{border-left:3px solid var(--rose);}
+.panel.good{border-left:3px solid var(--emerald);}
+.panel.warn{border-left:3px solid var(--amber);}
+.panel.neutral{border-left:3px solid var(--cyan);}
+
+pre{background:var(--bg-code); border:1px solid var(--bd-line); border-radius:8px; padding:14px 16px;
+  overflow-x:auto; margin:0; font-family:var(--fs-mono); font-size:13px; line-height:1.75; color:var(--tx-main);}
+.code-wrap{position:relative; margin:16px 0;}
+.code-wrap .code-hd{display:flex; justify-content:space-between; align-items:center; gap:10px;
+  background:var(--bg-soft); border:1px solid var(--bd-line); border-bottom:none;
+  border-radius:8px 8px 0 0; padding:7px 12px;}
+.code-wrap .code-hd .t{font-size:12.5px; font-weight:700; color:var(--accent); letter-spacing:.4px;}
+.copyBtn{background:transparent; border:1px solid var(--bd-strong); color:var(--tx-soft);
+  border-radius:5px; padding:2px 10px; font-size:11.5px; cursor:pointer; font-family:var(--fs-body);}
+.copyBtn:hover{border-color:var(--accent); color:var(--accent);}
+.code-wrap pre{border-radius:0 0 8px 8px;}
+code{font-family:var(--fs-mono); font-size:13px; background:var(--bg-soft); padding:1px 5px; border-radius:4px;}
+
+details{border:1px solid var(--bd-line); border-radius:8px; padding:12px 16px; margin:18px 0; background:var(--bg-soft);}
+summary{cursor:pointer; font-weight:700; font-size:14.5px; color:var(--accent);}
+details[open] summary{margin-bottom:10px;}
+
+.exercise{background:var(--bg-card); border:1px dashed var(--bd-strong); border-radius:10px; padding:16px 18px; margin:18px 0;}
+.exercise .ex-t{font-size:12px; letter-spacing:1.2px; color:var(--cyan); font-weight:700; margin-bottom:8px;}
+.exercise ul{margin-bottom:0;}
+
+.term{border:1px solid var(--bd-line); border-radius:10px; padding:14px 18px; margin:18px 0; background:var(--bg-card);}
+.term .term-hd{font-size:12px; letter-spacing:1.2px; color:var(--tx-faint); font-weight:700; margin-bottom:10px;}
+.term dl{margin:0;}
+.term dt{font-weight:700; font-size:14.5px; color:var(--accent); margin-top:8px;}
+.term dd{margin:2px 0 0; font-size:14px; color:var(--tx-soft); line-height:1.75;}
+
+.stage-flow{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:22px 0;}
+.stage-box{background:var(--bg-card); border:1px solid var(--bd-line); border-top:3px solid var(--accent);
+  border-radius:9px; padding:14px 15px;}
+.stage-box .sn{font-size:11px; letter-spacing:1.5px; color:var(--tx-faint); font-weight:700;}
+.stage-box .st{font-family:var(--fs-head); font-size:19px; font-weight:700; margin:3px 0 8px;}
+.stage-box ul{margin:0; padding-left:18px; font-size:13px; color:var(--tx-soft);}
+.stage-box li{margin:4px 0;}
+
+/* ---------- 沙盘 ---------- */
+.box-sim{background:var(--bg-card); border:1px solid var(--bd-line); border-radius:12px; padding:20px 22px; margin:24px 0;}
+.box-sim h3{margin-top:0; font-size:19px;}
+.sim-formula{font-family:var(--fs-mono); font-size:12.8px; background:var(--bg-soft); border:1px solid var(--bd-line);
+  border-radius:7px; padding:10px 13px; margin:12px 0 18px; color:var(--tx-soft); line-height:1.85;}
+.ctrl-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:16px; margin-bottom:16px;}
+.ctrl label{display:block; font-size:12.8px; color:var(--tx-soft); margin-bottom:6px;}
+.ctrl label b{color:var(--accent); font-family:var(--fs-mono);}
+input[type=range]{width:100%; accent-color:var(--accent); cursor:pointer;}
+.readout{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin:16px 0;}
+.ro{background:var(--bg-soft); border:1px solid var(--bd-line); border-radius:8px; padding:11px 13px;}
+.ro .rk{font-size:11px; color:var(--tx-faint); letter-spacing:.5px; margin-bottom:3px;}
+.ro .rv{font-family:var(--fs-mono); font-size:19px; font-weight:700; color:var(--tx-main);}
+.verdict{border-radius:8px; padding:12px 15px; font-size:14.5px; font-weight:600; margin-top:12px; line-height:1.75;}
+.verdict.ok{background:rgba(47,122,94,.12); border:1px solid var(--emerald); color:var(--emerald);}
+.verdict.no{background:rgba(178,58,72,.12); border:1px solid var(--rose); color:var(--rose);}
+.verdict.mid{background:rgba(168,118,27,.12); border:1px solid var(--amber); color:var(--amber);}
+.note{font-size:12.5px; color:var(--tx-faint); margin-top:12px; line-height:1.75;}
+svg{display:block; max-width:100%; height:auto;}
+.chart-cap{font-size:12.5px; color:var(--tx-faint); margin-top:8px; text-align:center;}
+
+.ck-list{list-style:none; margin:14px 0 4px; padding:0;}
+.ck-list li{display:flex; gap:11px; align-items:flex-start; background:var(--bg-soft);
+  border:1px solid var(--bd-line); border-radius:8px; padding:10px 14px; margin:7px 0; font-size:14.2px; cursor:pointer; line-height:1.7;}
+.ck-list li.done{border-color:var(--emerald); background:rgba(47,122,94,.08);}
+.ck-list input{margin-top:5px; accent-color:var(--emerald); cursor:pointer; flex:none; width:15px; height:15px;}
+.ck-list .ck-txt b{color:var(--tx-main);}
+.ck-list .ck-txt span{color:var(--tx-soft); font-size:13.2px;}
+
+footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--bd-line); font-size:13px; color:var(--tx-faint); line-height:1.85;}
+
+@media (max-width:1080px){
+  #sidebar{transform:translateX(-100%); transition:transform .2s ease;}
+  #sidebar.open{transform:translateX(0);}
+  #tocBtn{display:block; position:fixed; top:16px; left:16px; z-index:70; cursor:pointer;
+    background:var(--bg-card); color:var(--tx-main); border:1px solid var(--bd-strong); border-radius:8px; padding:7px 12px; font-size:13px;}
+  #main{margin-left:0; margin-right:0; max-width:100%; width:100%; padding:56px 20px 100px;}
+  #themeBtn{top:16px; right:16px;}
+  .two-col,.stage-flow{grid-template-columns:1fr;}
+  h1{font-size:26px;} h2{font-size:22px;}
+}
+@media print{
+  #sidebar,#themeBtn,#toTopBtn,#tocBtn,#progressBar{display:none !important;}
+  #main{margin:0; max-width:100%; padding:0;}
+  body{background:#fff; color:#111; font-size:11.5pt;}
+  .box-sim,table,.panel,pre{page-break-inside:avoid;}
+  h2{page-break-after:avoid;}
+}
+</style>
+</head>
+<body>
+<div id="progressBar"></div>
+<button id="tocBtn" type="button">目录</button>
+<button id="themeBtn" type="button">浅色</button>
+
+<aside id="sidebar">
+  <p class="sb-title">创始人手册 · 四阶段</p>
+  <p class="sb-sub">Anthropic · 36 页 v3</p>
+  <nav>
+    <a href="#s1">一、手册概览与四段主线</a>
+    <a href="#s1-1" class="lv2">1.1 一分钟速览</a>
+    <a href="#s1-2" class="lv2">1.2 四阶段退出标准总表</a>
+    <a href="#s2">二、旧路径与新路径</a>
+    <a href="#s2-1" class="lv2">2.1 AI 替代的三种能力</a>
+    <a href="#s3">三、三件套怎么选</a>
+    <a href="#s4">四、Idea：验证真问题</a>
+    <a href="#s4-1" class="lv2">4.1 可验证假设</a>
+    <a href="#s4-2" class="lv2">4.2 退出标准三问</a>
+    <a href="#s4-3" class="lv2">4.3 三个陷阱</a>
+    <a href="#s4-4" class="lv2">4.4 四组提示词</a>
+    <a href="#s5">五、MVP：证明离不开</a>
+    <a href="#s5-1" class="lv2">5.1 三目标与退出标准</a>
+    <a href="#s5-2" class="lv2">5.2 四个陷阱</a>
+    <a href="#s5-3" class="lv2">5.3 三问诊断</a>
+    <a href="#s6">六、Launch：系统自己转</a>
+    <a href="#s6-1" class="lv2">6.1 三条退出标准</a>
+    <a href="#s6-2" class="lv2">6.2 瓶颈三信号</a>
+    <a href="#s7">七、Scale：护城河与放手</a>
+    <a href="#s7-1" class="lv2">7.1 数据飞轮</a>
+    <a href="#s7-2" class="lv2">7.2 工作流锁定</a>
+    <a href="#s7-3" class="lv2">7.3 案例数字</a>
+    <a href="#s8">八、四阶段提示词速查表</a>
+    <a href="#s9">九、交互沙盘（三个）</a>
+    <a href="#s9-1" class="lv2">9.1 Sean Ellis 判定器</a>
+    <a href="#s9-2" class="lv2">9.2 退出标准自查</a>
+    <a href="#s9-3" class="lv2">9.3 单位经济测算器</a>
+    <a href="#s10">十、退出标准逐条对照</a>
+    <a href="#s11">来源与口径声明</a>
+  </nav>
+</aside>
+
+<main id="main">
+
+<header class="doc-head">
+  <div class="kicker">Anthropic · The Founder's Playbook · 深度消化</div>
+  <h1>AI 原生创业手册：四段主线、退出标准，与全套可直接抄的提示词</h1>
+  <p class="lede">36 页官方手册把 AI 原生创业路径重画成 Idea、MVP、Launch、Scale 四段，每段给出明确的毕业标准、AI 时代特有的失败模式，以及对应的 Claude 练习。本文按原文章节完整拆开，并补上三个可计算的判定工具。</p>
+  <div class="meta-grid">
+    <div class="meta-cell"><span class="k">来源</span><span class="v">Anthropic</span></div>
+    <div class="meta-cell"><span class="k">发布</span><span class="v">2026-05-06（PDF v3）</span></div>
+    <div class="meta-cell"><span class="k">篇幅</span><span class="v">36 页</span></div>
+    <div class="meta-cell"><span class="k">编译日期</span><span class="v">2026-07-14</span></div>
+    <div class="meta-cell"><span class="k">原文</span><span class="v"><a href="https://claude.com/blog/the-founders-playbook" target="_blank" rel="noopener">claude.com/blog/the-founders-playbook</a></span></div>
+    <div class="meta-cell"><span class="k">工具口径</span><span class="v">Claude / Claude Code / Claude Cowork</span></div>
+  </div>
+</header>
+
+<h2 id="s1">一、手册概览与四段主线</h2>
+<p>Anthropic 于 2026 年 5 月 6 日发布了一份 36 页的创始人手册《The Founder's Playbook》（PDF v3 版），把 AI 原生创业的路径重新拆解为 <strong>Idea、MVP、Launch、Scale</strong> 四个阶段。手册的核心论点很直接：创始人要做的事没变，还是那三件——找到一个真问题、做出解决它的东西、把它做成一家公司。AI 改的是到达终点的路。</p>
+<p>它压缩了这条路径，让每个阶段不再自动要求更大的团队和新一轮融资，瓶颈从「你能造什么」挪到了「你选择造什么」。</p>
+
+<h3 id="s1-1">1.1 一分钟速览</h3>
+<ul>
+  <li>手册把 AI 原生创业路径重新拆成 Idea、MVP、Launch、Scale 四个阶段，每个阶段都给出明确的<strong>退出标准</strong>。</li>
+  <li>核心工具栈是 <strong>Claude</strong>（研究策略）、<strong>Claude Code</strong>（写代码）、<strong>Claude Cowork</strong>（运营自动化）三件套，手册给了一张具体的任务对工具对应表。</li>
+  <li>每个阶段都列出 AI 时代特有的失败模式：把原型当验证、无摩擦范围蔓延、AI 加持的确认偏误、agentic 技术债，并配上对应的 Claude 练习。</li>
+  <li>MVP 阶段的退出标准用 <strong>Sean Ellis 测试</strong>量化：超过 40% 的活跃用户回答「如果不能用这产品会非常失望」，视为产品市场契合度的信号。</li>
+  <li>书末附十余家真实创业公司案例，包括每年处理 2.2 万例手术病例、数据摘录效率提升 66% 的 Carta Healthcare，以及帮 150 万用户把想法做成软件的 Anything。</li>
+</ul>
+
+<h3 id="s1-2">1.2 四阶段退出标准总表</h3>
+<div class="stage-flow">
+  <div class="stage-box">
+    <div class="sn">STAGE 01</div><div class="st">Idea</div>
+    <ul><li>三个判断问题全为「是」</li><li>找到问题与方案的契合</li></ul>
+  </div>
+  <div class="stage-box">
+    <div class="sn">STAGE 02</div><div class="st">MVP</div>
+    <ul><li>留存 / 付费 / 推荐三选一有实证</li><li>Sean Ellis 测试超 40%</li></ul>
+  </div>
+  <div class="stage-box">
+    <div class="sn">STAGE 03</div><div class="st">Launch</div>
+    <ul><li>增长可复制且渠道驱动</li><li>产品扛住生产负载</li><li>运营不再卡创始人</li></ul>
+  </div>
+  <div class="stage-box">
+    <div class="sn">STAGE 04</div><div class="st">Scale</div>
+    <ul><li>门槛事件三选一</li><li>可持续盈利 / IPO 就绪 / 被收购</li></ul>
+  </div>
+</div>
+<p>手册全篇反复回到同一个工具三件套：研究策略交给 Claude，写代码交给 Claude Code（AI 自主写代码、测试、调试的编码环境），运营自动化交给 Claude Cowork。下面按四个阶段依次拆，先看 AI 到底压缩了这条路的哪一段。</p>
+
+<h2 id="s2">二、旧路径七步循环，新路径只留四段主线</h2>
+<p>AI 并没有让创业跳过任何一个阶段，它拆掉的是<strong>阶段之间那条默认绑定</strong>：过去每进入一个新阶段，都自动意味着招更多人、换一套技能、再融一轮钱。现在这层绑定被解开了。</p>
+<div class="two-col">
+  <div class="panel bad">
+    <h4>传统路径 · 每一步都在触发扩张</h4>
+    <ul>
+      <li>验证问题 → 招研究 / 分析岗</li>
+      <li>做原型 → 招工程团队</li>
+      <li>上线 → 招运营与支持</li>
+      <li>规模化 → 再融一轮、换管理层</li>
+      <li>瓶颈始终在「你能造什么」</li>
+    </ul>
+  </div>
+  <div class="panel good">
+    <h4>AI 原生路径 · 阶段间不再自动扩团队</h4>
+    <ul>
+      <li>验证问题 → 创始人 + Claude</li>
+      <li>做原型 → 创始人 + Claude Code</li>
+      <li>上线运营 → 创始人 + Claude Cowork</li>
+      <li>规模化 → 系统化的组织与流程</li>
+      <li>瓶颈转移到「你选择造什么」</li>
+    </ul>
+  </div>
+</div>
+
+<h3 id="s2-1">2.1 AI 替代的三种能力</h3>
+<p>手册把 AI 在每个环节替代的能力说得很具体：</p>
+<table>
+  <thead><tr><th style="width:22%">环节</th><th style="width:38%">AI 的角色</th><th>具体工作</th></tr></thead>
+  <tbody>
+    <tr><td><strong>研究</strong></td><td>随叫随到的各领域专家</td><td>竞品分析、市场规模测算、财务建模、起草投资备忘录</td></tr>
+    <tr><td><strong>编码</strong></td><td>永远在线、永不被阻塞的工程师</td><td>把过去一整个团队的活，压缩成创始人自己能交付的工作</td></tr>
+    <tr><td><strong>运营</strong></td><td>按需的自动化运营团队</td><td>CRM 在成交推进时自动更新、周报自己编好、产品文档随产品变更同步</td></tr>
+  </tbody>
+</table>
+<div class="callout">
+  <div class="ct">角色的整体上移</div>
+  <p>结果是创始人的角色重心整体上移：从写代码、管人、处理日常杂务的<strong>「执行者」</strong>，转向生成想法、指挥这些 AI 工具去落地的<strong>「编排者」</strong>。手册特别点出，这里最有分量的变化，是让那些有行业经验、却没有工程背景的人也能开公司——创业者的来源池就此扩大到工程师之外。</p>
+</div>
+
+<h2 id="s3">三、同一个 Claude，套着三个不同的工作空间</h2>
+<p>手册强调：Chat、Claude Cowork、Claude Code 三者背后是<strong>同一个 Claude</strong>，区别只是外面套的工作空间不同。选错界面，会让本该顺手的事变别扭。下面这张表是可以直接套用的选择框架。</p>
+<table>
+  <thead><tr><th style="width:38%">如果任务是</th><th style="width:20%">该用什么</th><th>为什么</th></tr></thead>
+  <tbody>
+    <tr><td>一个问题、一次改写、快速头脑风暴</td><td><strong>Chat</strong></td><td>快、对话式、不用配置</td></tr>
+    <tr><td>研究、分析，或基于你的文件和系统整理出一份成品文档</td><td><strong>Claude Cowork</strong></td><td>能读文件夹、接各种连接器、跑技能、可定时执行</td></tr>
+    <tr><td>写代码、测试、上线软件</td><td><strong>Claude Code</strong></td><td>能读代码库、有 diff、有 git、有开发环境</td></tr>
+  </tbody>
+</table>
+<p>手册给的直觉是：Chat 处理运营公司时源源不断的小事，比如从一份密密麻麻的投资备忘录里拎出一句话结论、开董事会前核一下某个说法；Claude Cowork 处理真正耗时间的知识工作，比如把一文件夹的客户通话记录整理成主题发现文档、周一早上定时从连接的工具拉指标编成 KPI 简报；Claude Code 是团队里工程师的编码环境，从原型走到生产、迁移 MVP 时期的旧代码，都不必再等更多人手。</p>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="t">📋 Chat / Claude Cowork / Claude Code 怎么选</span><button class="copyBtn" type="button">复制</button></div>
+<pre>任务是快速问答、改写、头脑风暴 → 用 Chat（快、对话式、不需要配置）。任务是研究、分析，或者要基于你的文件和系统整理出一份成品文档 → 用 Claude Cowork（能读文件夹、接入各种连接器、跑技能、可以定时执行）。任务是写代码、测试或者上线软件 → 用 Claude Code（能直接读代码库、有 diff、有 git、有开发环境）。三者背后是同一个 Claude，区别只是外面套的工作空间不同。</pre>
+</div>
+
+<h2 id="s4">四、Idea：先别急着写代码，把「这是不是真问题」验证透</h2>
+<p>每个创始人都从同一个地方出发：一个自己停不下来去想的问题。Idea 阶段的心法只有一句——<strong>证据没到之前，不许动手建</strong>。这一阶段的活是研究、客户访谈、竞品分析，以及诚实评估那些反对你的证据，全部要发生在让 Claude Code 写第一行生产代码之前。</p>
+<p>手册把 Idea 阶段列成一串按顺序回答的问题：这个问题真实、具体、频繁到值得围着它建公司吗？谁在遇到它，这构成一个市场吗？有没有别人在解，解得怎么样？一个方案要真正解决它得做到什么，我的想法做到了吗？这些加起来回答一个终极问题：<em>这值得建吗？</em></p>
+
+<h3 id="s4-1">4.1 关键是先具体，再动身</h3>
+<div class="two-col">
+  <div class="panel bad">
+    <h4>✕ 一句观察（没法验证）</h4>
+    <p>「大家报销都很头疼。」——这只是一句观察，没法验证。</p>
+  </div>
+  <div class="panel good">
+    <h4>✓ 一句可验证的假设</h4>
+    <p>「中型公司的财务经理每周花 4 小时以上核对报销，因为现有工具不接他们的记账软件。」——换成一句可验证的假设，事情才立得住。</p>
+  </div>
+</div>
+
+<h3 id="s4-2">4.2 退出标准：三个问题全答「是」才走</h3>
+<p>Idea 阶段的退出条件是找到<strong>问题与方案的契合</strong>，也就是先有实打实的定性证据（主要来自真人对话），证明你在为真实的人解决真实的问题，然后才去建那个解决方案。三个问题全为「是」，才算能走：</p>
+<table>
+  <thead><tr><th style="width:30%">判断问题</th><th>具体要求</th></tr></thead>
+  <tbody>
+    <tr><td><strong>问题真实且具体吗</strong></td><td>能说出谁遇到、多频繁、多严重、他们现在怎么应付</td></tr>
+    <tr><td><strong>方案对准的是真问题吗</strong></td><td>是验证过程揭示的那个问题，不一定是你最初假设的那个</td></tr>
+    <tr><td><strong>信号够支撑开工吗</strong></td><td>这阶段永远不会有确定性，等确定本身就是一种失败；但要够到能理性决定做 MVP，而不是凭一股信念</td></tr>
+  </tbody>
+</table>
+
+<h3 id="s4-3">4.3 这一阶段的三个陷阱</h3>
+<h4>陷阱一 · 把构建当验证</h4>
+<p>技术门槛一被搬走，一个上头的创始人最容易跳过整段旅程里最重要的活：验证这想法真是人们需要、会用的东西。就算在 agentic 编码出现之前，也有 <strong>42%</strong> 的创业公司因为做了没人要的东西而失败。现在从「我有个想法」到「我有个产品」的距离被压得极短，这个失败率只会往上走。</p>
+<div class="callout">
+  <div class="ct">原型的正确用法</div>
+  <p>一个能跑的原型<em>太容易</em>被误当成「我在解决真问题」的实证，但它不是。原型真正的用处，是当你和潜在用户对话时的一个<strong>压力测试道具</strong>——那些对话本身才是证据。</p>
+</div>
+<div class="stat-row">
+  <div class="stat"><div class="num">42%</div><div class="lbl">AI 编程工具普及前，因「做了没人要的东西」而失败的创业公司占比。手册预计这个数字随原型变得极易生成还会上升。</div></div>
+  <div class="stat"><div class="num">36 页</div><div class="lbl">手册总篇幅（v3 版，2026 年 5 月 6 日发布）。</div></div>
+</div>
+
+<h4>陷阱二 · 过早规模化</h4>
+<p>建东西一旦变得毫不费力，你会在还没验证问题与方案契合之前，就把执行推到远超需求的地方，而且往往是无意识地跑偏。agentic 编码工具会用同样的热情，围着一个根本错了的前提生成、测试、调试、重构一整套代码。</p>
+<p><strong>对策：</strong>让理解跑在构建前面，尤其是在建东西又快又不费力的时候。</p>
+
+<h4>陷阱三 · AI 加持的确认偏误</h4>
+<p>让 AI 证明你的想法，它就找得到支持证据；让它测算你的市场，它就给出让 TAM 看起来能拿到融资的那个数。AI 跟着你的指令走，一个不问难题的创始人，现在能比以往更快地为一个坏想法搭起一份看起来很扎实的论证，还自以为在做尽职调查。</p>
+<p><strong>对策：</strong>把同一个工具掉转枪口，让 AI 去攻击你的想法、专门找能推翻假设的反面证据。研究和结构化的对抗性思考如果指向「想法需要修正」，那就是转向的信号。</p>
+
+<h3 id="s4-4">4.4 怎么用 Claude 走完 Idea 阶段（四组提示词）</h3>
+<p>先把假设打磨到真能验证。Claude 在这里最有用的地方是逼你说具体：到底谁有这问题、多频繁、多严重、现在怎么办。答不上这几个的问题陈述，还没到能验证的程度。</p>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="t">📋 把模糊问题压成可验证假设</span><button class="copyBtn" type="button">复制</button></div>
+<pre>把你的问题陈述讲给 Claude，让它帮你打磨成一句可验证的假设。反面例子：「合同审查太慢了」，这话没法验证。正面例子：「中型公司的内部法务团队每次合同审查要花 3 天以上，因为红线修改是靠邮件往来管理，而不是一个版本控制的单一文档」，这话可以验证。打磨完假设后，下一步是让 Claude 反过来攻击你的想法，专门找能推翻这个假设的反面证据。</pre>
+</div>
+
+<p>接着是竞品。手册点了一个创业者特有的毛病叫 <strong>competitor neglect（竞争对手忽视）</strong>，意思是太专注自己的愿景和执行，系统性地低估同赛道里别人在做什么。解药是让 Claude 反着来，论证一个竞争对手为什么会赢、而你会输。</p>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="t">📋 竞争格局分层扫描</span><button class="copyBtn" type="button">复制</button></div>
+<pre>让 Claude 按层级画出你的竞争格局：直接竞争者、间接竞争者、潜在收购方、可能跨界进场的邻近玩家。然后让它论证每一层为什么对你构成真实威胁，而不是给你一个最容易被反驳的弱化版本。</pre>
+</div>
+
+<div class="term">
+  <div class="term-hd">难词翻译 · TAM / SAM / SOM</div>
+  <p style="margin-bottom:6px;font-size:14px;color:var(--tx-soft)">手册让你用公开数据搭 TAM / SAM / SOM 模型再压力测试。这是分析一个市场能有多大的三层框架。</p>
+  <dl>
+    <dt>TAM</dt><dd>最外圈，这个问题理论上能覆盖的全部市场（所有可能的买家）。</dd>
+    <dt>SAM</dt><dd>中间圈，你的产品实际够得着的那部分人。</dd>
+    <dt>SOM</dt><dd>最里圈，你现实中能签下来、拿到手的那批客户。</dd>
+  </dl>
+</div>
+
+<p>然后是设计客户访谈。手册说，一个菜鸟创始人最常犯的错，是问一个宽泛、面向未来的问题（「你会用这样的产品吗」），而不去问具体的过去（「说说你上次遇到这问题是怎么处理的」）。让 Claude 审你手写的问题，把引导性的、假设性的、太宽泛的都揪出来。</p>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="t">📋 用户访谈提问自查</span><button class="copyBtn" type="button">复制</button></div>
+<pre>先自己手写访谈问题，再让 Claude 审核。明确要求它标出哪些问题是引导性的、面向未来假设的（比如「你会用这样的产品吗」）、太宽泛的，或者容易让对方给出讨好式回答而非真实回答的。然后让它针对访谈中最容易被对方回避的两三个关键节点，设计追问话术。</pre>
+</div>
+
+<p>验证做到位、方案概念也经过压力测试之后，才轮到 Claude Code 登场。这一步不是建真产品，而是造一个能让真人上手摸到的功能样本，用在客户和投资人对话里。</p>
+
+<div class="code-wrap">
+  <div class="code-hd"><span class="t">📋 轻量原型验证清单</span><button class="copyBtn" type="button">复制</button></div>
+<pre>明确你的方案依赖的那一个核心交互是什么，只让 Claude Code 把这一个核心交互做出来。做好后拿给验证过的目标用户画像里的 5 个人试用，观察他们的真实反应，决定继续做还是回去重新验证。</pre>
+</div>
+
+<h2 id="s5">五、MVP：做出来只是开始，证明有人离不开它才算数</h2>
+<p>很多创始人把 MVP 当成纯粹的施工阶段，但它本质上还是在<strong>收集证据</strong>。不同的是，现在收集的证据是关于解决方案的：一群真实、能被识别出来的人，是不是觉得它有价值到愿意用、愿意回来、愿意付钱、愿意推荐给别人。</p>
+<p>手册给 MVP 阶段压了三个目标：</p>
+<ol>
+  <li>把验证过的问题变成真实用户会用的产品，是最小、最聚焦的那一版，<em>不是</em>塞满路线图功能的完整版。</li>
+  <li>快，但别欠下会复利的技术债。</li>
+  <li>从第一天就投资<strong>持久上下文</strong>，这是让 AI 保持放大器、而不是变成熵源的关键。</li>
+</ol>
+
+<h3 id="s5-1">5.1 退出标准：Sean Ellis 测试 + 用力测试</h3>
+<p>宣布拿到产品市场契合度、可以从 MVP 进 Launch，最终是一次结合创始人直觉和已收集证据的判断。手册给了两把好用的尺。</p>
+<div class="two-col">
+  <div class="panel neutral">
+    <h4>尺一 · Sean Ellis 测试</h4>
+    <p>问活跃用户一个问题：如果明天不能再用这个产品，你会怎么样？回答「非常失望」的比例超过 <strong>40%</strong>，就是一个有意义的产品市场契合度信号。</p>
+  </div>
+  <div class="panel good">
+    <h4>尺二 · 用力测试</h4>
+    <p>找到 PMF 之前，留存靠创始人不断使力：频繁触达、给激励、人肉跟进；找到之后，产品开始自己做这件事。当感觉从「你推着用户走」变成「产品拉着用户来」，这个用力方式的转变，是发生了真实变化最清楚的信号之一。</p>
+  </div>
+</div>
+<div class="stat-row">
+  <div class="stat"><div class="num">40%</div><div class="lbl">回答「非常失望」的活跃用户占比越过 40% 这条线，视为产品市场契合度的信号。手册强调这不是单点数据能确认的，需要在多轮迭代里都稳住这个模式，才敢下定论。</div></div>
+</div>
+<p>它的退出条件是拿到产品市场契合度的真实证据，也就是<strong>留存、付费、推荐</strong>三者里，至少有一样被实证出来。</p>
+
+<h3 id="s5-2">5.2 四个陷阱，两个最有 AI 时代特色</h3>
+<h4>陷阱一 · agentic 技术债</h4>
+<p>普通技术债是慢慢累积的，能在后面某个专门的冲刺里清掉。AI 技术债不一样，它<em>会复利</em>。如果没有把架构约束写在 AI 能读到的地方，每一次会话都会从零重新推导那些底层决策，而这些决策会漂移。最后你得到一个没有连贯心智模型的代码库——不是哪一块单独很烂，而是这些块从一开始就不是为了拼在一起而设计的，这个问题往往很晚才浮现。</p>
+<p>手册开的药，是在打开 Claude Code 写第一行代码之前，先用 Claude 定义并写下架构决策，存成 <code>CLAUDE.md</code> 文件。它是 Claude Code 的项目级指令，会被 Agent SDK 在目录里运行时自动读取，功能上就是这个项目的持久「记忆」。</p>
+<div class="code-wrap">
+  <div class="code-hd"><span class="t">📋 开工前先让 Claude 写 CLAUDE.md 架构文档</span><button class="copyBtn" type="button">复制</button></div>
+<pre>在打开 Claude Code 之前，先跟 Claude 说清楚你要做什么：这个产品解决的核心问题、服务的用户、未来六个月现实预期的规模。让它帮你定义 MVP 阶段该遵守的架构原则、该规避的依赖项，以及你在这个阶段有意识接受的取舍。把这次对话的产出存成 CLAUDE.md 文件，作为后续每次 Claude Code 会话都要读取的架构上下文文档。</pre>
+</div>
+
+<h4>陷阱二 · 无摩擦范围蔓延</h4>
+<p>范围蔓延一直是创业风险，过去挡它的力量是工程时间的真实成本。现在加一个功能只要一个下午，那道天然的闸门没了。麻烦在于每一个添加单看都站得住：这个边界情况当然该处理、用户当然会想要那个流程。它们在当下都不像范围蔓延，可产品一旦漫出原定边界，你就有丢掉方向和势头的风险。</p>
+<p><strong>对策：</strong>在动手前写一份书面的<strong>范围文档</strong>，说清产品做什么、刻意不做什么、以及什么样的真实用户证据才够格新增一个功能。这样决策点就从「我们该建这个吗」变成「有没有一批关键数量的用户告诉我们，缺了它他们就用不出价值」。</p>
+
+<h4>陷阱三 · 把早期热度误当成产品市场契合</h4>
+<p>AI 工具能造出漂亮的早期数字，但这不保证市场需要你的产品。上线时的热度来自转瞬即逝的力量：创始人的朋友、投资人旗下其他被投公司里的潜在买家、一条冲上热榜的头条。这些都无法可靠预测第六周、第十二周初始助推退潮后会发生什么。</p>
+<p><strong>对策：</strong>在第一个用户到来之前就建好<strong>度量框架</strong>——先设好留存基准、激活标准、第 7 天和第 30 天目标，并定义清楚对你这个产品来说「假阳性」长什么样。</p>
+
+<h4>陷阱四 · 新手最容易漏掉的安全风险</h4>
+<p>agentic 编码工具生成的是<em>能跑</em>的代码，不是<em>天然安全</em>的代码。功能好坏很直接，要么能跑，要么跑不起来；安全漏洞在被利用之前是隐形的，没有天然的反馈回路来提醒一个新手创始人哪里出了问题。上线一个真用户能碰的 MVP，意味着真数据、真暴露、真后果。</p>
+<p><strong>对策：</strong>在任何用户碰到应用之前做一次安全审查，这是把一个 MVP 放进真实世界的最低责任门槛。</p>
+<div class="code-wrap">
+  <div class="code-hd"><span class="t">📋 上线前安全审查任务书</span><button class="copyBtn" type="button">复制</button></div>
+<pre>正式让任何真实用户接触产品之前，用一份明确的审查任务把核心应用代码交给 Claude 过一遍：检查身份验证和会话管理、API 响应中的数据暴露、输入校验和注入风险、以及有已知漏洞的依赖包。每一个发现都认真对待，凡是涉及身份验证、密钥或数据处理的问题，都要走人工复核。</pre>
+</div>
+<div class="callout">
+  <div class="ct">手册注明的能力边界</div>
+  <p>Claude Code 的 AI 扫描是<strong>辅助</strong>，不能替代安全工具，更高风险处也不能替代人工复核。另有一个 Claude Code Security 能进一步扫漏洞并给出待人工审阅的补丁，出版时它还是限量测试版，用之前要确认可用性。</p>
+</div>
+
+<h3 id="s5-3">5.3 如果三轮迭代还没起色</h3>
+<p>如果做了三轮以上迭代，产品市场契合度的关键指标始终没明显起色，手册说这不是失败，而是<strong>系统在正常工作</strong>——MVP 阶段本就是设计来在你过度投入错误答案之前把这个信息暴露出来。这时先别急着定下一步，让 Claude 跑一遍诊断。</p>
+<div class="code-wrap">
+  <div class="code-hd"><span class="t">📋 没到 PMF 时的三问诊断</span><button class="copyBtn" type="button">复制</button></div>
+<pre>如果你已经完成三轮以上迭代，产品市场契合度的关键指标却始终没有明显起色，先别急着决定下一步，让 Claude 跑一遍诊断。把留存数据、用户反馈和最初的问题假设都喂给它，问它三个问题：这批数据里有没有一个细分群体的反应和其他人明显不一样？设计时预想的价值和用户实际体验到的价值之间的落差，是定位问题还是产品问题？现有产品要达到真正的产品市场契合度，需要满足什么条件，照你现在看到的情况，这个条件现实吗？</pre>
+</div>
+
+<h2 id="s6">六、Launch：从「我一个人扛」到「系统自己转」</h2>
+<p>如果说 MVP 阶段是在证明<strong>产品</strong>值得存在，Launch 阶段就是在证明<strong>这门生意</strong>值得长大。除了把产品做到能上生产，还得同时给它下面的基础设施加固，并且真正围着产品搭起一家公司。</p>
+<p>手册特别提醒一个转折：Idea 和 MVP 阶段公司天然以创始人为中心，因为你需要完整的情境感知和紧密的反馈回路。到了 Launch，还想亲手攥着每一根线的创始人，就成了瓶颈。目标不是把自己从公司里抽走，而是搭起运营系统，把注意力腾出来给<em>只有创始人能做的决策</em>。</p>
+
+<h3 id="s6-1">6.1 退出标准：三条同时成立</h3>
+<table>
+  <thead><tr><th style="width:32%">退出条件</th><th>具体要求</th></tr></thead>
+  <tbody>
+    <tr><td><strong>增长可复制且渠道驱动</strong></td><td>不只是留住用户，还能通过具体渠道可预测地获取用户，CAC、LTV、回本周期你都清楚、都能站得住</td></tr>
+    <tr><td><strong>产品扛得住生产负载</strong></td><td>基础设施加固到位，安全合规就绪，在真实生产条件（不只是你测过的那些条件）下可靠性稳得住</td></tr>
+    <tr><td><strong>运营不再靠创始人兜底</strong></td><td>流程和自动化就位，你不再是那个亲手处理支持、分诊、冲刺规划、出报表的人</td></tr>
+  </tbody>
+</table>
+<div class="term">
+  <div class="term-hd">难词翻译 · CAC / LTV / 回本周期</div>
+  <dl>
+    <dt>CAC</dt><dd>获取一个付费用户平均要花的钱。</dd>
+    <dt>LTV</dt><dd>这个用户整个生命周期能给你带来的总收入。</dd>
+    <dt>回本周期</dt><dd>花在他身上的钱要多久才能通过他的付费赚回来。这三个数能不能说清、经不经得起追问，是「增长可复制」的硬门槛。</dd>
+  </dl>
+</div>
+
+<h3 id="s6-2">6.2 怎么看出自己已经成了瓶颈</h3>
+<p>从「亲手做活」到「设计那套替你做活的系统」，是整个创业周期里最难的转变之一。难在它很少有一个清晰的时刻，风险就是你完全错过它——组织在你身边停滞，你却还留在建造者模式里。手册给了三个可以对照的信号：</p>
+<div class="stat-row">
+  <div class="stat"><div class="num">⏳</div><div class="lbl">本该一小时定的决策，现在要拖一周才轮到你处理</div></div>
+  <div class="stat"><div class="num">📥</div><div class="lbl">支持请求堆着，因为只有你知道答案</div></div>
+  <div class="stat"><div class="num">🧠</div><div class="lbl">有些运营任务，只有你亲自记得才会发生</div></div>
+</div>
+<p>补救的办法，是对你亲手在处理的一切做一次彻底盘点，从最小的任务到最高风险的决策，分出哪些能系统化、哪些能交给别人（未必是你）、哪些确实还值得创始人的时间和注意力。</p>
+<div class="exercise">
+  <div class="ex-t">练习 · 亲手事务三分法（手册正文描述，非原文提示词）</div>
+  <ul>
+    <li><strong>能系统化</strong>：交给 Claude Cowork 的定时工作流、模板与自动化，例如 KPI 简报、CRM 更新、文档同步。</li>
+    <li><strong>能交给别人</strong>：不必然是你，可移交给人或 AI 系统，但需先把机构知识写成文档。</li>
+    <li><strong>留给自己</strong>：只有创始人带着完整背景才能拍的决策，如定价转向、关键 hires、融资节奏。</li>
+  </ul>
+</div>
+<p>另外两块补课手册也点了名：MVP 时期为速度欠下的技术债，现在开始计息，越拖越贵，要做系统性的架构审计、针对性重构、并实打实扩测试覆盖；安全与合规也不再能延期，一旦处理真实用户数据、处理支付、或卖进受监管行业，那些原型阶段不适用的合规要求全都适用了，浮出来的每一项都当成必须修的，不是建议。</p>
+<div class="code-wrap">
+  <div class="code-hd"><span class="t">📋 技术债审计 + 排期</span><button class="copyBtn" type="button">复制</button></div>
+<pre>让 Claude Code 对 MVP 代码库做一次完整架构审计，产出一份按优先级排序的清单：结构脆弱点、测试覆盖率缺口、值得重构的候选项。把这份清单交给 Claude，让它把补债工作排进接下来的几个 sprint：哪些必须在下一次发布前修完，哪些可以和新功能开发并行处理，哪些是当前阶段可以接受的债务。</pre>
+</div>
+<details>
+  <summary>点开看：Launch 阶段还要防的一个陷阱，过早扩张</summary>
+  <p>新市场和新融资机会看着都像增长机会，但它们也可能是产品市场契合度死掉的地方。你建起来的初始牵引是真的，但它也是特定于早期受众的。太早扩进一个和原市场差别很大的市场，会引入新的用户行为、合规要求、支付基建和基线预期，这些都是你产品当初没照着设计的。变量一多，你就失去了清晰解读自己数据的能力，还可能一边追逐新的、未经验证的受众，一边冷落了原来的用户基本盘。</p>
+</details>
+
+<h2 id="s7">七、Scale：护城河从数据飞轮和工作流锁定里长出来</h2>
+<p>进入 Scale 阶段，创始人的角色从建造者再度转向对外的公司高管，日常工作越来越多地关于公司本身。规模上看，是从数千用户走向数百万、从一个市场走向多个。目标从「贴着用户凭直觉调方向」，换成建立由成熟组织运营支撑的系统化增长。</p>
+<p>手册说，对一个 AI 原生创业公司，这阶段该建的是<strong>靠积累的深度撑起的护城河</strong>，来自你嵌进产品的专业知识、产品和用户依赖的其他工具平台的整合深度、以及专有的系统数据和工作流。它的退出条件不再是单一里程碑，而是一个门槛事件：公司在创始人越来越少直接管日常运营的情况下，依然可持续。</p>
+<p><strong>可持续盈利 / IPO 就绪 / 被收购</strong>，这三种形态三选一，共同前提是：增长系统化且可审计、产品护城河经得起推敲、组织运营成熟可持续。到这一步，手册说恭喜，你的创业从一个赌注变成了一门生意。</p>
+
+<h3 id="s7-1">7.1 护城河一：用户数据复利飞轮</h3>
+<p>用户和产品交互时会产生行为信号（他们接受哪些输出、拒绝哪些），这些信号喂进产品路线图。时间一长，你会摸清自己这批用户特有的模式、偏好和边界情况。这就是复利的意思：每一次改进让产品更有用，带来更多使用，产生更多反馈，又推动更多改进。</p>
+<svg viewBox="0 0 680 200" role="img" aria-label="数据飞轮循环示意图">
+  <rect x="0" y="0" width="680" height="200" fill="none"/>
+  <circle cx="340" cy="100" r="74" fill="none" stroke="#E2886A" stroke-width="1.5" stroke-dasharray="4 5"/>
+  <rect x="238" y="30" width="120" height="42" rx="8" fill="#211F1C" stroke="#E2886A" stroke-width="1.5"/>
+  <text x="298" y="56" fill="#EDE8E0" font-size="15" font-family="sans-serif" text-anchor="middle">更多使用</text>
+  <rect x="412" y="128" width="140" height="42" rx="8" fill="#211F1C" stroke="#7CC3D8" stroke-width="1.5"/>
+  <text x="482" y="154" fill="#EDE8E0" font-size="15" font-family="sans-serif" text-anchor="middle">更多行为数据</text>
+  <rect x="128" y="128" width="140" height="42" rx="8" fill="#211F1C" stroke="#6FCF97" stroke-width="1.5"/>
+  <text x="198" y="154" fill="#EDE8E0" font-size="15" font-family="sans-serif" text-anchor="middle">更好的产品</text>
+  <path d="M 358 30 A 74 74 0 0 1 412 128" fill="none" stroke="#E2886A" stroke-width="1.8"/>
+  <path d="M 412 170 A 74 74 0 0 1 268 170" fill="none" stroke="#7CC3D8" stroke-width="1.8"/>
+  <path d="M 268 128 A 74 74 0 0 1 282 30" fill="none" stroke="#6FCF97" stroke-width="1.8"/>
+  <text x="340" y="105" fill="#E2886A" font-size="26" font-family="sans-serif" text-anchor="middle">↻</text>
+</svg>
+<p class="chart-cap">飞轮循环：更多使用 → 更多行为数据 → 更好的产品 ↻</p>
+<p>手册强调，这份数据是<strong>时间锁定、情境特定、抄袭者无法复现</strong>的：你买不到成千上万名用户在你产品里打磨工作流留下的行为指纹。</p>
+<div class="code-wrap">
+  <div class="code-hd"><span class="t">📋 数据飞轮护城河叙事</span><button class="copyBtn" type="button">复制</button></div>
+<pre>把产品交互数据的情况喂给 Claude：你收集了什么数据、收集了多久、对用户如何随时间使用产品有什么了解。让它从中找出信号最强的三个行为模式，并为每一个设计一套能转化为系统性产品改进的反馈循环。然后让它帮你起草一页纸的护城河叙事：你的数据飞轮是怎么转起来的、转了多久，以及一个资源充足的竞争对手今天开始追赶，为什么两年内也追不上。</pre>
+</div>
+
+<h3 id="s7-2">7.2 护城河二：工作流深度锁定</h3>
+<p>数据网络效应让产品更难<em>复制</em>，工作流锁定让产品更难<em>离开</em>。用户在日常运营里跑你产品越久，它嵌得越深：他们在上面搭了自动化、培训了人、接了数据源和其他工具。他们开发的提示、打磨的流程、标准化的输出，全都围着你产品的做法成形。到这一步，更换供应商就从一个产品决策，变成一整个运营项目。手册让你先用 Claude 按整合深度给客户分层，看产品在哪里粘住了、哪里还需要往深里走。</p>
+
+<h4>Scale 阶段最难的一关：真正放手</h4>
+<p>对一个从第一天就亲力亲为的创始人，把运营层交出去，既是结构问题也是心理问题。交太多太快，尤其是交给 AI 自动化系统，关键决策就会在缺少只有创始人能提供的关键背景下做出；抓太久，你又成了瓶颈。核心难点是找出只活在创始人脑子里、或散落在没写下来的工作流里的<strong>机构知识</strong>，把它编码成有文档、可审计、可移交的系统。手册的做法是用 Claude 画一张瓶颈地图，再推演你消失一周会怎样。</p>
+<div class="code-wrap">
+  <div class="code-hd"><span class="t">📋 「消失一周」瓶颈地图</span><button class="copyBtn" type="button">复制</button></div>
+<pre>让 Claude 帮你画出当前运营层的瓶颈地图：每一个要经过你手的工作流、决策和审批。然后让它推演如果你一周内完全不在，每一项会发生什么。会卡住的那些工作流，就是你现在还插手太深、拖慢进度的地方。</pre>
+</div>
+
+<h3 id="s7-3">7.3 案例：护城河长出来是什么样</h3>
+<p>手册书末给了十余家真实公司案例，两个数字最能说明「积累的深度」：</p>
+<div class="stat-row">
+  <div class="stat"><div class="num">66%</div><div class="lbl">Carta Healthcare 用 Claude 驱动临床摘录平台后，数据摘录时间的降幅，每年处理 2.2 万例手术病例。</div></div>
+  <div class="stat"><div class="num">150 万</div><div class="lbl">Anything（基于 Claude 和 Agent SDK）帮助把想法变成可用软件产品的用户数，其中包括一位非技术创始人，已经在卖自己搭出来的完整招聘平台。</div></div>
+</div>
+<details>
+  <summary>点开看：手册还举了哪些落地公司</summary>
+  <p>GC AI 和 Wordsmith 都是用领域专长搭出贴合内部法务真实工作方式的 Claude 法律平台；Cogent 用 Claude 当推理层，自动化企业安全的调查、优先级排序和修复；Airtree 把 Claude Cowork 当运营基础设施的中枢，一个人搭好的工作流自动化，全组织都能用；Duvo 完全建在 Claude 上，用 Agent SDK 跨 ERP、供应商门户、表格、邮件甚至电话编排采购与供应链流程；Zingage 为居家护理机构做 7×24 自动化运营；Kindora 由一位非营利高管用 Claude Sonnet 搭出，智能匹配慈善机构和资助方。</p>
+</details>
+
+<h2 id="s8">八、四阶段提示词速查表</h2>
+<p>手册全篇的练习汇总在这里，按阶段分组，方便你对照自己所在阶段直接照抄。工具口径不变：研究策略用 Claude、写代码用 Claude Code、运营自动化用 Claude Cowork。</p>
+<table>
+  <thead><tr><th style="width:16%">阶段</th><th>练习清单</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Idea 阶段</strong></td><td>把模糊问题压成可验证假设 + 反过来攻击它 · 竞争格局分层扫描（含潜在收购方 / 邻近玩家）· 用户访谈提问自查（揪引导性 / 假设性问题）· 轻量原型验证清单（只做核心交互，给 5 人试）</td></tr>
+    <tr><td><strong>MVP 阶段</strong></td><td>开工前写 CLAUDE.md 架构文档 · 上线前安全审查任务书 · 没到 PMF 时的三问诊断</td></tr>
+    <tr><td><strong>Launch 阶段</strong></td><td>技术债审计 + 按 sprint 排期 · 盘点亲手在做的一切，分「自动化 / 交别人 / 留自己」</td></tr>
+    <tr><td><strong>Scale 阶段</strong></td><td>「消失一周」瓶颈地图 · 数据飞轮护城河叙事（一页纸）</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s9">九、交互沙盘：把两条硬门槛变成可计算的判定</h2>
+<p>手册给的两条硬门槛——<strong>Sean Ellis 40%</strong> 与 <strong>CAC / LTV / 回本周期说得清</strong>——都可以落成实算。下面三个沙盘全部由公式实时求解，不含任何预设结论或编造数值；滑块默认值仅为演示起点，可自行调整。</p>
+
+<h3 id="s9-1">9.1 Sean Ellis 测试判定器（含样本量校正）</h3>
+<p>手册只给了 40% 这条线，但没说样本量要多少。直接用点估计判断会掉进一个坑里：40 人里 18 人说「非常失望」，点估计 45% 已经过线，可它的 95% 置信下界只有 30.71%——离 40% 还差得很远。这里用 <strong>Wilson 评分区间</strong>补上这一层。</p>
+<div class="box-sim" id="box-se">
+  <div class="sim-formula">p̂ = d / n ；Wilson 95% 下界 = [ p̂ + z²/(2n) − z·√( p̂(1−p̂)/n + z²/(4n²) ) ] / ( 1 + z²/n )，z = 1.959964</div>
+  <div class="ctrl-grid">
+    <div class="ctrl">
+      <label for="seN">受访活跃用户数 n：<b id="out-se-nlab">40</b> 人</label>
+      <input type="range" id="seN" min="10" max="500" step="5" value="40">
+    </div>
+    <div class="ctrl">
+      <label for="seD">回答「非常失望」人数 d：<b id="out-se-dlab">18</b> 人</label>
+      <input type="range" id="seD" min="0" max="500" step="1" value="18">
+    </div>
+  </div>
+  <svg viewBox="0 0 680 300" role="img" aria-label="Wilson 95% 置信下界随样本量变化曲线">
+    <rect x="60" y="30" width="560" height="200" fill="none" stroke="#4A443C" stroke-width="1"/>
+    <line x1="60" y1="180" x2="620" y2="180" stroke="#332F2A" stroke-width="1"/>
+    <line x1="60" y1="130" x2="620" y2="130" stroke="#332F2A" stroke-width="1"/>
+    <line x1="60" y1="80" x2="620" y2="80" stroke="#332F2A" stroke-width="1"/>
+    <line x1="60" y1="230" x2="620" y2="230" stroke="#4A443C" stroke-width="1"/>
+    <line x1="60" y1="150" x2="620" y2="150" stroke="#E2886A" stroke-width="1.6" stroke-dasharray="6 4"/>
+    <text x="624" y="146" fill="#E2886A" font-size="11" font-family="sans-serif">40%</text>
+    <polyline id="se-curve" fill="none" stroke="#7CC3D8" stroke-width="2.2" points="71.20,196.36 82.40,178.36 93.60,169.54 104.80,168.59 116.00,167.68 127.20,163.81 138.40,160.85 149.60,160.84 160.80,160.77 172.00,158.77 183.20,157.08 194.40,157.22 205.60,157.31 216.80,156.00 228.00,154.84 239.20,155.00 250.40,155.14 261.60,154.18 272.80,153.30 284.00,153.47 295.20,153.62 306.40,152.86 317.60,152.17 328.80,152.33 340.00,152.48 351.20,151.86 362.40,151.28 373.60,151.44 384.80,151.58 396.00,151.06 407.20,150.57 418.40,150.72 429.60,150.86 440.80,150.41 452.00,149.98 463.20,150.12 474.40,150.25 485.60,149.85 496.80,149.48 508.00,149.61 519.20,149.73 530.40,149.38 541.60,149.05 552.80,149.17 564.00,149.29 575.20,148.97 586.40,148.67 597.60,148.79 608.80,148.90 620.00,148.61"/>
+    <circle id="se-mark" cx="452.00" cy="150.00" r="4" fill="#E2886A"/>
+    <text x="60" y="252" fill="#8B8378" font-size="11" font-family="sans-serif" text-anchor="middle">0</text>
+    <text x="200" y="252" fill="#8B8378" font-size="11" font-family="sans-serif" text-anchor="middle">125</text>
+    <text x="340" y="252" fill="#8B8378" font-size="11" font-family="sans-serif" text-anchor="middle">250</text>
+    <text x="480" y="252" fill="#8B8378" font-size="11" font-family="sans-serif" text-anchor="middle">375</text>
+    <text x="620" y="252" fill="#8B8378" font-size="11" font-family="sans-serif" text-anchor="middle">500</text>
+    <text x="30" y="234" fill="#8B8378" font-size="11" font-family="sans-serif" text-anchor="end">0</text>
+    <text x="30" y="184" fill="#8B8378" font-size="11" font-family="sans-serif" text-anchor="end">0.25</text>
+    <text x="30" y="134" fill="#8B8378" font-size="11" font-family="sans-serif" text-anchor="end">0.50</text>
+    <text x="30" y="84" fill="#8B8378" font-size="11" font-family="sans-serif" text-anchor="end">0.75</text>
+    <text x="30" y="34" fill="#8B8378" font-size="11" font-family="sans-serif" text-anchor="end">1.00</text>
+    <text x="340" y="278" fill="#8B8378" font-size="11.5" font-family="sans-serif" text-anchor="middle">样本量 n（人）</text>
+    <text x="18" y="130" fill="#8B8378" font-size="11.5" font-family="sans-serif" text-anchor="middle" transform="rotate(-90 18 130)">Wilson 95% 下界</text>
+  </svg>
+  <p class="chart-cap">在观测比例固定的情况下，置信下界随样本量上升的曲线；橙点为下界首次触及 40% 所需的最小样本量</p>
+  <div class="readout">
+    <div class="ro"><div class="rk">点估计 p̂</div><div class="rv" id="out-se-phat">45.00%</div></div>
+    <div class="ro"><div class="rk">95% 置信下界</div><div class="rv" id="out-se-lower">30.71%</div></div>
+    <div class="ro"><div class="rk">下界过 40% 所需最小 n</div><div class="rv" id="out-se-minn">350</div></div>
+  </div>
+  <div class="verdict mid" id="out-se-verdict">证据不足：点估计 45.00% 已过线，但 95% 置信下界仅 30.71%，样本量不足以支撑「已过 40%」的结论。</div>
+  <p class="note">口径说明：40% 阈值来自手册所引的 Sean Ellis 测试通行判据；Wilson 区间为本页附加的样本量校正，用于防止小样本下的假阳性。手册本身强调「要在多轮迭代里都稳住这个模式，才敢下定论」，与此处统计口径一致。滑块默认 n = 40 / d = 18 为演示起点假设值。</p>
+</div>
+
+<h3 id="s9-2">9.2 四阶段退出标准自查清单</h3>
+<p>把第十节的逐条对照做成可勾选清单：阶段判定采用「前置项全部完成才允许毕业」的严格口径，即必须本阶段及之前所有条目都勾选，才算进入下一阶段。</p>
+<div class="box-sim" id="box-ck">
+  <ul class="ck-list">
+    <li><input type="checkbox" id="chk-1" checked><label class="ck-txt" for="chk-1"><b>Idea · 问题真实且具体</b><br><span>说得出谁遇到、多频繁、多严重、现在怎么办；含糊的「大家都头疼」不算，要能写成一句可验证的假设</span></label></li>
+    <li><input type="checkbox" id="chk-2" checked><label class="ck-txt" for="chk-2"><b>Idea · 方案对准真问题</b><br><span>解决的是验证过程揭示的问题，不一定是你最初假设的那个</span></label></li>
+    <li><input type="checkbox" id="chk-3" checked><label class="ck-txt" for="chk-3"><b>Idea · 信号足够支撑开工</b><br><span>够到能理性决定做 MVP，而不是凭一股信念；等确定本身就是一种失败模式</span></label></li>
+    <li><input type="checkbox" id="chk-4"><label class="ck-txt" for="chk-4"><b>MVP · 留存 / 付费 / 推荐三选一有实证</b><br><span>一群能识别出的用户愿意回来、付钱或推荐</span></label></li>
+    <li><input type="checkbox" id="chk-5"><label class="ck-txt" for="chk-5"><b>MVP · Sean Ellis 测试超 40%</b><br><span>超过 40% 活跃用户回答「不能用会非常失望」；要在多轮迭代里都稳住这个模式才敢下定论</span></label></li>
+    <li><input type="checkbox" id="chk-6"><label class="ck-txt" for="chk-6"><b>Launch · 增长可复制且渠道驱动</b><br><span>CAC、LTV、回本周期你都清楚、都能站得住</span></label></li>
+    <li><input type="checkbox" id="chk-7"><label class="ck-txt" for="chk-7"><b>Launch · 产品扛住生产负载 + 运营不卡创始人</b><br><span>基建加固、安全合规就绪，你不再亲手兜底支持与分诊</span></label></li>
+    <li><input type="checkbox" id="chk-8"><label class="ck-txt" for="chk-8"><b>Scale · 达成门槛事件</b><br><span>可持续盈利 / IPO 就绪 / 被收购三选一；共同前提：增长系统化可审计、护城河经得起推敲、组织运营成熟</span></label></li>
+  </ul>
+  <div class="readout">
+    <div class="ro"><div class="rk">Idea</div><div class="rv" id="out-ck-idea">3 / 3</div></div>
+    <div class="ro"><div class="rk">MVP</div><div class="rv" id="out-ck-mvp">0 / 2</div></div>
+    <div class="ro"><div class="rk">Launch</div><div class="rv" id="out-ck-launch">0 / 2</div></div>
+    <div class="ro"><div class="rk">Scale</div><div class="rv" id="out-ck-scale">0 / 1</div></div>
+    <div class="ro"><div class="rk">总完成度</div><div class="rv" id="out-ck-total">3 / 8</div></div>
+  </div>
+  <div class="verdict mid" id="out-ck-stage">Idea 阶段已毕业 · 当前处于 MVP 阶段。</div>
+  <p class="note">判定口径：严格按手册「退出标准」逐条对应，前置阶段未全部完成时不承认后阶段毕业——这正是手册反对的「把早期热度误当成产品市场契合」。</p>
+</div>
+
+<h3 id="s9-3">9.3 CAC / LTV / 回本周期测算器</h3>
+<p>Launch 阶段的硬门槛是「CAC、LTV、回本周期你都清楚、都能站得住」。这里给出最小可算模型：以月毛利和月流失率反解 LTV，再对 CAC 求比值与回本周期。</p>
+<div class="box-sim" id="box-ue">
+  <div class="sim-formula">月毛利 m = ARPU × 毛利率 ；LTV = m / 月流失率 ；LTV/CAC = LTV ÷ CAC ；回本周期（月）= CAC ÷ m</div>
+  <div class="ctrl-grid">
+    <div class="ctrl"><label for="ueCac">CAC（元）：<b id="out-ue-cacv">800</b></label><input type="range" id="ueCac" min="50" max="5000" step="50" value="800"></div>
+    <div class="ctrl"><label for="ueArpu">月 ARPU（元）：<b id="out-ue-arpuv">120</b></label><input type="range" id="ueArpu" min="10" max="1000" step="10" value="120"></div>
+    <div class="ctrl"><label for="ueGm">毛利率（%）：<b id="out-ue-gmv">80</b></label><input type="range" id="ueGm" min="10" max="100" step="5" value="80"></div>
+    <div class="ctrl"><label for="ueChurn">月流失率（%）：<b id="out-ue-churnv">4.0</b></label><input type="range" id="ueChurn" min="0.5" max="20" step="0.5" value="4"></div>
+  </div>
+  <div class="readout">
+    <div class="ro"><div class="rk">月毛利 m（元）</div><div class="rv" id="out-ue-margin">96.00</div></div>
+    <div class="ro"><div class="rk">LTV（元）</div><div class="rv" id="out-ue-ltv">2400.00</div></div>
+    <div class="ro"><div class="rk">LTV / CAC</div><div class="rv" id="out-ue-ratio">3.00</div></div>
+    <div class="ro"><div class="rk">回本周期（月）</div><div class="rv" id="out-ue-payback">8.33</div></div>
+  </div>
+  <div class="verdict ok" id="out-ue-verdict">两项通行门槛均达标：LTV/CAC = 3.00 ≥ 3，回本周期 8.33 个月 ≤ 12 个月。</div>
+  <p class="note">口径说明：手册只要求这三个数「说得清、站得住」，<strong>未给出具体阈值</strong>。此处 3 倍与 12 个月是业界通行的参考线，仅作对照，不构成手册结论。模型为恒定流失率的稳态近似，未包含扩展销售（NRR &gt; 100%）与收入递延，实际测算应按自身账期口径修正。</p>
+</div>
+
+<h2 id="s10">十、四阶段退出标准，逐条对照你现在到哪了</h2>
+<table>
+  <thead><tr><th style="width:22%">阶段 · 条目</th><th>判定要求</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Idea · 问题真实且具体</strong></td><td>说得出谁遇到、多频繁、多严重、现在怎么办；含糊的「大家都头疼」不算，要能写成一句可验证的假设</td></tr>
+    <tr><td><strong>Idea · 方案对准真问题</strong></td><td>解决的是验证过程揭示的问题，不一定是你最初假设的那个</td></tr>
+    <tr><td><strong>Idea · 信号足够支撑开工</strong></td><td>够到能理性决定做 MVP，而不是凭一股信念；等确定本身就是一种失败模式</td></tr>
+    <tr><td><strong>MVP · 留存 / 付费 / 推荐三选一有实证</strong></td><td>一群能识别出的用户愿意回来、付钱或推荐</td></tr>
+    <tr><td><strong>MVP · Sean Ellis 测试超 40%</strong></td><td>超过 40% 活跃用户回答「不能用会非常失望」；要在多轮迭代里都稳住这个模式才敢下定论</td></tr>
+    <tr><td><strong>Launch · 增长可复制且渠道驱动</strong></td><td>CAC、LTV、回本周期你都清楚、都能站得住</td></tr>
+    <tr><td><strong>Launch · 产品扛住生产负载 + 运营不卡创始人</strong></td><td>基建加固、安全合规就绪，你不再亲手兜底支持与分诊</td></tr>
+    <tr><td><strong>Scale · 达成门槛事件</strong></td><td>可持续盈利 / IPO 就绪 / 被收购三选一；共同前提：增长系统化可审计、护城河经得起推敲、组织运营成熟</td></tr>
+  </tbody>
+</table>
+<div class="callout">
+  <div class="ct">手册结语</div>
+  <p>创始人要做的事没变：找到一个真问题，做出能解决它的东西，把它做大成一家有分量的公司。变的是到达那里的路——AI 把季度压成了周，把过去要几个月的验证周期压成了一个下午。</p>
+  <p style="margin-bottom:0;color:var(--tx-faint);font-size:13.5px">—— The Founder's Playbook · Anthropic</p>
+</div>
+<p>这篇能带走的：<strong>10 段可直接照抄的 Claude 提示词</strong>，加一张<strong>四阶段退出标准自查清单</strong>，对着自己所在阶段抄走就能用。</p>
+
+<h2 id="s11">来源与口径声明</h2>
+<ul>
+  <li>本文基于 Anthropic 官方发布的《The Founder's Playbook》（PDF v3 版，2026 年 5 月 6 日，36 页）编译整理，原文：<a href="https://claude.com/blog/the-founders-playbook" target="_blank" rel="noopener">claude.com/blog/the-founders-playbook</a>。</li>
+  <li>文中提示词均为手册所列练习的中文整理，可直接照抄使用；<strong>9.2 节的「亲手事务三分法」为按手册正文归纳的练习卡片，非原文提示词</strong>。</li>
+  <li>案例数据（Carta Healthcare 66%、2.2 万例手术病例；Anything 150 万用户等）为<strong>手册引述的公司自述</strong>，未经独立第三方核验。</li>
+  <li>40% 为 Sean Ellis 测试的通行判据；42% 失败率为手册引用的既有统计。第九节沙盘中的 Wilson 区间、LTV / CAC 模型为本文附加的可计算工具，其中 <strong>LTV/CAC ≥ 3 与回本周期 ≤ 12 个月属业界通行参考线，手册并未给出</strong>。</li>
+  <li>工具指 Claude、Claude Code、Claude Cowork 三件套，均为 Anthropic 自家产品。</li>
+</ul>
+
+<footer>
+  <p>单文件自包含文档 · 零外部依赖 · 断网可完整阅读与交互 · 生成日期 2026-09-15</p>
+</footer>
+
+<button id="toTopBtn" type="button">↑ 顶部</button>
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  function byId(id){ return document.getElementById(id); }
+  function pct(x){ return (x*100).toFixed(2) + "%"; }
+  function num(x, d){ return x.toFixed(d); }
+
+  /* ---------- 主题 ---------- */
+  var TH_KEY = "aike-theme-founders-playbook";
+  function applyTheme(t){
+    var btn = byId("themeBtn");
+    document.documentElement.setAttribute("data-theme", t);
+    if (btn) { btn.textContent = (t === "dark") ? "浅色" : "深色"; }
+    try { if (window.localStorage) { window.localStorage.setItem(TH_KEY, t); } } catch (e) {}
+  }
+  var saved = null;
+  try { if (window.localStorage) { saved = window.localStorage.getItem(TH_KEY); } } catch (e) {}
+  applyTheme(saved === "light" ? "light" : "dark");
+  byId("themeBtn").addEventListener("click", function(){
+    var cur = document.documentElement.getAttribute("data-theme");
+    applyTheme(cur === "dark" ? "light" : "dark");
+  });
+
+  /* ---------- 目录 / 进度 / 回顶 ---------- */
+  byId("tocBtn").addEventListener("click", function(){
+    byId("sidebar").classList.toggle("open");
+  });
+  byId("toTopBtn").addEventListener("click", function(){
+    if (window.scrollTo) { window.scrollTo(0, 0); }
+  });
+  function onScroll(){
+    var de = document.documentElement;
+    var h = de.scrollHeight - de.clientHeight;
+    var bar = byId("progressBar");
+    if (bar) { bar.style.width = (h > 0 ? (de.scrollTop / h * 100) : 0) + "%"; }
+    var top = byId("toTopBtn");
+    if (top) { top.style.display = (de.scrollTop > 400) ? "block" : "none"; }
+  }
+  window.addEventListener("scroll", onScroll);
+  onScroll();
+
+  if (typeof IntersectionObserver !== "undefined") {
+    var links = document.querySelectorAll("#sidebar nav a");
+    var secs = [];
+    for (var i = 0; i < links.length; i++) {
+      var target = byId(links[i].getAttribute("href").slice(1));
+      if (target) { secs.push({ link: links[i], el: target }); }
+    }
+    var io = new IntersectionObserver(function(entries){
+      for (var j = 0; j < entries.length; j++) {
+        if (entries[j].isIntersecting) {
+          for (var k = 0; k < secs.length; k++) { secs[k].link.classList.remove("active"); }
+          for (var m = 0; m < secs.length; m++) {
+            if (secs[m].el === entries[j].target) { secs[m].link.classList.add("active"); }
+          }
+        }
+      }
+    }, { rootMargin: "-10% 0px -80% 0px" });
+    for (var s = 0; s < secs.length; s++) { io.observe(secs[s].el); }
+  }
+
+  /* ---------- 复制按钮 ---------- */
+  var copyBtns = document.querySelectorAll(".copyBtn");
+  for (var c = 0; c < copyBtns.length; c++) {
+    copyBtns[c].addEventListener("click", function(){
+      var wrap = this.parentElement;
+      var pre = wrap ? wrap.parentElement.getElementsByTagName("pre")[0] : null;
+      if (!pre) { return; }
+      var txt = pre.textContent;
+      var ok = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt);
+          ok = true;
+        }
+      } catch (e) { ok = false; }
+      if (!ok) {
+        try {
+          var ta = document.createElement("textarea");
+          ta.value = txt;
+          document.body.appendChild(ta);
+          ta.select();
+          ok = document.execCommand("copy");
+          document.body.removeChild(ta);
+        } catch (e2) { ok = false; }
+      }
+      var old = this.textContent;
+      this.textContent = ok ? "已复制" : "请手动复制";
+      var self = this;
+      window.setTimeout(function(){ self.textContent = old; }, 1400);
+    });
+  }
+
+  /* ================= 沙盘 1：Sean Ellis 判定器 ================= */
+  var SE_Z = 1.959963984540054;
+  var SE_X0 = 60, SE_W = 560, SE_Y0 = 30, SE_H = 200, SE_MAXN = 500;
+
+  function seLower(p, n){
+    if (n <= 0) { return 0; }
+    var den = 1 + SE_Z * SE_Z / n;
+    var center = (p + SE_Z * SE_Z / (2 * n)) / den;
+    var half = (SE_Z / den) * Math.sqrt(p * (1 - p) / n + SE_Z * SE_Z / (4 * n * n));
+    return center - half;
+  }
+  function seGx(n){ return SE_X0 + (n / SE_MAXN) * SE_W; }
+  function seGy(v){ return SE_Y0 + (1 - v) * SE_H; }
+  function seMinN(p){
+    if (p <= 0.40) { return null; }
+    for (var n = 10; n <= 20000; n++) {
+      var d = Math.round(p * n);
+      if (seLower(d / n, n) >= 0.40) { return n; }
+    }
+    return null;
+  }
+  function seDraw(){
+    var nEl = byId("seN"), dEl = byId("seD");
+    var n = parseInt(nEl.value, 10);
+    var d = parseInt(dEl.value, 10);
+    if (d > n) { d = n; dEl.value = String(d); }
+    if (n > 0) { dEl.setAttribute("max", String(n)); }
+
+    var p = (n > 0) ? (d / n) : 0;
+    var lo = seLower(p, n);
+    byId("out-se-nlab").textContent = String(n);
+    byId("out-se-dlab").textContent = String(d);
+    byId("out-se-phat").textContent = pct(p);
+    byId("out-se-lower").textContent = pct(lo);
+
+    var mn = seMinN(p);
+    byId("out-se-minn").textContent = (mn === null) ? "不可达" : String(mn);
+
+    var pts = [];
+    for (var k = 10; k <= SE_MAXN; k += 10) {
+      var dp = Math.round(p * k);
+      pts.push(seGx(k).toFixed(2) + "," + seGy(seLower(dp / k, k)).toFixed(2));
+    }
+    byId("se-curve").setAttribute("points", pts.join(" "));
+    var mark = byId("se-mark");
+    if (mn === null) {
+      mark.setAttribute("r", "0");
+    } else {
+      mark.setAttribute("r", "4");
+      mark.setAttribute("cx", seGx(mn).toFixed(2));
+      mark.setAttribute("cy", seGy(0.40).toFixed(2));
+    }
+
+    var vd = byId("out-se-verdict");
+    var cls = "verdict ";
+    var txt = "";
+    if (p < 0.40) {
+      cls += "no";
+      txt = "未达线：点估计 " + pct(p) + " 低于 40% 门槛，且置信下界 " + pct(lo) + " 更低；回到 MVP 继续迭代。";
+    } else if (lo >= 0.40) {
+      cls += "ok";
+      txt = "稳健过线：点估计 " + pct(p) + " 与 95% 置信下界 " + pct(lo) + " 均 ≥ 40%，可考虑进入 Launch。";
+    } else {
+      cls += "mid";
+      txt = "证据不足：点估计 " + pct(p) + " 已过线，但 95% 置信下界仅 " + pct(lo) + "，样本量不足以支撑「已过 40%」的结论。";
+    }
+    vd.className = cls;
+    vd.textContent = txt;
+  }
+  byId("seN").addEventListener("input", seDraw);
+  byId("seD").addEventListener("input", seDraw);
+
+  /* ================= 沙盘 2：退出标准自查清单 ================= */
+  var CK_IDS = ["chk-1", "chk-2", "chk-3", "chk-4", "chk-5", "chk-6", "chk-7", "chk-8"];
+  var CK_STAGE = ["Idea", "Idea", "Idea", "MVP", "MVP", "Launch", "Launch", "Scale"];
+  function ckDraw(){
+    var cnt = { "Idea": 0, "MVP": 0, "Launch": 0, "Scale": 0 };
+    var tot = { "Idea": 3, "MVP": 2, "Launch": 2, "Scale": 1 };
+    var done = 0;
+    for (var i = 0; i < CK_IDS.length; i++) {
+      var el = byId(CK_IDS[i]);
+      var on = !!el.checked;
+      if (on) { cnt[CK_STAGE[i]] += 1; done += 1; }
+      if (el.parentElement && el.parentElement.classList) {
+        el.parentElement.classList.toggle("done", on);
+      }
+    }
+    byId("out-ck-idea").textContent = cnt["Idea"] + " / " + tot["Idea"];
+    byId("out-ck-mvp").textContent = cnt["MVP"] + " / " + tot["MVP"];
+    byId("out-ck-launch").textContent = cnt["Launch"] + " / " + tot["Launch"];
+    byId("out-ck-scale").textContent = cnt["Scale"] + " / " + tot["Scale"];
+    byId("out-ck-total").textContent = done + " / 8";
+
+    var vd = byId("out-ck-stage");
+    var cls = "verdict ";
+    var txt = "";
+    if (done >= 8) {
+      cls += "ok"; txt = "全部八项达成 · Scale 门槛事件已落地，创业从赌注变成生意。";
+    } else if (done >= 7) {
+      cls += "ok"; txt = "Launch 阶段已毕业 · 当前处于 Scale 阶段。";
+    } else if (done >= 5) {
+      cls += "ok"; txt = "MVP 阶段已毕业 · 当前处于 Launch 阶段。";
+    } else if (done >= 3 && cnt["Idea"] === 3) {
+      cls += "mid"; txt = "Idea 阶段已毕业 · 当前处于 MVP 阶段。";
+    } else {
+      cls += "no"; txt = "仍在 Idea 阶段 · 已完成 " + done + " / 8 项，先把问题验证透再动 Claude Code。";
+    }
+    vd.className = cls;
+    vd.textContent = txt;
+  }
+  for (var q = 0; q < CK_IDS.length; q++) {
+    byId(CK_IDS[q]).addEventListener("change", ckDraw);
+  }
+
+  /* ================= 沙盘 3：单位经济测算器 ================= */
+  function ueDraw(){
+    var cac = parseFloat(byId("ueCac").value);
+    var arpu = parseFloat(byId("ueArpu").value);
+    var gm = parseFloat(byId("ueGm").value) / 100;
+    var churn = parseFloat(byId("ueChurn").value) / 100;
+
+    var m = arpu * gm;
+    var ltv = (churn > 0) ? (m / churn) : 0;
+    var ratio = (cac > 0) ? (ltv / cac) : 0;
+    var payback = (m > 0) ? (cac / m) : 0;
+
+    byId("out-ue-cacv").textContent = String(Math.round(cac));
+    byId("out-ue-arpuv").textContent = String(Math.round(arpu));
+    byId("out-ue-gmv").textContent = String(Math.round(gm * 100));
+    byId("out-ue-churnv").textContent = num(churn * 100, 1);
+    byId("out-ue-margin").textContent = num(m, 2);
+    byId("out-ue-ltv").textContent = num(ltv, 2);
+    byId("out-ue-ratio").textContent = num(ratio, 2);
+    byId("out-ue-payback").textContent = num(payback, 2);
+
+    var vd = byId("out-ue-verdict");
+    var cls = "verdict ";
+    var txt = "";
+    if (ratio >= 3 && payback <= 12) {
+      cls += "ok";
+      txt = "两项通行门槛均达标：LTV/CAC = " + num(ratio, 2) + " ≥ 3，回本周期 " + num(payback, 2) + " 个月 ≤ 12 个月。";
+    } else if (ratio >= 3) {
+      cls += "mid";
+      txt = "LTV/CAC = " + num(ratio, 2) + " 达标，但回本周期 " + num(payback, 2) + " 个月超过 12 个月，现金流压力偏大。";
+    } else if (ratio >= 1) {
+      cls += "mid";
+      txt = "勉强为正：LTV/CAC = " + num(ratio, 2) + " 低于通行参考线 3，回本周期 " + num(payback, 2) + " 个月。";
+    } else {
+      cls += "no";
+      txt = "不成立：LTV/CAC = " + num(ratio, 2) + " 小于 1，每获取一个用户都在亏钱，增长不可复制。";
+    }
+    vd.className = cls;
+    vd.textContent = txt;
+  }
+  byId("ueCac").addEventListener("input", ueDraw);
+  byId("ueArpu").addEventListener("input", ueDraw);
+  byId("ueGm").addEventListener("input", ueDraw);
+  byId("ueChurn").addEventListener("input", ueDraw);
+
+  /* ---------- 初始化（保证静态初值与 JS 重算一致） ---------- */
+  seDraw();
+  ckDraw();
+  ueDraw();
+})();
+</script>
+</body>
+</html>

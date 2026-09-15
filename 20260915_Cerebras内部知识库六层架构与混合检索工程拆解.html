@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" class="dark" data-page-node-id="H1PI3pTpRneE3db6hAWv1K">
+<head data-page-node-id="o6lvS4phBKDKsNtAoG1msf">
+<meta charset="utf-8" data-page-node-id="oRWxeoykNCkm4I56btK56G">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="thSE7rnstx6FWH42wWeIBU">
+<title>Cerebras 内部知识库六层架构与混合检索工程拆解 | AIKnowledge 技术消化白皮书</title>
+<meta name="description" content="Cerebras Knowledge 内部知识库完整搭法：数据留在原地、六源归一到一张 Postgres 表、Slack 四路混合检索、讨论串蒸馏与 burst 补捞、代码语法切块与增量、倒数排名融合（k=60）与重排。" data-page-node-id="nEZevEjXu2oKWE5k386p1l">
+<style>
+  :root, html.dark, [data-theme="dark"] {
+    --bg: #181715; --bg-card: #211F1C; --bg-elevated: #2A2723; --bg-subtle: #1E1C19;
+    --border: #33302B; --border-strong: #4D4841;
+    --text-main: #E6E2DC; --text-muted: #A8A29A; --text-dim: #736D64;
+    --accent: #E2886A; --accent-dim: rgba(226,136,106,0.12); --accent-glow: rgba(226,136,106,0.28);
+    --c-teal: #5B9A92; --c-teal-dim: rgba(91,154,146,0.15);
+    --c-gold: #D4A373; --c-gold-dim: rgba(212,163,115,0.15);
+    --c-rose: #D66853; --c-rose-dim: rgba(214,104,83,0.15);
+    --c-blue: #6C9BD1; --c-blue-dim: rgba(108,155,209,0.15);
+    --c-violet: #9B8BC4; --c-violet-dim: rgba(155,139,196,0.15);
+    --code-bg: #121110; --shadow-sm: 0 2px 8px rgba(0,0,0,0.35); --shadow-md: 0 8px 26px rgba(0,0,0,0.45);
+    --font-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", SimSun, STSong, Georgia, serif;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+    --aike-sidebar-w: 280px; --aike-content-max: 1180px;
+  }
+  html.light, [data-theme="light"] {
+    --bg: #FAF7F2; --bg-card: #FFFFFF; --bg-elevated: #F3EDE3; --bg-subtle: #F5F1EA;
+    --border: #E6E0D6; --border-strong: #CFC5B6;
+    --text-main: #2B2824; --text-muted: #6E675E; --text-dim: #999083;
+    --accent: #D97757; --accent-dim: rgba(217,119,87,0.10); --accent-glow: rgba(217,119,87,0.20);
+    --c-teal: #2D6A4F; --c-teal-dim: rgba(45,106,79,0.12);
+    --c-gold: #B07D38; --c-gold-dim: rgba(176,125,56,0.12);
+    --c-rose: #C04D38; --c-rose-dim: rgba(192,77,56,0.12);
+    --c-blue: #2B6CB0; --c-blue-dim: rgba(43,108,176,0.12);
+    --c-violet: #6B5B95; --c-violet-dim: rgba(107,91,149,0.12);
+    --code-bg: #F4EFE6; --shadow-sm: 0 2px 8px rgba(0,0,0,0.05); --shadow-md: 0 8px 26px rgba(0,0,0,0.08);
+    --aike-sidebar-w: 280px; --aike-content-max: 1180px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; background: var(--bg); color: var(--text-main);
+         line-height: 1.78; font-family: var(--font-sans); -webkit-text-size-adjust: 100%; }
+  body { background: var(--bg); color: var(--text-main); min-height: 100vh; display: block;
+         transition: background-color .25s ease, color .25s ease; }
+  ::selection { background: var(--accent-glow); }
+
+  #reading-progress-bar { position: fixed; top: 0; left: 0; width: 0%; height: 3px;
+    background: linear-gradient(90deg, var(--c-teal), var(--accent)); z-index: 1000; transition: width .1s linear; }
+
+  .top-header { position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--border);
+    height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px;
+    z-index: 900; }
+  .header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .header-brand { font-family: var(--font-serif); font-size: .95rem; font-weight: 700; color: var(--accent); letter-spacing: .04em; white-space: nowrap; }
+  .header-title { font-size: .84rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
+  .header-right { display: flex; align-items: center; gap: 8px; }
+  .icon-btn { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-muted);
+    border-radius: 8px; padding: 6px 12px; font-size: .8rem; cursor: pointer; font-family: inherit;
+    transition: all .18s ease; }
+  .icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  #sidebar { position: fixed; top: 54px; left: 0; bottom: 0; width: var(--aike-sidebar-w);
+    overflow-y: auto; border-right: 1px solid var(--border); background: var(--bg); padding: 20px 14px 40px; z-index: 800; }
+  #sidebar .toc-title { font-size: .72rem; letter-spacing: .18em; color: var(--text-dim); text-transform: uppercase; margin: 0 0 12px 10px; }
+  #sidebar ol { list-style: none; counter-reset: toc; }
+  #sidebar li { counter-increment: toc; }
+  #sidebar a { display: block; padding: 7px 10px; border-radius: 7px; color: var(--text-muted);
+    text-decoration: none; font-size: .85rem; line-height: 1.5; border-left: 2px solid transparent; transition: all .16s ease; }
+  #sidebar a::before { content: counter(toc, decimal-leading-zero) "  "; color: var(--text-dim); font-family: var(--font-mono); font-size: .74rem; }
+  #sidebar a:hover { color: var(--text-main); background: var(--bg-elevated); }
+  #sidebar a.active { color: var(--accent); background: var(--accent-dim); border-left-color: var(--accent); font-weight: 600; }
+
+  body > #main { display: block; max-width: var(--aike-content-max); width: auto; flex: none;
+    margin-left: calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+    margin-right: max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+    box-sizing: border-box; padding: 42px 46px 96px; }
+  #main { max-width: 1180px; margin: 0 auto; padding: 42px 46px 96px; }
+
+  .hero { border-bottom: 1px solid var(--border); padding-bottom: 30px; margin-bottom: 38px; }
+  .kicker { display: inline-block; font-size: .72rem; letter-spacing: .2em; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 999px; padding: 3px 12px; margin-bottom: 16px; text-transform: uppercase; }
+  h1 { font-family: var(--font-serif); font-size: clamp(1.7rem, 3.4vw, 2.5rem); line-height: 1.3;
+    color: var(--text-main); font-weight: 700; letter-spacing: -.01em; margin-bottom: 14px; }
+  .subtitle { font-size: 1.02rem; color: var(--text-muted); max-width: 62ch; margin-bottom: 22px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 18px;
+    border-top: 1px dashed var(--border); padding-top: 16px; }
+  .meta-item { font-size: .8rem; color: var(--text-dim); }
+  .meta-item b { display: block; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+  .meta-item span { color: var(--text-main); }
+  .meta-item a { color: var(--accent); text-decoration: none; word-break: break-all; }
+  .meta-item a:hover { text-decoration: underline; }
+
+  h2 { font-family: var(--font-serif); font-size: 1.62rem; line-height: 1.35; color: var(--text-main);
+    margin: 58px 0 6px; padding-top: 12px; border-top: 1px solid var(--border); scroll-margin-top: 76px; }
+  h2 .sec-num { display: inline-block; font-family: var(--font-mono); font-size: .8rem; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 6px; padding: 1px 8px; margin-right: 10px; vertical-align: 3px; }
+  h2 + .sec-kicker { font-size: .78rem; letter-spacing: .16em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 20px; }
+  h3 { font-family: var(--font-serif); font-size: 1.2rem; color: var(--text-main); margin: 34px 0 12px; scroll-margin-top: 76px; }
+  h4 { font-size: 1rem; color: var(--text-main); margin: 22px 0 8px; }
+  p { margin: 14px 0; color: var(--text-main); }
+  ul, ol { margin: 14px 0 14px 22px; color: var(--text-main); }
+  li { margin: 7px 0; }
+  strong { color: var(--text-main); font-weight: 600; }
+  a { color: var(--accent); }
+  hr { border: none; border-top: 1px dashed var(--border); margin: 34px 0; }
+
+  .lead { font-size: 1.06rem; color: var(--text-muted); }
+  .tldr { background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 10px; padding: 20px 24px; margin: 24px 0 8px; box-shadow: var(--shadow-sm); }
+  .tldr h3 { margin: 0 0 10px; font-size: 1rem; letter-spacing: .06em; color: var(--accent); }
+  .tldr ul { margin: 0 0 0 20px; }
+  .tldr li { color: var(--text-muted); font-size: .95rem; }
+
+  .quote { border-left: 3px solid var(--c-gold); background: var(--bg-subtle); padding: 16px 20px;
+    margin: 22px 0; border-radius: 0 10px 10px 0; font-family: var(--font-serif); font-size: 1.02rem;
+    color: var(--text-main); }
+  .quote cite { display: block; margin-top: 8px; font-size: .8rem; font-style: normal; color: var(--text-dim); font-family: var(--font-sans); }
+
+  .callout { border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; margin: 20px 0; background: var(--bg-card); }
+  .callout .ct { font-size: .76rem; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; font-weight: 700; }
+  .callout p:first-of-type { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin: 20px 0; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 20px 0; }
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow-sm); }
+  .card h4 { margin: 0 0 10px; font-size: 1rem; }
+  .card ul { margin: 0 0 0 18px; font-size: .92rem; color: var(--text-muted); }
+  .card.neg { border-color: var(--c-rose); background: var(--c-rose-dim); }
+  .card.pos { border-color: var(--c-teal); background: var(--c-teal-dim); }
+  .card.neg h4 { color: var(--c-rose); }
+  .card.pos h4 { color: var(--c-teal); }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin: 22px 0; }
+  .stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; text-align: left; }
+  .stat .v { font-family: var(--font-mono); font-size: 1.5rem; color: var(--accent); line-height: 1.2; }
+  .stat .l { font-size: .78rem; color: var(--text-muted); margin-top: 6px; }
+  .stat .n { font-size: .72rem; color: var(--text-dim); margin-top: 6px; line-height: 1.5; }
+
+  figure { margin: 26px 0; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 18px 14px; box-shadow: var(--shadow-sm); }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { font-size: .8rem; color: var(--text-dim); margin-top: 12px; line-height: 1.6; text-align: center; }
+  .fig-h { font-family: var(--font-serif); font-size: .95rem; color: var(--text-main); margin-bottom: 12px; text-align: center; }
+
+  table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: .9rem; }
+  th, td { border: 1px solid var(--border); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--bg-elevated); color: var(--text-main); font-weight: 600; font-size: .84rem; letter-spacing: .03em; }
+  td { color: var(--text-muted); }
+  tbody tr:nth-child(even) { background: var(--bg-subtle); }
+  .tbl-wrap { overflow-x: auto; }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px;
+    overflow-x: auto; margin: 18px 0; font-family: var(--font-mono); font-size: .84rem; line-height: 1.7; color: var(--text-main); }
+  code { font-family: var(--font-mono); font-size: .88em; }
+  p code, li code, td code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; color: var(--accent); }
+
+  details { border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin: 18px 0; background: var(--bg-subtle); }
+  summary { cursor: pointer; font-weight: 600; color: var(--text-main); font-size: .95rem; }
+  details[open] summary { margin-bottom: 10px; }
+  details p { font-size: .92rem; color: var(--text-muted); }
+
+  .math-block { margin: 20px 0; padding: 18px 20px; background: var(--bg-subtle); border: 1px solid var(--border);
+    border-radius: 10px; overflow-x: auto; text-align: center; color: var(--text-main);
+    display: flex; align-items: center; justify-content: center; }
+  math { font-family: "Latin Modern Math", "Cambria Math", "STIX Two Math", "Songti SC", Georgia, serif; font-size: 1.2rem; color: var(--text-main); }
+  math mfrac { padding: 0 .15em; }
+  math mo { padding: 0 .18em; }
+
+  .layers { display: grid; gap: 8px; margin: 22px 0; }
+  .layer { display: grid; grid-template-columns: 42px 1fr; gap: 14px; align-items: start;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+  .layer .n { font-family: var(--font-mono); font-size: 1.05rem; color: var(--accent); text-align: center; font-weight: 700; }
+  .layer .b b { display: block; font-size: .95rem; color: var(--text-main); }
+  .layer .b span { font-size: .85rem; color: var(--text-muted); }
+
+  .sandbox { border: 1px solid var(--border-strong); border-radius: 14px; padding: 22px; margin: 26px 0;
+    background: var(--bg-card); box-shadow: var(--shadow-sm); }
+  .sandbox-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .sandbox-h h4 { margin: 0; font-family: var(--font-serif); font-size: 1.06rem; }
+  .sandbox-h .badge { font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 999px; padding: 1px 9px; }
+  .sandbox-desc { font-size: .84rem; color: var(--text-dim); margin: 8px 0 16px; }
+  .ctrl-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 12px 0; }
+  .ctrl-row label { font-size: .86rem; color: var(--text-muted); min-width: 132px; }
+  input[type="range"] { flex: 1; min-width: 180px; accent-color: var(--accent); height: 24px; }
+  .readout { font-family: var(--font-mono); font-size: .92rem; color: var(--accent); min-width: 96px; text-align: right; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .tab { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-muted);
+    border-radius: 999px; padding: 6px 14px; font-size: .82rem; cursor: pointer; font-family: inherit; transition: all .16s ease; }
+  .tab:hover { color: var(--text-main); }
+  .tab.on { background: var(--accent); border-color: var(--accent); color: #16130F; font-weight: 600; }
+
+  .cand { display: grid; grid-template-columns: 30px 1fr; gap: 12px; padding: 12px 14px; border-radius: 10px;
+    border: 1px solid var(--border); margin-bottom: 8px; background: var(--bg-subtle); }
+  .cand .idx { font-family: var(--font-mono); color: var(--text-dim); font-size: .85rem; }
+  .cand .txt { font-size: .9rem; color: var(--text-main); line-height: 1.6; }
+  .cand .txt code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; color: var(--c-gold); font-size: .84em; }
+  .cand .why { font-size: .8rem; color: var(--text-muted); margin-top: 6px; }
+  .cand.up { border: 1.5px solid var(--c-teal); background: var(--c-teal-dim); }
+  .cand.down { border: 1.5px dashed var(--border-strong); background: transparent; opacity: .78; }
+  .cand .flag { display: inline-block; font-size: .7rem; border-radius: 5px; padding: 1px 7px; margin-left: 8px; vertical-align: 2px; }
+  .cand.up .flag { background: var(--c-teal); color: #0F1A18; }
+  .cand.down .flag { background: transparent; color: var(--text-dim); border: 1px solid var(--border-strong); }
+
+  .bars { display: grid; gap: 6px; margin-top: 14px; }
+  .bar-row { display: grid; grid-template-columns: 26px 1fr 88px; gap: 10px; align-items: center; }
+  .bar-row .rk { font-family: var(--font-mono); font-size: .82rem; color: var(--text-dim); text-align: right; }
+  .bar-track { background: var(--bg-elevated); border-radius: 6px; height: 22px; overflow: hidden; display: flex; align-items: center; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, var(--c-teal), var(--accent)); border-radius: 6px; min-width: 2px; }
+  .bar-fill.hi { background: linear-gradient(90deg, var(--accent), var(--c-gold)); }
+  .bar-row .nm { font-size: .8rem; color: var(--text-main); padding-left: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-row .sc { font-family: var(--font-mono); font-size: .82rem; color: var(--accent); text-align: right; }
+
+  .verdict { margin-top: 16px; padding: 14px 16px; border-radius: 10px; font-size: .92rem;
+    border: 1px solid var(--border); background: var(--bg-subtle); color: var(--text-main); }
+  .verdict b { color: var(--accent); }
+  .verdict.ok { border-color: var(--c-teal); background: var(--c-teal-dim); }
+  .verdict.no { border-color: var(--c-rose); background: var(--c-rose-dim); }
+  .crit-list { list-style: none; margin: 14px 0 0; }
+  .crit-list li { display: flex; gap: 10px; align-items: baseline; font-size: .9rem; color: var(--text-muted); padding: 6px 0; border-bottom: 1px dashed var(--border); }
+  .crit-list li:last-child { border-bottom: none; }
+  .crit-list .dot { font-family: var(--font-mono); font-size: .8rem; min-width: 46px; }
+
+  .checklist { list-style: none; margin: 16px 0 0; }
+  .checklist li { display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: start;
+    padding: 11px 14px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--bg-subtle); transition: all .18s ease; }
+  .checklist li.done { border-color: var(--c-teal); background: var(--c-teal-dim); }
+  .checklist input { margin-top: 5px; width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+  .checklist .t { font-size: .93rem; color: var(--text-main); }
+  .checklist .t b { color: var(--accent); }
+  .checklist .t em { font-style: normal; color: var(--text-muted); font-size: .86rem; display: block; margin-top: 3px; }
+  .checklist li.done .t { text-decoration: line-through; text-decoration-color: var(--text-dim); }
+
+  .src-note { font-size: .82rem; color: var(--text-dim); line-height: 1.7; margin-top: 14px; }
+  footer { margin-top: 60px; padding-top: 22px; border-top: 1px solid var(--border); font-size: .8rem; color: var(--text-dim); }
+
+  #toTopBtn { position: fixed; right: 24px; bottom: 28px; z-index: 950; background: var(--bg-elevated);
+    border: 1px solid var(--border-strong); color: var(--text-muted); border-radius: 999px;
+    width: 42px; height: 42px; cursor: pointer; font-size: 1.1rem; display: none; box-shadow: var(--shadow-md); }
+  #toTopBtn:hover { color: var(--accent); border-color: var(--accent); }
+
+  @media (max-width: 1080px) {
+    #sidebar { transform: translateX(-100%); transition: transform .22s ease; background: var(--bg-card); box-shadow: var(--shadow-md); }
+    #sidebar.open { transform: translateX(0); }
+    body > #main { margin-left: 0 !important; margin-right: 0 !important; max-width: 100% !important; width: 100% !important; padding: 30px 20px 80px; }
+    h2 { font-size: 1.4rem; }
+  }
+  @media (max-width: 640px) {
+    h1 { font-size: 1.5rem; }
+    .ctrl-row label { min-width: 100%; }
+    .readout { min-width: 72px; }
+    .bar-row { grid-template-columns: 22px 1fr 74px; }
+  }
+  @media print {
+    #sidebar, .top-header, #toTopBtn, #reading-progress-bar { display: none !important; }
+    body > #main { margin: 0 !important; max-width: 100% !important; padding: 0 !important; }
+    body { background: #fff !important; color: #000 !important; }
+    .sandbox, .card, figure, pre, table { break-inside: avoid; }
+    h2 { break-after: avoid; }
+    a { color: #000 !important; text-decoration: underline; }
+  }
+</style>
+</head>
+<body data-page-node-id="odZcyLUsyDGuvlUKef9QDD">
+<div id="reading-progress-bar" data-page-node-id="8GAZ6LD3SkOfB5CEbUIMzh"></div>
+
+<header class="top-header" data-page-node-id="lzcIIe3AEO8sm7B9U0vRQl">
+  <div class="header-left" data-page-node-id="kgxrGb2A141pD9OSyMDfj1">
+    <button class="icon-btn" id="btn-toc" type="button" data-page-node-id="HMGeKRbkiS2tCjjFWRrd37">目录</button>
+    <span class="header-brand" data-page-node-id="OEP2zC1PagsRvHl8wulgXG">AIKnowledge</span>
+    <span class="header-title" data-page-node-id="BmWApIu9qxeH1RCaPtjcru">Cerebras 内部知识库六层架构与混合检索工程拆解</span>
+  </div>
+  <div class="header-right" data-page-node-id="tetyzQn6PskNAtwUc1L2kn">
+    <button class="icon-btn" id="btn-theme" type="button" data-page-node-id="mHRTpYENEb2G7q3tdu5Xkz">浅色 / 深色</button>
+  </div>
+</header>
+
+<aside id="sidebar" data-page-node-id="uPwrLGEhGZTXgF7LX7aHIv">
+  <div class="toc-title" data-page-node-id="EERDeOTE75X5qLlrC56wsF">全文目录</div>
+  <ol data-page-node-id="rUXIJ61boqcMI55BHAEt8D">
+    <li data-page-node-id="PagFn0GyGhRm4T7anKHMdc"><a href="#s0" data-page-node-id="iiich8y2vU2tMEpZfSK3Ia">一分钟速览</a></li>
+    <li data-page-node-id="SEhSij6EEr6pdyZf93yM1R"><a href="#s1" data-page-node-id="TY6CIG8RUoNa4smUDJModk">上线三个月：每天 15000 个问题</a></li>
+    <li data-page-node-id="PRSReqZLxkkpQNVA0KoCQD"><a href="#s2" data-page-node-id="ciRPzd8FoeyXEIg3yZX6LJ">设计决定：数据留在原地</a></li>
+    <li data-page-node-id="UN2ZfvgCoXgTRyrW2EmmFb"><a href="#s3" data-page-node-id="OjvNqPC1T5CXsu4CEWRcm9">Slack 混合检索：四路打分</a></li>
+    <li data-page-node-id="MBjsgdwxezYLOerjqTe33R"><a href="#s4" data-page-node-id="pXI3zHoonUFsVLRGGB5LpN">蒸馏、burst 与增量采集</a></li>
+    <li data-page-node-id="N3qDp4j6npBLOVWLmxr0xn"><a href="#s5" data-page-node-id="wRcgr2UlHQcArAOD2C1wBd">代码库：语法切块与增量重算</a></li>
+    <li data-page-node-id="ttMnHEHxRgQH5BzRB4TZgP"><a href="#s6" data-page-node-id="NsjxQ3r1X6Xp7QWLdms89L">查询侧：规划、取证、合成</a></li>
+    <li data-page-node-id="MPNDEvhItem6sQ2nvlBn8K"><a href="#s7" data-page-node-id="yzkwehPCJhJBVD2AhGXKKK">排名融合：RRF 与常数 60</a></li>
+    <li data-page-node-id="5yeDuB9OTK3Ay9Ly5CsdXN"><a href="#s8" data-page-node-id="IjBndAgWpNVdElZajpYbeQ">检索范围：project 这一层</a></li>
+    <li data-page-node-id="tsx9Gv53KwOO3m7riGTkmk"><a href="#s9" data-page-node-id="nxSHhOr6pkyAODdRQWcnGs">数据一览</a></li>
+    <li data-page-node-id="iLtCQ0VfARNhac7RPAqfHq"><a href="#s10" data-page-node-id="QxsCcAO3V38UA8vSUGrzJr">八个可对照的决定</a></li>
+    <li data-page-node-id="qAwIkY5se3cYHpva1e6grt"><a href="#s11" data-page-node-id="1zaeo1EdCl8lwmTflGXAwc">来源与核验说明</a></li>
+  </ol>
+</aside>
+
+<main id="main" data-page-node-id="iFJdmV6TL3ekdK2yrVpYv1">
+<article data-page-node-id="SmGfZe1nfCWGUGeEbTwbSE">
+<header class="hero" data-page-node-id="Fh9w0CWNqUrio6LgH5B0iM">
+  <span class="kicker" data-page-node-id="OPGL7PCJLXS1J67flkN46Y">深度 · 技术拆解</span>
+  <h1 data-page-node-id="hEu3Jy98MkbJv9QMGVrkEA">Cerebras 公开内部知识库的完整搭法：数据留在原地，AI 自己上门去取</h1>
+  <p class="subtitle" data-page-node-id="USWapBcBDREHnHzFCIvy05">上线三个月，人、自动化脚本和 Agent 每天都在问；四路打分、讨论串蒸馏、倒数排名融合的具体参数都写了出来。本文按原文六层架构逐层拆开，并把排名融合的常数用可复算的方式验了一遍。</p>
+  <div class="meta-grid" data-page-node-id="0ZXG4hpSZbL1liC52RO5eJ">
+    <div class="meta-item" data-page-node-id="ENLLbR1gqOIdbEuNHbPDpR"><b data-page-node-id="hcPjKlMeEhGyARVFrDnig3">来源</b><span data-page-node-id="v03Uo1amGIq0terampSBxU">Cerebras 官方博客（Isaac、Daniel、Zenghao）</span></div>
+    <div class="meta-item" data-page-node-id="QoLDnHsbPSEOFvrS3aBQqq"><b data-page-node-id="m1bCU99fRl1Fy6qaYJnF7Z">原文标题</b><span data-page-node-id="XhIMsxC2IXfRp5iP53V9Ez">How we built our knowledge base</span></div>
+    <div class="meta-item" data-page-node-id="0gWB8HWCzsLYyZujGlxByS"><b data-page-node-id="iVj8hk4wBoF1e8rC8VpNTs">原文发布</b><span data-page-node-id="YZ6H0FKGI8psWVSnrPDS5G">2026-07-18</span></div>
+    <div class="meta-item" data-page-node-id="79Y3cPNaCKUuAiY5aGZXri"><b data-page-node-id="03UqmwQCjHZ2lpEC46SiSS">本文定稿</b><span data-page-node-id="obQMZvoLbkLdnwfeNisBqx">2026-09-15</span></div>
+    <div class="meta-item" data-page-node-id="ikxbBye3ecAd78FuWo76sW"><b data-page-node-id="X1qaElmQdNonDRLqG8CZa1">原文链接</b><a href="https://www.cerebras.ai/blog/how-we-built-our-knowledge-base" target="_blank" rel="noopener" data-page-node-id="Z0Pk0a9fQvTnSKml0aKxNN">cerebras.ai/blog/how-we-built-our-knowledge-base</a></div>
+  </div>
+</header>
+
+<section id="s0" data-page-node-id="SB0Y6grClBCeVnBtnDA2rG">
+  <div class="tldr" data-page-node-id="EpAdtfm8WC4PWGhwG19k5D">
+    <h3 data-page-node-id="vZWwwmXLrq12qfYe88QTya">一分钟速览</h3>
+    <ul data-page-node-id="ZNoCOvKkQhK97ulu1sJtRT">
+      <li data-page-node-id="Ax6c3ooQy5J0SGXUICGp2f">Cerebras 的三名工程师公开了公司内部知识库 Cerebras Knowledge 的搭法，上线三个月，每天被提问超过 15000 次，提问方包括员工、自动化脚本和 Agent。</li>
+      <li data-page-node-id="xlUOV79bRCmdLxMKyBfko7">它不要求任何人改变习惯：资料继续留在 Slack、代码仓库、文档系统里，系统去每个平台取数，全部落进同一张 Postgres 表。</li>
+      <li data-page-node-id="XaRoRIJxPCfFTM47MHmSsu">Slack 是最难啃的源。同一批候选会被四种打分方式同时检索：全文匹配、向量匹配、稀有词权重、时间衰减，各补各的盲区。</li>
+      <li data-page-node-id="tfNLq1Bg7HYRzHXAS5YWoF">聊天记录不直接拿去做向量。先由模型蒸馏成「一句话问题＋摘要＋结论＋涉及的系统和代码符号」的统一结构，再嵌入。</li>
+      <li data-page-node-id="UqCaAVS4Ru1Abbt5Ka6BHd">六个检索器各出一份排名，用倒数排名融合合成一份，常数取 60，效果是「几份榜单都靠前」的文档赢过「一份榜单第一」的文档。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s1" data-page-node-id="eWbrakpAC0vReDDE2svK4g">
+  <h2 data-page-node-id="acQH2CqZKnhLYDtqUGX8eZ"><span class="sec-num" data-page-node-id="YRFVr871sTjviWInQEdCXg">01</span>上线三个月：每天 15000 个问题，问的人里还有 Agent</h2>
+  <div class="sec-kicker" data-page-node-id="Zv7CW1y2IbVX741RM8mLAm">开篇 · 使用规模与触发场景</div>
+  <p data-page-node-id="AITE7ZjtU6MKuVqeoFWoya">Cerebras 的三名工程师最近在公司博客上把内部知识库 Cerebras Knowledge 的搭法整个拆开公开，从数据怎么采集一路讲到答案怎么排序，每一层用了什么参数都写在里面。</p>
+  <p data-page-node-id="P7xq2jE0WtYRrGf56xg088">这套系统上线三个月，每天被提问超过 <strong data-page-node-id="hkCebDpZGg7sWBtJVUKWZW">15000 次</strong>。提问的不只是员工，还有自动化脚本和 Agent。</p>
+  <p data-page-node-id="M3GZcxcHbErDFQsO491ACp">触发它的场景很多公司都熟悉：Cerebras 的团队分布在机房运维、芯片设计、硬件、训练、推理、云平台等方向，每年进来几百个新人，沟通频道里被同样的三类问题填满：<strong data-page-node-id="caFdAyoWtFNDliBEhJOjMC">某个东西在哪里、某件事谁最懂、这个名词是什么意思</strong>。</p>
+  <p data-page-node-id="cWFsQJ59hg6ev2Q3ihND02">全文地图，自上而下六层：</p>
+  <div class="layers" data-page-node-id="SaBc44Q2ZpDRoUaWSawdCv">
+    <div class="layer" data-page-node-id="KzK8whvlADZcrqdtG0CbGI"><div class="n" data-page-node-id="At8vfF724KxXI9CYhDhF9x">①</div><div class="b" data-page-node-id="LkLOdjisI8uFlzlIbVP0ek"><b data-page-node-id="SuaF3L1yE6L5xoZlQDtDHA">数据源</b><span data-page-node-id="AeUVi5NGUNWewl5cxhZXGT">Slack、Wiki、代码、事故记录等各平台原始数据</span></div></div>
+    <div class="layer" data-page-node-id="NK7v4kMkPn1EHMBM4OK1x2"><div class="n" data-page-node-id="xh2K6btFYiHoBl8cgTlH28">②</div><div class="b" data-page-node-id="TSwGBJOVFWOwT3wBpMs3YB"><b data-page-node-id="2qe5Io23DtQthlsxDgM9Eo">蒸馏</b><span data-page-node-id="b2p3zAkL0O1pclaVvLr5my">模型把原始内容抽成统一结构</span></div></div>
+    <div class="layer" data-page-node-id="EHZofBdRcyFKhtEgsJJrn5"><div class="n" data-page-node-id="PhUcNHL6ZkkCbZT2tELzgv">③</div><div class="b" data-page-node-id="E0HvTSi8bmeRiG5N6fpKpt"><b data-page-node-id="GbmwFQqoKg9LZE7fnsvN9T">向量</b><span data-page-node-id="Ey23bNMugv00E9peFxajp9">存进 Postgres 的 pgvector，3072 维，用 HNSW 索引找近邻</span></div></div>
+    <div class="layer" data-page-node-id="BzDUUMzp9kojEtaDIRe5cy"><div class="n" data-page-node-id="CtdhUwop42IqyaFDFrRJ4A">④</div><div class="b" data-page-node-id="fxrLplnbjE0t13U9ebY5xG"><b data-page-node-id="2wfMkgcX101C4QH4wF3pVU">检索</b><span data-page-node-id="pqLdvvM4PCbXJk7FcgAs6d">六份排名并行</span></div></div>
+    <div class="layer" data-page-node-id="0eALPD5gf2BNqIBGoSoTkU"><div class="n" data-page-node-id="RxCdHSoSpbJpRovGJAVBnG">⑤</div><div class="b" data-page-node-id="R8KLSTpenBOVQ6eblvrmrM"><b data-page-node-id="pGkJiexxyAZWOkRKwNbRbR">融合与重排</b><span data-page-node-id="sMo8AXcSeqW1CinyCq3HS4">先用倒数排名融合，再交给小模型重排</span></div></div>
+    <div class="layer" data-page-node-id="Xg5yfcyVN50P9NtPH4AJxH"><div class="n" data-page-node-id="H2SiE4bt15ng70wgVOCWFE">⑥</div><div class="b" data-page-node-id="vT882GN70t7wCelE0WWuE2"><b data-page-node-id="6CKirZHeaDPIZW7ZKUFG3H">合成</b><span data-page-node-id="mf37fMtkLsnaIStsD82H3T">给出带引用的答案</span></div></div>
+  </div>
+  <p class="src-note" data-page-node-id="3al6FgnctjUOjD1oke2s0e">下面每一节拆其中一层。</p>
+</section>
+
+<section id="s2" data-page-node-id="2qdKVBq5Fiu4yJqQfzKzi2">
+  <h2 data-page-node-id="WvjgoBgyyeFcGbEj35UsEB"><span class="sec-num" data-page-node-id="tzRz4l35ClHDmTUQVENta9">02</span>设计决定：把资料全搬到一个地方，为什么从来没成过</h2>
+  <div class="sec-kicker" data-page-node-id="ajcCCQmFFqn9GriRHI4d6w">数据放在哪</div>
+  <p data-page-node-id="coXbr7bZZiHMH8l21On7vR">在公司内部找资料难，难点不在搜索本身，在于<strong data-page-node-id="gHwGUHcKwiyU4WmB3Eunx1">资料天生就是散的</strong>。每过一个季度，总有人提出同一个「绝妙方案」：以后所有信息都记录到一个平台上，做成唯一的真相源。这个设想在实践中几乎没有成功过。</p>
+  <p data-page-node-id="gsDypTIXQvmO0AAcKrRrw2">原因是信息在哪里产生方便，就会在哪里产生：文档里的建议修改、Slack 里的讨论串、GitHub 里的代码引用、Jira 里的状态字段。这些平台各自为自己的场景打磨了很多年。在 Google Docs 里讨论一个 pull request 会是很糟糕的体验。</p>
+  <p data-page-node-id="kkYYyCn696GkxPIRq4jeUz">所以 Cerebras 的第一个决定，是设计一套<strong data-page-node-id="EHONqSGovveTfQednkhAnX">几乎不要求人改变现有习惯</strong>的系统。采集这一侧的做法，就是直接去每个平台把数据抽出来。</p>
+
+  <div class="grid-2" data-page-node-id="bjjNlRZVKBExIvHutWKFda">
+    <div class="card neg" data-page-node-id="leC1cjCVNnhCm9qf10d2cm">
+      <h4 data-page-node-id="1MgPsDLnm6XKtnpKQfobis">搬家方案</h4>
+      <ul data-page-node-id="LjONXcOhlFX2i7XACMr3EU">
+        <li data-page-node-id="wRK7SAmqexc5PvLsd6mqli">要求大家以后都写到统一平台</li>
+        <li data-page-node-id="YpVS70BcHIVsGDXTOoQUIc">每个人多一道工序，执行几周后回潮</li>
+        <li data-page-node-id="5q4bEKCa78M0QUdZzJ3Bqp">历史资料还留在原处，两边都不全</li>
+      </ul>
+    </div>
+    <div class="card pos" data-page-node-id="YMZDGPZtoDbXTI3cUjZrlv">
+      <h4 data-page-node-id="yPLDmf9odiMBaSFeEyPh60">连接器方案（他们的选择）</h4>
+      <ul data-page-node-id="W3AdzYUKAttU00MQGKlxFq">
+        <li data-page-node-id="YS2ttpsoOd8IHUoZobvHvC">人继续在原来最顺手的地方写</li>
+        <li data-page-node-id="IAoCuFMUcG4BBFvttlV8AP">每个源写一个连接器去取数</li>
+        <li data-page-node-id="br5HC7tOepBa39wYMJUsOc">取回来的东西统一格式，落进同一张表</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 id="s2-1" data-page-node-id="UCUPpoOvCKvsFnIXVTiMxP">整套东西的核心，是一张表</h3>
+  <p data-page-node-id="Aoy92DZp68PB7WndBYUj4S">这个知识库对外提供三件事：一个存内部数据的地方、一个查这些数据的地方，以及一层做身份认证、权限控制、审计和统计的东西。</p>
+  <p data-page-node-id="TskeufRI2bFJPRUUsxFkwF">核心是一张 Postgres 表，里面同时放着向量、原始摘要和元数据，来源不限。系统持续把公司各处的数据灌进来，维持一个随时可查的状态。数据接口被刻意做得简单：不管来自 Slack 讨论串还是芯片设计用的网表文件，都落进同一张向量表，进了这张表就能被同一套接口查到。</p>
+  <p data-page-node-id="6PpbBiTkLgXlLATxJKUDSG">每个数据源只需要定义三件事：<strong data-page-node-id="1BJC56sacY1GJMYEUMEcw0">这是什么数据、怎么连上去、多久取一次</strong>。取回来生成的每一行，字段结构完全一样。</p>
+
+  <figure data-page-node-id="IFvEWz13BNn4ZYPEfOu9EH">
+    <div class="fig-h" data-page-node-id="A1x0hqpnZ4BLxmuuPEqRuZ">一个源一个连接器，同一张表同一套接口</div>
+    <svg viewBox="0 0 680 300" role="img" aria-label="六类数据源各自通过连接器写入同一张 Postgres 向量表" data-page-node-id="RnnJ5z9x4ATDJZiGb90d6V">
+      <defs data-page-node-id="94MnsO4gDA4ZkaPOQJFXNQ">
+        <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse" data-page-node-id="BfEyHTQBXCbcbIPvbsiylT">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#E2886A" data-page-node-id="m6ltnDtceoAWpcxVbfWvF9"/>
+        </marker>
+      </defs>
+      <g font-family="system-ui, -apple-system, sans-serif" font-size="12.5" data-page-node-id="mCYwJ0naJevgvliOV0qCi9">
+        <rect x="18" y="20" width="212" height="34" rx="7" fill="#2A2723" stroke="#4D4841" data-page-node-id="OFl3Jlc49zXbG6MIOBBFoe"/>
+        <text x="124" y="42" fill="#E6E2DC" text-anchor="middle" data-page-node-id="sFDLnB0TK1UqGTJEfjGQG2">Slack 频道</text>
+        <rect x="18" y="62" width="212" height="34" rx="7" fill="#2A2723" stroke="#4D4841" data-page-node-id="GgRJR44xGJ0Z8pBRb2T5oL"/>
+        <text x="124" y="84" fill="#E6E2DC" text-anchor="middle" data-page-node-id="kcw4uSwDXjbFX3gw20FPs6">Wiki / Confluence</text>
+        <rect x="18" y="104" width="212" height="34" rx="7" fill="#2A2723" stroke="#4D4841" data-page-node-id="B4MZ29s3WO6Z9DcK2Rrr08"/>
+        <text x="124" y="126" fill="#E6E2DC" text-anchor="middle" data-page-node-id="Zz2C12j01TT1Cq5ROAVFL9">代码仓库</text>
+        <rect x="18" y="146" width="212" height="34" rx="7" fill="#2A2723" stroke="#4D4841" data-page-node-id="VeyUGw9v6pOrSDRyEyaFg4"/>
+        <text x="124" y="168" fill="#E6E2DC" text-anchor="middle" data-page-node-id="G9NUpjcorPtsjFdXh1xyyj">网表文件</text>
+        <rect x="18" y="188" width="212" height="34" rx="7" fill="#2A2723" stroke="#4D4841" data-page-node-id="RAV1qQYN6zK5nZF34bodMz"/>
+        <text x="124" y="210" fill="#E6E2DC" text-anchor="middle" data-page-node-id="gINYyG7XyGK9UN36I2Ymf6">内部文档</text>
+        <rect x="18" y="230" width="212" height="34" rx="7" fill="#2A2723" stroke="#4D4841" data-page-node-id="kEKA8qnH9nmassWYzkcFyN"/>
+        <text x="124" y="252" fill="#E6E2DC" text-anchor="middle" data-page-node-id="E7Aj7E9vbFze4hrXeG2N5U">团队自建数据库</text>
+
+        <line x1="240" y1="37" x2="330" y2="80" stroke="#4D4841" stroke-width="1.2" data-page-node-id="9ZZRysBP4KmFiRWCCoRMNR"/>
+        <line x1="240" y1="79" x2="330" y2="90" stroke="#4D4841" stroke-width="1.2" data-page-node-id="pOMRZatH5h82AJdErikcgV"/>
+        <line x1="240" y1="121" x2="330" y2="100" stroke="#4D4841" stroke-width="1.2" data-page-node-id="LFDnb6GfwlGkALt0nf2mmY"/>
+        <line x1="240" y1="163" x2="330" y2="110" stroke="#4D4841" stroke-width="1.2" data-page-node-id="EO1PCZ7wVB3bqtS50N160v"/>
+        <line x1="240" y1="205" x2="330" y2="120" stroke="#4D4841" stroke-width="1.2" data-page-node-id="CM7uGaDdj5DEc5RwvB7WR5"/>
+        <line x1="240" y1="247" x2="330" y2="130" stroke="#4D4841" stroke-width="1.2" data-page-node-id="UqEDSb0Y99iLSvza3QRtQH"/>
+        <line x1="300" y1="150" x2="352" y2="150" stroke="#E2886A" stroke-width="2" marker-end="url(#arw)" data-page-node-id="5GJz8f7Yuedu774N2Tn6N4"/>
+
+        <rect x="360" y="60" width="302" height="182" rx="10" fill="#211F1C" stroke="#E2886A" stroke-width="1.6" data-page-node-id="HuBxEDDr7VKinK6mwUEHIY"/>
+        <text x="511" y="88" fill="#E2886A" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="13" data-page-node-id="BHeRmp0em9Ebb0TUcjh1D4">EMBEDDINGS（一张表）</text>
+        <rect x="378" y="102" width="266" height="26" rx="5" fill="#1E1C19" stroke="#33302B" data-page-node-id="ODtWPl5Lg5taNWBsWKpFYZ"/>
+        <text x="392" y="120" fill="#A8A29A" font-size="11.5" data-page-node-id="lKGQCTJ2olP71WvBah3NWw">document　归一后的正文</text>
+        <rect x="378" y="134" width="266" height="26" rx="5" fill="#1E1C19" stroke="#33302B" data-page-node-id="7GSfjKpViH7JcELkkNoi9t"/>
+        <text x="392" y="152" fill="#A8A29A" font-size="11.5" data-page-node-id="j2oCOVGwZhik89HVShQaZM">embedding　3072 维向量</text>
+        <rect x="378" y="166" width="266" height="26" rx="5" fill="#1E1C19" stroke="#33302B" data-page-node-id="kHKSNgzlZ59udBgJ5J06L9"/>
+        <text x="392" y="184" fill="#A8A29A" font-size="11.5" data-page-node-id="v9yghYi07cO6XahunQ2ovY">metadata　频道、作者、系统</text>
+        <rect x="378" y="198" width="266" height="26" rx="5" fill="#1E1C19" stroke="#33302B" data-page-node-id="pIko8iYBndJzJwHE5KjXSj"/>
+        <text x="392" y="216" fill="#A8A29A" font-size="11.5" data-page-node-id="dF7scDNWe7jDv3f3x1DoVw">source + 时间戳</text>
+      </g>
+    </svg>
+    <figcaption data-page-node-id="s9W9Z9urP8CMqY02A9RnGr">依原文架构图重绘为中文。这张表是后面所有机制的公共地基：加一个新数据源，查询侧不用改任何东西。</figcaption>
+  </figure>
+
+  <p data-page-node-id="ynDpjPIAvA7vXUPNJ6wnM8">这个设计还留了一个口子给别的团队。有些团队本来就有自己的数据库，不想为了进知识库把数据挪到 Slack 或文档系统里。做法是把这类源当成<strong data-page-node-id="yDyyajhIrw68xDNCGWKMbg">插件脚本</strong>：团队提一个 pull request，交一个小的 Python 模块，负责从自己的系统读数据、吐出符合那张表结构的行，再配一条数据源记录。只要写进同一个库、用同一套字段，剩下的整条链路一行都不用动。</p>
+</section>
+<section id="s3" data-page-node-id="9nDayzDnWZu6mxtDh7xhoq">
+  <h2 data-page-node-id="oLybtHmbQjf5GBjiHIyWdg"><span class="sec-num" data-page-node-id="DivpUc1ylvGU4eRbY2b8cv">03</span>Slack 里最难的事：分不清哪句话有用</h2>
+  <div class="sec-kicker" data-page-node-id="7qfYDLWPqOjvqt7EqgHB2x">Slack · 混合检索</div>
+  <p data-page-node-id="qEzH4JyEBZAxMw1m2Fkb2P">Slack 是他们最看重、也最难处理的数据源，公司里最新的工程讨论都发生在那里。一开始他们试过最省事的办法：把原始文本直接做成向量去搜。很快发现单靠向量捞不全。</p>
+  <p data-page-node-id="DJa9facpyOoddlSIktwNFC">问题出在聊天记录本身的三个特点：</p>
+  <ol data-page-node-id="ERFW0K1vtwA7j9TTkG2mvd">
+    <li data-page-node-id="jxqAfPlrUPsJLt91rlw7iD"><strong data-page-node-id="8orlTREsoqAVB7PL2Y08QF">信息密度差得极远</strong>，「好的收到，谢谢」和一整段讲内核实现的解释，在系统眼里都只是一条消息。</li>
+    <li data-page-node-id="iYq9vA0G0R6GMJmAORedH1"><strong data-page-node-id="AHQu4gPMWbdP1zm4GaoPgU">消息长短不一</strong>，而短消息在向量相似度上经常压过更长、更详细的那条。</li>
+    <li data-page-node-id="7wI1A1XtBguvYAKYjG6uI3"><strong data-page-node-id="UVzOkfyWSc09cYNpV1hJQ2">一条消息的含义取决于上下文</strong>，往往要看它前后的对话才能定。</li>
+  </ol>
+  <div class="quote" data-page-node-id="wPJaYbrseS3ELBfuUvEBBT">
+    你在群里搜「恢复卡在清单加载之后」。真正解决过这个问题的那条回复，可能一个原词都没用，说的是「checkpoint 在 NFS 挂载点上卡住了」；而字面最像的那条，是八个月前一个已经作废的老办法；至于「好的收到，谢谢」，它和几乎所有问句都有点像。
+    <cite data-page-node-id="jvdqwOoGwbT7FVEKrVIcC3">三个特点合起来意味着什么</cite>
+  </div>
+  <p data-page-node-id="HT7GeplSkCtIwNp7tMEVC6">他们的解法是让同一条内容<strong data-page-node-id="jpmvHc2F39IjoYA1rI2U7F">同时被几种检索方式覆盖</strong>，每一种补上别的短板。下面这个组件用的是原文那组示例数据：同一个查询、同一批四条候选，切换打分方式，看谁被抬起来、谁被压下去。</p>
+
+  <div class="sandbox" data-page-node-id="jLISGaclh1y3ydUNnhwVej">
+    <div class="sandbox-h" data-page-node-id="PrWPbLkSmn5a1qCT8WPrfk">
+      <h4 data-page-node-id="qoqHGAS3fEdnLDAQlaWQuR">四种打分，同一批候选</h4>
+      <span class="badge" data-page-node-id="eVwaEr28sQGFYFLLJUdtDj">可交互</span>
+    </div>
+    <p class="sandbox-desc" data-page-node-id="aa2jBkSVSTx5mE9DyfC3aw">查询：<code data-page-node-id="jWRm1t58Eph6PhjCU1AbR9">restore hangs after manifest load</code>（恢复卡在清单加载之后）。切换打分方式，观察四条候选谁被抬起来、谁被压下去。</p>
+    <div class="tabs" data-page-node-id="x766SJBbEeC7HiFgVdyEM7">
+      <button class="tab on" id="btn-sc-ft" type="button" data-page-node-id="3glvBcTIGeJxGiBCYV06gP">全文匹配 FULL-TEXT</button>
+      <button class="tab" id="btn-sc-emb" type="button" data-page-node-id="poVjjtJ1JskjSExVMbEL60">向量匹配 EMBEDDING</button>
+      <button class="tab" id="btn-sc-idf" type="button" data-page-node-id="Of8tkMbrQDF4suaMn8hTS7">稀有词权重 IDF</button>
+      <button class="tab" id="btn-sc-age" type="button" data-page-node-id="Z4WyFbKXz6UCO2ijPDGt98">时间衰减 AGE DECAY</button>
+    </div>
+    <p class="sandbox-desc" id="out-sc-desc" style="margin-top:0" data-page-node-id="wp3TCWAKae7mwO5Tljj3VM">按字面对词。工程师直接粘贴一段报错的时候，字面对上就是最硬的证据，语义再像也不该排到它前面。代价是换了一套说法讲同一件事的那条，一个词都对不上。</p>
+    <div id="box-sc-cards" data-page-node-id="juq363dUgqdTAOcG6qLBsu"></div>
+    <div class="verdict" id="out-sc-blind" data-page-node-id="VzL6JqJd9rxkjWPwLCDBFc">盲区：真正解决问题的那条回复一个原词都没用，在这一栏里一个词都对不上。</div>
+    <p class="src-note" data-page-node-id="HqkY3KiQMaLp4llhZByI0S">数据取自原文示例。实心底＝被这种打分抬起来，虚线框＝被压下去。<strong data-page-node-id="AAqFlyr2L1tnuCBE3xBKzc">原文只给出定性的升降关系，未给出四条候选在四种打分下的具体名次与分值</strong>；标「原文未给出」的条目不做任何补数。</p>
+  </div>
+
+  <p data-page-node-id="866AMW71sheVYmgA7gXZfu">切一遍四个标签会发现：每一种打分的第一名都不一样，而且每一种都有明显的盲区。那条两周前、换了一套说法、带着罕见参数名的讨论串，恰好是真正解决问题的答案，可它在全文匹配这一栏里一个词都没对上。任何一种打分单独用，都会漏掉它。所以四种打分各自出一份排名，到查询时再合并。</p>
+</section>
+
+<section id="s4" data-page-node-id="xdlZAWsTAAluTTYmdH9eHG">
+  <h2 data-page-node-id="PH1pTMPsubXpPq9UuyB1dx"><span class="sec-num" data-page-node-id="13b1J39KkVVa86NmSdSaDv">04</span>聊天记录不直接拿去做向量：蒸馏、burst 与增量采集</h2>
+  <div class="sec-kicker" data-page-node-id="YmIFGmBG4RNzAbnAm2EoJU">Slack · 蒸馏与补捞</div>
+  <p data-page-node-id="wDvqHi8aIOWQwGgyG3v7fL">原始 Slack 文本一落地就能被关键词搜到，因为他们在 Postgres 里对原文维护了一个全文索引。但要让向量检索真的好用，还得多做一步加工。</p>
+  <p data-page-node-id="mWRWatLhJ3mP7JUVH5By4E">这一步叫<strong data-page-node-id="72ZKSH93lBAHqgivvfcs7Y">蒸馏</strong>：让模型读完整条讨论串，抽出四样东西——一句工程师真的会拿去搜的问题、一段简短摘要、最后的结论，以及过程中提到的系统和代码符号。被做成向量的是这四样东西，<strong data-page-node-id="ArIE9ffxOafLCdkSlysXGj">原始的逐字聊天记录不进向量库</strong>。实测把讨论串归一成统一格式之后，准确率有明显提升，多出来的元数据也给语义匹配提供了更多线索。</p>
+
+  <figure data-page-node-id="DG41FoPrhk0FjBhPINl6Gg">
+    <div class="fig-h" data-page-node-id="XzbAqOE57Cyt3h2PPQ1wM8">一条讨论串，三段加工</div>
+    <svg viewBox="0 0 680 268" role="img" aria-label="原始讨论串经蒸馏抽出结构件，再落为一行向量记录" data-page-node-id="6cHhZTRbqi576QEqylhxhZ">
+      <defs data-page-node-id="NuC9HWHLGgDNmyi5hUqLQD">
+        <marker id="arw2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse" data-page-node-id="hKVCNao9zCfxPtfFQ8Ye7w">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#E2886A" data-page-node-id="ipWUmUIyqTX4RaM4ALA7PS"/>
+        </marker>
+      </defs>
+      <g font-family="system-ui, -apple-system, sans-serif" data-page-node-id="3vNSN57uxf5RUAMDtiFWa4">
+        <rect x="8" y="30" width="200" height="188" rx="9" fill="#2A2723" stroke="#4D4841" data-page-node-id="GeKYOj88lZuve0VcuxD4F1"/>
+        <text x="108" y="52" fill="#D4A373" text-anchor="middle" font-size="12" data-page-node-id="EDSnODfNKyJIFrg3Kvf2rh">① 原始讨论串</text>
+        <text x="22" y="78" fill="#A8A29A" font-size="11.5" data-page-node-id="nYrFVHpJ1m9GrPduNfyvKc">大集群上恢复卡在清单</text>
+        <text x="22" y="96" fill="#A8A29A" font-size="11.5" data-page-node-id="KuzJ1mXsFnPyP3xwnyjmTN">加载之后，小规模跑没</text>
+        <text x="22" y="112" fill="#A8A29A" font-size="11.5" data-page-node-id="MpmCOFLthBLoyDTPym79jQ">问题。</text>
+        <text x="22" y="136" fill="#A8A29A" font-size="11.5" data-page-node-id="HlGxOnr6Xm0KEpSce3E4Ff">128 个分片能复现，日</text>
+        <text x="22" y="152" fill="#A8A29A" font-size="11.5" data-page-node-id="aFcWWDGqntropaJdtDjoBS">志停在缓存预热之前。</text>
+        <text x="22" y="176" fill="#736D64" font-size="11.5" data-page-node-id="eeHHDnONVIOeloL4nTJplF">我笔记本一到周一也卡。</text>
+        <text x="22" y="200" fill="#A8A29A" font-size="11.5" data-page-node-id="H9thLmb93WLR39aP8UYgGq">设成 CKPT_PREFETCH=4</text>
+        <text x="22" y="216" fill="#A8A29A" font-size="11.5" data-page-node-id="59y9aqgvbFmDZFaV3AJ4P4">就跑完了，默认值对</text>
+        <text x="22" y="232" fill="#A8A29A" font-size="11.5" data-page-node-id="Y90S855jeh9OVE2tzXJag4">NFS 挂载点来说太高。</text>
+
+        <line x1="214" y1="124" x2="236" y2="124" stroke="#E2886A" stroke-width="2" marker-end="url(#arw2)" data-page-node-id="SsxH99JTThnu8IvGLm2DSH"/>
+
+        <rect x="242" y="30" width="196" height="188" rx="9" fill="#211F1C" stroke="#D4A373" data-page-node-id="veCoq2uwfiYuSncslW6k2W"/>
+        <text x="340" y="52" fill="#D4A373" text-anchor="middle" font-size="12" data-page-node-id="5BBlZ2p1wFJ8Gf0Nq8xGM0">② 抽成结构件</text>
+        <text x="256" y="78" fill="#E6E2DC" font-size="11.5" data-page-node-id="37fMCKGNOGkEY2f9CRecne">为什么恢复会卡在</text>
+        <text x="256" y="94" fill="#E6E2DC" font-size="11.5" data-page-node-id="JuDd4PiHMFqd4LsGNDjoTv">清单加载之后？</text>
+        <text x="256" y="118" fill="#A8A29A" font-size="11.5" data-page-node-id="rAzztfZNTpgu7C86tVFA09">大规模恢复停在缓存</text>
+        <text x="256" y="134" fill="#A8A29A" font-size="11.5" data-page-node-id="PXUqjOdFkTfW2IMyzEEE33">预热之前。</text>
+        <text x="256" y="158" fill="#5B9A92" font-size="11.5" data-page-node-id="OuPjGk4zkJRfC3LFHjWqFY">对 NFS 挂载点设</text>
+        <text x="256" y="174" fill="#5B9A92" font-size="11.5" data-page-node-id="lwFyOWgQ0qgMFOU7zMVk8L">CKPT_PREFETCH=4。</text>
+        <text x="256" y="198" fill="#D4A373" font-size="11.5" data-page-node-id="cBV9hIpBkMdBkXYXxg6WOM">checkpoint 恢复、NFS</text>
+        <text x="256" y="214" fill="#D4A373" font-size="11.5" data-page-node-id="d9yEPc6NjRHw0KxtIC8Yd3">CKPT_PREFETCH</text>
+
+        <line x1="444" y1="124" x2="466" y2="124" stroke="#E2886A" stroke-width="2" marker-end="url(#arw2)" data-page-node-id="CsGzss6BkyqqMQeJT5D3o2"/>
+
+        <rect x="472" y="30" width="200" height="188" rx="9" fill="#211F1C" stroke="#E2886A" stroke-width="1.5" data-page-node-id="jXsEj5AZodrTeZK1AhXafv"/>
+        <text x="572" y="52" fill="#E2886A" text-anchor="middle" font-size="12" data-page-node-id="J4WbYlsXHk54paVnxLeTpO">③ 一行向量记录</text>
+        <text x="486" y="80" fill="#E6E2DC" font-size="11.5" data-page-node-id="7cUv3V48UWhz0KFlX6Rjl5">问题＋摘要＋结论</text>
+        <text x="486" y="96" fill="#E6E2DC" font-size="11.5" data-page-node-id="fjMisdQCBpxBBLYePGiNKh">＋系统＋代码符号</text>
+        <line x1="486" y1="110" x2="658" y2="110" stroke="#33302B" data-page-node-id="ouj8F5CJMYdRXvyBha9BmY"/>
+        <text x="486" y="130" fill="#A8A29A" font-size="11.5" data-page-node-id="8Ylb3n2ugRC1ooGFQPeHH1">slack_thread</text>
+        <text x="486" y="146" fill="#A8A29A" font-size="11.5" data-page-node-id="G7cGuhOBXpHaE3D7GLD6yq">thread_8f42</text>
+        <text x="486" y="166" fill="#A8A29A" font-size="11.5" data-page-node-id="9BhpZjqZB7jR6ICmGmlntD">3,072 维</text>
+        <text x="486" y="186" fill="#A8A29A" font-size="11.5" data-page-node-id="dyKMG47OXsUsOpOybWNydp">频道＋参与者＋时间</text>
+      </g>
+    </svg>
+    <figcaption data-page-node-id="YvuFETNCPs6JCz53yT8f2n">依原文示意图重绘为中文。注意第三条消息「我笔记本一到周一也卡」是离题内容，它出现在原始记录里，但没有进入抽出来的结构件。</figcaption>
+  </figure>
+
+  <details data-page-node-id="SqCpSHObZRKyFiigmg6sQO">
+    <summary data-page-node-id="73yHhwpaaL5OGBoNCtzc0A">数据怎么实时进来：Socket Mode 与整串重拉</summary>
+    <p data-page-node-id="JE38x4EAfYAM0Xfkpiv2Nc">采集侧他们在工作区装了一个 Slack 机器人，跑在 Socket Mode 下：Slack 通过一条长连接把每条消息事件推过来，不用反复轮询 Web API，也就不会撞上接口调用频率限制。</p>
+    <p data-page-node-id="lGVZoEZ9lHSxq0WEfy2AO7">事件一到就立刻回执，用稳定的事件 ID 去重，然后标记给入库程序。入库这一步有个容易忽略的设计：它不会孤零零地存下这条新消息，而是先定位这条消息属于哪条讨论串，再从 Slack 接口把整条对话重新拉一遍，包括最初那条和后面所有回复，然后把整串当作一行写回去。所以一条新回复会触发父消息和所有同级回复被重新拉取，存下来的正文、参与者名单和最后活跃时间，永远反映的是完整对话的当前状态。</p>
+    <p data-page-node-id="V68Z59psJeJ5ebZld7dTNm">另外，每个 Slack 频道在系统里都是一个独立的数据源，采集频率可以分别调。某个团队可以让自己那个高频的故障频道更新得更勤一些。</p>
+  </details>
+
+  <h3 id="s4-2" data-page-node-id="yHJaDrv2jMaRGaDYkE1BUl">长讨论串里，被摘要漏掉的那条消息</h3>
+  <p data-page-node-id="X3zBVAvCeXTfRKq4aMn7dP">做到这一步，Slack 的检索已经可用，但他们反复撞上同一个毛病：长讨论串里那些重要的消息，不一定能在整串的摘要里留下痕迹。</p>
+  <p data-page-node-id="GtwZ4r8hZzDM8eidCS7XzB">补救办法叫 <strong data-page-node-id="kv9T4xsjSNoO3XhKhShx4v">bursting</strong>。一段 burst 指的是同一个人连着发的几条消息。他们把每段 burst 单独做成向量，并且在前面拼上整串的话题当上下文。这样一来，那种答案藏在某条跑题分支里、用词从没进过整串摘要的情况，也能被单独搜到。</p>
+  <p data-page-node-id="CGBTRliBG5IxsQNYuGDqhG">为了不让低价值内容涌进数据库，每段 burst 要过一道加权打分，达标才做向量，判据有三条：</p>
+  <ul data-page-node-id="ZeTWo2KuLV6zFtRf3nW1QB">
+    <li data-page-node-id="tJIMh4PclNV5ZbdQwn1umB">含有一个在全公司语料里足够罕见的词，稀有度门槛是 <code data-page-node-id="H0T9WWulfyNubvmtr8iAjA">IDF ≥ 4.0</code>；</li>
+    <li data-page-node-id="HfbzgJF5FEkt0Ttzizneva">合并之后至少 <code data-page-node-id="AuuLbIl2TOMmGVyGVJjNHm">200</code> 个字符；</li>
+    <li data-page-node-id="69WCFbFWj2okgf5IE6Bi8t">这段里有消息被人加了表情回应，算一份来自同事的认可。</li>
+  </ul>
+
+  <figure data-page-node-id="rK1nYmApWP1muV15vW0IM0">
+    <div class="fig-h" data-page-node-id="mHhbluP3lVLw71BCFu5HoU">五条消息，两段 burst，一段被拦下</div>
+    <svg viewBox="0 0 680 236" role="img" aria-label="一条讨论串内的五条消息聚成两段 burst，其中一段未达入库门槛" data-page-node-id="DhP2fzfZM5ZxWDgEjAIYfq">
+      <g font-family="system-ui, -apple-system, sans-serif" font-size="11.5" data-page-node-id="7klIE4mKVaGG8fLXAUAKzn">
+        <rect x="14" y="18" width="118" height="30" rx="6" fill="#2A2723" stroke="#4D4841" data-page-node-id="fYub4MquKGAmF9kA4jahth"/>
+        <text x="73" y="37" fill="#A8A29A" text-anchor="middle" data-page-node-id="sddXrG0oOpbMi9jzVvfL9D">短消息</text>
+        <rect x="14" y="56" width="118" height="30" rx="6" fill="#2A2723" stroke="#4D4841" data-page-node-id="0xEsFeR0ouD9VzZgPgFTYk"/>
+        <text x="73" y="75" fill="#A8A29A" text-anchor="middle" data-page-node-id="i1Bhaxj7rvPzW5TYy7xRiw">补一句</text>
+        <rect x="14" y="112" width="118" height="30" rx="6" fill="#2A2723" stroke="#4D4841" data-page-node-id="mu6X8jnUrFPif2w54BWDTm"/>
+        <text x="73" y="131" fill="#A8A29A" text-anchor="middle" data-page-node-id="wB3Db6m8ulhNM0F4h5tC1l">一段技术细节</text>
+        <rect x="14" y="150" width="118" height="30" rx="6" fill="#2A2723" stroke="#4D4841" data-page-node-id="5IjYtCD6PFfhJdeh9qSpgX"/>
+        <text x="73" y="169" fill="#A8A29A" text-anchor="middle" data-page-node-id="eSCJ1ojhmkXCzaDhIkQ8eX">给出结论</text>
+        <rect x="14" y="188" width="118" height="30" rx="6" fill="#2A2723" stroke="#4D4841" data-page-node-id="fCou0vFlcZNgKCZ9fplQvi"/>
+        <text x="73" y="207" fill="#A8A29A" text-anchor="middle" data-page-node-id="t6dStJ8tYHCTefDsDxg3sf">收到</text>
+
+        <path d="M 138 33 C 176 33 158 62 196 62" fill="none" stroke="#4D4841" stroke-width="1.2" data-page-node-id="6crAhWhOJPpL1jCu6bUl0c"/>
+        <path d="M 138 127 C 176 127 158 62 196 62" fill="none" stroke="#4D4841" stroke-width="1.2" data-page-node-id="GYxQVLZSbDjEeybXveBonC"/>
+        <path d="M 138 165 C 176 165 158 152 196 152" fill="none" stroke="#4D4841" stroke-width="1.2" data-page-node-id="QySorOtmTaELeXQ9ES9sxA"/>
+
+        <rect x="202" y="26" width="272" height="72" rx="9" fill="#211F1C" stroke="#C04D38" stroke-dasharray="5 4" data-page-node-id="bNuchKPnRfnkYwGTWqojQk"/>
+        <text x="338" y="48" fill="#D66853" text-anchor="middle" font-size="12" data-page-node-id="PgPKRpiFOKe4LgsPT1y8AA">BURST 01　被拦下</text>
+        <text x="216" y="70" fill="#A8A29A" data-page-node-id="cLeA26ZqoicDUJU3RAuVeg">太短，全是常见词，没有人加表情回应，</text>
+        <text x="216" y="86" fill="#A8A29A" data-page-node-id="BzQSjC9qTspVgfbXsjhiP6">三条判据一条没过。</text>
+
+        <rect x="202" y="116" width="272" height="72" rx="9" fill="#211F1C" stroke="#5B9A92" stroke-width="1.6" data-page-node-id="DnCz71Tnx0Qb4apWMNiIKt"/>
+        <text x="338" y="138" fill="#5B9A92" text-anchor="middle" font-size="12" data-page-node-id="iE4cRZlrQxd9B01TDcEvLQ">BURST 02　入库</text>
+        <text x="216" y="160" fill="#A8A29A" data-page-node-id="VB9QJmsqNWpXWA6zC0QhWB">够长，含罕见词，有人加了表情回应，</text>
+        <text x="216" y="176" fill="#A8A29A" data-page-node-id="r3oWWp9r59WghVhWg8JCiu">做成向量入库。</text>
+
+        <rect x="494" y="26" width="172" height="72" rx="9" fill="#1E1C19" stroke="#33302B" data-page-node-id="1AwrrdMwPuWyzkKMOD7K0B"/>
+        <text x="580" y="52" fill="#736D64" text-anchor="middle" font-size="11.5" data-page-node-id="kKP2CMl4O8KSwENBmiWMuw">不写进向量表</text>
+        <text x="580" y="74" fill="#736D64" text-anchor="middle" font-size="11.5" data-page-node-id="lciFeKtg9xsy9l7rjLwFjc">只留在全文索引里</text>
+
+        <rect x="494" y="116" width="172" height="72" rx="9" fill="#1E1C19" stroke="#5B9A92" data-page-node-id="758UjBBjK3a7dgvZeSJx8s"/>
+        <text x="580" y="142" fill="#5B9A92" text-anchor="middle" font-size="11.5" data-page-node-id="medI7fO99FdGrjXtDCXKlm">与整串那条记录</text>
+        <text x="580" y="164" fill="#5B9A92" text-anchor="middle" font-size="11.5" data-page-node-id="buQNNXWUo3jWYQLmrhwDoF">并排存在同一张表</text>
+
+        <text x="340" y="222" fill="#736D64" text-anchor="middle" font-size="11" data-page-node-id="TUtjilQLhWiTAZ4g9BkiGY">同一条讨论串在库里会有两种粒度的记录：整串一条，加上若干段达标的 burst。</text>
+      </g>
+    </svg>
+    <figcaption data-page-node-id="svBkLTe9TwWa1xUEUnXp4E">依原文示意图重绘为中文。</figcaption>
+  </figure>
+
+  <div class="sandbox" data-page-node-id="ncFJ5RTFxJzCGBc0XnCENw">
+    <div class="sandbox-h" data-page-node-id="IyGGq8vhRWHxe8CZUv0ftK">
+      <h4 data-page-node-id="xJSaXDl2F3W8X2XiOvuVl0">burst 入库门槛判定器</h4>
+      <span class="badge" data-page-node-id="WTevTOM7DDw1rzq72DsDzw">可交互 · 阈值出自原文</span>
+    </div>
+    <p class="sandbox-desc" data-page-node-id="XH0o4eD4tHPYwPp3StqZuO">三段判据全部取自原文：<code data-page-node-id="Nx8400LrymbLCDulLJO54H">IDF ≥ 4.0</code>、合并后 <code data-page-node-id="7BhXW6Bhkyl1ldCs3PVDJd">≥ 200</code> 字符、有表情回应。拖动滑块看一段 burst 是否会被做成向量。滑块初值仅为演示起点，不代表任何实测样本。</p>
+    <div class="ctrl-row" data-page-node-id="tiPbMHKExuMvx4JNgq5Gjf">
+      <label for="rng-burst-idf" data-page-node-id="7NFaDitlnfCmb5go7RZXSi">段内最罕见词的 IDF</label>
+      <input type="range" id="rng-burst-idf" min="0" max="8" step="0.1" value="4.5" data-page-node-id="uZSNtB6LALGHyu2Gws3ZYz">
+      <span class="readout" id="out-burst-idf" data-page-node-id="B9cR2HCFCCZIFLcYYjKCkv">4.5</span>
+    </div>
+    <div class="ctrl-row" data-page-node-id="E1nGqepAtB9NzgaakiAyOY">
+      <label for="rng-burst-len" data-page-node-id="WlzDlj8Jjf7vU0M1BtaLsb">合并后字符数</label>
+      <input type="range" id="rng-burst-len" min="0" max="600" step="5" value="240" data-page-node-id="8C95dl7y0dafa8w0gBOGjq">
+      <span class="readout" id="out-burst-len" data-page-node-id="6F9mHiDfMsa62A8YQ14UJL">240</span>
+    </div>
+    <div class="ctrl-row" data-page-node-id="zP0j9TDrI6s7GDHl7rAGgO">
+      <label for="chk-burst-emoji" data-page-node-id="B8TL8czCbRNFOlitP1QYAK">有人加表情回应</label>
+      <input type="checkbox" id="chk-burst-emoji" checked data-page-node-id="ZPtrrnwDcDAbTz6Rzz4faH">
+      <span class="readout" id="out-burst-emoji" data-page-node-id="JuxdVffLxE7a3xM9BtZhYj">是</span>
+    </div>
+    <ul class="crit-list" data-page-node-id="zaYDfN4cQnRKLaT0atElws">
+      <li data-page-node-id="xyrZrNkX6xuJSBf5emsnM0"><span class="dot" id="out-burst-v1" data-page-node-id="LJxZeEzgNp6ShlcsyjG8ef">通过</span><span data-page-node-id="PB2EEbTdyjS9KVHcnmfDaV">判据一：含 IDF ≥ 4.0 的罕见词</span></li>
+      <li data-page-node-id="vXLvNOdYeKYw6nnn2JNE5E"><span class="dot" id="out-burst-v2" data-page-node-id="g4JN6g74CkXcCne0fvoq2S">通过</span><span data-page-node-id="B2t8HZudvB8bjZUwHc7DXG">判据二：合并后 ≥ 200 字符</span></li>
+      <li data-page-node-id="rqe8Pc2fR1GP0jWsKyFGtZ"><span class="dot" id="out-burst-v3" data-page-node-id="lPbPjMO6L0mRleH3fRCpCT">通过</span><span data-page-node-id="wT3uWRFWJ7Shb3ViAWhSAX">判据三：有表情回应</span></li>
+    </ul>
+    <div class="verdict ok" id="out-burst-verdict" data-page-node-id="2np4IBMITwP9xQgHxua4pT">三段判据全部满足：这段 burst 会被做成向量，与整串记录并排存进同一张表。</div>
+    <p class="src-note" data-page-node-id="31NkMwH2VGk9kGW1kBNlqw">说明：原文给出的是「加权打分、达标才做向量」与三条判据，<strong data-page-node-id="Nm2zkQwNx8AokHRT7bLUfY">未公开三条判据各自的权重与合成方式</strong>，因此本组件只做逐条是否满足的判定，不产出总分。</p>
+  </div>
+</section>
+<section id="s5" data-page-node-id="rDKl5Fu3eCiZ2SjuCWTdZu">
+  <h2 data-page-node-id="OXaqDgXTXpYTtpXfNoyyFG"><span class="sec-num" data-page-node-id="jhI4GRBX5y6i89EM5BcYvt">05</span>40GB 的代码库，怎么保持是最新的</h2>
+  <div class="sec-kicker" data-page-node-id="2GGXDSBB1GjIX4wBqo6nSl">代码库 · 切块与增量</div>
+  <p data-page-node-id="Gk7nY2yvop0Ztk6P4ZoYFr">要不要给代码库做向量，他们一开始是犹豫的。有了 Claude Code 这类命令行工具之后，给代码建向量索引看着有点反直觉，感觉有 grep 就够了。跟同行聊过、又读了 Cursor 关于大型代码库语义检索的结论之后，他们决定试一试。</p>
+  <p data-page-node-id="PGeyExL1J2FdRmfRXGvz4H">真正的顾虑其实是另一件事：公司内部仓库很多，有的单个超过 <strong data-page-node-id="DQjJpn7Gdfwd3zTLNF9sS9">40GB</strong>，怎么用可接受的代价让索引一直是最新的。</p>
+  <p data-page-node-id="SiE7PqaMUNg11CBYmCn6wo">最后落在 <strong data-page-node-id="7pHaJBVREPNtz4z3pT92fb">CocoIndex</strong> 上，一个专门做代码库向量化的开源框架。切块规则按语言的语法边界来，从粗到细依次尝试：先试类这种高层边界，如果切出来的块还是太大，退到方法边界，再不行退到更小的代码块。同一个文件因此会产出好几个粒度的向量，比如文件级一条、函数级各一条。</p>
+
+  <div class="grid-2" data-page-node-id="JQuIbmD8IvdKVaz2fsvwr8">
+    <div class="card neg" data-page-node-id="szJyquxA6UUNZFIBxpOeKQ">
+      <h4 data-page-node-id="Swp4fJJzM7IbEmZYQP5I3S">每 N 个 token 一刀切</h4>
+      <ul data-page-node-id="hvmNT3XnNP6jcmJ9Jkquhy">
+        <li data-page-node-id="n3PitlfWbEQBjFINdWEM2t">切点落在哪儿全看长度</li>
+        <li data-page-node-id="wV8X5ZAQnCN2dZKr0MNTMa">一个函数可能被从中间劈开</li>
+        <li data-page-node-id="VCOld7FNPK2TFBlCcapB9A">切出来的块常常缺头少尾，读不出在干嘛</li>
+      </ul>
+    </div>
+    <div class="card pos" data-page-node-id="GtXohjbM94qNl7vCWvB1jI">
+      <h4 data-page-node-id="shfJtDOQKlY4npVW6YGwES">按语法边界从粗到细</h4>
+      <ul data-page-node-id="LkurTc9XSpYXDSkydrKBI1">
+        <li data-page-node-id="CpoyzWk6IZDy45ZB5xcn3O">先按类切，太大退到方法，再退到条件块和循环块</li>
+        <li data-page-node-id="3nVLjrXvoN73IzmyFGbHAw">每一块都是一个完整的语法单位</li>
+        <li data-page-node-id="rNBnStFFqLBL7clglFNr1n">同一个文件产出多个粒度，粗细都能被搜到</li>
+      </ul>
+    </div>
+  </div>
+
+  <figure data-page-node-id="l6eFW6fv61Vm9HN0FfAsA5">
+    <div class="fig-h" data-page-node-id="I7BW233tcqanKZLBr6d9Fl">两种切法：固定长度 vs 语法边界</div>
+    <svg viewBox="0 0 680 300" role="img" aria-label="固定 token 长度切块会把函数从中间劈开，按语法边界切块每一块都是完整语法单位" data-page-node-id="6DEWhlxZeqf7H1ooGbQ5Vu">
+      <g font-family="system-ui, -apple-system, sans-serif" font-size="11.5" data-page-node-id="Im85dDTsHqzaHV9neCLPcD">
+        <text x="174" y="20" fill="#D66853" text-anchor="middle" font-size="12.5" data-page-node-id="COKHuMOq4ZCg3ZApB7DO6a">每 N 个 token 一刀切</text>
+        <rect x="24" y="32" width="300" height="240" rx="8" fill="#1E1C19" stroke="#4D4841" data-page-node-id="wOKgGSpiZuxebqN3YhOO2F"/>
+        <text x="40" y="54" fill="#A8A29A" data-page-node-id="yBpZltTDkJZ3fQk2aieqXL">class CheckpointLoader {</text>
+        <text x="40" y="74" fill="#A8A29A" data-page-node-id="KEJ4ezXtZLcRWBdeBU4oQC">  LoadManifest() { ... }</text>
+        <text x="40" y="94" fill="#A8A29A" data-page-node-id="BCunxOsJlGCuwKaSkDhT6O">  WarmShardCache() {</text>
+        <text x="40" y="114" fill="#E6E2DC" data-page-node-id="r2NaHSLedRS6cYDQxRAH1S">    for (shard : shards) {</text>
+        <text x="40" y="134" fill="#E6E2DC" data-page-node-id="mNjgVFOaQNSNyVHeamC2ZQ">      if (shard.cold) {</text>
+        <text x="40" y="154" fill="#E6E2DC" data-page-node-id="mtamKEzZ9OQKkaIDOFexzj">        prefetch(shard);</text>
+        <text x="40" y="174" fill="#E6E2DC" data-page-node-id="BBnhjY9VOdkVzeVFSY8HH0">      }</text>
+        <text x="40" y="194" fill="#E6E2DC" data-page-node-id="HPTw3C2HDqtSnKrlBFKzBe">    }</text>
+        <text x="40" y="214" fill="#A8A29A" data-page-node-id="Dd9LJLLRpXHb3d6JDwEet8">  }</text>
+        <text x="40" y="234" fill="#A8A29A" data-page-node-id="EVHedl3IdrQDim9V7QLUBG">  Restore() { ... }</text>
+        <text x="40" y="254" fill="#A8A29A" data-page-node-id="YKBGbmhYVc7DCqx2SIOwmj">}</text>
+        <line x1="34" y1="124" x2="314" y2="124" stroke="#D66853" stroke-width="1.6" stroke-dasharray="6 4" data-page-node-id="zE0MmsjvADLAIlm9nLrCzy"/>
+        <line x1="34" y1="184" x2="314" y2="184" stroke="#D66853" stroke-width="1.6" stroke-dasharray="6 4" data-page-node-id="vWlXb3KQxnNWWjfNZ7ziq2"/>
+        <text x="34" y="120" fill="#D66853" font-size="10.5" data-page-node-id="lGSPKnSb1j8YvjFBI9RWYQ">切点落在 if 块中间</text>
+        <text x="34" y="180" fill="#D66853" font-size="10.5" data-page-node-id="HZR7u6Clelx5An639V5FtP">切点把循环体劈成两半</text>
+        <text x="34" y="278" fill="#D66853" font-size="10.5" data-page-node-id="qfAfXfHlQ8HZPXXhTnWhfA">切点位置只由累计长度决定，与代码结构无关。</text>
+
+        <text x="506" y="20" fill="#5B9A92" text-anchor="middle" font-size="12.5" data-page-node-id="OJYMGZlVlmQnehPXfKEGM4">按语法边界从粗到细</text>
+        <rect x="356" y="32" width="300" height="240" rx="8" fill="#1E1C19" stroke="#4D4841" data-page-node-id="zxRv9qTz3mLJpZozn43pKU"/>
+        <rect x="368" y="44" width="276" height="212" rx="6" fill="none" stroke="#6C9BD1" stroke-width="1.4" data-page-node-id="BjYpaJCWAczjZbdAurR1CZ"/>
+        <text x="374" y="40" fill="#6C9BD1" font-size="10.5" data-page-node-id="hFaDOBsmQ0lSgxCRTobYaM">class</text>
+        <rect x="380" y="76" width="252" height="34" rx="5" fill="none" stroke="#5B9A92" data-page-node-id="jorM3aGDtnKnTM4eBcN5p4"/>
+        <text x="386" y="72" fill="#5B9A92" font-size="10.5" data-page-node-id="xrTBEheFcLF0Puas3XdnWw">method  LoadManifest()</text>
+        <rect x="380" y="118" width="252" height="82" rx="5" fill="none" stroke="#5B9A92" data-page-node-id="ycr9C166e02bYlTjmpzDsP"/>
+        <text x="386" y="114" fill="#5B9A92" font-size="10.5" data-page-node-id="j0PoVOWPFhys25KD9QwYBG">method  WarmShardCache()</text>
+        <rect x="392" y="128" width="228" height="28" rx="4" fill="none" stroke="#D4A373" stroke-dasharray="4 3" data-page-node-id="bQmlBmOp9TVk0oNQXpaejQ"/>
+        <text x="398" y="146" fill="#D4A373" font-size="10.5" data-page-node-id="ofH3wjZlNL85ANvWsCaogr">for 块</text>
+        <rect x="392" y="160" width="228" height="30" rx="4" fill="none" stroke="#D4A373" stroke-dasharray="4 3" data-page-node-id="Wue53sN2tULy6yD9ToNWX5"/>
+        <text x="398" y="179" fill="#D4A373" font-size="10.5" data-page-node-id="ZGKBFffW0wHvM6w0y8OFhm">if 块（块内仍过大才继续下切）</text>
+        <rect x="380" y="208" width="252" height="34" rx="5" fill="none" stroke="#5B9A92" data-page-node-id="cvmMyBuQ6WfBVHBTF3HmVd"/>
+        <text x="386" y="204" fill="#5B9A92" font-size="10.5" data-page-node-id="D8v8e26aWCfRBfRBpAh8Jf">method  Restore()</text>
+        <text x="356" y="278" fill="#5B9A92" font-size="10.5" data-page-node-id="hfpaqRwCR4gK8lvBFgP7le">每一块都是完整语法单位，同一文件同时产出多个粒度。</text>
+      </g>
+    </svg>
+    <figcaption data-page-node-id="Fs6rIX1YwhQWAAyTCuq0mm">示意图按原文描述的切块规则绘制。原文配图示例为：先试 class，进到 LoadManifest()、WarmShardCache()、Restore() 三个方法，方法内还太大的再退到 if 和 for 这一级，末尾的私有字段区单独成块。</figcaption>
+  </figure>
+
+  <p data-page-node-id="IHX6a0OlnV4TNG5plrjBgy">更新这一侧是这套方案真正省力的地方。CocoIndex 把同步用的元数据也存在 Postgres 里，<strong data-page-node-id="3ddPDYsjfdwQSDH04RueLX">每次提交只重新做变动过的那些代码块</strong>，不用整个仓库重算。同步状态和向量存在同一个库里，这一点对他们来说尤其合适。</p>
+  <p data-page-node-id="cIRuMvb1e0KpmU6d8anabO">随着接入的代码库变多，仓库接入这件事被改成了配置文件，各团队自己提交，可以按文件路径设白名单和黑名单。</p>
+</section>
+
+<section id="s6" data-page-node-id="w7hrRDwDRH3QYu62UZaqmC">
+  <h2 data-page-node-id="kK2hRlRerou9trnRBNIFP5"><span class="sec-num" data-page-node-id="bTPuueoNGJzWuDdH2shbz1">06</span>一个问题进来之后，系统做了什么</h2>
+  <div class="sec-kicker" data-page-node-id="vlbGlOL20cFYBgNdCq9Wi1">查询侧 · 选工具与取证</div>
+  <p data-page-node-id="jAQCNmYwvkv3uicMUy4qXT">每次收到提问，系统先跑一轮很短的规划：由模型判断这个问题可能需要用到哪些工具、哪些数据源，然后把选中的工具并行发出去。</p>
+
+  <figure data-page-node-id="jzeXDERydnGZAl71N5EOK7">
+    <div class="fig-h" data-page-node-id="RIRScsKXvCTdtlQXulrjEN">规划 → 并行取证 → 合成</div>
+    <svg viewBox="0 0 680 274" role="img" aria-label="规划器选择工具后并行取证，结果归一化后交给模型合成答案" data-page-node-id="Tqww2wY56hMwBDT8wZmD8W">
+      <defs data-page-node-id="idlvMJFwuEftTuY7m5Ig0n">
+        <marker id="arw3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse" data-page-node-id="tj5TEgXB1ad59QMkGA3ylA">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#E2886A" data-page-node-id="wkPezMsrGTVXYVE9Jmj2lk"/>
+        </marker>
+      </defs>
+      <g font-family="system-ui, -apple-system, sans-serif" font-size="11.5" data-page-node-id="J5BNukCQtLxBBfaJmzEX1K">
+        <rect x="14" y="104" width="118" height="66" rx="9" fill="#211F1C" stroke="#E2886A" stroke-width="1.5" data-page-node-id="lRG7Fnz1CpBmAFES7kBpSq"/>
+        <text x="73" y="130" fill="#E2886A" text-anchor="middle" font-size="12.5" data-page-node-id="RbfQobslTBYAx0rxfLPBoC">规划</text>
+        <text x="73" y="150" fill="#736D64" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="10.5" data-page-node-id="G39vBh2RaGpPccoCSgfbTz">PLANNER</text>
+
+        <line x1="136" y1="137" x2="164" y2="137" stroke="#E2886A" stroke-width="2" marker-end="url(#arw3)" data-page-node-id="9jZWrj59DjMOBJ89RG97oG"/>
+
+        <rect x="170" y="24" width="150" height="30" rx="6" fill="#2A2723" stroke="#4D4841" data-page-node-id="6aCU9SJULJ3G2WOI6yffEr"/>
+        <text x="245" y="43" fill="#A8A29A" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="11" data-page-node-id="rHjLW2YPEzNAKkATSNYInU">search</text>
+        <rect x="170" y="60" width="150" height="30" rx="6" fill="#2A2723" stroke="#4D4841" data-page-node-id="Ssax4YGA0BwVnabW6kOIFI"/>
+        <text x="245" y="79" fill="#A8A29A" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="11" data-page-node-id="GmIacqIEiSCQ21STk54RLg">search_slack</text>
+        <rect x="170" y="96" width="150" height="30" rx="6" fill="#2A2723" stroke="#4D4841" data-page-node-id="JgtVlxnp4esESfJ8PWaiH1"/>
+        <text x="245" y="115" fill="#A8A29A" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="11" data-page-node-id="ZgGeMhOdog8NdcJuSf72u8">search_code</text>
+        <rect x="170" y="132" width="150" height="30" rx="6" fill="#2A2723" stroke="#4D4841" data-page-node-id="8JwKndSitdIFWXccBzjNYO"/>
+        <text x="245" y="151" fill="#A8A29A" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="11" data-page-node-id="vKkeaErdgvVrMDZptG2KfC">subsystem_index</text>
+        <rect x="170" y="168" width="150" height="30" rx="6" fill="#2A2723" stroke="#4D4841" data-page-node-id="dXmv7eyOMbFCZflG382VAC"/>
+        <text x="245" y="187" fill="#A8A29A" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="11" data-page-node-id="CEDtNHzXYGd7yGpMCYdbqc">recent_prs</text>
+        <rect x="170" y="204" width="150" height="30" rx="6" fill="#2A2723" stroke="#4D4841" data-page-node-id="nWAzSFrB0k7P4qZAWrLqNk"/>
+        <text x="245" y="223" fill="#A8A29A" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="11" data-page-node-id="pGTYHT6ADnmwNKyO0xFRC6">who_knows</text>
+
+        <rect x="336" y="24" width="128" height="210" rx="9" fill="none" stroke="#33302B" stroke-dasharray="5 4" data-page-node-id="85uW3WraCOAk15TDVsYHiB"/>
+        <text x="400" y="136" fill="#736D64" text-anchor="middle" font-size="11" data-page-node-id="MelLUFOIldEFNCtjvBBAk3">并行发出</text>
+
+        <line x1="326" y1="39" x2="360" y2="39" stroke="#4D4841" data-page-node-id="hOXnxWqstDsIxNvRbR3r7M"/>
+        <line x1="326" y1="75" x2="360" y2="75" stroke="#4D4841" data-page-node-id="iEZ7djyqRBi2hRJL7wv6mx"/>
+        <line x1="326" y1="111" x2="360" y2="111" stroke="#4D4841" data-page-node-id="udC81kWBqXUm79X05Cbfsy"/>
+        <line x1="326" y1="147" x2="360" y2="147" stroke="#4D4841" data-page-node-id="zFb70JXxaIHV2Hc2BuhQ2c"/>
+        <line x1="326" y1="183" x2="360" y2="183" stroke="#4D4841" data-page-node-id="kOiaIzCGqjAO1HpXploTKE"/>
+        <line x1="326" y1="219" x2="360" y2="219" stroke="#4D4841" data-page-node-id="SW2ln0FfiQ81ZNm1f5zZWl"/>
+
+        <line x1="470" y1="137" x2="500" y2="137" stroke="#E2886A" stroke-width="2" marker-end="url(#arw3)" data-page-node-id="gvx11FQ8ftfDArzywDt65C"/>
+
+        <rect x="506" y="104" width="160" height="66" rx="9" fill="#211F1C" stroke="#E2886A" stroke-width="1.5" data-page-node-id="UClGLGhZjSGxrkBkyDucXG"/>
+        <text x="586" y="130" fill="#E2886A" text-anchor="middle" font-size="12.5" data-page-node-id="pnVtWg42XwaeFjQ2oyjaew">合成</text>
+        <text x="586" y="150" fill="#A8A29A" text-anchor="middle" font-size="11.5" data-page-node-id="ug73tHXhyCusDQpRqBACLG">答案＋引用</text>
+
+        <text x="340" y="258" fill="#736D64" text-anchor="middle" font-size="11" data-page-node-id="We3AVlja4EJEgjp0NdsmDC">规划看的是一份紧凑索引说明：有哪些 project、每个 project 下有哪些源、每个源擅长回答什么问题。</text>
+      </g>
+    </svg>
+    <figcaption data-page-node-id="F8OXtstUHSScNdbJgTRjpL">依原文流程图重绘为中文。规划据此选出工具，执行层并行发出，把回来的结果归一成统一的证据格式，再交给最后一轮模型合成答案。</figcaption>
+  </figure>
+
+  <p data-page-node-id="Rks1pCXj8uzknlxVTwxVwE">网页界面里，上面这条链路是端到端跑完的：规划选工具，执行层并行取证并归一成带分数、时间和来源提示的统一证据，最后一轮模型据此产出带引用和注意事项的答案。对用户来说就是提个问题拿到一个答案。</p>
+
+  <h3 id="s6-2" data-page-node-id="hRkXbLUa1PwRPd4rwJ9Q2R">MCP 那一侧反过来做</h3>
+  <p data-page-node-id="4zwmD5RguZuEblm8oCSDHG">MCP 集成走的是相反的路子：把检索能力拆成一个个直接可调的工具暴露出去，而不是藏在一个「帮我回答这个问题」的大接口后面。这些工具被刻意做得简单，尽量不掺模型，客户端因此可以查得又快又便宜。每个 MCP 工具对应一个底层检索原语，输入输出窄、有结构、稳定，任何客户端或 Agent 都能直接调。大部分工具只跑一条查询链路——向量检索、词法检索或者 ripgrep——套一层轻量打分，然后把原始证据行返回。</p>
+  <p data-page-node-id="JWq1LVkOfuWrW33pnDse18">这样一来，编排的活儿交给 Claude Code 这类支持 MCP 的 Agent：调哪些工具、按什么顺序调、结果怎么拼成最终答案或者一次代码修改，都由它自己决定。<strong data-page-node-id="g51URHLJbeVIqgxBJUn5uU">检索层不依赖这些模型判断也能照常提供服务。</strong></p>
+
+  <div class="tbl-wrap" data-page-node-id="8ztimG7mBlLER8EmBnGO1y">
+    <table data-page-node-id="Cu0so6OHrYa0L8d86dFEIb">
+      <thead data-page-node-id="OTA9AY2yrKgzN6t2lRjONb">
+        <tr data-page-node-id="2mLFQRJGwGa7J1o5F04ABH"><th style="width:26%" data-page-node-id="RvGNa9rJTutsa9HW0ncQsj">检索器</th><th style="width:20%" data-page-node-id="H6qtK1mh2F1qvm9DASbPXG">类型</th><th data-page-node-id="B8dL7i1sngxw8JfBuYRADn">补的是什么盲区</th></tr>
+      </thead>
+      <tbody data-page-node-id="1D9iyLOsv8zW1MxUqhphLP">
+        <tr data-page-node-id="PxtgPalDmlxXqIcg7IGWxA"><td data-page-node-id="Lhj6fkrLEYfooJkUt1iom0"><code data-page-node-id="ojupyyz4F8WJBehk2ZnfKq">search</code></td><td data-page-node-id="yTBnh8YxdGxQkPGHYnt8rA">通用入口</td><td data-page-node-id="2WweBK6FTtrsgCkhM5lZDZ">不预选源时兜底，跨全部数据源召回</td></tr>
+        <tr data-page-node-id="oCzfb0R20ZRUavTCuauYx5"><td data-page-node-id="O3PxvHnS3EPdG5x4d225TP"><code data-page-node-id="2kFqGSeYLicB9n6nRyGpoW">search_slack</code></td><td data-page-node-id="vB1D2DQ305og5uLkspJC04">四路混合</td><td data-page-node-id="VrVv5dyNdmX6mHFw1nbnCD">全文、向量、稀有词权重、时间衰减各出一份排名，覆盖 Slack 的口语化表达</td></tr>
+        <tr data-page-node-id="getCeNS8G8mIpzd3PyDdGx"><td data-page-node-id="TjBpFqpELQUiJeUDO8Nx7h"><code data-page-node-id="eyEvCLBjtXyJfFWCBonUwP">search_code</code></td><td data-page-node-id="6ajFTZrAsL3F7Pqpo4BzF3">语义 + 词法</td><td data-page-node-id="koCixHc1kj31e33VcoPnoW">按语法切块后的多粒度代码向量，外加 ripgrep 精确匹配</td></tr>
+        <tr data-page-node-id="CbtvXAosGpf3pwdkR03fkv"><td data-page-node-id="AD8sPiHcK9iln3O5D8mOJ0"><code data-page-node-id="q57q9iqc0DKVnDJleCx8iX">subsystem_index</code></td><td data-page-node-id="rqTLt0NgMzxhZwg8f4xRxG">关系图</td><td data-page-node-id="8iTQCD9NRexCqxMXBRrZ3K">系统、模块与代码符号之间的结构关系，命中「这个东西属于哪个子系统」</td></tr>
+        <tr data-page-node-id="VKxao39VG2THmPiNPtIAxX"><td data-page-node-id="3XYUrXCv6IMVGk8MnJnOoD"><code data-page-node-id="cTOgC7mECiUxgnNCPSWEH5">recent_prs</code></td><td data-page-node-id="S302iV6hHzDpsbboiUmz4t">时间序</td><td data-page-node-id="P1eHUFJGEMJGQA19c7FeTC">近期改动与评审上下文，回答「这件事最近动过没有」</td></tr>
+        <tr data-page-node-id="i9zCw8YhwDEZQ7W93EWlNn"><td data-page-node-id="mNBBFRjDdqCHfaNJa9UjFT"><code data-page-node-id="J6GyLvFCXuGSTVAyB3mdpC">who_knows</code></td><td data-page-node-id="5pPWgrt5YIIDXU6erq08VU">人</td><td data-page-node-id="7InECWsRDygwv0c811OSiM">把「某件事谁最懂」变成一次可查询的检索</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="src-note" data-page-node-id="dNcCjKWNArOasiPKVTuNV7">上表「补的是什么盲区」一列为依据原文对每个工具职责的描述所作的归纳；工具名与调用方式出自原文。</p>
+</section>
+
+<section id="s7" data-page-node-id="QGTGaTiMuiK6qs5dwQVvOk">
+  <h2 data-page-node-id="Ye2u9VmkwCZ6GJzO477dTg"><span class="sec-num" data-page-node-id="NilfXFY1obghCWQg50sBEL">07</span>六份排名，怎么合成一份</h2>
+  <div class="sec-kicker" data-page-node-id="NYrAdhsYKkgfGmSBpRGtBI">排序 · 排名融合</div>
+  <p data-page-node-id="k4mgoBrzug89LrzMB4lQzg">一份检索结果排在最前面，可能只是因为它和提问用词撞了，实际回答的是另一件事。更麻烦的是，六个检索器给出的分数互相不能直接比：向量的余弦相似度和全文检索的相关度，根本不是同一把尺子。</p>
+  <p data-page-node-id="AaGm2TW6WbiWaJHGcWjkcP">他们的做法是先不看分数，只看名次。这个算法叫<strong data-page-node-id="HjJWeDj2ZXGgEicrzyHjNA">倒数排名融合</strong>，缩写 RRF：一份文档每上一份榜单，就给它加一次分，加的量是 1 除以（60 加上它在这份榜单里的名次），权重默认取 1.0，那个 60 是平滑常数。</p>
+
+  <div class="math-block" data-page-node-id="xxSCvTbKE2rk2rHwdPUj79">
+    <math display="block" data-page-node-id="fTuapf46dJFpBeVNKuWdd8">
+      <mi data-page-node-id="cuw77bIoXNBgsKfmOHo4JF">score</mi><mo data-page-node-id="6OrTtr21iKAE0YcsM8AGtv">&#x2061;</mo><mo stretchy="false" data-page-node-id="l0ei5acWLViLniolkNLdb7">(</mo><mi data-page-node-id="ULlmzD391J2AnfENPyAXHK">d</mi><mo stretchy="false" data-page-node-id="v4cXH1Fc06GFeIxSxqikBJ">)</mo>
+      <mo data-page-node-id="u5lYlCqzJPSEUjmhCuoOMH">=</mo>
+      <munder data-page-node-id="qKFk7DwmHEefuWSzND7OuV"><mo data-page-node-id="nGrVvg1CdiIVpDFn43yAkl">&#x2211;</mo><mrow data-page-node-id="0oQCAFMMg2BbXE5ygxDCmd"><mi data-page-node-id="MaWtgHwMhaj2eJbkdrKJDv">l</mi><mo data-page-node-id="piK5DU42RpBOcgvD9xuIha">&#x2208;</mo><mi data-page-node-id="DxGTx3tv9uCGxdxlDP8Hpi">L</mi></mrow></munder>
+      <msub data-page-node-id="MnyTcFStGIPn0A7veJkDBA"><mi data-page-node-id="PxtEnMJtA45pkzDn1cAK3W">w</mi><mi data-page-node-id="9l9Tb8l5P9l0WQAKUheAZc">l</mi></msub>
+      <mo data-page-node-id="I7i7yDj95aVKAerzO3JxP8">&#x22C5;</mo>
+      <mfrac data-page-node-id="GrbbmSgtdTCZetPACSGJNC">
+        <mn data-page-node-id="CZ6VBanlTcfcpWMYGDsOJQ">1</mn>
+        <mrow data-page-node-id="MpYQ3AoFjA3sdEuiJQUVoJ"><mi data-page-node-id="bsvZEJ6EVAZMCWdoAyCCql">k</mi><mo data-page-node-id="KnPD3yCa7efUMUChrwEOWH">+</mo><msub data-page-node-id="H14tKyJRTbfDndoeUBbifp"><mi data-page-node-id="i5soQJRS2T2kkkFl75UDOp">rank</mi><mi data-page-node-id="MVv2SxcGbgTCutajA1RxUB">l</mi></msub><mo stretchy="false" data-page-node-id="aG9dCqPuBue60LHwj7qQns">(</mo><mi data-page-node-id="N5bQv2OrEhpqXFox1YYcXJ">d</mi><mo stretchy="false" data-page-node-id="Fqpslk43afb9kM11UAMJdS">)</mo></mrow>
+      </mfrac>
+      <mspace width="1.6em" data-page-node-id="5nBx8Iik8g1nBUAaPYI4Uh"/>
+      <msub data-page-node-id="5BPWqBoh4JWDVerDQZADGW"><mi data-page-node-id="ASnzT5g4rKzl7Yz7EjVG1R">w</mi><mi data-page-node-id="xxIwnY1DKoLKb59FthZfcU">l</mi></msub><mo data-page-node-id="hy39RkR9XImzP7q5hfcsIq">=</mo><mn data-page-node-id="5ZGeAPyJnFrB4CdGUckcFB">1.0</mn>
+      <mspace width="1.6em" data-page-node-id="MR3f4VCFWvPdsedSo7SYRw"/>
+      <mi data-page-node-id="5WQIVdSXLeS8MZX55v8Yp8">k</mi><mo data-page-node-id="Y5WX5fouBturYVB0GrWcof">=</mo><mn data-page-node-id="KPJnzO3bDDDZZvRhgQkvAi">60</mn>
+    </math>
+  </div>
+
+  <div class="tbl-wrap" data-page-node-id="QFHCd4Nfd0bDezzh4FNMOa">
+    <table data-page-node-id="fA90gxXDF5pcBtPiEmPNFS">
+      <thead data-page-node-id="e1jLNvrxzfDjg86iLyK1Po">
+        <tr data-page-node-id="gn4DsZIWFIkfmTrN2dfcDn"><th style="width:14%" data-page-node-id="GyHDDAfxHepHgHPtYdudwf">榜单</th><th data-page-node-id="FjMzLvTkpF0ToBEcH7lDJO">第 1 名 → 第 5 名</th></tr>
+      </thead>
+      <tbody data-page-node-id="MM1yCbAWGB5UnOwAaoA5Yo">
+        <tr data-page-node-id="n97vFXqwcSnqetk01vrDyB"><td data-page-node-id="p2OoCK9FdsjBVSOnAIzWFV">向量</td><td data-page-node-id="qQ8zklSdl4oTtQb2z4rJju">CKPT_LOADER.CC → CLASS: CheckpointLoader → WIKI: 检查点格式 → THREAD: NFS 卡住 → INC-82: 恢复变慢</td></tr>
+        <tr data-page-node-id="zIIB12MFUf5cY8FTCWhDqD"><td data-page-node-id="VyjYd6AIIN2xPgwrIzsZHm">全文</td><td data-page-node-id="vaMK02UaPxDLHLavKEnPBz">WIKI: 检查点格式 → CKPT_LOADER.CC → RUNBOOK: NFS 挂载 → INC-82: 恢复变慢 → THREAD: 缓存预热</td></tr>
+        <tr data-page-node-id="s08X3KK0KawaT81qqc2GMr"><td data-page-node-id="DWgLeXeB26ahGRLS5ibdG1">讨论串摘要</td><td data-page-node-id="GvHdsHPGt7pSleMIqHRARR">THREAD: NFS 卡住 → THREAD: 缓存预热 → CLASS: CheckpointLoader → WIKI: 加载卡住 → INC-82: 恢复变慢</td></tr>
+        <tr data-page-node-id="iE3BawMYuCUQ6d2IsP9pCL"><td data-page-node-id="HZaqfKbewUtVbPQ5mFH2uz">关系图</td><td data-page-node-id="rUGO38GopBTgXpspYOWpei">CLASS: CheckpointLoader → MANIFEST_PARSER.H → RUNBOOK: NFS 挂载 → THREAD: NFS 卡住 → WIKI: 检查点格式</td></tr>
+        <tr data-page-node-id="8eqkYwe8I8eEGw71iXfszE"><td data-page-node-id="HIj4OvT8RZ99nVLxPnRrvn">Wiki 向量</td><td data-page-node-id="EB48nOazqLitzVeXEkT769">WIKI: 检查点格式 → WIKI: 加载卡住 → RUNBOOK: NFS 挂载 → INC-82: 恢复变慢 → CLASS: CheckpointLoader</td></tr>
+        <tr data-page-node-id="4feO56x3l0xCR4XofLmh2T"><td data-page-node-id="2Wk66S4281kubOBrJegSxk">Slack 全文</td><td data-page-node-id="e2PpTPNH51Spt8P1YKNMgD">THREAD: NFS 卡住 → THREAD: 缓存预热 → BURST: 超时参数 → INC-82: 恢复变慢 → CLASS: CheckpointLoader</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="src-note" data-page-node-id="Yo4ucsEozP9oPuod829igg">条目名与名次为原文数据。下面所有分数均由这组名次按 RRF 公式实时算出，未引入任何原文未给出的数字。</p>
+
+  <p data-page-node-id="lvITXDwh0bYcDSFxzpFFKP">拿总榜第一名算一遍就能看清这个机制。<code data-page-node-id="Q8OZP98h6q1EhLMHNv85WP">CLASS: CheckpointLoader</code> 在六份榜单里进了五份，名次分别是第 1、2、3、5、5：</p>
+<pre data-page-node-id="Gmf6e8aTsexRzZyVHr0VWh"><code data-page-node-id="mwuCHKz1cZbFiZtbjYqUbC">CLASS: CheckpointLoader
+  关系图   第 1 名    1 / (60 + 1)  = 0.016393
+  向量     第 2 名    1 / (60 + 2)  = 0.016129
+  串摘要   第 3 名    1 / (60 + 3)  = 0.015873
+  Wiki     第 5 名    1 / (60 + 5)  = 0.015385
+  Slack    第 5 名    1 / (60 + 5)  = 0.015385
+                                总分 0.079165  →  排第 1
+
+INC-82: 恢复变慢（一次第一都没拿到）
+  向量 5、全文 4、串摘要 5、Wiki 4、Slack 4
+                                总分 0.077644  →  排第 2</code></pre>
+
+  <div class="sandbox" data-page-node-id="HCbIsJTpAV0uPkRdDtwvpL">
+    <div class="sandbox-h" data-page-node-id="GTFfujOvQyU4odBAwIFFoz">
+      <h4 data-page-node-id="NlV8AfkIPfOVmHfkN94v52">RRF 融合沙盘：拖动 k，看总榜怎么变</h4>
+      <span class="badge" data-page-node-id="4oMZZ2w8Gp9migmgFTjDxG">可交互 · 实时计算</span>
+    </div>
+    <p class="sandbox-desc" data-page-node-id="eshiumGCKqTozDg8am5JqD">六份榜单的名次固定为原文数据，权重固定为 1.0，唯一变量是平滑常数 k（原文取 60）。所有分数、名次与百分比均由上面的公式当场算出。</p>
+    <div class="ctrl-row" data-page-node-id="Nfo27DLrIdS2IVL3cqM1jn">
+      <label for="rng-rrf-k" data-page-node-id="7eQxV81lGgd15mUGVamKyH">平滑常数 k</label>
+      <input type="range" id="rng-rrf-k" min="0" max="200" step="1" value="60" data-page-node-id="iG9dBvHpD4Gk9D7F5LjbMK">
+      <span class="readout" id="out-rrf-k" data-page-node-id="FCdkgbGpcN1bXR2jNkzvQr">60</span>
+    </div>
+    <div class="ctrl-row" data-page-node-id="UgGKvabmQKWdfjQLBqVlG9">
+      <button class="tab" id="btn-rrf-reset" type="button" data-page-node-id="PpbNcvkLUhSYkR09U6ct7S">回到 k = 60（Cerebras 取值）</button>
+      <button class="tab" id="btn-rrf-zero" type="button" data-page-node-id="T6xmCu12c9t8JTGCrYTJQk">跳到 k = 0（无平滑）</button>
+    </div>
+    <div class="bars" id="box-rrf-bars" data-page-node-id="gHRPxdy8OEmvPJOHgEB642"></div>
+    <ul class="crit-list" data-page-node-id="OegQWoHP55nAiBDBMH86tq">
+      <li data-page-node-id="ct9gMPUsN3h0T5Fxg2z8pr"><span class="dot" id="out-rrf-class" data-page-node-id="Ew57OSMSBKPHV4yGHIapKA">0.079165</span><span data-page-node-id="hE1up4EFvkkKKfeb8b9wLf">CLASS: CheckpointLoader 总分（5 份榜单，名次 1 / 2 / 3 / 5 / 5）</span></li>
+      <li data-page-node-id="G0cqRWqlpCkMFvAQr72rtT"><span class="dot" id="out-rrf-inc" data-page-node-id="e6zGF66hSz5HRBxVfZcHhw">0.077644</span><span data-page-node-id="73njBtZPYp2swEmJfhzBvR">INC-82: 恢复变慢 总分（5 份榜单，名次 4 / 4 / 4 / 5 / 5，零个第一）</span></li>
+      <li data-page-node-id="tcA3Tk8xm9w0F0PuACOHYv"><span class="dot" id="out-rrf-gap" data-page-node-id="2pLGQVnEUYKBjr4KDr9arP">0.001520</span><span data-page-node-id="es22CDEccmp0ztxcVX795H">两者之差，占第一名总分的 <span id="out-rrf-gappct" data-page-node-id="6OPkTpvqRsCt2SCIg09FVv">1.92%</span></span></li>
+      <li data-page-node-id="kOsma9CPvoGgi8gvf9xJlU"><span class="dot" id="out-rrf-spread" data-page-node-id="wbxU3Mz3unn1l8tItgGaMm">6.15%</span><span data-page-node-id="s40rnUkh6Kh8J5kCErfs0k">同一份榜单内，第 1 名单票与第 5 名单票的相对差距</span></li>
+    </ul>
+    <div class="verdict" id="out-rrf-note" data-page-node-id="kOrRADpPkF7NHjiUCgH8iV">当前 k = 60：第 1 名 CLASS: CheckpointLoader（0.079165），第 2 名 INC-82: 恢复变慢（0.077644），两者相差 0.001520（占第一名 1.92%）。</div>
+    <div class="verdict" id="out-rrf-cross" data-page-node-id="18maiyScaIEXs7TMH3FMwE">共识区判定：k = 60 ≥ 6.4384，已进入共识区，零个第一的 INC-82 现排第 2 名。</div>
+  </div>
+
+  <figure data-page-node-id="GRimKEAQDVQzJII5mhYuwl">
+    <div class="fig-h" data-page-node-id="7xY9ysJgOmQciWntn8sVEt">总分随 k 的衰减（对数纵轴，41 个采样点）</div>
+    <svg viewBox="0 0 680 330" role="img" aria-label="四份文档的总分随平滑常数 k 增大而衰减的对数曲线，标注 k=60 与共识区临界点" data-page-node-id="RGARoKZz7V6muNvEr6EQfN">
+      <g font-family="system-ui, -apple-system, sans-serif" data-page-node-id="6qQUGxRRleuXiEsiuHDp0K">
+        <line x1="60" y1="34" x2="60" y2="252" stroke="#4D4841" stroke-width="1.2" data-page-node-id="l020Gej3gobAf9uh3Jg2hO"/>
+        <line x1="60" y1="252" x2="620" y2="252" stroke="#4D4841" stroke-width="1.2" data-page-node-id="nJmGpYRCQ1WZSrmIQDdvC1"/>
+        <g stroke="#33302B" stroke-dasharray="3 4" data-page-node-id="PsxsQBnmaOUtyffjimNYaD">
+          <line x1="60" y1="247.94" x2="620" y2="247.94" data-page-node-id="6x8kACGtVlpUnfKASV7v87"/>
+          <line x1="60" y1="207.51" x2="620" y2="207.51" data-page-node-id="vZMI80WhSW1EGChEnZACwF"/>
+          <line x1="60" y1="177.68" x2="620" y2="177.68" data-page-node-id="pQH7yUyPH2RF0c6qnbe0PN"/>
+          <line x1="60" y1="147.85" x2="620" y2="147.85" data-page-node-id="wYDNhC2ra2W2oPeSb4opnv"/>
+          <line x1="60" y1="108.42" x2="620" y2="108.42" data-page-node-id="Q5ZY5a56SpU1mjLfGolgvJ"/>
+          <line x1="60" y1="78.59" x2="620" y2="78.59" data-page-node-id="guEoEVr1HmgheWtZEc8LGL"/>
+          <line x1="60" y1="48.76" x2="620" y2="48.76" data-page-node-id="Be2dwJF0T3g0zmZBFYoM5U"/>
+        </g>
+        <g fill="#736D64" font-size="10.5" text-anchor="end" data-page-node-id="c8PMUZewufQ4OSLhn6zz2C">
+          <text x="54" y="251" data-page-node-id="TUnPus5posz1W7KEco7GgD">0.02</text>
+          <text x="54" y="211" data-page-node-id="wHNe52pec1qKsmCey2tRwR">0.05</text>
+          <text x="54" y="181" data-page-node-id="R02IZbd0nAGmdO79cax63r">0.1</text>
+          <text x="54" y="151" data-page-node-id="awobILcHCArwkBCoXgpzk1">0.2</text>
+          <text x="54" y="112" data-page-node-id="PWVEWPFTJG5DmwKFI5YwEc">0.5</text>
+          <text x="54" y="82" data-page-node-id="GRJFhGcuoCMzTcho6lV4FB">1.0</text>
+          <text x="54" y="52" data-page-node-id="C8Q864ew1k8FrMN9iSGXDJ">2.0</text>
+        </g>
+        <g fill="#736D64" font-size="10.5" text-anchor="middle" data-page-node-id="Jvu1fn7OObvT1TVFb6iYLu">
+          <text x="60" y="270" data-page-node-id="mS5WWbc5UeR5jR0wglGt0E">0</text>
+          <text x="200" y="270" data-page-node-id="TC09X4p2amzL5RFYUMJoJA">50</text>
+          <text x="340" y="270" data-page-node-id="zUaKVrMGk41SBq5qG7muED">100</text>
+          <text x="480" y="270" data-page-node-id="KCkGmRDFHpPshj9cgHsQXl">150</text>
+          <text x="620" y="270" data-page-node-id="EwZpG9EEY5MTDpEIdz3BY0">200</text>
+        </g>
+        <text x="340" y="292" fill="#A8A29A" font-size="11" text-anchor="middle" data-page-node-id="lPxccGZA0zysYIMA0BEHSy">平滑常数 k</text>
+        <text x="20" y="146" fill="#A8A29A" font-size="11" text-anchor="middle" transform="rotate(-90 20 146)" data-page-node-id="p9YCgPCaaA7cFGhDVBpuN4">RRF 总分（对数）</text>
+
+        <polyline points="60.0,38.59 74.0,103.67 88.0,126.9 102.0,141.73 116.0,152.69 130.0,161.4 144.0,168.64 158.0,174.82 172.0,180.23 186.0,185.03 200.0,189.34 214.0,193.26 228.0,196.86 242.0,200.17 256.0,203.25 270.0,206.13 284.0,208.82 298.0,211.35 312.0,213.75 326.0,216.01 340.0,218.17 354.0,220.22 368.0,222.17 382.0,224.05 396.0,225.84 410.0,227.56 424.0,229.22 438.0,230.81 452.0,232.35 466.0,233.83 480.0,235.27 494.0,236.66 508.0,238.0 522.0,239.31 536.0,240.57 550.0,241.8 564.0,243.0 578.0,244.16 592.0,245.3 606.0,246.4 620.0,247.48" fill="none" stroke="#6C9BD1" stroke-width="2" data-page-node-id="tI4WIhH0llZWmOZodUIXCG"/>
+        <polyline points="60.0,39.16 74.0,103.89 88.0,127.0 102.0,141.79 116.0,152.73 130.0,161.43 144.0,168.65 158.0,174.84 172.0,180.24 186.0,185.03 200.0,189.35 214.0,193.27 228.0,196.86 242.0,200.18 256.0,203.26 270.0,206.13 284.0,208.82 298.0,211.35 312.0,213.75 326.0,216.01 340.0,218.17 354.0,220.22 368.0,222.18 382.0,224.05 396.0,225.84 410.0,227.56 424.0,229.22 438.0,230.81 452.0,232.35 466.0,233.84 480.0,235.27 494.0,236.66 508.0,238.0 522.0,239.31 536.0,240.57 550.0,241.8 564.0,243.0 578.0,244.16 592.0,245.3 606.0,246.4 620.0,247.48" fill="none" stroke="#9B8BC4" stroke-width="2" data-page-node-id="D5GgR6l00SsWoHpcBd6Ylo"/>
+        <polyline points="60.0,44.01 74.0,98.17 88.0,119.72 102.0,133.85 116.0,144.43 130.0,152.9 144.0,159.96 158.0,166.02 172.0,171.33 186.0,176.06 200.0,180.31 214.0,184.18 228.0,187.74 242.0,191.02 256.0,194.06 270.0,196.91 284.0,199.58 298.0,202.09 312.0,204.47 326.0,206.72 340.0,208.86 354.0,210.89 368.0,212.84 382.0,214.7 396.0,216.48 410.0,218.2 424.0,219.84 438.0,221.43 452.0,222.96 466.0,224.44 480.0,225.86 494.0,227.25 508.0,228.59 522.0,229.88 536.0,231.15 550.0,232.37 564.0,233.56 578.0,234.72 592.0,235.85 606.0,236.95 620.0,238.02" fill="none" stroke="#E2886A" stroke-width="2.6" data-page-node-id="vQCzcfFTfXk2J59frnnDiP"/>
+        <polyline points="60.0,72.58 74.0,105.64 88.0,124.06 102.0,136.91 116.0,146.79 130.0,154.82 144.0,161.58 158.0,167.42 172.0,172.56 186.0,177.16 200.0,181.31 214.0,185.09 228.0,188.57 242.0,191.79 256.0,194.78 270.0,197.58 284.0,200.21 298.0,202.69 312.0,205.03 326.0,207.25 340.0,209.36 354.0,211.38 368.0,213.3 382.0,215.14 396.0,216.91 410.0,218.6 424.0,220.23 438.0,221.81 452.0,223.32 466.0,224.79 480.0,226.2 494.0,227.58 508.0,228.9 522.0,230.19 536.0,231.45 550.0,232.66 564.0,233.85 578.0,235.0 592.0,236.12 606.0,237.21 620.0,238.28" fill="none" stroke="#5B9A92" stroke-width="2.6" data-page-node-id="GCAthy2TgxMH5FtIfoNaAY"/>
+
+        <line x1="228" y1="34" x2="228" y2="252" stroke="#E2886A" stroke-width="1" stroke-dasharray="4 4" data-page-node-id="Emk1SBRjs63tH7XTCSxwZB"/>
+        <text x="232" y="46" fill="#E2886A" font-size="10.5" data-page-node-id="ushTqqlbKLQEGjlcHAJsbr">k = 60（Cerebras）</text>
+        <line x1="78" y1="34" x2="78" y2="252" stroke="#D4A373" stroke-width="1" stroke-dasharray="4 4" data-page-node-id="5Yf7FWsHFf7orRNp9fNf5J"/>
+        <text x="82" y="60" fill="#D4A373" font-size="10.5" data-page-node-id="tqHOPrVQIsMzGdQEqvgaeO">k ≈ 6.44 共识区起点</text>
+      </g>
+    </svg>
+    <figcaption data-page-node-id="FjizZcqcK1mGmUani53nnO">四条曲线为 WIKI: 检查点格式（蓝）、THREAD: NFS 卡住（紫）、CLASS: CheckpointLoader（陶土，原文总榜第一）、INC-82: 恢复变慢（青，原文总榜第二）。纵轴为对数刻度，k 每 5 取一个采样点，共 41 点等距分布。坐标由 Python 脚本按公式实算后写入，未手绘估算。</figcaption>
+  </figure>
+
+  <p data-page-node-id="P0P6WvOYwIjfG9vRDkrPaj">把 60 加在名次前面，第 1 名和第 5 名的单票得分只差 <strong data-page-node-id="RzY4uc93ehTSY0q43bR9LW">6.15%</strong>（0.016393 对 0.015385）。如果不加这个常数、直接取名次的倒数，第 5 名就只剩第 1 名的五分之一，相对差距拉开到 80%。所以 60 的作用是把「名次靠前」这件事的收益压平，让共识压过单一强票：一份在好几个检索器里都排在前列的文档，赢过只在其中一个里拿第一的文档。上面那个 INC-82 就是例子，它一次第一都没拿过，靠稳定进入五份榜单排到了第二。</p>
+
+  <div class="callout" data-page-node-id="XWvLxkBFUaOcilGzgytlnH">
+    <div class="ct" data-page-node-id="ZtWILWKecBKfmevTRyIS52">稳健性复检（本文推算，非原文结论）</div>
+    <p data-page-node-id="Q7D4N0rnKL97LBcaEutv6c">用上面这组名次做全域扫描（k 从 0 到 200，步长 0.01，约两万组），有两个结论值得单独记下来：</p>
+    <ul data-page-node-id="TcpEvR8pwtiLprb5OIREe1">
+      <li data-page-node-id="NGTn2ZAZbSECDlspvKxDzf"><strong data-page-node-id="0TFCDKcYqZGLrbzAIEYK9i">常数 60 远在临界点之外，不是精调出来的魔法数字。</strong> INC-82 反超「拿过两个第一」的 THREAD: NFS 卡住的临界点是 <code data-page-node-id="SEtSC6wNzE90VX8qXY84bX">k = 6.2915</code>，反超 WIKI: 检查点格式的临界点是 <code data-page-node-id="Du6LkGUSzUMxbNj9WHrGCt">k = 6.4384</code>。也就是说 k 只要大于 6.44，前两名就与 k=60 时完全一致；60 比临界点高出一个数量级，余量充足。</li>
+      <li data-page-node-id="mlBoudkzpvTg0HIfVCZ98p"><strong data-page-node-id="pDbNiyCNemRp5LWYNXpP0Y">k 足够小时，「共识压过单一强票」这句话会失效。</strong> 当 k &lt; 1，总榜第一会变成 WIKI: 检查点格式（4 份榜单、两个第一），CLASS 退到第二。两条曲线在 <code data-page-node-id="BXLaZ61L3kdPsXId3iqAaf">k = 1</code> 处精确相交，此时两者同为 1.416667（代数上 1/(k+2) + 1/(k+5) = 1/(k+1) 的正根恰为 k = 1）。原文的定性说法在 k ≥ 1 时成立，k → 0 时反转。</li>
+      <li data-page-node-id="mIWTEGwEryWKrl8F81gS39">顺带一个细节：k = 60 时第 3 名与第 4 名只差 0.00000763，第 5 名与第 6 名只差 0.00002363，实质上是并列。这类名次不该被当成分数差来解读。</li>
+    </ul>
+  </div>
+
+  <h3 id="s7-2" data-page-node-id="ws1nEXcSJfRCUczjnUdqbc">合并之后还有三道工序</h3>
+  <p data-page-node-id="ZS3oacO5rrnmvy8Hk2oMhl">融合出来的榜单不会直接送去写答案。接下来先把同一个来源被切散的重复块合并回一条，再限制单个文件最多能贡献几条结果，得到一批更分散的前二十名。这二十条连同原始问题一起交给一个小的重排模型，它给每条打一个 0 到 10 分，留下前十条。</p>
+  <p data-page-node-id="zdCzzgopW7RkMEDxupvTu4">排名定下来之后，再把上下文补回来。比如命中的是 wiki 里的某一段，就顺带把它前后两段也拉进来，避免切块时被切散的标题、前置条件和注意事项丢掉。这样交到读者手上的是一段完整的引用，而不是一段缺前提的孤立文字。</p>
+  <p data-page-node-id="MiCFut8BCfSxiVt4dl2apa">走完这一整条，检索这一步交出去的是一包证据：<strong data-page-node-id="270iCf8U736PO1fa1SGiL7">来自不同检索器、经过融合，在来源这一级去过重，针对真正的问题重排过，最后才补上周边上下文。</strong></p>
+</section>
+<section id="s8" data-page-node-id="E7nWwD5V90VnyDHQ4zqJO5">
+  <h2 data-page-node-id="DtCaukS0akFjU8ZN3HXyxO"><span class="sec-num" data-page-node-id="NhTIhoowmQj8Z3HKayq4kP">08</span>搜全公司，反而搜不到有用的</h2>
+  <div class="sec-kicker" data-page-node-id="lai7HRG3CayShRfHWPhz1F">组织 · 检索范围</div>
+  <p data-page-node-id="zB4NlfvRcCpaym21Cmbd64">语料越攒越大之后，「什么都搜」这件事很快就不好用了。做编译器的工程师不想在结果里看到机房运维手册，反过来也一样。</p>
+  <p data-page-node-id="hfdkHg9lrEHPg4qQNJAHcB">他们引入了 <strong data-page-node-id="ooimStbnxi4XNIWoch3WAC">project</strong> 这一层来解决。一个 project 就是一组数据源的命名包：指定的几个 Slack 频道、几个代码仓库、几个内部数据库和几个文档空间，围绕某个团队或某个项目组织。project 被刻意做得很轻：同一个数据源，比如公司共用的故障频道或者中心平台仓库，可以被多个 project 同时引用，不需要复制一份。</p>
+  <p data-page-node-id="Wyxz7fcw4fvM1rmCfXbuKn">新人入职时会被引导选一个或者建一个跟自己工作最贴近的默认 project，比如训练基础设施、编译器、机房运维。这个默认值存在用户档案里，之后所有查询自动限定在这个范围内。效果是新来的工程师不用先花时间搞清楚哪些 Slack 频道、哪些仓库、哪些文档空间跟自己有关，一上手拿到的结果就已经是相关的。</p>
+
+  <div class="grid-2" data-page-node-id="kNwZuS04aMuDDzIWRhfzwp">
+    <div class="card neg" data-page-node-id="TEwsxDeMCRC4a4bwaiMCDw">
+      <h4 data-page-node-id="nHNs6KBVEK0IpDxqkCDODx">全公司范围</h4>
+      <ul data-page-node-id="LLhFFXSMcP0LN1aj1xWJdE">
+        <li data-page-node-id="6BTnYLSKIU7Wv57ZVrMgrE">编译器的问题，结果里混进机房运维手册</li>
+        <li data-page-node-id="8Nc2ay25OcIQq9JOH7macK">相关度靠算法硬扛</li>
+        <li data-page-node-id="Vcz30qyBkbL2AlFVzlu0By">新人不知道该信哪一条</li>
+      </ul>
+    </div>
+    <div class="card pos" data-page-node-id="beIF7VEJMs5FHYeOXbZvre">
+      <h4 data-page-node-id="hLIyk4rcaX2YfZtBXLWxw9">限定在一个 project 里</h4>
+      <ul data-page-node-id="n45bKH1qCdZcMbL8CCZ88I">
+        <li data-page-node-id="2xpIG7aajADbPOxPSbem3Y">只在这个团队关心的源里检索</li>
+        <li data-page-node-id="DxZmnF0t0LeIK3oaRfn5fG">相关性由范围先兜住一层</li>
+        <li data-page-node-id="g9HX8JfKnBuVIGNAZkY6z7">入职选一次，之后自动生效</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="quote" data-page-node-id="9h0Acl8oHoErQydUKseDOD">
+    这套知识库之所以跑得起来，是因为它到信息本来所在的地方去找人，而没有把一切塞进一个僵硬的系统里。
+    <cite data-page-node-id="BBqdEDDt6JSkiMLwmW7aFf">Cerebras，《How we built our knowledge base》</cite>
+  </div>
+</section>
+
+<section id="s9" data-page-node-id="InUVHLjWxMwUA0S0jWHgG5">
+  <h2 data-page-node-id="tDbEvnfgIjgvDCGNoF6G6i"><span class="sec-num" data-page-node-id="m1LWwvUDeznKUwydRgm9nK">09</span>数据一览：全文出现过的具体数字</h2>
+  <div class="sec-kicker" data-page-node-id="D24bA5bs46DYEwka2DD1dE">参数与规模</div>
+  <div class="stat-grid" data-page-node-id="QzXOQFrLYzn9TxZgVpkQNH">
+    <div class="stat" data-page-node-id="lOH7FKVT196b063NCaxBPP"><div class="v" data-page-node-id="PEJdNWNS1cx3kBVYbFt4yM">15,000+</div><div class="l" data-page-node-id="sRViv1ppSeM6Zq9MBC60nW">每天被提问的次数</div><div class="n" data-page-node-id="pFZW1Hd6rN3ID67f6DC1bQ">提问方含员工、自动化脚本和 Agent</div></div>
+    <div class="stat" data-page-node-id="4PGkDbDry5iHkkuhgmYRMf"><div class="v" data-page-node-id="NHCGHzFtrwcYkxNGEDS320">3 个月</div><div class="l" data-page-node-id="ESG4RUKJYAnVnxPrWuTDTY">上线到现在的时间</div><div class="n" data-page-node-id="vdTYhwczXPOvz08Xc3FY9G">已是公司内使用最广的内部工具之一</div></div>
+    <div class="stat" data-page-node-id="uYa7NrMENHjgB1yE15jjy8"><div class="v" data-page-node-id="dOlDhCRE92xUbTuQIYujpQ">3,072 维</div><div class="l" data-page-node-id="O8pVuS1Jf7KrHV6KkFF5K0">每条记录的向量维度</div><div class="n" data-page-node-id="1VjHl4VfF3uICbY15iH7R5">存在 Postgres 的 pgvector 里</div></div>
+    <div class="stat" data-page-node-id="nD7panjnrUKCAjFjX6HtcS"><div class="v" data-page-node-id="wsJzh7McrUcPQ67PyoxRBZ">IDF ≥ 4.0</div><div class="l" data-page-node-id="Pb9EkU8OANRPJMlaQpGYWE">burst 入库的稀有度门槛</div><div class="n" data-page-node-id="u96AuFkYtFJeUjZWIgTGId">至少得含一个这么罕见的词</div></div>
+    <div class="stat" data-page-node-id="xxOhP7CNmqXzO7VxEiJCuY"><div class="v" data-page-node-id="10gTWwZ0cPrsk6tSpCnh3S">200 字符</div><div class="l" data-page-node-id="Ue3kzzuJWgLVYPAnAUtHuP">burst 合并后的长度门槛</div><div class="n" data-page-node-id="CFG6c67ZJHWNS2FDEnwBQ5">短于此不入库</div></div>
+    <div class="stat" data-page-node-id="b4O2EiTDWgnDWRbEYl0ApU"><div class="v" data-page-node-id="6KSKyusvY444XEYs85HHW0">k = 60</div><div class="l" data-page-node-id="kM9rtDbdPgwakaABz3HeqA">排名融合的平滑常数</div><div class="n" data-page-node-id="zAXr67hQTao4Anm5AJoiRw">让共识压过单一强票</div></div>
+    <div class="stat" data-page-node-id="30CAEM34OK0JHLyH17RkFS"><div class="v" data-page-node-id="JdHzVSuz5GCJnck65KOKMe">20 → 10</div><div class="l" data-page-node-id="G3teuT5pFZAIdu8wFR5Drg">候选收敛路径</div><div class="n" data-page-node-id="YfUlyQLz13yfnNOj8UUMNP">融合去重后留 20 条，重排后留前 10 条</div></div>
+    <div class="stat" data-page-node-id="UOS2YxLWoLHIgZGXj1RrmG"><div class="v" data-page-node-id="EpuBGXkromM36COK0PUEeQ">40 GB+</div><div class="l" data-page-node-id="CThb8wI8hZHYHPjGZdRA8z">内部单个代码仓库的规模</div><div class="n" data-page-node-id="IqaKLRSTEJaOBWsGLqqubp">只能靠增量重算跟上</div></div>
+  </div>
+</section>
+
+<section id="s10" data-page-node-id="geHlSPXpoq7rk2WAEC5atA">
+  <h2 data-page-node-id="BlVDXjxz1eulUcuWuWhD76"><span class="sec-num" data-page-node-id="WKqFbfSLhosPA32pnoOA5i">10</span>要搭同类系统时，可以逐条对照的八个决定</h2>
+  <div class="sec-kicker" data-page-node-id="nFkm5Dpq5fZDfHqlYluLBD">落地清单</div>
+  <p data-page-node-id="aOZuuXmZ6QT6VESIOHwyxh">下面八条是从原文提炼的实施项。勾掉已经做到的，看还差几条。</p>
+  <ul class="checklist" data-page-node-id="pYoQG4Nax49lwJtAWEjvE2">
+    <li data-page-node-id="fnusb1aPHAcbyUH4WxML7b"><input type="checkbox" id="chk-d1" data-page-node-id="CuAtw9xRqHonIRzqkKhXJQ"><span class="t" data-page-node-id="t877JsWWh7M6AIu5OUl88X"><b data-page-node-id="jZ3i5xmSgqvV5iwMWPYPo4">数据留在原地</b><em data-page-node-id="NxkisQBb8rIm59N35uDv4K">每个源写一个连接器去取，不要求人改变写东西的习惯</em></span></li>
+    <li data-page-node-id="oXCCguY6EtqDwncqhXDjFw"><input type="checkbox" id="chk-d2" data-page-node-id="is5DObZUmtWp5rvrMvDsUD"><span class="t" data-page-node-id="Ij3ipsFczgrGCglDZNDw5h"><b data-page-node-id="G1YxXl2Cx9TVomaE5yI9vd">所有源落进同一张表</b><em data-page-node-id="ACyn6BkcawoZaObdHcIwfr">同一套字段，加新数据源时查询侧不用改</em></span></li>
+    <li data-page-node-id="Kp1V7x8tznQjn8ZDjVuL69"><input type="checkbox" id="chk-d3" data-page-node-id="nqbEmgXPAPhBHfoPfz9dY2"><span class="t" data-page-node-id="kmwlXzLqbaTg9HUbPaGXj3"><b data-page-node-id="9UKV5KEbbcgHE6kzABT8JR">聊天记录先蒸馏再嵌入</b><em data-page-node-id="qt1Gr1Jkknf0vTH60JjGhD">抽成一句话问题、摘要、结论、涉及系统和代码符号，原始逐字记录不进向量库</em></span></li>
+    <li data-page-node-id="dyJyi8miNMXgEpzHE9564l"><input type="checkbox" id="chk-d4" data-page-node-id="DBtEu9G1DRqvqt1dpNJG8h"><span class="t" data-page-node-id="6tgpAnYTtIVow0y2PkezdP"><b data-page-node-id="i3IqkT60cLn8ezn7l1Emvv">给长讨论串补一层 burst 检索</b><em data-page-node-id="1jcvEI34nYHxGr1QEuEoDY">同一个人连发的几条单独做向量，防止关键回复被整串摘要吃掉。入库门槛：IDF ≥ 4.0、合并后 ≥ 200 字符、有表情回应</em></span></li>
+    <li data-page-node-id="qsPa4e0DWDeSNdPXFADFKf"><input type="checkbox" id="chk-d5" data-page-node-id="j5cbdmyF5JHJnl4DoGyipp"><span class="t" data-page-node-id="vVkK4UTovaSGAKFdV7JMwH"><b data-page-node-id="a43wxCrJ818WnWx5f9Vpn7">多路检索并行，不指望单一打分</b><em data-page-node-id="InionFQ600hx3s7olAbs1X">全文补向量的字面盲区，稀有词权重压掉寒暄，时间衰减淘汰过期答案</em></span></li>
+    <li data-page-node-id="Jds70JgEV5F1ugEUHhgWDl"><input type="checkbox" id="chk-d6" data-page-node-id="mKFAwPGwPCCnSJe4OnnZsJ"><span class="t" data-page-node-id="vGSpCQRFQ3GOajBrkYjr1t"><b data-page-node-id="F7dZJcLdjsiTQmV2NiY7Hg">代码按语法边界切块</b><em data-page-node-id="4dBTwrKHqCm8dB39d0XxM3">从类到方法再到更小的块，同步状态和向量存同一个库，每次提交只重算改动的部分</em></span></li>
+    <li data-page-node-id="fEcPHxH8D1hZZrKXUc6DeT"><input type="checkbox" id="chk-d7" data-page-node-id="Q7p9qgXSSH0aV79B7P2m7p"><span class="t" data-page-node-id="aHMUapuKqk18Rn9oHZFsI3"><b data-page-node-id="1HBCTdwvi4EWvcAO1B4t1l">用倒数排名融合合并结果，常数取 60</b><em data-page-node-id="OtezCU5UwyC3zROTp55mHF">让几份榜单都靠前的文档，赢过只在一份榜单里拿第一的</em></span></li>
+    <li data-page-node-id="aUM5LRgmeEfDvwTE2QTrcW"><input type="checkbox" id="chk-d8" data-page-node-id="ySTQjwbvfx02SGOwtwJHIf"><span class="t" data-page-node-id="AdAVGaYUlneSf04Llu3NCh"><b data-page-node-id="4mYWH8FhDIy36l3Oh9qC8j">重排完把相邻上下文补回来</b><em data-page-node-id="TarLd9JLFqoaZKHyKXY1cm">命中 wiki 一段就带上前后两段，避免读者拿到缺前提的孤立段落</em></span></li>
+  </ul>
+  <div class="verdict" id="out-check-progress" data-page-node-id="lzQwnOFzCUyPg2Jv1aXT2G">已完成 0 / 8 条对照。</div>
+</section>
+
+<section id="s11" data-page-node-id="4FUtgTunaX8KE1lPBL12D2">
+  <h2 data-page-node-id="CKjd4IA38r1Raokmhwu8nc"><span class="sec-num" data-page-node-id="ifsMOf4SK76qEmDqvvZGE5">11</span>来源与核验说明</h2>
+  <div class="sec-kicker" data-page-node-id="bcE27Cw7ssLD4lmIbkb2Om">出处与边界</div>
+  <ul data-page-node-id="q8COrXwQahv7pEMBq1fWnA">
+    <li data-page-node-id="ghCZ1EFsbWpaA015lSvOGu"><strong data-page-node-id="NgOgCH5BWaPIBmvXt9E4TN">一手来源</strong>：Cerebras 官方博客《How we built our knowledge base》，作者 Isaac、Daniel、Zenghao，<a href="https://www.cerebras.ai/blog/how-we-built-our-knowledge-base" target="_blank" rel="noopener" data-page-node-id="oejEivkw8eKU0iGlxQBZgd">原文链接</a>。文中架构图与代码切块图为原文配图，其余可视化依原文交互图重绘为中文。</li>
+    <li data-page-node-id="hhXJr68PChEzlnjRACNyOW"><strong data-page-node-id="TTnX82FrfVJfUG9Vfj1kWN">原文出处</strong>：数据、参数（15,000 次/日、3,072 维、IDF ≥ 4.0、200 字符、k = 60、20 → 10、40 GB+）、四条候选示例、六份榜单的条目名与名次、两条 RRF 算式与总分，均出自该文及其配图。</li>
+    <li data-page-node-id="wmjtoBQZdOQmIIPWMMDYHj"><strong data-page-node-id="kz0aCVzizROBYw5MzAhVqA">本文推算（非原文结论）</strong>：第 1 名与第 5 名单票相对差 6.15%、无常数时 80%；INC-82 反超临界点 k = 6.2915 与 6.4384；k = 1 处两曲线精确相交于 1.416667；k = 60 时第 3/4 名差 0.00000763、第 5/6 名差 0.00002363。以上均由 Python 脚本按 RRF 公式实算，脚本在 k ∈ [0, 200]、步长 0.01 的全域上做过扫描。</li>
+    <li data-page-node-id="9q4bFSN0iVuHJi7o7wHf7j"><strong data-page-node-id="GRHbfHFaHFyJ3xHfALTjGY">未公开、因此未补全的部分</strong>：四种打分下四条候选的具体名次与分值（只标注原文给出的定性升降）；burst 三条判据各自的权重与合成方式；重排模型的打分口径。这些位置一律留白，不补数字。</li>
+    <li data-page-node-id="fjzKhP6aMOjwvU9sJ0gseR"><strong data-page-node-id="EOcT2EAJ4eG8IkTpApw1px">口径提醒</strong>：Cerebras Knowledge 为公司内部工具，未对外开放；上述参数是其内部环境下的取值，迁移到别的公司需重新标定。</li>
+  </ul>
+  <footer data-page-node-id="PSgsYc6uJSvX2jiRIPQPEE">
+    <p data-page-node-id="kQgVAxZZl5w1V8abLFzIhs">AIKnowledge 技术消化系列 · 单文件自包含文档 · 零外部依赖，断网可完整阅读与交互 · 定稿日 2026-09-15</p>
+  </footer>
+</section>
+
+</article>
+</main>
+
+<button id="toTopBtn" type="button" title="回到顶部" data-page-node-id="HGK8Jwdrm5DlUkk1UkMCUd">↑</button>
+<script>
+(function () {
+  "use strict";
+
+  function byId(id) { return document.getElementById(id); }
+
+  /* ---------- 主题切换：默认深色 ---------- */
+  var THEME_KEY = "aike-cerebras-theme";
+  var root = document.documentElement;
+  function applyTheme(t) {
+    root.setAttribute("data-theme", t);
+    if (t === "dark") { root.classList.add("dark"); }
+    else { root.classList.remove("dark"); }
+  }
+  var saved = null;
+  try { saved = window.localStorage.getItem(THEME_KEY); } catch (e) { saved = null; }
+  applyTheme(saved === "light" ? "light" : "dark");
+  byId("btn-theme").addEventListener("click", function () {
+    var now = root.getAttribute("data-theme");
+    var next = (now === "dark") ? "light" : "dark";
+    applyTheme(next);
+    try { window.localStorage.setItem(THEME_KEY, next); } catch (e) { /* 隐私模式忽略 */ }
+  });
+
+  /* ---------- 目录开关与阅读进度 ---------- */
+  var sidebar = byId("sidebar");
+  byId("btn-toc").addEventListener("click", function () {
+    sidebar.classList.toggle("open");
+  });
+  var bar = byId("reading-progress-bar");
+  var toTop = byId("toTopBtn");
+  function onScroll() {
+    var docH = root.scrollHeight - root.clientHeight;
+    var top = root.scrollTop || 0;
+    var pct = docH > 0 ? (top / docH) * 100 : 0;
+    if (pct < 0) { pct = 0; }
+    if (pct > 100) { pct = 100; }
+    bar.style.width = pct.toFixed(2) + "%";
+    toTop.style.display = top > 600 ? "block" : "none";
+  }
+  window.addEventListener("scroll", onScroll);
+  toTop.addEventListener("click", function () {
+    if (window.scrollTo) { window.scrollTo(0, 0); }
+  });
+
+  var tocLinks = document.querySelectorAll("#sidebar a");
+  var sections = [];
+  for (var si = 0; si < tocLinks.length; si++) {
+    var href = tocLinks[si].getAttribute("href");
+    if (href && href.charAt(0) === "#") {
+      var el = byId(href.substring(1));
+      if (el) { sections.push({ link: tocLinks[si], el: el }); }
+    }
+  }
+  function markActive() {
+    var best = null;
+    for (var i = 0; i < sections.length; i++) {
+      var r = sections[i].el.getBoundingClientRect();
+      if (r.top <= 140) { best = sections[i]; }
+    }
+    if (!best && sections.length) { best = sections[0]; }
+    for (var j = 0; j < sections.length; j++) {
+      sections[j].link.classList.toggle("active", sections[j] === best);
+    }
+  }
+  window.addEventListener("scroll", markActive);
+
+  /* ---------- 组件一：四种打分，同一批候选 ---------- */
+  var CAND = [
+    "Checkpoint 在 NFS 挂载点上卡住，把 <code>CKPT_PREFETCH</code> 设成 4。",
+    "<code>ERR_MANIFEST_TIMEOUT</code>：恢复卡在清单加载之后。",
+    "好的收到，谢谢，我试试。",
+    "恢复卡在清单加载之后，改用 <code>LEGACY_FETCHER=1</code>。"
+  ];
+  var SCORERS = {
+    ft: {
+      name: "全文匹配 FULL-TEXT",
+      desc: "按字面对词。工程师直接粘贴一段报错的时候，字面对上就是最硬的证据，语义再像也不该排到它前面。代价是换了一套说法讲同一件事的那条，一个词都对不上。",
+      blind: "盲区：真正解决问题的那条回复一个原词都没用，在这一栏里一个词都对不上。",
+      items: [
+        { i: 0, s: "down", w: "一个原词都没用：既没有 restore / hangs，也没有 manifest / load。" },
+        { i: 1, s: "up", w: "报错码与查询词几乎逐字重合，字面最硬的一条证据。" },
+        { i: 2, s: "down", w: "不含任何查询词，直接落榜。" },
+        { i: 3, s: "up", w: "字面含「恢复卡在清单加载之后」，但这是八个月前已作废的老办法。" }
+      ]
+    },
+    emb: {
+      name: "向量匹配 EMBEDDING",
+      desc: "按意思对。提问的人说「恢复卡住」，回答的人说「checkpoint 在 NFS 挂载点上停住」，两边可能没有一个共同的词，这一层专门接这种情况。代价是寒暄句在向量空间里离所有问句都不远。",
+      blind: "盲区：寒暄句在向量空间里离所有问句都不远，会被一起抬上来，占用前排位置。",
+      items: [
+        { i: 0, s: "up", w: "换了一整套说法讲同一件事，靠语义被捞上来。" },
+        { i: 1, s: "na", w: "原文未给出该条在此打分下的表现。" },
+        { i: 2, s: "up", w: "原文明确指出：寒暄句在向量空间里离所有问句都不远，属于被误抬的噪声。" },
+        { i: 3, s: "na", w: "原文未给出该条在此打分下的表现。" }
+      ]
+    },
+    idf: {
+      name: "稀有词权重 IDF",
+      desc: "按词有多罕见给权重。一条很短但用了生僻配置项名字的消息，值得排上去；而「好的收到，谢谢」一旦按词的稀有程度算分，就接近于零。",
+      blind: "盲区：它只认词的稀有度，不认这段话是不是真的回答了问题。",
+      items: [
+        { i: 0, s: "up", w: "带着罕见参数名 CKPT_PREFETCH，短也能被抬上去。" },
+        { i: 1, s: "na", w: "原文未给出该条在此打分下的表现。" },
+        { i: 2, s: "down", w: "原文明确指出：按词的稀有程度算分，这一条接近于零。" },
+        { i: 3, s: "na", w: "原文未给出该条在此打分下的表现。" }
+      ]
+    },
+    age: {
+      name: "时间衰减 AGE DECAY",
+      desc: "按时间打折。两条内容都能回答同一个问题，八个月前那条描述的基础设施可能已经不存在了。在相关度差不多的时候，新的那条赢。",
+      blind: "盲区：它只在相关度接近时起作用，救不了本身就不相关的结果。",
+      items: [
+        { i: 0, s: "up", w: "两周前的讨论串，正是原文说的那条真正解决问题的答案。" },
+        { i: 1, s: "na", w: "原文未给出该条在此打分下的表现。" },
+        { i: 2, s: "na", w: "原文未给出该条在此打分下的表现。" },
+        { i: 3, s: "down", w: "八个月前的老办法，原文说它描述的基础设施可能已经不存在了。" }
+      ]
+    }
+  };
+  var scKeys = ["ft", "emb", "idf", "age"];
+  var scBtns = { ft: byId("btn-sc-ft"), emb: byId("btn-sc-emb"), idf: byId("btn-sc-idf"), age: byId("btn-sc-age") };
+  var scCur = "ft";
+  function renderScorer(key) {
+    var cfg = SCORERS[key];
+    byId("out-sc-desc").textContent = cfg.desc;
+    byId("out-sc-blind").textContent = cfg.blind;
+    var html = "";
+    var k, it, cls, flag;
+    for (var n = 0; n < cfg.items.length; n++) {
+      it = cfg.items[n];
+      cls = it.s === "up" ? "cand up" : (it.s === "down" ? "cand down" : "cand");
+      flag = it.s === "up" ? "抬起" : (it.s === "down" ? "压下去" : "原文未给出");
+      html += '<div class="' + cls + '"><div class="idx">' + (n + 1) + '</div><div class="txt">' +
+              CAND[it.i] + '<span class="flag">' + flag + '</span>' +
+              '<div class="why">' + it.w + '</div></div></div>';
+    }
+    byId("box-sc-cards").innerHTML = html;
+    for (k = 0; k < scKeys.length; k++) {
+      scBtns[scKeys[k]].classList.toggle("on", scKeys[k] === key);
+    }
+    scCur = key;
+  }
+  for (var b = 0; b < scKeys.length; b++) {
+    (function (kk) {
+      scBtns[kk].addEventListener("click", function () { renderScorer(kk); });
+    })(scKeys[b]);
+  }
+  renderScorer("ft");
+
+  /* ---------- 组件二：burst 入库门槛判定器 ---------- */
+  var IDF_MIN = 4.0, LEN_MIN = 200;
+  function renderBurst() {
+    var idf = parseFloat(byId("rng-burst-idf").value);
+    var len = parseInt(byId("rng-burst-len").value, 10);
+    var emo = byId("chk-burst-emoji").checked;
+    byId("out-burst-idf").textContent = idf.toFixed(1);
+    byId("out-burst-len").textContent = String(len);
+    byId("out-burst-emoji").textContent = emo ? "是" : "否";
+
+    var c1 = idf >= IDF_MIN, c2 = len >= LEN_MIN, c3 = emo;
+    byId("out-burst-v1").textContent = c1 ? "通过" : "未达";
+    byId("out-burst-v2").textContent = c2 ? "通过" : "未达";
+    byId("out-burst-v3").textContent = c3 ? "通过" : "未达";
+
+    var cnt = (c1 ? 1 : 0) + (c2 ? 1 : 0) + (c3 ? 1 : 0);
+    var vd = byId("out-burst-verdict");
+    if (cnt === 3) {
+      vd.textContent = "三段判据全部满足：这段 burst 会被做成向量，与整串记录并排存进同一张表。";
+      vd.classList.add("ok");
+      vd.classList.remove("no");
+    } else if (cnt === 0) {
+      vd.textContent = "三段判据一条未过：这段 burst 不做向量，只留在全文索引里。";
+      vd.classList.add("no");
+      vd.classList.remove("ok");
+    } else {
+      vd.textContent = "三段判据满足 " + cnt + " 条（未全部达标）：这段 burst 不做向量，只留在全文索引里。";
+      vd.classList.add("no");
+      vd.classList.remove("ok");
+    }
+  }
+  byId("rng-burst-idf").addEventListener("input", renderBurst);
+  byId("rng-burst-len").addEventListener("input", renderBurst);
+  byId("chk-burst-emoji").addEventListener("change", renderBurst);
+  renderBurst();
+
+  /* ---------- 组件三：RRF 融合沙盘 ---------- */
+  var LISTS = [
+    ["CKPT_LOADER.CC", "CLASS: CheckpointLoader", "WIKI: 检查点格式", "THREAD: NFS 卡住", "INC-82: 恢复变慢"],
+    ["WIKI: 检查点格式", "CKPT_LOADER.CC", "RUNBOOK: NFS 挂载", "INC-82: 恢复变慢", "THREAD: 缓存预热"],
+    ["THREAD: NFS 卡住", "THREAD: 缓存预热", "CLASS: CheckpointLoader", "WIKI: 加载卡住", "INC-82: 恢复变慢"],
+    ["CLASS: CheckpointLoader", "MANIFEST_PARSER.H", "RUNBOOK: NFS 挂载", "THREAD: NFS 卡住", "WIKI: 检查点格式"],
+    ["WIKI: 检查点格式", "WIKI: 加载卡住", "RUNBOOK: NFS 挂载", "INC-82: 恢复变慢", "CLASS: CheckpointLoader"],
+    ["THREAD: NFS 卡住", "THREAD: 缓存预热", "BURST: 超时参数", "INC-82: 恢复变慢", "CLASS: CheckpointLoader"]
+  ];
+  var SHORT = {
+    "CLASS: CheckpointLoader": "CLASS: CheckpointLoader",
+    "INC-82: 恢复变慢": "INC-82: 恢复变慢",
+    "WIKI: 检查点格式": "WIKI: 检查点格式",
+    "THREAD: NFS 卡住": "THREAD: NFS 卡住",
+    "THREAD: 缓存预热": "THREAD: 缓存预热",
+    "RUNBOOK: NFS 挂载": "RUNBOOK: NFS 挂载",
+    "CKPT_LOADER.CC": "CKPT_LOADER.CC",
+    "WIKI: 加载卡住": "WIKI: 加载卡住",
+    "MANIFEST_PARSER.H": "MANIFEST_PARSER.H",
+    "BURST: 超时参数": "BURST: 超时参数"
+  };
+  var DOC_ORDER = [
+    "CLASS: CheckpointLoader", "INC-82: 恢复变慢", "WIKI: 检查点格式", "THREAD: NFS 卡住",
+    "THREAD: 缓存预热", "RUNBOOK: NFS 挂载", "CKPT_LOADER.CC", "WIKI: 加载卡住",
+    "MANIFEST_PARSER.H", "BURST: 超时参数"
+  ];
+  var CROSS = 6.4384;
+
+  function ranksOf(doc) {
+    var out = [];
+    for (var i = 0; i < LISTS.length; i++) {
+      var idx = LISTS[i].indexOf(doc);
+      if (idx >= 0) { out.push(idx + 1); }
+    }
+    return out;
+  }
+  function scoreOf(doc, k) {
+    var rs = ranksOf(doc), s = 0;
+    for (var i = 0; i < rs.length; i++) { s += 1 / (k + rs[i]); }
+    return s;
+  }
+  function board(k) {
+    var rows = [], i;
+    for (i = 0; i < DOC_ORDER.length; i++) {
+      rows.push({ name: DOC_ORDER[i], score: scoreOf(DOC_ORDER[i], k) });
+    }
+    rows.sort(function (a, b2) {
+      if (b2.score !== a.score) { return b2.score - a.score; }
+      return a.name < b2.name ? -1 : 1;
+    });
+    return rows;
+  }
+
+  function renderRRF() {
+    var k = parseInt(byId("rng-rrf-k").value, 10);
+    var rows = board(k);
+    var max = rows[0].score;
+    var html = "";
+    for (var i = 0; i < rows.length; i++) {
+      var w = max > 0 ? (rows[i].score / max) * 100 : 0;
+      var hi = (i < 2) ? " bar-fill hi" : "";
+      html += '<div class="bar-row"><div class="rk">' + (i + 1) + '</div>' +
+              '<div class="bar-track"><div class="bar-fill' + hi + '" style="width:' + w.toFixed(2) + '%">' +
+              '<span class="nm">' + SHORT[rows[i].name] + '</span></div></div>' +
+              '<div class="sc">' + rows[i].score.toFixed(6) + '</div></div>';
+    }
+    byId("box-rrf-bars").innerHTML = html;
+    byId("out-rrf-k").textContent = String(k);
+
+    var cName = "CLASS: CheckpointLoader", iName = "INC-82: 恢复变慢";
+    var cs = scoreOf(cName, k), is = scoreOf(iName, k);
+    var gap = cs - is;
+    byId("out-rrf-class").textContent = cs.toFixed(6);
+    byId("out-rrf-inc").textContent = is.toFixed(6);
+    byId("out-rrf-gap").textContent = gap.toFixed(6);
+    byId("out-rrf-gappct").textContent = (cs > 0 ? (gap / cs) * 100 : 0).toFixed(2) + "%";
+
+    var a = 1 / (k + 1), b = 1 / (k + 5);
+    byId("out-rrf-spread").textContent = ((a - b) / a * 100).toFixed(2) + "%";
+
+    var t1 = rows[0], t2 = rows[1];
+    byId("out-rrf-note").textContent = "当前 k = " + k + "：第 1 名 " + t1.name + "（" + t1.score.toFixed(6) +
+      "），第 2 名 " + t2.name + "（" + t2.score.toFixed(6) + "），两者相差 " + (t1.score - t2.score).toFixed(6) +
+      "（占第一名 " + (t1.score > 0 ? ((t1.score - t2.score) / t1.score) * 100 : 0).toFixed(2) + "%）。";
+
+    var incRank = 1;
+    for (var r = 0; r < rows.length; r++) { if (rows[r].name === iName) { incRank = r + 1; } }
+    if (k >= CROSS) {
+      byId("out-rrf-cross").textContent = "共识区判定：k = " + k + " ≥ 6.4384，已进入共识区，零个第一的 INC-82 现排第 " + incRank + " 名。";
+    } else {
+      byId("out-rrf-cross").textContent = "共识区判定：k = " + k + " < 6.4384，尚未进入共识区，INC-82 现排第 " + incRank + " 名，靠前的仍是拿过第一的文档。";
+    }
+  }
+  byId("rng-rrf-k").addEventListener("input", renderRRF);
+  byId("btn-rrf-reset").addEventListener("click", function () {
+    byId("rng-rrf-k").value = "60";
+    renderRRF();
+  });
+  byId("btn-rrf-zero").addEventListener("click", function () {
+    byId("rng-rrf-k").value = "0";
+    renderRRF();
+  });
+  renderRRF();
+
+  /* ---------- 组件四：八个决定对照清单 ---------- */
+  var CHK = ["chk-d1", "chk-d2", "chk-d3", "chk-d4", "chk-d5", "chk-d6", "chk-d7", "chk-d8"];
+  function renderCheck() {
+    var n = 0;
+    for (var i = 0; i < CHK.length; i++) {
+      var el = byId(CHK[i]);
+      if (el.checked) { n++; }
+      if (el.parentElement && el.parentElement.classList) {
+        el.parentElement.classList.toggle("done", el.checked);
+      }
+    }
+    byId("out-check-progress").textContent = "已完成 " + n + " / 8 条对照。" + (n === 8 ? "八条全部落地。" : "");
+  }
+  for (var ci = 0; ci < CHK.length; ci++) {
+    byId(CHK[ci]).addEventListener("change", renderCheck);
+  }
+  renderCheck();
+
+  onScroll();
+  markActive();
+})();
+</script>
+</body>
+</html>

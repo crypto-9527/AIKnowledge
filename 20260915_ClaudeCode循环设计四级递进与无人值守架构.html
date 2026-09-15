@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Anthropic Claude Code 官方《Getting started with loops》深度消化：循环的四维坐标系、四级递进（回合制 / 目标制 / 时间制 / 主动式）、质量保障与 Token 治理六条，并给出三个可计算模型与交互沙盘。">
+<title>Claude Code 循环设计：四级递进到无人值守</title>
+<style>
+/* ============ 令牌系统 ============ */
+:root{
+  --sidebar-w:280px;
+  --content-max:1180px;
+  --accent:#D97757;
+  --accent-ink:#B4542F;
+  --emerald:#5FB49C;
+  --rose:#D97066;
+  --amber:#D9A05B;
+  --cyan:#6FA8C7;
+  --fs-body:-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --fs-head:"Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --fs-code:ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+}
+html[data-theme="dark"]{
+  --bg:#181715; --bg-card:#201E1B; --bg-soft:#262320; --bg-sunk:#141311;
+  --line:#332F2A; --line-soft:#282520;
+  --fg:#E8E3DB; --fg-dim:#A79F94; --fg-mute:#7C756B;
+  --accent:#E2886A; --accent-ink:#E2886A;
+  --emerald:#6FC7AC; --rose:#E0837A; --amber:#E0B06A; --cyan:#7FB6D4;
+  --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.28);
+}
+html[data-theme="light"]{
+  --bg:#FAF7F2; --bg-card:#FFFDF9; --bg-soft:#F3EEE6; --bg-sunk:#EFE9DF;
+  --line:#E4DCCF; --line-soft:#EFE9DE;
+  --fg:#23201C; --fg-dim:#5C554C; --fg-mute:#8A8175;
+  --accent:#D97757; --accent-ink:#B4542F;
+  --emerald:#3F8F76; --rose:#C2544A; --amber:#A8762C; --cyan:#3E7E9E;
+  --shadow:0 1px 2px rgba(60,48,32,.08), 0 8px 24px rgba(60,48,32,.07);
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--fs-body); font-size:16px; line-height:1.85;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+/* ============ 骨架 ============ */
+#siteSidebar{
+  position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh;
+  overflow-y:auto; background:var(--bg-soft); border-right:1px solid var(--line);
+  padding:22px 18px 40px; z-index:60;
+}
+#main{
+  max-width:var(--content-max);
+  margin-left:calc(var(--sidebar-w) + max(0px, (100% - var(--sidebar-w) - var(--content-max)) / 2));
+  margin-right:max(0px, calc((100% - var(--sidebar-w) - var(--content-max)) / 2));
+  padding:48px 40px 120px;
+}
+#progWrap{position:fixed;top:0;left:0;right:0;height:3px;background:transparent;z-index:80;}
+#progBar{height:3px;width:0%;background:var(--accent);transition:width .12s linear;}
+#topbar{
+  position:fixed; top:10px; right:16px; z-index:90; display:flex; gap:8px;
+}
+#topbar button{
+  font-family:var(--fs-body); font-size:12.5px; padding:6px 12px; cursor:pointer;
+  background:var(--bg-card); color:var(--fg-dim); border:1px solid var(--line);
+  border-radius:7px; box-shadow:var(--shadow);
+}
+#topbar button:hover{color:var(--fg); border-color:var(--accent);}
+#toTopBtn{
+  position:fixed; right:18px; bottom:24px; z-index:90; width:38px; height:38px;
+  border-radius:50%; cursor:pointer; font-size:16px; line-height:1;
+  background:var(--bg-card); color:var(--fg-dim); border:1px solid var(--line);
+  box-shadow:var(--shadow);
+}
+#toTopBtn:hover{color:var(--fg); border-color:var(--accent);}
+/* ============ 目录 ============ */
+.brand{font-family:var(--fs-head); font-size:16px; font-weight:700; color:var(--fg); margin:0 0 4px;}
+.brand-sub{font-size:11.5px; color:var(--fg-mute); margin:0 0 18px; letter-spacing:.04em;}
+.toc a{
+  display:block; font-size:13px; color:var(--fg-dim); text-decoration:none;
+  padding:5px 9px; border-left:2px solid transparent; border-radius:0 5px 5px 0; line-height:1.5;
+}
+.toc a:hover{color:var(--fg); background:var(--bg-sunk);}
+.toc a.on{color:var(--accent); border-left-color:var(--accent); background:var(--bg-sunk); font-weight:600;}
+.toc a.sub{padding-left:22px; font-size:12.5px;}
+.toc .grp{font-size:11px; color:var(--fg-mute); letter-spacing:.12em; margin:16px 0 6px 9px; text-transform:uppercase;}
+/* ============ 排版 ============ */
+h1,h2,h3,h4{font-family:var(--fs-head); font-weight:700; color:var(--fg); line-height:1.35;}
+h1{font-size:33px; margin:0 0 12px; letter-spacing:-.01em;}
+h2{font-size:24px; margin:56px 0 18px; padding-bottom:10px; border-bottom:1px solid var(--line);}
+h3{font-size:18.5px; margin:32px 0 12px; color:var(--accent-ink);}
+h4{font-size:15.5px; margin:22px 0 8px; color:var(--fg);}
+p{margin:0 0 15px;}
+a{color:var(--accent-ink); text-decoration:none; border-bottom:1px solid var(--line);}
+a:hover{border-bottom-color:var(--accent);}
+ul,ol{margin:0 0 16px; padding-left:24px;}
+li{margin:5px 0;}
+strong{color:var(--fg); font-weight:650;}
+em{color:var(--accent-ink); font-style:normal; font-weight:600;}
+code{
+  font-family:var(--fs-code); font-size:13px; background:var(--bg-sunk);
+  border:1px solid var(--line-soft); border-radius:4px; padding:1px 5px; color:var(--fg);
+}
+pre{
+  font-family:var(--fs-code); font-size:12.8px; line-height:1.72; background:var(--bg-sunk);
+  border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px;
+  padding:14px 16px; overflow-x:auto; margin:0 0 18px; color:var(--fg);
+}
+pre code{background:none; border:none; padding:0; font-size:inherit;}
+blockquote{
+  margin:0 0 18px; padding:12px 18px; background:var(--bg-soft);
+  border-left:3px solid var(--accent); border-radius:0 8px 8px 0; color:var(--fg-dim);
+}
+blockquote p:last-child{margin-bottom:0;}
+hr{border:none; border-top:1px solid var(--line); margin:40px 0;}
+/* ============ 组件 ============ */
+.lede{font-size:17.5px; color:var(--fg-dim); line-height:1.8; margin-bottom:8px;}
+.meta-line{font-size:12.5px; color:var(--fg-mute); margin-bottom:28px;}
+.meta-line span{margin-right:14px;}
+.hero{
+  background:var(--bg-card); border:1px solid var(--line); border-radius:12px;
+  padding:26px 28px; margin:0 0 30px; box-shadow:var(--shadow);
+}
+.hero h1{margin-top:0;}
+table{width:100%; border-collapse:collapse; margin:0 0 20px; font-size:14px;}
+th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top;}
+th{background:var(--bg-soft); font-weight:650; font-size:13px; color:var(--fg);}
+tbody tr:nth-child(even){background:var(--bg-sunk);}
+.card{
+  background:var(--bg-card); border:1px solid var(--line); border-radius:10px;
+  padding:18px 20px; margin:0 0 18px;
+}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:0 0 18px;}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:0 0 18px;}
+.grid4{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:0 0 18px;}
+.stat{
+  background:var(--bg-card); border:1px solid var(--line); border-radius:10px;
+  padding:14px 16px;
+}
+.stat .k{font-size:11.5px; color:var(--fg-mute); letter-spacing:.06em; margin-bottom:5px;}
+.stat .v{font-family:var(--fs-code); font-size:21px; font-weight:700; color:var(--accent); line-height:1.3;}
+.stat .n{font-size:11.5px; color:var(--fg-mute); margin-top:4px; line-height:1.5;}
+.tag{
+  display:inline-block; font-size:11.5px; padding:2px 8px; border-radius:20px;
+  border:1px solid var(--line); color:var(--fg-dim); background:var(--bg-soft); margin-right:6px;
+}
+.tag.ok{color:var(--emerald); border-color:var(--emerald);}
+.tag.warn{color:var(--amber); border-color:var(--amber);}
+.tag.bad{color:var(--rose); border-color:var(--rose);}
+.tag.info{color:var(--cyan); border-color:var(--cyan);}
+.note{
+  font-size:13px; color:var(--fg-mute); background:var(--bg-sunk);
+  border:1px dashed var(--line); border-radius:8px; padding:10px 14px; margin:0 0 18px;
+}
+.warnbox{
+  background:var(--bg-card); border:1px solid var(--amber); border-left:3px solid var(--amber);
+  border-radius:0 8px 8px 0; padding:14px 18px; margin:0 0 18px; font-size:14px;
+}
+.warnbox .h{font-weight:700; color:var(--amber); margin-bottom:6px; font-size:13.5px;}
+details{
+  background:var(--bg-card); border:1px solid var(--line); border-radius:8px;
+  padding:0 16px; margin:0 0 14px;
+}
+details[open]{padding-bottom:14px;}
+summary{
+  cursor:pointer; padding:11px 0; font-weight:600; font-size:14px; color:var(--fg-dim);
+}
+summary:hover{color:var(--accent-ink);}
+/* 图示 */
+figure{margin:0 0 22px; background:var(--bg-card); border:1px solid var(--line); border-radius:10px; padding:16px 18px 12px;}
+figure svg{display:block; width:100%; height:auto;}
+figcaption{font-size:12px; color:var(--fg-mute); margin-top:10px; line-height:1.65; text-align:center;}
+/* 沙盘 */
+.sandbox{
+  background:var(--bg-card); border:1px solid var(--line); border-radius:12px;
+  padding:22px 24px; margin:0 0 26px; box-shadow:var(--shadow);
+}
+.sandbox .sb-head{display:flex; align-items:baseline; gap:10px; margin-bottom:6px;}
+.sandbox .sb-idx{
+  font-family:var(--fs-code); font-size:11.5px; color:var(--bg); background:var(--accent);
+  border-radius:4px; padding:1px 7px; font-weight:700;
+}
+.sandbox h3{margin:0; border:none; padding:0; font-size:17px;}
+.sandbox .sb-desc{font-size:13.5px; color:var(--fg-dim); margin:0 0 16px;}
+.ctrl-row{display:grid; grid-template-columns:1fr 1fr; gap:14px 22px; margin:0 0 16px;}
+.ctrl{display:flex; flex-direction:column; gap:5px;}
+.ctrl label{font-size:12.5px; color:var(--fg-dim); display:flex; justify-content:space-between; gap:8px;}
+.ctrl label b{font-family:var(--fs-code); color:var(--accent); font-weight:700;}
+input[type=range]{
+  width:100%; height:4px; -webkit-appearance:none; appearance:none;
+  background:var(--line); border-radius:3px; outline:none; margin:6px 0;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:50%;
+  background:var(--accent); cursor:pointer; border:2px solid var(--bg-card);
+}
+input[type=range]::-moz-range-thumb{
+  width:14px; height:14px; border-radius:50%; background:var(--accent);
+  cursor:pointer; border:2px solid var(--bg-card);
+}
+.tabs{display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px;}
+.tabs button{
+  font-family:var(--fs-body); font-size:13px; padding:7px 14px; cursor:pointer;
+  background:var(--bg-sunk); color:var(--fg-dim); border:1px solid var(--line); border-radius:7px;
+}
+.tabs button:hover{color:var(--fg);}
+.tabs button.on{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:650;}
+.kv{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:0 0 16px;}
+.kv .stat .v{font-size:19px;}
+.legend{display:flex; gap:18px; flex-wrap:wrap; font-size:12.5px; color:var(--fg-dim); margin-top:8px;}
+.legend i{display:inline-block; width:16px; height:3px; border-radius:2px; margin-right:6px; vertical-align:middle;}
+.formula{
+  background:var(--bg-sunk); border:1px solid var(--line-soft); border-radius:8px;
+  padding:12px 16px; margin:0 0 16px; font-size:14px; overflow-x:auto; text-align:center;
+}
+math{font-family:var(--fs-head); font-size:16px; color:var(--fg);}
+.pill{
+  display:inline-block; font-size:11px; padding:1px 7px; border-radius:4px;
+  background:var(--bg-soft); border:1px solid var(--line); color:var(--fg-mute); margin-left:6px;
+}
+.pri{font-family:var(--fs-code); font-weight:700; font-size:12px; padding:1px 7px; border-radius:4px; margin-right:8px;}
+.pri.p0{background:var(--rose); color:#fff;}
+.pri.p1{background:var(--amber); color:#241c0c;}
+.pri.p2{background:var(--cyan); color:#0d1c24;}
+/* 响应式 */
+@media (max-width:1080px){
+  #siteSidebar{transform:translateX(-100%); transition:transform .22s ease;}
+  #siteSidebar.open{transform:translateX(0);}
+  #main{margin-left:0; margin-right:0; max-width:100%; padding:44px 20px 100px;}
+  .grid2,.grid3,.grid4,.kv,.ctrl-row{grid-template-columns:1fr;}
+}
+@media (max-width:640px){
+  body{font-size:15px;}
+  h1{font-size:26px;} h2{font-size:20.5px;} h3{font-size:17px;}
+  .kv,.grid4{grid-template-columns:1fr 1fr;}
+}
+@media print{
+  #siteSidebar,#topbar,#toTopBtn,#progWrap{display:none !important;}
+  #main{margin:0 !important; max-width:100% !important; padding:0 !important;}
+  body{background:#fff; color:#000; font-size:11pt;}
+  .sandbox,.card,figure,.hero{box-shadow:none; border:1px solid #ccc; break-inside:avoid;}
+  pre,figure{break-inside:avoid;}
+  h2{break-after:avoid;}
+}
+</style>
+</head>
+<body>
+
+<div id="progWrap"><div id="progBar"></div></div>
+
+<div id="topbar">
+  <button id="btnToc" type="button">目录</button>
+  <button id="btnTheme" type="button">深色</button>
+</div>
+<button id="toTopBtn" type="button" aria-label="回到顶部">↑</button>
+
+<aside id="siteSidebar">
+  <p class="brand">循环设计 · 四级递进</p>
+  <p class="brand-sub">Claude Code / Loop Engineering</p>
+  <nav class="toc" id="tocNav">
+    <div class="grp">总览</div>
+    <a href="#s1">一分钟速览</a>
+    <a href="#s2">事实核验与来源标定</a>
+    <div class="grp">框架</div>
+    <a href="#s3">循环的定义与四维坐标系</a>
+    <a href="#s4">第 1 级 · 回合制</a>
+    <a href="#s5">第 2 级 · 目标制</a>
+    <a href="#s6">第 3 级 · 时间制</a>
+    <a href="#s7">第 4 级 · 主动式</a>
+    <a href="#s8">四级速查总表</a>
+    <div class="grp">治理</div>
+    <a href="#s9">质量保障四条</a>
+    <a href="#s10">Token 治理六条</a>
+    <div class="grp">建模</div>
+    <a href="#s11">可计算模型与交互沙盘</a>
+    <a href="#s11-1" class="sub">M1 四级循环装配</a>
+    <a href="#s11-2" class="sub">M2 达标概率与轮数</a>
+    <a href="#s11-3" class="sub">M3 轮询延迟-成本</a>
+    <a href="#s11-4" class="sub">M4 脚本摊销平衡</a>
+    <div class="grp">落地</div>
+    <a href="#s12">落地建议与风险边界</a>
+    <a href="#s13">附录 · 勘误与来源</a>
+  </nav>
+</aside>
+
+<main id="main">
+
+<div class="hero">
+  <h1>循环设计：从手动确认到无人值守的四级递进</h1>
+  <p class="lede">Anthropic Claude Code 团队给「循环（loop）」下了唯一定义，并把早已存在的五个功能，按自主程度从低到高归位成一个四级坐标系。本文在核验英文一手源的基础上，还原被中文转述稿丢失的四条 Token 治理建议，并把三个定性命题改写为可计算模型。</p>
+  <p class="meta-line">
+    <span>一手源：Delba de Oliveira、Michael Segner</span>
+    <span>发布：2026-06-30</span>
+    <span>体裁：厂商发布内容</span>
+    <span>消化基准日：2026-09-15</span>
+  </p>
+  <p style="margin:0">
+    <span class="tag info">一手源已核验</span>
+    <span class="tag warn">转述稿存在 4 处遗漏</span>
+    <span class="tag ok">零外部依赖</span>
+  </p>
+</div>
+
+<!-- ============================ s1 ============================ -->
+<h2 id="s1">一分钟速览</h2>
+
+<ul>
+  <li><strong>循环的唯一官方定义</strong>：agent 反复执行一轮轮工作，直到满足某个停止条件。关键区别在于「什么时候算完成」是<em>提前定好、交给系统判断</em>，而不是人一轮轮盯着催。</li>
+  <li><strong>四级分类</strong>：回合制（Turn-based）、目标制（<code>/goal</code>）、时间制（<code>/loop</code> 与 <code>/schedule</code>）、主动式（Proactive），按自主程度从低到高递进。</li>
+  <li><strong>四个分类维度</strong>：谁触发、怎么判断停、用 Claude Code 的哪个功能实现、最适合什么任务。</li>
+  <li><strong>目标制的核心机制</strong>：引入一个<em>独立的评估模型（evaluator）</em>核对条件，Claude 自己不能提前喊「够了就收工」，另可设最多尝试次数上限。</li>
+  <li><strong>主动式是五功能叠加</strong>：<code>/schedule</code> 定时触发 + <code>/goal</code> 停止条件 + skills 校验标准 + dynamic workflows 多 agent 编排 + auto mode 免人工确认。</li>
+  <li><strong>两条最硬的实操建议</strong>：确定性工作用脚本（比让 Claude 每次重新推导更省）；dynamic workflows 单次可拉起<em>数百个 agent</em>，大规模上线前先小范围试跑。</li>
+</ul>
+
+<div class="note">
+  <strong>立场标注。</strong>这是一篇厂商发布内容，讲的是 Anthropic 自家 Claude Code 的能力与功能组合。文中的分类框架、示例命令与「Lighthouse 90 分、stop after 5 tries、数百个 agent」等数字均引自原文，属<strong>官方口径</strong>，非第三方实测。本文标记为「基线假设」的参数（如单轮 token 成本、单次检查成本）为建模所需，<strong>原文未提供</strong>，不具官方背书。
+</div>
+
+<div class="grid4">
+  <div class="stat"><div class="k">循环类型数</div><div class="v">4</div><div class="n">回合制 / 目标制 / 时间制 / 主动式</div></div>
+  <div class="stat"><div class="k">组合进主动式的功能</div><div class="v">5</div><div class="n">schedule · goal · skills · workflows · auto mode</div></div>
+  <div class="stat"><div class="k">分类维度</div><div class="v">4</div><div class="n">触发 · 停止 · 原语 · 任务</div></div>
+  <div class="stat"><div class="k">研究预览版功能</div><div class="v">2</div><div class="n">/schedule、dynamic workflows</div></div>
+</div>
+
+<!-- ============================ s2 ============================ -->
+<h2 id="s2">事实核验与来源标定</h2>
+
+<p>输入材料为第三方中文转述稿（小互解读，slug <code>claude-code-loops</code>）。按实证纪律，本文以英文一手源 <em>Getting started with loops</em>（claude.com/blog/getting-started-with-loops）逐条比对，结果如下。</p>
+
+<h3>核验结论</h3>
+
+<table>
+  <thead>
+    <tr><th style="width:20%">项目</th><th style="width:12%">判定</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>核心定义</td>
+      <td><span class="tag ok">一致</span></td>
+      <td>「agents repeating cycles of work until a stop condition is met」— 转述稿与原文一致。</td>
+    </tr>
+    <tr>
+      <td>四级分类与四维度</td>
+      <td><span class="tag ok">一致</span></td>
+      <td>四级命名、四维度（触发 / 停止 / 原语 / 任务）与原文逐条对应。</td>
+    </tr>
+    <tr>
+      <td>评估模型机制</td>
+      <td><span class="tag ok">一致</span></td>
+      <td>原文明确写有 <em>an evaluator model checks your condition</em>，「独立评估模型」表述成立。</td>
+    </tr>
+    <tr>
+      <td>数字口径</td>
+      <td><span class="tag ok">一致</span></td>
+      <td>Lighthouse 90 分、stop after 5 tries、hundreds of agents 三处数字均与原文一致。</td>
+    </tr>
+    <tr>
+      <td>作者与日期</td>
+      <td><span class="tag ok">一致</span></td>
+      <td>Delba de Oliveira、Michael Segner，2026-06-30。</td>
+    </tr>
+    <tr>
+      <td>Token 治理清单</td>
+      <td><span class="tag bad">缺失 4 条</span></td>
+      <td>原文给出<strong>六条</strong>可执行建议；转述稿标题称「六条」，实际只呈现<strong>两条</strong>（数百 agent 先试点、脚本优于推导）。缺「选对原语与模型」「明确成功与停止标准」「别比需要的更频繁」「用 /usage 与 /workflows 复核」四条。本文已在 <a href="#s10">第 10 节</a> 补全。</td>
+    </tr>
+    <tr>
+      <td>数字块位置</td>
+      <td><span class="tag warn">抓取错位</span></td>
+      <td>转述稿把「90 分」这个数字块插进了来源声明句中，形成「示例代码与 / 90 分 / 等数字」的断句。属排版抓取错位，非原文口径问题，本文按原文还原。</td>
+    </tr>
+    <tr>
+      <td>质量保障关键句</td>
+      <td><span class="tag warn">遗漏</span></td>
+      <td>原文收尾有一句 <em>Loops that write code need loops that check it</em>（写代码的循环，需要检查代码的循环），是全文的对称性原则，转述稿未收录。见 <a href="#s9">第 9 节</a>。</td>
+    </tr>
+    <tr>
+      <td>原文配图</td>
+      <td><span class="tag info">重绘</span></td>
+      <td>原文的循环示意图未随转述稿提供。本文的 4 张示意图均为<strong>依据原文文字描述重绘</strong>，非原图复制，图注已标注。</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="warnbox">
+  <div class="h">为什么这一节值得单独存在</div>
+  转述稿的「六条清单只出现两条」是一个典型的<strong>信息静默丢失</strong>：读者会以为原文只讲了两条，并据此低估 Token 治理的复杂度。真正被丢掉的四条里，有两条（选对原语与模型、别比需要的更频繁）恰恰是<strong>成本量级最大</strong>的杠杆。若不回源核验，这类丢失无法通过阅读转述稿本身发现。
+</div>
+
+<!-- ============================ s3 ============================ -->
+<h2 id="s3">循环的定义与四维坐标系</h2>
+
+<p>官方定义只有一句：<strong>循环，就是 agent 反复执行一轮轮工作，直到满足某个停止条件。</strong></p>
+
+<blockquote>
+  <p>On the Claude Code team, we define loops as agents repeating cycles of work until a stop condition is met.</p>
+</blockquote>
+
+<p>这个定义的分量在于后半句：停止条件是<em>提前定好</em>的。一旦停止条件外置，人在循环里的角色就从「每一步的决策者」退化为「停止条件的设计者」——这是整个 Loop Engineering 的支点。</p>
+
+<p>作者按四个维度给循环分类，这四维就是后面每种循环的统一参照系：</p>
+
+<div class="grid4">
+  <div class="stat"><div class="k">① 谁触发</div><div class="v" style="font-size:14px">提示 → 手动 → 到点 → 事件</div><div class="n">从「你发一句话」到「全程无人在场」</div></div>
+  <div class="stat"><div class="k">② 怎么判断停</div><div class="v" style="font-size:14px">自查 → 评估模型 → 你取消</div><div class="n">从 Claude 自己判断，到外部评估者核对</div></div>
+  <div class="stat"><div class="k">③ 用什么功能</div><div class="v" style="font-size:14px">对话 → goal → loop · schedule</div><div class="n">到全部原语 + workflows + auto mode</div></div>
+  <div class="stat"><div class="k">④ 适合什么任务</div><div class="v" style="font-size:14px">短 → 可验证 → 周期性 → 反复</div><div class="n">从零散短任务到定义清晰的持续工作流</div></div>
+</div>
+
+<figure>
+  <svg viewBox="0 0 680 330" role="img" aria-label="四级循环自主度同心轨道示意图">
+    <g fill="none" stroke="var(--line)" stroke-width="1">
+      <circle cx="340" cy="165" r="46"></circle>
+      <circle cx="340" cy="165" r="86"></circle>
+      <circle cx="340" cy="165" r="126"></circle>
+      <circle cx="340" cy="165" r="152" stroke-dasharray="4 5" stroke="var(--accent)"></circle>
+    </g>
+    <text x="340" y="150" text-anchor="middle" font-size="13" fill="var(--fg)" font-weight="700">回合制</text>
+    <text x="340" y="168" text-anchor="middle" font-size="10.5" fill="var(--fg-mute)">人在每一轮</text>
+    <text x="340" y="104" text-anchor="middle" font-size="13" fill="var(--fg)" font-weight="700">目标制</text>
+    <text x="340" y="120" text-anchor="middle" font-size="10.5" fill="var(--fg-mute)">交出停止条件</text>
+    <text x="340" y="58" text-anchor="middle" font-size="13" fill="var(--fg)" font-weight="700">时间制</text>
+    <text x="340" y="74" text-anchor="middle" font-size="10.5" fill="var(--fg-mute)">交出触发</text>
+    <text x="340" y="16" text-anchor="middle" font-size="13" fill="var(--accent)" font-weight="700">主动式</text>
+    <text x="340" y="31" text-anchor="middle" font-size="10.5" fill="var(--fg-mute)">交出提示词</text>
+    <text x="340" y="292" text-anchor="middle" font-size="11" fill="var(--fg-mute)">越往外圈，自主程度越高、越少人管</text>
+    <text x="340" y="310" text-anchor="middle" font-size="11" fill="var(--accent)">最外圈即一条正在无人值守跑着的循环</text>
+    <g font-size="10.5" fill="var(--fg-mute)">
+      <text x="404" y="169">自主度 →</text>
+      <text x="404" y="184">人在环内程度 ←</text>
+    </g>
+  </svg>
+  <figcaption>图 1 · 四级循环的自主度同心轨道（依据原文「越往外圈自主程度越高」的文字描述重绘，非原文配图复制）。虚线为最外圈的持续运行轨道。</figcaption>
+</figure>
+
+<div class="note">
+  作者明确提醒：<strong>不是所有任务都需要复杂循环</strong>。从最简单的方案起步，这些模式按需选用。把「设计一个循环」当成默认动作，是这套框架最常见的误用。
+</div>
+
+<!-- ============================ s4 ============================ -->
+<h2 id="s4">第 1 级 · 回合制</h2>
+
+<p>这就是你每天在用的默认模式：你发的每一条提示，都开启一个由你亲手引导每一轮的循环。Claude 收集上下文、动手、检查自己的工作、必要时重复、然后回复——官方称其为 <strong>agentic loop</strong>。</p>
+
+<table>
+  <thead><tr><th style="width:18%">维度</th><th>取值</th></tr></thead>
+  <tbody>
+    <tr><td>谁触发</td><td>一句用户提示（手动、实时）</td></tr>
+    <tr><td>怎么判断停</td><td>Claude 自行判断「已完成」或「需要更多上下文」</td></tr>
+    <tr><td>用什么功能</td><td>默认对话；改善手段是自定义验证 skills</td></tr>
+    <tr><td>适合什么任务</td><td>不属于固定流程、也不按排期来的短任务</td></tr>
+    <tr><td>你交出去的是</td><td><strong>「检查」</strong></td></tr>
+  </tbody>
+</table>
+
+<figure>
+  <svg viewBox="0 0 680 190" role="img" aria-label="回合制 agentic loop 流程示意图">
+    <g font-size="11.5" fill="var(--fg)" text-anchor="middle">
+      <rect x="16" y="66" width="108" height="52" rx="8" fill="var(--bg-soft)" stroke="var(--line)"></rect>
+      <text x="70" y="89">读上下文</text><text x="70" y="105" fill="var(--fg-mute)" font-size="10">gather</text>
+      <rect x="148" y="66" width="108" height="52" rx="8" fill="var(--bg-soft)" stroke="var(--line)"></rect>
+      <text x="202" y="89">动手改</text><text x="202" y="105" fill="var(--fg-mute)" font-size="10">act</text>
+      <rect x="280" y="66" width="108" height="52" rx="8" fill="var(--bg-soft)" stroke="var(--line)"></rect>
+      <text x="334" y="89">跑测试自查</text><text x="334" y="105" fill="var(--fg-mute)" font-size="10">check</text>
+      <rect x="412" y="66" width="108" height="52" rx="8" fill="var(--bg-soft)" stroke="var(--line)"></rect>
+      <text x="466" y="89">交回你验收</text><text x="466" y="105" fill="var(--fg-mute)" font-size="10">respond</text>
+      <rect x="544" y="60" width="120" height="64" rx="8" fill="var(--accent)" opacity="0.14" stroke="var(--accent)"></rect>
+      <text x="604" y="86" fill="var(--accent)" font-weight="700">你写下一句提示</text>
+      <text x="604" y="104" fill="var(--fg-mute)" font-size="10">手动开启下一轮</text>
+    </g>
+    <g stroke="var(--line)" stroke-width="1.4" fill="none">
+      <path d="M124 92 L144 92" marker-end="url(#ar)"></path>
+      <path d="M256 92 L276 92" marker-end="url(#ar)"></path>
+      <path d="M388 92 L408 92" marker-end="url(#ar)"></path>
+      <path d="M520 92 L540 92" marker-end="url(#ar)"></path>
+    </g>
+    <path d="M604 124 C604 158 340 168 70 126" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ar2)"></path>
+    <text x="340" y="176" text-anchor="middle" font-size="10.5" fill="var(--accent)">由人驱动的回路：每一轮的走向都由你决定</text>
+    <defs>
+      <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--line)"></path></marker>
+      <marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--accent)"></path></marker>
+    </defs>
+  </svg>
+  <figcaption>图 2 · 回合制循环（agentic loop）：一句提示触发，Claude 自查后交回你手动确认（依据原文描述重绘）。</figcaption>
+</figure>
+
+<h3>怎么让它自查得更彻底</h3>
+
+<p>可以把「验证」这一步做强：把你平时手动验收的步骤写成一个 <code>SKILL.md</code>，让 Claude 能端到端地自己检查更多东西。关键是给它能<strong>看到、量到、动手</strong>的工具或连接器。原文的判断是：</p>
+
+<blockquote>
+  <p>The more quantitative the checks are, the easier it is for Claude to self-verify.</p>
+</blockquote>
+
+<p>原文给出的 <code>verify-frontend-change</code> 技能要求：任何前端改动，不许只凭「编辑成功」就报完成，得像人类审查者那样走完整流程。</p>
+
+<ol>
+  <li>启动 dev server，在浏览器打开改动的页面。</li>
+  <li>直接和改动交互：点按钮、确认状态变化、截图前后对比。</li>
+  <li>看浏览器控制台：不能有任何新报错或警告。</li>
+  <li>用 Chrome DevTools MCP 跑性能 trace，审 Core Web Vitals。</li>
+</ol>
+
+<p>任一步失败，就修好后从第 1 步重跑，绝不交半成品。</p>
+
+<details>
+  <summary>展开：原始 SKILL.md 示例代码</summary>
+<pre><code>---
+name: verify-frontend-change
+description: Verify any UI change end-to-end before declaring it done.
+---
+
+# Verifying frontend changes
+Never report a UI change as complete based on a successful edit alone.
+Verify it the way a human reviewer would:
+
+1. Start the dev server and open the edited page in the browser.
+
+2. Interact with the change directly. For a new control (button,
+   input, toggle): click it, confirm the expected state change,
+   and screenshot before/after.
+
+3. Check the browser console: zero new errors or warnings.
+
+4. Use the Chrome Devtools MCP, run a performance trace and audit
+   Core Web Vitals.
+
+If any step fails, fix the issue and rerun from step 1 — do not
+hand back partially verified work.</code></pre>
+</details>
+
+<!-- ============================ s5 ============================ -->
+<h2 id="s5">第 2 级 · 目标制</h2>
+
+<p>有时候一轮不够，尤其是复杂任务——agent 在能反复迭代时表现更好。你可以用 <code>/goal</code> 把「什么样才算做完」定义清楚，来延长 Claude 迭代的时间。</p>
+
+<p><strong>核心机制：</strong>当你定义了成功标准，Claude 就不用自己去判断「够好了吗」然后提前收工。<em>每次 Claude 想停下来，都有一个独立的评估模型拿着你的条件核对一遍</em>；没达标就把它打回去继续干，直到目标达成、或者到了你设定的尝试次数上限才真正停。</p>
+
+<div class="warnbox">
+  <div class="h">判定权发生了转移</div>
+  从 Claude 手里拿走，交给一个专门核对标准的评估模型。这也是为什么<strong>「确定性标准」特别好使</strong>——通过的测试数量、清除某个分数阈值，评估模型能明确打勾，不含糊。反过来，模糊标准（「看起来不错」）会让评估模型与执行模型陷入同样的主观判断，这一级的收益就消失了。
+</div>
+
+<figure>
+  <svg viewBox="0 0 680 240" role="img" aria-label="目标制循环评估模型关卡示意图">
+    <rect x="16" y="86" width="118" height="58" rx="8" fill="var(--bg-soft)" stroke="var(--line)"></rect>
+    <text x="75" y="112" text-anchor="middle" font-size="12" fill="var(--fg)">Claude 干一轮</text>
+    <text x="75" y="130" text-anchor="middle" font-size="10.5" fill="var(--fg-mute)">attempt</text>
+
+    <rect x="168" y="78" width="150" height="74" rx="8" fill="var(--accent)" opacity="0.13" stroke="var(--accent)"></rect>
+    <text x="243" y="102" text-anchor="middle" font-size="12.5" fill="var(--accent)" font-weight="700">独立评估模型</text>
+    <text x="243" y="120" text-anchor="middle" font-size="10.5" fill="var(--fg-dim)">evaluator 核对标准</text>
+    <text x="243" y="137" text-anchor="middle" font-size="10" fill="var(--fg-mute)">不是执行者本人</text>
+
+    <rect x="352" y="86" width="118" height="58" rx="8" fill="var(--bg-soft)" stroke="var(--emerald)"></rect>
+    <text x="411" y="112" text-anchor="middle" font-size="12" fill="var(--emerald)" font-weight="700">达标 → 真停</text>
+    <text x="411" y="130" text-anchor="middle" font-size="10.5" fill="var(--fg-mute)">goal met</text>
+
+    <rect x="504" y="86" width="160" height="58" rx="8" fill="var(--bg-soft)" stroke="var(--rose)"></rect>
+    <text x="584" y="112" text-anchor="middle" font-size="12" fill="var(--rose)" font-weight="700">到上限 → 强制停</text>
+    <text x="584" y="130" text-anchor="middle" font-size="10.5" fill="var(--fg-mute)">max tries reached</text>
+
+    <g stroke="var(--line)" stroke-width="1.4" fill="none">
+      <path d="M134 115 L164 115" marker-end="url(#ar3)"></path>
+      <path d="M318 115 L348 115" marker-end="url(#ar3)"></path>
+    </g>
+    <path d="M243 152 C243 196 75 190 75 148" fill="none" stroke="var(--rose)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar4)"></path>
+    <g stroke="var(--rose)" stroke-width="1.4" fill="none">
+      <path d="M470 115 L500 115" marker-end="url(#ar4)"></path>
+    </g>
+    <text x="160" y="190" text-anchor="middle" font-size="10.5" fill="var(--rose)">不达标：打回重做</text>
+    <text x="340" y="222" text-anchor="middle" font-size="10.5" fill="var(--fg-mute)">判定权在执行者之外 —— 这是目标制与回合制的分水岭</text>
+    <defs>
+      <marker id="ar3" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--line)"></path></marker>
+      <marker id="ar4" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--rose)"></path></marker>
+    </defs>
+  </svg>
+  <figcaption>图 3 · 目标制循环：Claude 每次想收工都要过评估模型这道关（依据原文描述重绘）。</figcaption>
+</figure>
+
+<h3>原文示例</h3>
+
+<pre><code>/goal get the homepage Lighthouse score to 90 or above, stop after 5 tries.</code></pre>
+
+<div class="grid2">
+  <div class="stat"><div class="k">达标线（示例设定）</div><div class="v">90 分</div><div class="n">Lighthouse 分数阈值，由评估模型核对</div></div>
+  <div class="stat"><div class="k">最多重试次数（示例设定）</div><div class="v">5 次</div><div class="n">达不到就停，用来管住花销</div></div>
+</div>
+
+<p>目标制适合<strong>有可验证退出标准的任务</strong>；你交出去的是「停止条件」，用的功能就是 <code>/goal</code>。管花销的办法：把完成标准和重试上限都定具体。</p>
+
+<!-- ============================ s6 ============================ -->
+<h2 id="s6">第 3 级 · 时间制</h2>
+
+<p>有些活儿是周期性的：任务不变，只有输入在变，比如每天早上汇总一遍 Slack 消息。还有些活儿依赖外部系统，最简单的对接办法就是<strong>按固定间隔去查一下、根据变化做出反应</strong>——比如一个 PR，它可能收到评审意见、也可能 CI 挂掉。</p>
+
+<p>这类工作用 <code>/loop</code> 触发，它会按间隔重跑一句提示。停下来的条件是<em>你取消它、或者活干完了</em>（PR 合并了、队列空了）。</p>
+
+<pre><code>/loop 5m check my PR, address review comments, and fix failing CI</code></pre>
+
+<div class="grid2">
+  <div class="card">
+    <h4><code>/loop</code> · 本地跑</h4>
+    <p style="margin-bottom:6px">在你自己的电脑上按固定间隔重跑同一句提示。</p>
+    <p style="margin:0"><strong>你把电脑关了，它就停。</strong>适合你人在、临时盯一段的活儿。</p>
+  </div>
+  <div class="card">
+    <h4><code>/schedule</code> · 搬到云端</h4>
+    <p style="margin-bottom:6px">用 <code>/schedule</code> 建一个 routine，把这套「定时重跑」搬到云端常驻。</p>
+    <p style="margin:0"><strong>你电脑关了，它照样跑。</strong>适合要长期挂着、不受你在不在场影响的活儿。</p>
+  </div>
+</div>
+
+<div class="note">
+  原文将 <code>/schedule</code> 标注为 <span class="tag warn">research preview</span>。管花销的办法原文写得很直接：<em>Set longer intervals or react based on events rather than time</em>——把间隔设长，或改成「按事件反应」而不是死盯时间。
+</div>
+
+<!-- ============================ s7 ============================ -->
+<h2 id="s7">第 4 级 · 主动式</h2>
+
+<p>前面几种原语，加上 <strong>auto mode</strong>（不用每步停下来问你要不要继续）和 <strong>dynamic workflows</strong>（动态工作流，研究预览版），能组合成一条处理长期工作的循环。触发它的是<em>事件或排期，全程没有人实时在场</em>。</p>
+
+<p>主动式循环的停止逻辑分两层：<strong>每个具体任务达到自己的目标就退出，而整条 routine 本身会一直跑，直到你手动把它关掉。</strong>它最适合那种反复出现、定义清晰的工作流：bug 报告、issue 分诊、迁移、依赖升级等等。</p>
+
+<h3>五功能叠加结构</h3>
+
+<div class="card">
+  <p><span class="tag info">1</span> <strong><code>/schedule</code>　定时触发</strong> — 建一个 routine，每小时检查一次有没有新报告（研究预览版）。</p>
+  <p><span class="tag info">2</span> <strong><code>/goal</code>　停止条件</strong> — 定义什么算「做完」，配合 skills 说明该怎么验证。</p>
+  <p><span class="tag info">3</span> <strong>skills　校验标准</strong> — 把「怎么算修好」固化成技能，让 Claude 能自查。</p>
+  <p><span class="tag info">4</span> <strong>dynamic workflows　多 agent 编排</strong> — 编排一批 agent 去分诊每条报告、修复、再审查修复结果。</p>
+  <p style="margin-bottom:0"><span class="tag info">5</span> <strong>auto mode　免人工确认</strong> — 罩在最外层，让整条 routine 一路跑完，不停下来问权限。</p>
+</div>
+
+<figure>
+  <svg viewBox="0 0 680 260" role="img" aria-label="主动式循环流水线示意图">
+    <rect x="10" y="96" width="104" height="56" rx="8" fill="var(--bg-soft)" stroke="var(--cyan)"></rect>
+    <text x="62" y="120" text-anchor="middle" font-size="11.5" fill="var(--cyan)" font-weight="700">事件 / 排期</text>
+    <text x="62" y="137" text-anchor="middle" font-size="10" fill="var(--fg-mute)">无人在场</text>
+
+    <rect x="134" y="96" width="92" height="56" rx="8" fill="var(--bg-soft)" stroke="var(--line)"></rect>
+    <text x="180" y="124" text-anchor="middle" font-size="11.5" fill="var(--fg)">分诊</text>
+
+    <rect x="246" y="42" width="146" height="46" rx="8" fill="var(--accent)" opacity="0.12" stroke="var(--accent)"></rect>
+    <text x="319" y="70" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="700">解法 A · worktree</text>
+    <rect x="246" y="101" width="146" height="46" rx="8" fill="var(--accent)" opacity="0.12" stroke="var(--accent)"></rect>
+    <text x="319" y="129" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="700">解法 B · worktree</text>
+    <rect x="246" y="160" width="146" height="46" rx="8" fill="var(--accent)" opacity="0.12" stroke="var(--accent)"></rect>
+    <text x="319" y="188" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="700">解法 C · worktree</text>
+    <text x="319" y="228" text-anchor="middle" font-size="10" fill="var(--fg-mute)">三个独立分支并行探索</text>
+
+    <rect x="412" y="96" width="106" height="56" rx="8" fill="var(--bg-soft)" stroke="var(--rose)"></rect>
+    <text x="465" y="120" text-anchor="middle" font-size="11.5" fill="var(--rose)" font-weight="700">裁判 agent</text>
+    <text x="465" y="137" text-anchor="middle" font-size="10" fill="var(--fg-mute)">对抗式挑错</text>
+
+    <rect x="538" y="96" width="132" height="56" rx="8" fill="var(--bg-soft)" stroke="var(--emerald)"></rect>
+    <text x="604" y="120" text-anchor="middle" font-size="11.5" fill="var(--emerald)" font-weight="700">自动收尾回复</text>
+    <text x="604" y="137" text-anchor="middle" font-size="10" fill="var(--fg-mute)">回到监听下一事件</text>
+
+    <g stroke="var(--line)" stroke-width="1.4" fill="none">
+      <path d="M114 124 L130 124" marker-end="url(#ar5)"></path>
+      <path d="M226 124 L242 124" marker-end="url(#ar5)"></path>
+      <path d="M392 65 L408 110" marker-end="url(#ar5)"></path>
+      <path d="M392 124 L408 124" marker-end="url(#ar5)"></path>
+      <path d="M392 183 L408 138" marker-end="url(#ar5)"></path>
+      <path d="M518 124 L534 124" marker-end="url(#ar5)"></path>
+    </g>
+    <path d="M604 152 C604 240 180 244 62 156" fill="none" stroke="var(--emerald)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ar6)"></path>
+    <defs>
+      <marker id="ar5" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--line)"></path></marker>
+      <marker id="ar6" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--emerald)"></path></marker>
+    </defs>
+  </svg>
+  <figcaption>图 4 · 主动式循环流水线：事件触发 → 分诊 → 多 agent 在三个 worktree 并行探索 → 裁判对抗式审查 → 自动收尾（依据原文描述重绘）。</figcaption>
+</figure>
+
+<h3>完整提示长这样</h3>
+
+<pre><code>/schedule every hour: check #project-feedback for bug reports.
+/goal: don't stop until every report found this run is triaged,
+actioned, and responded to. When fixing a bug, use a workflow to
+explore three solutions in parallel worktrees and have a judge
+adversarially review them.</code></pre>
+
+<p>翻成大白话：每小时去 <code>#project-feedback</code> 频道查 bug 报告；这一轮找到的每一条，不分诊完、处理完、回复完就别停；修某个 bug 时，用一个 workflow 在三个独立分支（worktree）里并行试三种解法，再让一个裁判 agent 对抗式地互相挑错。</p>
+
+<div class="grid2">
+  <div class="stat"><div class="k">dynamic workflows 单次拉起 agent 量级</div><div class="v">数百个</div><div class="n">原文口径；放量前务必先小范围试跑</div></div>
+  <div class="stat"><div class="k">管花销的核心手段</div><div class="v" style="font-size:15px">路由分级</div><div class="n">routine 派给更小更快的模型，只在需要判断的关键点上用最强模型</div></div>
+</div>
+
+<!-- ============================ s8 ============================ -->
+<h2 id="s8">四级速查总表</h2>
+
+<p>面对一个具体任务，要想清楚三件事：<strong>交出去什么、什么时候用、用哪个功能</strong>。下表并成一行行对照。</p>
+
+<table>
+  <thead>
+    <tr><th style="width:14%">循环</th><th style="width:16%">你交出</th><th style="width:26%">什么时候用</th><th style="width:44%">用什么</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>回合制</strong></td><td>「检查」</td><td>你在探索或做决定</td><td>自定义验证 skills</td></tr>
+    <tr><td><strong>目标制</strong></td><td>「停止条件」</td><td>你清楚什么算完成</td><td><code>/goal</code></td></tr>
+    <tr><td><strong>时间制</strong></td><td>「触发」</td><td>工作在项目之外按时间表发生</td><td><code>/loop</code>、<code>/schedule</code></td></tr>
+    <tr><td><strong>主动式</strong></td><td>「提示词」</td><td>工作反复出现且定义清晰</td><td>以上全部 + dynamic workflows</td></tr>
+  </tbody>
+</table>
+
+<details>
+  <summary>回合制 · 看示例</summary>
+  <p>让 Claude 做个点赞按钮：它读代码、改文件、跑测试、交回一个它自认为能用的版本，你手动验收后再写下一条提示。</p>
+</details>
+<details>
+  <summary>目标制 · 看示例</summary>
+<pre><code>/goal get the homepage Lighthouse score to 90 or above, stop after 5 tries.</code></pre>
+</details>
+<details>
+  <summary>时间制 · 看示例</summary>
+<pre><code>/loop 5m check my PR, address review comments, and fix failing CI</code></pre>
+</details>
+<details>
+  <summary>主动式 · 看示例</summary>
+<pre><code>/schedule every hour: check #project-feedback for bug reports.
+/goal: don't stop until every report found this run is triaged,
+actioned, and responded to. When fixing a bug, use a workflow to
+explore three solutions in parallel worktrees and have a judge
+adversarially review them.</code></pre>
+</details>
+
+<h3>从哪里开始 · 三个自查问题</h3>
+
+<p>看你已经在做的活儿，挑一个<strong>你是瓶颈</strong>的任务，问自己哪一块能交出去：</p>
+
+<ol>
+  <li>你能不能写出这件事的<strong>验收检查</strong>？</li>
+  <li>这件事的<strong>目标</strong>够不够清楚？</li>
+  <li>这活儿是不是<strong>按时间表</strong>来的？</li>
+</ol>
+
+<blockquote>
+  <p>有了想法就把循环跑起来，观察它在哪儿卡住、在哪儿越界，然后放手去迭代它。</p>
+</blockquote>
+
+<!-- ============================ s9 ============================ -->
+<h2 id="s9">质量保障四条</h2>
+
+<p>一个循环的输出质量，取决于它<em>周围那套系统</em>。设计系统时，官方给了四条：</p>
+
+<div class="grid2">
+  <div class="card">
+    <h4>① 保持代码库本身干净</h4>
+    <p style="margin:0">Claude 会照着你代码库里<strong>已有的模式和约定</strong>走。底子干净，它跟着走出来的东西才干净。</p>
+  </div>
+  <div class="card">
+    <h4>② 给 Claude 一个自查的手段</h4>
+    <p style="margin:0">把「什么样才算好」用 skills 固化成你和团队的标准，让它能端到端检查自己。</p>
+  </div>
+  <div class="card">
+    <h4>③ 让文档触手可及</h4>
+    <p style="margin:0">框架和库的官方文档带着最新的最佳实践，别让它<strong>凭旧记忆瞎猜</strong>。</p>
+  </div>
+  <div class="card">
+    <h4>④ 用第二个 agent 做代码审查</h4>
+    <p style="margin:0">一个上下文全新的审查者<strong>偏见更少</strong>，不受主 agent 推理的影响。可用内置 <code>/code-review</code>，或接 GitHub Code Review。</p>
+  </div>
+</div>
+
+<blockquote>
+  <p><strong>Loops that write code need loops that check it.</strong><br>
+  <span style="font-size:13px;color:var(--fg-mute)">写代码的循环，需要检查代码的循环。（原文收尾的对称性原则，中文转述稿未收录）</span></p>
+</blockquote>
+
+<p>当某一次的结果不达标，<strong>别只停在修好这一次的问题</strong>。试着把它固化成规则，去改进整个系统，让后面每一轮迭代都受益。出错时该改的是系统规则，不是这一次的结果。</p>
+
+<!-- ============================ s10 ============================ -->
+<h2 id="s10">Token 治理六条</h2>
+
+<p>要管住 token，循环得有清晰的边界。原文给出<strong>六条</strong>可执行清单（中文转述稿仅呈现其中两条，此处按一手源补全）：</p>
+
+<table>
+  <thead><tr><th style="width:5%">#</th><th style="width:26%">建议</th><th>原文要点与本文注解</th><th style="width:11%">转述稿</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><strong>为任务选对原语与模型</strong></td>
+      <td>Smaller tasks don't need multiple agents or loops. 小任务不必上多 agent 或循环；有些任务可以用更便宜更快的模型。<em>这条是成本量级最大的杠杆之一。</em></td>
+      <td><span class="tag bad">缺失</span></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>明确成功与停止标准</strong></td>
+      <td>Be specific about what done looks like so Claude can arrive at the solution sooner (but not too soon). 标准要具体，让 Claude 更快到达解——<em>但也不能太快</em>（过松的标准会让它在未达标时就停）。</td>
+      <td><span class="tag bad">缺失</span></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>大规模前先试点</strong></td>
+      <td>Dynamic workflows can spawn <strong>hundreds of agents</strong>. 先在一小块工作上评估用量，再放量。</td>
+      <td><span class="tag ok">有</span></td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>确定性工作用脚本</strong></td>
+      <td>Running a script is cheaper than reasoning through the steps. 例如 PDF skill 可以随附一个填表脚本让 Claude 每次直接跑，而不是每次重新推导代码。</td>
+      <td><span class="tag ok">有</span></td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><strong>别比需要的更频繁</strong></td>
+      <td>Don't run routines more often than you need to. 让轮询间隔<em>匹配被观察对象实际变化的频率</em>。</td>
+      <td><span class="tag bad">缺失</span></td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td><strong>复核用量</strong></td>
+      <td><code>/usage</code> 按 skills、subagents、MCP 拆解近期用量；<code>/goal</code> 不带参数可看当前轮数与 token 用量；<code>/workflows</code> 显示每个 agent 的用量，且可随时停掉某个 agent。</td>
+      <td><span class="tag bad">缺失</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+  原文另有一句总结性判断：<em>Your model and effort level choices are among the biggest levers on what a loop costs</em>——<strong>模型档位与 effort 彻底性这两个旋钮，是循环成本最大的杠杆之一</strong>。这与「选对原语与模型」互为表里。
+</div>
+
+<!-- ============================ s11 ============================ -->
+<h2 id="s11">可计算模型与交互沙盘</h2>
+
+<p>上文四节是分类框架，属定性命题。本节把其中三个命题改写成<strong>可计算约束</strong>，并用四个沙盘实时反解。</p>
+
+<div class="warnbox">
+  <div class="h">防造假声明（Anti-Hallucination）</div>
+  以下所有回显数值<strong>均由公式实时运算得出</strong>，没有任何一处是为页面效果编造的实测百分比或提升幅度。凡原文未提供的参数（单轮 token 成本、单次检查成本、写脚本成本等），均在界面中显式标注为<strong>「基线假设值」</strong>，且全部可通过滑块调整。曲线形状由数学恒等式决定，参数只改变取值、不改变结论的方向性。
+</div>
+
+<!-- ---------- M1 ---------- -->
+<h3 id="s11-1">M1 · 四级循环装配沙盘</h3>
+
+<div class="sandbox">
+  <div class="sb-head"><span class="sb-idx">M1</span><h3>选一级，看它的四个维度与命令原型</h3></div>
+  <p class="sb-desc">数据完全取自原文表格与正文，无推断项。点击标签切换。</p>
+  <div class="tabs">
+    <button id="tab-m1-0" type="button" class="on">回合制</button>
+    <button id="tab-m1-1" type="button">目标制</button>
+    <button id="tab-m1-2" type="button">时间制</button>
+    <button id="tab-m1-3" type="button">主动式</button>
+  </div>
+  <div class="kv">
+    <div class="stat"><div class="k">你交出去</div><div class="v" id="out-m1-hand" style="font-size:16px">「检查」</div></div>
+    <div class="stat"><div class="k">谁触发</div><div class="v" id="out-m1-trigger" style="font-size:15px">一句提示</div></div>
+    <div class="stat"><div class="k">怎么判断停</div><div class="v" id="out-m1-stop" style="font-size:15px">Claude 自判</div></div>
+    <div class="stat"><div class="k">用什么功能</div><div class="v" id="out-m1-prim" style="font-size:15px">默认对话</div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="k" style="font-size:11.5px;color:var(--fg-mute);letter-spacing:.06em;margin-bottom:5px">适合什么任务</div>
+    <div id="out-m1-task" style="font-size:14.5px">不属于固定流程、也不按排期来的短任务</div>
+  </div>
+  <div class="k" style="font-size:11.5px;color:var(--fg-mute);letter-spacing:.06em;margin-bottom:6px">命令原型</div>
+  <pre id="out-m1-cmd" style="margin-bottom:12px">（无需命令）你发的每一条提示即开启一个由你引导每一轮的 agentic loop。</pre>
+  <div class="note" id="out-m1-note" style="margin-bottom:0">管花销：写具体的提示，并用 skills 强化验证以减少回合数。</div>
+</div>
+
+<!-- ---------- M2 ---------- -->
+<h3 id="s11-2">M2 · 目标制：达标概率与期望轮数</h3>
+
+<p>把 <code>/goal ... stop after N tries</code> 建模为<strong>截断几何分布</strong>：每轮独立地以概率 <em>p</em> 达标，最多允许 <em>N</em> 次尝试。这是「最多尝试次数上限」这个旋钮能带来的唯一可量化收益。</p>
+
+<div class="formula">
+  <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML">
+    <mrow>
+      <msub><mi>P</mi><mtext>hit</mtext></msub><mo>(</mo><mi>N</mi><mo>)</mo><mo>=</mo><mn>1</mn><mo>−</mo>
+      <msup><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mi>p</mi><mo>)</mo></mrow><mi>N</mi></msup>
+    </mrow>
+  </math>
+  <span style="margin:0 18px;color:var(--fg-mute)">·</span>
+  <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML">
+    <mrow>
+      <mi>E</mi><mo>[</mo><mi>K</mi><mo>]</mo><mo>=</mo>
+      <mfrac><mrow><mn>1</mn><mo>−</mo><msup><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mi>p</mi><mo>)</mo></mrow><mi>N</mi></msup></mrow><mi>p</mi></mfrac>
+      <mo>=</mo>
+      <munderover><mo>∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover>
+      <msup><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mi>p</mi><mo>)</mo></mrow><mrow><mi>k</mi><mo>−</mo><mn>1</mn></mrow></msup>
+    </mrow>
+  </math>
+  <span style="margin:0 18px;color:var(--fg-mute)">·</span>
+  <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML">
+    <mrow>
+      <mi mathvariant="normal">Δ</mi><mo>(</mo><mi>N</mi><mo>)</mo><mo>=</mo><mi>p</mi>
+      <msup><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mi>p</mi><mo>)</mo></mrow><mrow><mi>N</mi><mo>−</mo><mn>1</mn></mrow></msup>
+    </mrow>
+  </math>
+</div>
+
+<p style="font-size:13.5px;color:var(--fg-dim)">其中 <em>p</em> 为单轮成功率，<em>E[K]</em> 为实际执行的期望轮数，<em>Δ(N)</em> 为第 <em>N</em> 次尝试带来的<strong>边际达标概率增量</strong>。</p>
+
+<div class="sandbox">
+  <div class="sb-head"><span class="sb-idx">M2</span><h3>拖动 p 与 N，看上限该设几次</h3></div>
+  <p class="sb-desc"><span class="tag warn">基线假设</span> 单轮成功率 <em>p</em> 与单轮 token 成本均非原文数据，仅用于演示公式形状；<em>N</em>=5 取自原文示例「stop after 5 tries」。</p>
+  <div class="ctrl-row">
+    <div class="ctrl">
+      <label>单轮成功率 p <b><span id="out-m2-pv">45%</span></b></label>
+      <input type="range" id="rng-m2-p" min="10" max="90" step="5" value="45">
+    </div>
+    <div class="ctrl">
+      <label>最多尝试次数 N <b><span id="out-m2-nv">5</span></b></label>
+      <input type="range" id="rng-m2-n" min="1" max="20" step="1" value="5">
+    </div>
+  </div>
+  <div class="kv">
+    <div class="stat"><div class="k">达标概率 P_hit(N)</div><div class="v" id="out-m2-phit">94.97%</div><div class="n">N−1 次时为 <span id="out-m2-prev">90.85%</span></div></div>
+    <div class="stat"><div class="k">期望执行轮数 E[K]</div><div class="v" id="out-m2-turns">2.11</div><div class="n">远小于上限 N，因达标即停</div></div>
+    <div class="stat"><div class="k">第 N 次的边际增量</div><div class="v" id="out-m2-marg">4.12%</div><div class="n">再加一次能买到的达标概率</div></div>
+    <div class="stat"><div class="k">期望 / 最坏 token</div><div class="v" id="out-m2-cost" style="font-size:17px">12,662</div><div class="n">最坏上限 <span id="out-m2-cap">30,000</span>（按 6,000/轮）</div></div>
+  </div>
+  <figure style="margin-bottom:0">
+    <svg viewBox="0 0 680 300" role="img" aria-label="达标概率随最多尝试次数变化的饱和曲线">
+      <g stroke="var(--line-soft)" stroke-width="1">
+        <line x1="64" y1="246" x2="644" y2="246"></line>
+        <line x1="64" y1="193.5" x2="644" y2="193.5"></line>
+        <line x1="64" y1="141" x2="644" y2="141"></line>
+        <line x1="64" y1="88.5" x2="644" y2="88.5"></line>
+        <line x1="64" y1="36" x2="644" y2="36"></line>
+      </g>
+      <line x1="64" y1="36" x2="64" y2="246" stroke="var(--line)" stroke-width="1.2"></line>
+      <line x1="644" y1="36" x2="644" y2="246" stroke="var(--line)" stroke-width="1.2"></line>
+      <polyline id="poly-m2" fill="none" stroke="var(--accent)" stroke-width="2.4"
+        points="64.00,151.50 94.53,99.53 125.05,70.94 155.58,55.22 186.11,46.57 216.63,41.81 247.16,39.20 277.68,37.76 308.21,36.97 338.74,36.53 369.26,36.29 399.79,36.16 430.32,36.09 460.84,36.05 491.37,36.03 521.89,36.01 552.42,36.01 582.95,36.00 613.47,36.00 644.00,36.00"></polyline>
+      <line id="ln-m2" x1="186.11" x2="186.11" y1="246.00" y2="46.57" stroke="var(--cyan)" stroke-width="1.4" stroke-dasharray="4 4"></line>
+      <circle id="dot-m2" cx="186.11" cy="46.57" r="4.5" fill="var(--cyan)" stroke="var(--bg-card)" stroke-width="1.5"></circle>
+      <g font-size="10.5" fill="var(--fg-mute)" text-anchor="end">
+        <text x="52" y="250">0%</text><text x="52" y="197.5">25%</text>
+        <text x="52" y="145">50%</text><text x="52" y="92.5">75%</text><text x="52" y="40">100%</text>
+      </g>
+      <g font-size="10.5" fill="var(--fg-mute)" text-anchor="middle">
+        <text x="64" y="268">1</text><text x="186.11" y="268">5</text>
+        <text x="338.74" y="268">10</text><text x="491.37" y="268">15</text><text x="644" y="268">20</text>
+      </g>
+      <text x="354" y="290" text-anchor="middle" font-size="11" fill="var(--fg-dim)">最多尝试次数 N</text>
+      <text x="18" y="141" text-anchor="middle" font-size="11" fill="var(--fg-dim)" transform="rotate(-90,18,141)">达标概率</text>
+    </svg>
+    <figcaption>图 5 · 饱和曲线：P_hit 随 N 单调不减但边际递减。曲线由公式实时重绘，点阵 x 轴严格等距（步长 30.53）。</figcaption>
+  </figure>
+  <div class="legend"><span><i style="background:var(--accent)"></i>P_hit(N) 曲线</span><span><i style="background:var(--cyan)"></i>当前 N 位置</span></div>
+</div>
+
+<div class="card">
+  <h4>由该模型得到的两个结论</h4>
+  <p><strong>① 上限不是越大越好。</strong>在 <em>p</em>=0.45 的基线假设下，N=5 已捕获 <strong>94.97%</strong> 的达标概率；把上限加到 10 次只多买 <strong>4.78 个百分点</strong>，加到 20 次也只再多 <strong>0.25 个百分点</strong>，而最坏成本上限翻了 4 倍。原文示例的「5 次」在量级上是合理的。</p>
+  <p style="margin-bottom:0"><strong>② 期望轮数远小于上限。</strong>E[K]=2.11 而 N=5，说明「上限」主要作用是<em>给长尾兜底</em>，而非日常开销。真正的成本大头是单轮成功率 <em>p</em>——把 p 从 0.45 提到 0.70，期望轮数降到 1.42，比放松上限有效得多。</p>
+</div>
+
+<div class="note">
+  <strong>稳健性检验。</strong>已对 p ∈ [0.10, 0.90]、N ∈ [1, 20] 全域扫描，P_hit 对 N <strong>单调不减</strong>（无反例）；上述「饱和」结论在 p ≥ 0.30 时均成立。p 的取值本身无原文出处，故本结论只对「形状」负责，不对具体数值负责。
+</div>
+
+<!-- ---------- M3 ---------- -->
+<h3 id="s11-3">M3 · 时间制：轮询延迟与成本的权衡</h3>
+
+<p>把 <code>/loop T</code> 建模为一个轮询系统：事件在时间上均匀到达，间隔为 <em>T</em> 的轮询对事件<strong>平均延迟 T/2、最坏延迟 T</strong>；而日均调用次数为 1440/<em>T</em>。这条权衡没有免费午餐：</p>
+
+<div class="formula">
+  <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML">
+    <mrow>
+      <msub><mi>D</mi><mtext>avg</mtext></msub><mo>=</mo><mfrac><mi>T</mi><mn>2</mn></mfrac>
+    </mrow>
+  </math>
+  <span style="margin:0 18px;color:var(--fg-mute)">·</span>
+  <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML">
+    <mrow>
+      <msub><mi>D</mi><mtext>max</mtext></msub><mo>=</mo><mi>T</mi>
+    </mrow>
+  </math>
+  <span style="margin:0 18px;color:var(--fg-mute)">·</span>
+  <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML">
+    <mrow>
+      <msub><mi>C</mi><mtext>day</mtext></msub><mo>(</mo><mi>T</mi><mo>)</mo><mo>=</mo>
+      <mfrac><mn>1440</mn><mi>T</mi></mfrac><mo>×</mo><mi>c</mi><mo>=</mo>
+      <mfrac><mn>720</mn><msub><mi>D</mi><mtext>avg</mtext></msub></mfrac><mo>×</mo><mi>c</mi>
+    </mrow>
+  </math>
+</div>
+
+<p style="font-size:13.5px;color:var(--fg-dim)">成本与平均延迟成<strong>反比</strong>：延迟降一半，成本翻一倍。这正是原文「把间隔设长，或改成按事件反应」这条建议的数学根据。</p>
+
+<div class="sandbox">
+  <div class="sb-head"><span class="sb-idx">M3</span><h3>拖动间隔 T 与单次成本，看帕累托前沿</h3></div>
+  <p class="sb-desc"><span class="tag warn">基线假设</span> 单次检查 token 成本 <em>c</em> 原文未提供；<em>T</em>=5 分钟取自原文 <code>/loop 5m</code> 示例。曲线即「检测延迟—日均成本」的帕累托前沿。</p>
+  <div class="ctrl-row">
+    <div class="ctrl">
+      <label>轮询间隔 T（分钟） <b><span id="out-m3-tv">5</span></b></label>
+      <input type="range" id="rng-m3-t" min="2" max="120" step="1" value="5">
+    </div>
+    <div class="ctrl">
+      <label>单次检查成本 c（token） <b><span id="out-m3-cv">800</span></b></label>
+      <input type="range" id="rng-m3-c" min="100" max="3000" step="100" value="800">
+    </div>
+  </div>
+  <div class="kv">
+    <div class="stat"><div class="k">平均检测延迟</div><div class="v" id="out-m3-delay">2.5</div><div class="n">分钟（T/2）</div></div>
+    <div class="stat"><div class="k">最坏检测延迟</div><div class="v" id="out-m3-worst">5</div><div class="n">分钟（T）</div></div>
+    <div class="stat"><div class="k">日均调用次数</div><div class="v" id="out-m3-calls">288</div><div class="n">1440 / T</div></div>
+    <div class="stat"><div class="k">日均 token 成本</div><div class="v" id="out-m3-costd" style="font-size:17px">230,400</div><div class="n">30 天累计 <span id="out-m3-costm">6,912,000</span></div></div>
+  </div>
+  <figure style="margin-bottom:0">
+    <svg viewBox="0 0 680 300" role="img" aria-label="轮询检测延迟与日均 token 成本的帕累托前沿曲线">
+      <g stroke="var(--line-soft)" stroke-width="1">
+        <line x1="64" y1="246" x2="644" y2="246"></line>
+        <line x1="64" y1="193.5" x2="644" y2="193.5"></line>
+        <line x1="64" y1="141" x2="644" y2="141"></line>
+        <line x1="64" y1="88.5" x2="644" y2="88.5"></line>
+        <line x1="64" y1="36" x2="644" y2="36"></line>
+      </g>
+      <line x1="64" y1="36" x2="64" y2="246" stroke="var(--line)" stroke-width="1.2"></line>
+      <line x1="644" y1="36" x2="644" y2="246" stroke="var(--line)" stroke-width="1.2"></line>
+      <polyline id="poly-m3" fill="none" stroke="var(--accent)" stroke-width="2.4"
+        points="64.00,44.40 73.83,145.20 83.66,178.80 93.49,195.60 103.32,205.68 113.15,212.40 122.98,217.20 132.81,220.80 142.64,223.60 152.47,225.84 162.31,227.67 172.14,229.20 181.97,230.49 191.80,231.60 201.63,232.56 211.46,233.40 221.29,234.14 231.12,234.80 240.95,235.39 250.78,235.92 260.61,236.40 270.44,236.84 280.27,237.23 290.10,237.60 299.93,237.94 309.76,238.25 319.59,238.53 329.42,238.80 339.25,239.05 349.08,239.28 358.92,239.50 368.75,239.70 378.58,239.89 388.41,240.07 398.24,240.24 408.07,240.40 417.90,240.55 427.73,240.69 437.56,240.83 447.39,240.96 457.22,241.08 467.05,241.20 476.88,241.31 486.71,241.42 496.54,241.52 506.37,241.62 516.20,241.71 526.03,241.80 535.86,241.89 545.69,241.97 555.53,242.05 565.36,242.12 575.19,242.20 585.02,242.27 594.85,242.33 604.68,242.40 614.51,242.46 624.34,242.52 634.17,242.58 644.00,242.64"></polyline>
+      <line id="ln-m3" x1="78.75" x2="78.75" y1="246.00" y2="165.36" stroke="var(--cyan)" stroke-width="1.4" stroke-dasharray="4 4"></line>
+      <circle id="dot-m3" cx="78.75" cy="165.36" r="4.5" fill="var(--cyan)" stroke="var(--bg-card)" stroke-width="1.5"></circle>
+      <g font-size="10.5" fill="var(--fg-mute)" text-anchor="end">
+        <text x="52" y="250">0</text>
+        <text x="52" y="197.5" id="out-m3-yt1">150,000</text>
+        <text x="52" y="145" id="out-m3-yt2">300,000</text>
+        <text x="52" y="92.5" id="out-m3-yt3">450,000</text>
+        <text x="52" y="40" id="out-m3-yt4">600,000</text>
+      </g>
+      <g font-size="10.5" fill="var(--fg-mute)" text-anchor="middle">
+        <text x="64" y="268">1</text><text x="201.63" y="268">15</text>
+        <text x="349.08" y="268">30</text><text x="496.54" y="268">45</text><text x="644" y="268">60</text>
+      </g>
+      <text x="354" y="290" text-anchor="middle" font-size="11" fill="var(--fg-dim)">平均检测延迟（分钟）</text>
+      <text x="18" y="141" text-anchor="middle" font-size="11" fill="var(--fg-dim)" transform="rotate(-90,18,141)">日均 token 成本</text>
+    </svg>
+    <figcaption>图 6 · 帕累托前沿：延迟与成本成反比，曲线上任意点都是「给定延迟下的最低成本」。点阵 60 个采样点 x 轴严格等距（步长 9.83）。</figcaption>
+  </figure>
+  <div class="legend"><span><i style="background:var(--accent)"></i>帕累托前沿</span><span><i style="background:var(--cyan)"></i>当前 T 位置</span></div>
+</div>
+
+<div class="card">
+  <h4>由该模型得到的结论</h4>
+  <p><strong>双曲衰减意味着「快」极其昂贵。</strong>在 c=800 的基线假设下，T=5 分钟对应日均 288 次调用、230,400 token；把间隔放宽到 30 分钟，延迟从 2.5 分钟升到 15 分钟，但日均成本降到 38,400 token——<strong>延迟涨 6 倍，成本降 6 倍</strong>。曲线在延迟 &lt; 10 分钟的区间近乎垂直，说明这个区间里每一点延迟改善都要付出巨大成本。</p>
+  <p style="margin-bottom:0"><strong>对应原文的治理建议。</strong>原文第 5 条「别比需要的更频繁：让间隔匹配被观察对象实际变化的频率」——翻译成数学语言就是：<em>不要把 T 设得比事件的实际变化周期更小</em>。一个一天只更新一次的看板，用 5 分钟轮询不会更快发现问题，只会多付 288 倍成本。</p>
+</div>
+
+<!-- ---------- M4 ---------- -->
+<h3 id="s11-4">M4 · 脚本摊销：什么时候该写脚本</h3>
+
+<p>原文第 4 条建议「确定性工作用脚本，跑脚本比让模型重新推导步骤便宜」。这是一个典型的<strong>一次性投入 vs 每次摊销</strong>的盈亏平衡问题。设写并调通一个脚本的一次性成本为 <em>S</em>，每次让 Claude 重新推导的成本为 <em>R</em>，每次调用脚本的成本为 <em>V</em>：</p>
+
+<div class="formula">
+  <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML">
+    <mrow>
+      <msub><mi>C</mi><mtext>script</mtext></msub><mo>(</mo><mi>n</mi><mo>)</mo><mo>=</mo><mi>S</mi><mo>+</mo><mi>n</mi><mo>×</mo><mi>V</mi>
+    </mrow>
+  </math>
+  <span style="margin:0 18px;color:var(--fg-mute)">·</span>
+  <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML">
+    <mrow>
+      <msub><mi>C</mi><mtext>derive</mtext></msub><mo>(</mo><mi>n</mi><mo>)</mo><mo>=</mo><mi>n</mi><mo>×</mo><mi>R</mi>
+    </mrow>
+  </math>
+  <span style="margin:0 18px;color:var(--fg-mute)">·</span>
+  <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML">
+    <mrow>
+      <msup><mi>n</mi><mo>*</mo></msup><mo>=</mo>
+      <mfrac><mi>S</mi><mrow><mi>R</mi><mo>−</mo><mi>V</mi></mrow></mfrac>
+      <mtext>　（要求 </mtext><mi>R</mi><mo>&gt;</mo><mi>V</mi><mtext>）</mtext>
+    </mrow>
+  </math>
+</div>
+
+<div class="sandbox">
+  <div class="sb-head"><span class="sb-idx">M4</span><h3>拖动三个成本参数，反解盈亏平衡点</h3></div>
+  <p class="sb-desc"><span class="tag warn">基线假设</span> S / R / V 三个 token 成本原文均未提供，此处取值仅用于演示公式形状。观察窗口固定为 40 次执行。</p>
+  <div class="ctrl-row">
+    <div class="ctrl">
+      <label>写脚本一次性成本 S <b><span id="out-m4-sv">12,000</span></b></label>
+      <input type="range" id="rng-m4-s" min="1000" max="40000" step="500" value="12000">
+    </div>
+    <div class="ctrl">
+      <label>每次重新推导成本 R <b><span id="out-m4-rv">900</span></b></label>
+      <input type="range" id="rng-m4-r" min="100" max="2000" step="50" value="900">
+    </div>
+    <div class="ctrl">
+      <label>每次调用脚本成本 V <b><span id="out-m4-vv">60</span></b></label>
+      <input type="range" id="rng-m4-v" min="0" max="500" step="10" value="60">
+    </div>
+    <div class="ctrl">
+      <label>观察窗口 <b>40 次</b></label>
+      <div style="font-size:12px;color:var(--fg-mute);line-height:1.6;padding-top:4px">n 超过 40 次视为窗口外</div>
+    </div>
+  </div>
+  <div class="kv">
+    <div class="stat"><div class="k">盈亏平衡点 n*</div><div class="v" id="out-m4-nstar">14.29</div><div class="n">S / (R − V)</div></div>
+    <div class="stat"><div class="k">首次转正的次数</div><div class="v" id="out-m4-nint" style="font-size:18px">第 15 次</div><div class="n">向上取整</div></div>
+    <div class="stat"><div class="k">该点净节省</div><div class="v" id="out-m4-save" style="font-size:18px">600</div><div class="n">token（负值表示仍净亏）</div></div>
+    <div class="stat"><div class="k">判定</div><div class="v" id="out-m4-verdict" style="font-size:16px">窗口内回本</div><div class="n">纵轴上限 <span id="out-m4-ymax">40,000</span></div></div>
+  </div>
+  <figure style="margin-bottom:0">
+    <svg viewBox="0 0 680 300" role="img" aria-label="脚本方案与推导方案的累计成本曲线及盈亏平衡点">
+      <g stroke="var(--line-soft)" stroke-width="1">
+        <line x1="64" y1="246" x2="644" y2="246"></line>
+        <line x1="64" y1="193.5" x2="644" y2="193.5"></line>
+        <line x1="64" y1="141" x2="644" y2="141"></line>
+        <line x1="64" y1="88.5" x2="644" y2="88.5"></line>
+        <line x1="64" y1="36" x2="644" y2="36"></line>
+      </g>
+      <line x1="64" y1="36" x2="64" y2="246" stroke="var(--line)" stroke-width="1.2"></line>
+      <line x1="644" y1="36" x2="644" y2="246" stroke="var(--line)" stroke-width="1.2"></line>
+      <polyline id="poly-m4a" fill="none" stroke="var(--rose)" stroke-width="2.4"
+        points="64.00,246.00 78.50,241.28 93.00,236.55 107.50,231.82 122.00,227.10 136.50,222.38 151.00,217.65 165.50,212.93 180.00,208.20 194.50,203.47 209.00,198.75 223.50,194.03 238.00,189.30 252.50,184.57 267.00,179.85 281.50,175.12 296.00,170.40 310.50,165.68 325.00,160.95 339.50,156.23 354.00,151.50 368.50,146.78 383.00,142.05 397.50,137.32 412.00,132.60 426.50,127.88 441.00,123.15 455.50,118.42 470.00,113.70 484.50,108.97 499.00,104.25 513.50,99.53 528.00,94.80 542.50,90.07 557.00,85.35 571.50,80.62 586.00,75.90 600.50,71.17 615.00,66.45 629.50,61.73 644.00,57.00"></polyline>
+      <polyline id="poly-m4b" fill="none" stroke="var(--emerald)" stroke-width="2.4"
+        points="64.00,183.00 78.50,182.69 93.00,182.37 107.50,182.06 122.00,181.74 136.50,181.43 151.00,181.11 165.50,180.80 180.00,180.48 194.50,180.17 209.00,179.85 223.50,179.53 238.00,179.22 252.50,178.91 267.00,178.59 281.50,178.27 296.00,177.96 310.50,177.64 325.00,177.33 339.50,177.01 354.00,176.70 368.50,176.38 383.00,176.07 397.50,175.75 412.00,175.44 426.50,175.12 441.00,174.81 455.50,174.50 470.00,174.18 484.50,173.87 499.00,173.55 513.50,173.24 528.00,172.92 542.50,172.61 557.00,172.29 571.50,171.98 586.00,171.66 600.50,171.34 615.00,171.03 629.50,170.72 644.00,170.40"></polyline>
+      <line id="ln-m4" x1="271.14" x2="271.14" y1="246.00" y2="178.50" stroke="var(--cyan)" stroke-width="1.4" stroke-dasharray="4 4"></line>
+      <circle id="dot-m4" cx="271.14" cy="178.50" r="4.5" fill="var(--cyan)" stroke="var(--bg-card)" stroke-width="1.5"></circle>
+      <g font-size="10.5" fill="var(--fg-mute)" text-anchor="end">
+        <text x="52" y="250">0</text>
+        <text x="52" y="197.5" id="out-m4-yt1">10,000</text>
+        <text x="52" y="145" id="out-m4-yt2">20,000</text>
+        <text x="52" y="92.5" id="out-m4-yt3">30,000</text>
+        <text x="52" y="40" id="out-m4-yt4">40,000</text>
+      </g>
+      <g font-size="10.5" fill="var(--fg-mute)" text-anchor="middle">
+        <text x="64" y="268">0</text><text x="209" y="268">10</text>
+        <text x="354" y="268">20</text><text x="499" y="268">30</text><text x="644" y="268">40</text>
+      </g>
+      <text x="354" y="290" text-anchor="middle" font-size="11" fill="var(--fg-dim)">执行次数 n</text>
+      <text x="18" y="141" text-anchor="middle" font-size="11" fill="var(--fg-dim)" transform="rotate(-90,18,141)">累计 token 成本</text>
+    </svg>
+    <figcaption>图 7 · 摊销曲线：两线相交处即盈亏平衡点 n*。点阵 41 个采样点 x 轴严格等距（步长 14.50）。</figcaption>
+  </figure>
+  <div class="legend">
+    <span><i style="background:var(--rose)"></i>每次重新推导（n·R）</span>
+    <span><i style="background:var(--emerald)"></i>写脚本并调用（S + n·V）</span>
+    <span><i style="background:var(--cyan)"></i>盈亏平衡点 n*</span>
+  </div>
+</div>
+
+<div class="card">
+  <h4>由该模型得到的结论与边界</h4>
+  <p><strong>① 默认参数下 n* = 14.29，第 15 次转正。</strong>也就是说，在你判断这件事<em>会重复做 15 次以上</em>之前，写脚本并不划算。这给出了原文「确定性工作用脚本」这条建议的<strong>适用边界</strong>：它只对高频重复动作成立，一次性任务写脚本是纯亏损。</p>
+  <p><strong>② 决定 n* 的是差值 (R − V)，不是 R 本身。</strong>把 V 从 60 提到 500（脚本本身很啰嗦），n* 从 14.29 跳到 30.00；而 R 只决定了曲线斜率。所以优化方向是<em>让脚本调用尽可能轻</em>，而不是纠结推导有多贵。</p>
+  <p style="margin-bottom:0"><strong>③ 存在不回本的参数域。</strong>当 R ≤ V 时（调用脚本比让模型重新推导还贵），n* 发散、<strong>永不回本</strong>。已对滑块全域扫描：R &gt; V 的组合中，有 <strong>40,361</strong> 个组合的 n* 超出 40 次观察窗口，此时界面会显式提示「窗口内未回本」，而不是画一条虚假的交叉线。</p>
+</div>
+
+<div class="note">
+  <strong>稳健性检验记录。</strong>本模型的三个结论均已做全域参数扫描（S: 1000–40000/500，R: 100–2000/50，V: 0–500/10）。结论 ① 依赖基线假设的 S 与 R 取值，属「形状结论」；结论 ② 与 ③ 是<strong>代数恒等结论</strong>，不依赖任何参数取值，可安全外推。
+</div>
+
+<!-- ============================ s12 ============================ -->
+<h2 id="s12">落地建议与风险边界</h2>
+
+<p>按优先级给出可执行动作，每条附原文或本文的出处。</p>
+
+<h3><span class="pri p0">P0</span>先把「停止条件」写出来，再谈循环</h3>
+<p>目标制的全部收益来自<em>判定权外置</em>（<a href="#s5">第 5 节</a>）。如果写不出可量化的退出标准（通过多少测试、清除哪个阈值），那么 <code>/goal</code> 只会把回合制的主观判断原样搬进评估模型，收益归零，成本翻倍。落地动作：为第一个接入循环的任务写一条<strong>可自动判分</strong>的标准，再启用 <code>/goal</code>。</p>
+
+<h3><span class="pri p0">P0</span>用 <code>/usage</code>、<code>/goal</code>、<code>/workflows</code> 建立成本观测</h3>
+<p>这是中文转述稿丢掉的第 6 条，也是最容易被忽略的一条。三个命令分别给出：按 skills / subagents / MCP 拆解的近期用量、当前轮数与 token 用量、每个 agent 的用量（且可随时停掉某个 agent）。<strong>没有观测就没有治理</strong>——在跑第一个长期 routine 之前就把这些命令纳入日常。</p>
+
+<h3><span class="pri p1">P1</span>先小范围试点，再放量到 dynamic workflows</h3>
+<p>原文口径：dynamic workflows 单次可拉起<strong>数百个 agent</strong>。结合 M2 模型的饱和曲线，建议的做法是：先取工作量的一个小切片跑通，测出实际的单轮成功率 <em>p</em>，再用 M2 沙盘反解一个合理的最多尝试次数上限，最后才放量。</p>
+
+<h3><span class="pri p1">P1</span>让轮询间隔匹配变化频率</h3>
+<p>M3 模型显示成本与延迟成反比，且在延迟 &lt; 10 分钟的区间近乎垂直。落地动作：先问「被观察对象实际多久变一次」，按这个周期设 <em>T</em>，而不是默认用 5 分钟。能用事件触发就<strong>不要</strong>用时间轮询。</p>
+
+<h3><span class="pri p2">P2</span>把高频重复动作脚本化，先算 n*</h3>
+<p>用 M4 沙盘代入你自己的 S / R / V 估算，只有当 n* 明显小于预期重复次数时才值得写脚本。注意决定 n* 的是 (R − V) 差值——让脚本调用尽可能轻。</p>
+
+<h3><span class="pri p2">P2</span>为循环配一个「检查循环」</h3>
+<p>原文原则：<em>Loops that write code need loops that check it</em>。落地动作：接入第二个上下文全新的 agent 做审查（内置 <code>/code-review</code> 或 GitHub Code Review），并确保每次结果不达标时把教训<strong>固化成规则</strong>而非只修本次问题。</p>
+
+<h3>风险边界与不适用情形</h3>
+<ul>
+  <li><strong>非确定性目标不要上目标制。</strong>评估模型与执行模型同样无法判断「好不好看」，此时 <code>/goal</code> 只会增加轮数与成本。</li>
+  <li><strong><code>/schedule</code> 与 dynamic workflows 均为研究预览版</strong>（原文标注），接口与行为可能在正式版中变化，不要建长期依赖。</li>
+  <li><strong>主动式循环的停止逻辑是分层的</strong>：单个任务达标即退出，但整条 routine 会一直跑到你手动关闭。忘记关掉的 routine 是持续的成本泄漏源。</li>
+  <li><strong>auto mode 免人工确认</strong>意味着权限边界被整体放开。在接入写权限、外网访问或生产数据之前，必须先用只读任务验证循环的行为边界。</li>
+  <li><strong>本文三个模型的参数均为假设值</strong>，形状结论可外推，具体数值不可直接引用。</li>
+</ul>
+
+<!-- ============================ s13 ============================ -->
+<h2 id="s13">附录 · 勘误与来源</h2>
+
+<h3 id="s13-1">A. 中文转述稿与一手源的差异清单</h3>
+
+<table>
+  <thead><tr><th style="width:22%">位置</th><th style="width:39%">转述稿</th><th>一手源 / 本文处理</th></tr></thead>
+  <tbody>
+    <tr><td>Token 治理章节</td><td>标题称「六条可执行清单」，实际只列出两条</td><td>原文确为六条。本文补全「选对原语与模型」「明确成功与停止标准」「别比需要的更频繁」「用 /usage 等复核用量」四条，见第 10 节。</td></tr>
+    <tr><td>来源声明句</td><td>「示例代码与 / 90 分 / 「数百个 agent」等数字均引自原文」</td><td>「90 分」为数字块抓取错位。原文口径为 <code>Lighthouse score to 90 or above</code>。本文按原文还原。</td></tr>
+    <tr><td>质量保障章节</td><td>仅四条，无收尾句</td><td>原文另有 <em>Loops that write code need loops that check it</em>。本文补入第 9 节并作为 P2 建议。</td></tr>
+    <tr><td>延伸阅读</td><td>未收录</td><td>原文推荐了 steering Claude Code（skills / hooks / rules / subagents 选型）、building verification loops with skills 等文档。</td></tr>
+    <tr><td>配图</td><td>以文字占位描述（如「原文配图：回合制循环示意」）</td><td>本文以 SVG 重绘 4 张示意图，图注明确标注「依据原文描述重绘，非原图复制」。</td></tr>
+  </tbody>
+</table>
+
+<h3 id="s13-2">B. 来源</h3>
+
+<div class="card">
+  <p style="margin-bottom:8px"><strong>一手源（已核验）：</strong></p>
+  <p style="margin-bottom:8px">Delba de Oliveira、Michael Segner，<em>Getting started with loops</em>，Anthropic 官方博客，2026-06-30。</p>
+  <p style="margin-bottom:8px"><code>https://claude.com/blog/getting-started-with-loops</code></p>
+  <p style="margin-bottom:8px"><strong>输入材料：</strong>中文转述稿（小互解读，<code>slug: claude-code-loops</code>，标注 <code>source: Claude Blog</code>），日期 2026-07-02。</p>
+  <p style="margin-bottom:0"><strong>性质标注：</strong>本文为厂商发布内容的深度消化。所有分类框架、示例命令与数字均为官方口径；所有建模参数均为本文假设，已逐处标注。</p>
+</div>
+
+<hr>
+
+<blockquote>
+  <p>我们把循环定义为：agent 反复执行一轮轮工作，直到满足某个停止条件。</p>
+  <p style="font-size:13px;color:var(--fg-mute);margin-bottom:0">— Claude Code 团队，<em>Getting started with loops</em>，2026-06-30</p>
+</blockquote>
+
+<p style="font-size:12.5px;color:var(--fg-mute)">本文档为单文件自包含 HTML：零外部依赖、无远程字体与脚本、断网可完整阅读与交互，支持打印与移动端响应。</p>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var doc = document;
+  function byId(id){ return doc.getElementById(id); }
+
+  /* ---------- 主题 ---------- */
+  var TKEY = "loopdoc-theme";
+  var root = doc.documentElement;
+  var tBtn = byId("btnTheme");
+  function applyTheme(t){
+    root.setAttribute("data-theme", t);
+    if (tBtn) { tBtn.textContent = (t === "dark") ? "浅色" : "深色"; }
+  }
+  var saved = null;
+  try { if (window.localStorage) { saved = window.localStorage.getItem(TKEY); } } catch (e) { saved = null; }
+  applyTheme(saved === "light" ? "light" : "dark");
+  if (tBtn) {
+    tBtn.addEventListener("click", function(){
+      var cur = root.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      var nx = cur === "dark" ? "light" : "dark";
+      applyTheme(nx);
+      try { if (window.localStorage) { window.localStorage.setItem(TKEY, nx); } } catch (e) {}
+    });
+  }
+
+  /* ---------- 侧栏目录 ---------- */
+  var tocBtn = byId("btnToc");
+  var sidebar = byId("siteSidebar");
+  if (tocBtn && sidebar) {
+    tocBtn.addEventListener("click", function(){ sidebar.classList.toggle("open"); });
+  }
+
+  /* ---------- 阅读进度 ---------- */
+  var bar = byId("progBar");
+  function onScroll(){
+    var de = doc.documentElement;
+    var h = de.scrollHeight - de.clientHeight;
+    var top = de.scrollTop || (doc.body && doc.body.scrollTop) || 0;
+    var p = h > 0 ? top / h : 0;
+    if (p < 0) { p = 0; }
+    if (p > 1) { p = 1; }
+    if (bar) { bar.style.width = (p * 100).toFixed(2) + "%"; }
+  }
+  window.addEventListener("scroll", onScroll);
+  onScroll();
+
+  /* ---------- 回到顶部 ---------- */
+  var toTop = byId("toTopBtn");
+  if (toTop) {
+    toTop.addEventListener("click", function(){ window.scrollTo(0, 0); });
+  }
+
+  /* ---------- 目录高亮 ---------- */
+  if (typeof IntersectionObserver !== "undefined") {
+    var links = doc.querySelectorAll(".toc a");
+    var map = {};
+    var i;
+    for (i = 0; i < links.length; i++) {
+      var hr = links[i].getAttribute("href");
+      if (hr && hr.length > 1) { map[hr.slice(1)] = links[i]; }
+    }
+    var obs = new IntersectionObserver(function(entries){
+      var k;
+      for (k = 0; k < entries.length; k++) {
+        var en = entries[k];
+        if (en.isIntersecting && map[en.target.id]) {
+          for (var j = 0; j < links.length; j++) { links[j].classList.remove("on"); }
+          map[en.target.id].classList.add("on");
+        }
+      }
+    }, { rootMargin: "-80px 0px -70% 0px" });
+    var heads = doc.querySelectorAll("h2[id], h3[id]");
+    for (i = 0; i < heads.length; i++) { obs.observe(heads[i]); }
+  }
+})();
+
+/* ============ M1 四级循环装配 ============ */
+(function(){
+  "use strict";
+  function byId(id){ return document.getElementById(id); }
+  var LOOPS = [
+    {
+      hand: "「检查」",
+      trigger: "一句提示",
+      stop: "Claude 自判",
+      prim: "默认对话",
+      task: "不属于固定流程、也不按排期来的短任务",
+      cmd: "（无需命令）你发的每一条提示即开启一个由你引导每一轮的 agentic loop。",
+      note: "管花销：写具体的提示，并用 skills 强化验证以减少回合数。"
+    },
+    {
+      hand: "「停止条件」",
+      trigger: "手动实时提示",
+      stop: "评估模型核对",
+      prim: "/goal",
+      task: "有可验证退出标准的任务",
+      cmd: "/goal get the homepage Lighthouse score to 90 or above, stop after 5 tries.",
+      note: "判定权在执行者之外。管花销：把完成标准与重试上限都定具体。"
+    },
+    {
+      hand: "「触发」",
+      trigger: "到点（时间间隔）",
+      stop: "你取消或活干完",
+      prim: "/loop、/schedule",
+      task: "周期性工作，或需要对接外部系统的工作",
+      cmd: "/loop 5m check my PR, address review comments, and fix failing CI",
+      note: "管花销：把间隔设长，或改成按事件反应而不是死盯时间。/loop 关机即停，/schedule 云端常驻。"
+    },
+    {
+      hand: "「提示词」",
+      trigger: "事件或排期",
+      stop: "分层停止",
+      prim: "全部 + workflows",
+      task: "反复出现且定义清晰的工作流：bug 报告、issue 分诊、迁移、依赖升级",
+      cmd: "/schedule every hour: check #project-feedback for bug reports.\n/goal: don't stop until every report found this run is triaged,\nactioned, and responded to. When fixing a bug, use a workflow to\nexplore three solutions in parallel worktrees and have a judge\nadversarially review them.",
+      note: "停止逻辑分层：每个任务达标即退出，整条 routine 跑到你手动关闭为止。管花销：routine 派给更小更快的模型。"
+    }
+  ];
+  var tabs = [];
+  function render(i){
+    var d = LOOPS[i];
+    byId("out-m1-hand").textContent = d.hand;
+    byId("out-m1-trigger").textContent = d.trigger;
+    byId("out-m1-stop").textContent = d.stop;
+    byId("out-m1-prim").textContent = d.prim;
+    byId("out-m1-task").textContent = d.task;
+    byId("out-m1-cmd").textContent = d.cmd;
+    byId("out-m1-note").textContent = d.note;
+    var k;
+    for (k = 0; k < tabs.length; k++) {
+      if (tabs[k]) { tabs[k].classList.toggle("on", k === i); }
+    }
+  }
+  var TAB_IDS = ["tab-m1-0", "tab-m1-1", "tab-m1-2", "tab-m1-3"];
+  var i;
+  for (i = 0; i < TAB_IDS.length; i++) {
+    (function(idx){
+      var b = byId(TAB_IDS[idx]);
+      tabs.push(b);
+      if (b) { b.addEventListener("click", function(){ render(idx); }); }
+    })(i);
+  }
+  render(0);
+})();
+
+/* ============ M2 目标制达标概率 ============ */
+(function(){
+  "use strict";
+  function byId(id){ return document.getElementById(id); }
+  function commas(n){
+    var s = Math.round(n).toString();
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  var X0 = 64, Y0 = 36, W = 580, H = 210, CT = 6000;
+  var sp = byId("rng-m2-p");
+  var sn = byId("rng-m2-n");
+  var poly = byId("poly-m2");
+  var ln = byId("ln-m2");
+  var dot = byId("dot-m2");
+
+  function draw(){
+    var p = sp ? (parseFloat(sp.value) / 100) : 0.45;
+    var N = sn ? parseInt(sn.value, 10) : 5;
+    var q = 1 - p;
+    var phit = 1 - Math.pow(q, N);
+    var prev = 1 - Math.pow(q, N - 1);
+    var eturns = (1 - Math.pow(q, N)) / p;
+    var marg = p * Math.pow(q, N - 1);
+
+    byId("out-m2-pv").textContent = Math.round(p * 100) + "%";
+    byId("out-m2-nv").textContent = String(N);
+    byId("out-m2-phit").textContent = (phit * 100).toFixed(2) + "%";
+    byId("out-m2-prev").textContent = (prev * 100).toFixed(2) + "%";
+    byId("out-m2-turns").textContent = eturns.toFixed(2);
+    byId("out-m2-marg").textContent = (marg * 100).toFixed(2) + "%";
+    byId("out-m2-cost").textContent = commas(eturns * CT);
+    byId("out-m2-cap").textContent = commas(N * CT);
+
+    var pts = [];
+    var k;
+    for (k = 1; k <= 20; k++) {
+      var x = X0 + (k - 1) / 19 * W;
+      var y = Y0 + H - (1 - Math.pow(q, k)) * H;
+      pts.push(x.toFixed(2) + "," + y.toFixed(2));
+    }
+    if (poly) { poly.setAttribute("points", pts.join(" ")); }
+
+    var mx = (X0 + (N - 1) / 19 * W).toFixed(2);
+    var my = (Y0 + H - phit * H).toFixed(2);
+    if (ln) { ln.setAttribute("x1", mx); ln.setAttribute("x2", mx); ln.setAttribute("y2", my); }
+    if (dot) { dot.setAttribute("cx", mx); dot.setAttribute("cy", my); }
+  }
+  if (sp) { sp.addEventListener("input", draw); }
+  if (sn) { sn.addEventListener("input", draw); }
+  draw();
+})();
+
+/* ============ M3 轮询延迟-成本 ============ */
+(function(){
+  "use strict";
+  function byId(id){ return document.getElementById(id); }
+  function commas(n){
+    var s = Math.round(n).toString();
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  var X0 = 64, Y0 = 36, W = 580, H = 210;
+  var st = byId("rng-m3-t");
+  var sc = byId("rng-m3-c");
+  var poly = byId("poly-m3");
+  var ln = byId("ln-m3");
+  var dot = byId("dot-m3");
+
+  function draw(){
+    var T = st ? parseInt(st.value, 10) : 5;
+    var c = sc ? parseInt(sc.value, 10) : 800;
+    var delay = T / 2;
+    var calls = 1440 / T;
+    var costd = calls * c;
+    var yMax = Math.max(10000, Math.ceil(720 * c / 100000) * 100000);
+
+    byId("out-m3-tv").textContent = String(T);
+    byId("out-m3-cv").textContent = commas(c);
+    byId("out-m3-delay").textContent = delay.toFixed(1);
+    byId("out-m3-worst").textContent = String(T);
+    byId("out-m3-calls").textContent = commas(calls);
+    byId("out-m3-costd").textContent = commas(costd);
+    byId("out-m3-costm").textContent = commas(costd * 30);
+    byId("out-m3-yt1").textContent = commas(yMax / 4);
+    byId("out-m3-yt2").textContent = commas(yMax / 2);
+    byId("out-m3-yt3").textContent = commas(yMax * 3 / 4);
+    byId("out-m3-yt4").textContent = commas(yMax);
+
+    var pts = [];
+    var i;
+    for (i = 1; i <= 60; i++) {
+      var x = X0 + (i - 1) / 59 * W;
+      var cost = 720 * c / i;
+      var y = Y0 + H - (cost / yMax) * H;
+      pts.push(x.toFixed(2) + "," + y.toFixed(2));
+    }
+    if (poly) { poly.setAttribute("points", pts.join(" ")); }
+
+    var mx = (X0 + (delay - 1) / 59 * W).toFixed(2);
+    var my = (Y0 + H - (720 * c / delay / yMax) * H).toFixed(2);
+    if (ln) { ln.setAttribute("x1", mx); ln.setAttribute("x2", mx); ln.setAttribute("y2", my); }
+    if (dot) { dot.setAttribute("cx", mx); dot.setAttribute("cy", my); }
+  }
+  if (st) { st.addEventListener("input", draw); }
+  if (sc) { sc.addEventListener("input", draw); }
+  draw();
+})();
+
+/* ============ M4 脚本摊销盈亏平衡 ============ */
+(function(){
+  "use strict";
+  function byId(id){ return document.getElementById(id); }
+  function commas(n){
+    var s = Math.round(n).toString();
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  var X0 = 64, Y0 = 36, W = 580, H = 210, WIN = 40;
+  var ss = byId("rng-m4-s");
+  var sr = byId("rng-m4-r");
+  var sv = byId("rng-m4-v");
+  var pa = byId("poly-m4a");
+  var pb = byId("poly-m4b");
+  var ln = byId("ln-m4");
+  var dot = byId("dot-m4");
+
+  function draw(){
+    var S = ss ? parseInt(ss.value, 10) : 12000;
+    var R = sr ? parseInt(sr.value, 10) : 900;
+    var V = sv ? parseInt(sv.value, 10) : 60;
+
+    byId("out-m4-sv").textContent = commas(S);
+    byId("out-m4-rv").textContent = commas(R);
+    byId("out-m4-vv").textContent = commas(V);
+
+    var finite = R > V;
+    var nstar = finite ? (S / (R - V)) : Infinity;
+    var nint = finite ? Math.ceil(nstar) : 0;
+    if (finite && nint < 1) { nint = 1; }
+    var inWin = finite && nstar <= WIN;
+
+    if (!finite) {
+      byId("out-m4-nstar").textContent = "—";
+      byId("out-m4-nint").textContent = "永不回本";
+      byId("out-m4-save").textContent = "—";
+      byId("out-m4-verdict").textContent = "R ≤ V：不回本";
+    } else if (!inWin) {
+      var d40 = WIN * R - (S + WIN * V);
+      byId("out-m4-nstar").textContent = nstar.toFixed(2);
+      byId("out-m4-nint").textContent = "窗口外";
+      byId("out-m4-save").textContent = commas(d40);
+      byId("out-m4-verdict").textContent = "窗口内未回本";
+    } else {
+      var save = nint * R - (S + nint * V);
+      byId("out-m4-nstar").textContent = nstar.toFixed(2);
+      byId("out-m4-nint").textContent = "第 " + nint + " 次";
+      byId("out-m4-save").textContent = commas(save);
+      byId("out-m4-verdict").textContent = "窗口内回本";
+    }
+
+    var yMax = Math.ceil(Math.max(S + WIN * V, WIN * R) / 5000) * 5000;
+    if (yMax < 5000) { yMax = 5000; }
+    byId("out-m4-ymax").textContent = commas(yMax);
+    byId("out-m4-yt1").textContent = commas(yMax / 4);
+    byId("out-m4-yt2").textContent = commas(yMax / 2);
+    byId("out-m4-yt3").textContent = commas(yMax * 3 / 4);
+    byId("out-m4-yt4").textContent = commas(yMax);
+
+    var a = [];
+    var b = [];
+    var n;
+    for (n = 0; n <= WIN; n++) {
+      var x = (X0 + n / WIN * W).toFixed(2);
+      a.push(x + "," + (Y0 + H - (n * R / yMax) * H).toFixed(2));
+      b.push(x + "," + (Y0 + H - ((S + n * V) / yMax) * H).toFixed(2));
+    }
+    if (pa) { pa.setAttribute("points", a.join(" ")); }
+    if (pb) { pb.setAttribute("points", b.join(" ")); }
+
+    if (finite) {
+      var nn = Math.min(nstar, WIN);
+      var mx = (X0 + nn / WIN * W).toFixed(2);
+      var my = (Y0 + H - (nn * R / yMax) * H).toFixed(2);
+      if (ln) { ln.setAttribute("x1", mx); ln.setAttribute("x2", mx); ln.setAttribute("y2", my); ln.setAttribute("opacity", "1"); }
+      if (dot) { dot.setAttribute("cx", mx); dot.setAttribute("cy", my); dot.setAttribute("opacity", "1"); }
+    } else {
+      if (ln) { ln.setAttribute("opacity", "0"); }
+      if (dot) { dot.setAttribute("opacity", "0"); }
+    }
+  }
+  if (ss) { ss.addEventListener("input", draw); }
+  if (sr) { sr.addEventListener("input", draw); }
+  if (sv) { sv.addEventListener("input", draw); }
+  draw();
+})();
+</script>
+
+</body>
+</html>

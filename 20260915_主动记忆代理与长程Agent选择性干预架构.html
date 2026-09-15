@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>主动记忆代理与长程 Agent 选择性干预架构 · 工程解读</title>
+<meta name="description" content="基于 Meta AI 论文 arXiv:2607.08716《Remember When It Matters: Proactive Memory Agent for Long-Horizon Agents》的工程解读：行为状态衰退、旁挂记忆代理的两阶段机制、τ²-Bench 消融归因，以及可计算的干预盈亏平衡模型。">
+<style>
+:root{
+  --bg:#FAF7F2; --card:#FFFDF9; --card2:#F4F0E9; --text:#2A2724; --muted:#6B645C;
+  --border:#E4DCD2; --accent:#D97757; --accent-soft:#F6E7E0;
+  --emerald:#3F8A68; --rose:#C2503B; --amber:#B4882F; --cyan:#3F7D8E;
+  --shadow:0 1px 2px rgba(42,39,36,.05),0 8px 24px rgba(42,39,36,.06);
+  --sidebar-w:280px; --content-max:1180px;
+  --f-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --f-serif:"Songti SC","SimSun",Georgia,serif;
+  --f-mono:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+}
+html[data-theme="dark"]{
+  --bg:#181715; --card:#21201D; --card2:#27251F; --text:#EDE8E1; --muted:#9C948A;
+  --border:#3A372F; --accent:#E2886A; --accent-soft:#33241C;
+  --emerald:#5FB891; --rose:#E0745C; --amber:#D9AE5C; --cyan:#6BA9BA;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--f-sans); font-size:16px; line-height:1.85;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+/* ---------- 阅读进度条 ---------- */
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:80;transition:width .1s linear}
+/* ---------- 侧栏 ---------- */
+#sidebar{
+  position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;overflow-y:auto;
+  background:var(--card); border-right:1px solid var(--border); padding:26px 18px 40px; z-index:60;
+}
+#sidebar .brand{font-family:var(--f-serif);font-size:15px;font-weight:700;line-height:1.5;margin-bottom:4px}
+#sidebar .brand em{font-style:normal;color:var(--accent)}
+#sidebar .sub{font-size:11.5px;color:var(--muted);letter-spacing:.04em;margin-bottom:18px}
+#sidebar nav a{
+  display:block;padding:7px 10px;margin:1px 0;border-radius:6px;color:var(--muted);
+  text-decoration:none;font-size:13.2px;line-height:1.5;border-left:2px solid transparent;
+}
+#sidebar nav a.lv2{padding-left:22px;font-size:12.6px}
+#sidebar nav a:hover{background:var(--card2);color:var(--text)}
+#sidebar nav a.on{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft)}
+/* ---------- 正文在剩余区域居中 ---------- */
+#main{
+  max-width:var(--content-max);
+  margin-left:calc(var(--sidebar-w) + max(0px,(100% - var(--sidebar-w) - var(--content-max))/2));
+  margin-right:max(0px,calc((100% - var(--sidebar-w) - var(--content-max))/2));
+  padding:56px 44px 120px;
+}
+/* ---------- 顶部工具 ---------- */
+.tools{position:fixed;top:14px;right:18px;z-index:70;display:flex;gap:8px}
+.tbtn{
+  background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;
+  padding:7px 12px;font-size:12.5px;cursor:pointer;font-family:var(--f-sans);box-shadow:var(--shadow);
+}
+.tbtn:hover{border-color:var(--accent);color:var(--accent)}
+#toTopBtn{display:none}
+/* ---------- 标题 ---------- */
+header.hero{border-bottom:1px solid var(--border);padding-bottom:26px;margin-bottom:34px}
+.kicker{font-size:11.5px;letter-spacing:.16em;color:var(--accent);text-transform:uppercase;margin-bottom:12px}
+h1{font-family:var(--f-serif);font-size:34px;line-height:1.35;margin:0 0 14px;font-weight:700;letter-spacing:-.01em}
+.lede{font-size:16.5px;color:var(--muted);line-height:1.8;margin:0}
+.metarow{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.chip{
+  font-size:11.5px;padding:4px 10px;border-radius:20px;background:var(--card2);
+  border:1px solid var(--border);color:var(--muted);
+}
+.chip b{color:var(--text);font-weight:600}
+h2{
+  font-family:var(--f-serif);font-size:25px;margin:64px 0 8px;padding-top:14px;
+  border-top:1px solid var(--border);font-weight:700;letter-spacing:-.01em;
+}
+h2 .num{color:var(--accent);font-size:15px;font-family:var(--f-mono);margin-right:10px;vertical-align:2px}
+h3{font-size:18.5px;margin:38px 0 10px;font-weight:650;letter-spacing:-.005em}
+h4{font-size:15px;margin:24px 0 8px;font-weight:650;color:var(--accent)}
+p{margin:0 0 15px}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+a:hover{border-bottom-color:var(--accent)}
+ul,ol{margin:0 0 16px;padding-left:24px}
+li{margin:5px 0}
+strong{font-weight:650}
+code{
+  font-family:var(--f-mono);font-size:.875em;background:var(--card2);
+  padding:2px 6px;border-radius:4px;border:1px solid var(--border);
+}
+pre{
+  background:var(--card2);border:1px solid var(--border);border-radius:10px;
+  padding:16px 18px;overflow-x:auto;font-family:var(--f-mono);font-size:12.8px;line-height:1.7;margin:0 0 18px;
+}
+pre code{background:none;border:none;padding:0;font-size:inherit}
+/* ---------- 卡片 ---------- */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px 24px;margin:20px 0;box-shadow:var(--shadow)}
+.callout{border-left:3px solid var(--accent);background:var(--card);border-radius:0 12px 12px 0;padding:18px 22px;margin:20px 0;border-top:1px solid var(--border);border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+.callout.warn{border-left-color:var(--amber)}
+.callout.good{border-left-color:var(--emerald)}
+.callout.bad{border-left-color:var(--rose)}
+.callout .ct{font-size:13px;font-weight:700;letter-spacing:.03em;margin-bottom:8px;color:var(--accent)}
+.callout.warn .ct{color:var(--amber)}
+.callout.good .ct{color:var(--emerald)}
+.callout.bad .ct{color:var(--rose)}
+.callout p:last-child{margin-bottom:0}
+/* ---------- 指标条 ---------- */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin:24px 0}
+.metric{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow)}
+.metric .mv{font-family:var(--f-mono);font-size:23px;font-weight:700;color:var(--accent);line-height:1.25;letter-spacing:-.02em}
+.metric .ml{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.55}
+/* ---------- 表格 ---------- */
+.tw{overflow-x:auto;margin:20px 0;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:13.4px;min-width:600px}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:var(--card2);font-weight:650;font-size:12.5px;color:var(--muted);letter-spacing:.02em;white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--card2)}
+td.n{font-family:var(--f-mono);text-align:right;white-space:nowrap}
+td.up{color:var(--emerald);font-family:var(--f-mono);text-align:right;white-space:nowrap}
+td.down{color:var(--rose);font-family:var(--f-mono);text-align:right;white-space:nowrap}
+tr.hl{background:var(--accent-soft)}
+tr.hl td{font-weight:600}
+caption{caption-side:bottom;padding:10px 14px;font-size:12px;color:var(--muted);text-align:left;line-height:1.6}
+/* ---------- SVG ---------- */
+figure{margin:22px 0}
+figure svg{width:100%;height:auto;display:block;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px 4px}
+figcaption{font-size:12.3px;color:var(--muted);margin-top:9px;line-height:1.65;padding-left:2px}
+.grid{stroke:var(--border);stroke-width:1}
+.axis line,.axis-l{stroke:var(--muted);stroke-width:1.2}
+.tick{font:11px var(--f-mono);fill:var(--muted)}
+.axlab{font:11.5px var(--f-sans);fill:var(--muted)}
+.curve{fill:none;stroke:var(--accent);stroke-width:2.6;stroke-linejoin:round}
+.dash{stroke-width:1.4;stroke-dasharray:5 4;fill:none}
+.dash.opt{stroke:var(--emerald)}
+.dash.ref-a{stroke:var(--emerald);opacity:.75}
+.dash.ref-b{stroke:var(--rose);opacity:.75}
+.dash.baseline{stroke:var(--muted);opacity:.9}
+.reflab{font:10.8px var(--f-sans);fill:var(--muted)}
+.reflab.ref-a{fill:var(--emerald)}
+.reflab.ref-b{fill:var(--rose)}
+.optlab{font:11.5px var(--f-mono);fill:var(--emerald);font-weight:600}
+.dot.opt{fill:var(--emerald)}
+.dot.endp{fill:var(--rose)}
+.bar{fill:var(--cyan);opacity:.85}
+.bar.b-base{fill:var(--muted);opacity:.55}
+.bar.b-full{fill:var(--accent);opacity:.95}
+.bar.b-bad{fill:var(--rose);opacity:.8}
+.bval{font:11.5px var(--f-mono);fill:var(--text);font-weight:600}
+.blab{font:10.8px var(--f-sans);fill:var(--muted)}
+.bdelta{font:11px var(--f-mono);font-weight:600}
+.bdelta.up{fill:var(--emerald)}
+.bdelta.down{fill:var(--rose)}
+.fbox{fill:var(--card2);stroke:var(--border);stroke-width:1.2}
+.fbox.acc{fill:var(--accent-soft);stroke:var(--accent)}
+.fbox.cy{fill:none;stroke:var(--cyan);stroke-dasharray:4 3}
+.ftext{font:13px var(--f-sans);fill:var(--text);font-weight:600}
+.fsub{font:11px var(--f-sans);fill:var(--muted)}
+.flab{font:10.8px var(--f-sans);fill:var(--muted)}
+.farrow{stroke:var(--muted);stroke-width:1.4;fill:none}
+.fhead{fill:var(--muted)}
+.farrow.hot{stroke:var(--accent)}
+.fhead.hot{fill:var(--accent)}
+/* ---------- 沙盘 ---------- */
+.sim{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin:26px 0;box-shadow:var(--shadow)}
+.sim-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.sim-h .tag{font-size:10.5px;letter-spacing:.1em;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:2px 7px}
+.sim-h h4{margin:0;color:var(--text);font-size:16px}
+.sim-d{font-size:12.8px;color:var(--muted);margin:0 0 18px;line-height:1.7}
+.ctrl{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px;margin-bottom:18px}
+.ctrl label{display:block;font-size:12.5px;margin-bottom:7px;color:var(--muted)}
+.ctrl label b{color:var(--text);font-family:var(--f-mono);font-weight:600}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+select{
+  width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);
+  background:var(--card2);color:var(--text);font-family:var(--f-sans);font-size:13px;
+}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:16px 0 0}
+.ro{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.ro .rv{font-family:var(--f-mono);font-size:19px;font-weight:700;color:var(--accent);line-height:1.3;letter-spacing:-.02em}
+.ro .rv.g{color:var(--emerald)} .ro .rv.r{color:var(--rose)} .ro .rv.c{color:var(--cyan)}
+.ro .rl{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.5}
+.simnote{font-size:11.8px;color:var(--muted);margin-top:14px;line-height:1.7;border-top:1px dashed var(--border);padding-top:12px}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.sbtn{
+  background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;
+  padding:7px 13px;font-size:12.5px;cursor:pointer;font-family:var(--f-sans);
+}
+.sbtn:hover{border-color:var(--accent);color:var(--accent)}
+.sbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+/* ---------- 时间线 ---------- */
+.tldots{display:flex;gap:0;align-items:center;margin:18px 0 20px;flex-wrap:wrap}
+.tldot{width:11px;height:11px;border-radius:50%;background:var(--card2);border:2px solid var(--border);flex:0 0 auto}
+.tldot.on{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.tldot.last.on{background:var(--rose);border-color:var(--rose);box-shadow:0 0 0 4px color-mix(in srgb,var(--rose) 22%,transparent)}
+.tlbar{height:2px;flex:1 1 30px;background:var(--border);min-width:24px}
+.tlpanel{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+.tlst{font-family:var(--f-mono);font-size:12px;color:var(--accent);letter-spacing:.05em;margin-bottom:6px}
+.tltt{font-size:16px;font-weight:650;margin-bottom:8px}
+.tlbd{font-size:14px;color:var(--muted);line-height:1.75;margin:0}
+/* ---------- 记忆库三卡 ---------- */
+.memgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:20px 0}
+.mem{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow)}
+.mem .mk{font-family:var(--f-mono);font-size:12px;color:var(--accent);letter-spacing:.04em;margin-bottom:6px}
+.mem .mn{font-size:15px;font-weight:650;margin-bottom:8px}
+.mem .md{font-size:13px;color:var(--muted);line-height:1.7;margin:0}
+/* ---------- 数学排版 ---------- */
+.math{font-family:var(--f-serif);font-size:16.5px;line-height:2.1;margin:14px 0;padding:14px 18px;background:var(--card2);border-radius:10px;border:1px solid var(--border);overflow-x:auto}
+.math .mfrac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 .18em}
+.math .mfrac>span:first-child{border-bottom:1.2px solid currentColor;padding:0 .35em 1px}
+.math .mfrac>span:last-child{padding:1px .35em 0}
+.math i{font-style:italic}
+.math sub{font-size:.68em;vertical-align:-.25em}
+.math sup{font-size:.68em;vertical-align:.4em}
+/* ---------- details ---------- */
+details{border:1px solid var(--border);border-radius:10px;background:var(--card);margin:16px 0;overflow:hidden}
+summary{padding:12px 18px;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--muted);list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸ ";color:var(--accent)}
+details[open] summary::before{content:"▾ "}
+details[open] summary{border-bottom:1px solid var(--border);color:var(--text)}
+.dbody{padding:4px 18px 12px}
+/* ---------- 页脚 ---------- */
+footer{margin-top:70px;padding-top:26px;border-top:1px solid var(--border);font-size:12.5px;color:var(--muted);line-height:1.8}
+footer a{color:var(--muted)}
+/* ---------- 响应式 ---------- */
+@media (max-width:1080px){
+  #sidebar{transform:translateX(-100%);transition:transform .22s ease;box-shadow:var(--shadow)}
+  #sidebar.open{transform:translateX(0)}
+  #main{margin-left:0!important;margin-right:0!important;max-width:100%;padding:64px 20px 100px}
+  h1{font-size:26px} h2{font-size:21px}
+  #menuBtn{display:inline-block!important}
+}
+@media (max-width:640px){
+  body{font-size:15.5px}
+  #main{padding:58px 15px 90px}
+  h1{font-size:23px} h2{font-size:19.5px} h3{font-size:17px}
+  .metrics{grid-template-columns:1fr 1fr}
+}
+@media print{
+  #sidebar,.tools,#progress,#toTopBtn{display:none!important}
+  body{background:#fff;color:#000}
+  #main{margin:0!important;max-width:100%!important;padding:0}
+  h2{page-break-after:avoid} figure,.sim,.tw,.callout{page-break-inside:avoid}
+  a{color:#000;border:none}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+
+<aside id="sidebar">
+  <div class="brand">主动记忆代理<br><em>选择性干预架构</em></div>
+  <div class="sub">arXiv:2607.08716 · 工程解读 · 2026-09-15</div>
+  <nav>
+    <a href="#s0">§0　一手源核验与订正</a>
+    <a href="#s1">§1　一分钟速览</a>
+    <a href="#s2">§2　问题：行为状态衰退</a>
+    <a href="#s2-1" class="lv2">衰退时间线</a>
+    <a href="#s3">§3　方法：旁挂记忆代理</a>
+    <a href="#s3-1" class="lv2">两阶段内部机制</a>
+    <a href="#s3-2" class="lv2">三类记忆库</a>
+    <a href="#s4">§4　数据：两个考场</a>
+    <a href="#s5">§5　消融：沉默的价值</a>
+    <a href="#s5-1" class="lv2">归因沙盘</a>
+    <a href="#s5-2" class="lv2">盈亏平衡模型</a>
+    <a href="#s5-3" class="lv2">稳健性复检</a>
+    <a href="#s6">§6　案例：三个干预时刻</a>
+    <a href="#s7">§7　开源训练：SFT + GRPO</a>
+    <a href="#s8">§8　落地：仓库与成本</a>
+    <a href="#s8-1" class="lv2">唤醒频率沙盘</a>
+    <a href="#s9">§9　边界与风险</a>
+    <a href="#s10">§10　行动建议</a>
+  </nav>
+</aside>
+
+<div class="tools">
+  <button class="tbtn" id="menuBtn" type="button" style="display:none">目录</button>
+  <button class="tbtn" id="themeBtn" type="button">主题：<span id="out-theme">深色</span></button>
+  <button class="tbtn" id="toTopBtn" type="button">↑ 顶部</button>
+</div>
+
+<main id="main">
+
+<header class="hero">
+  <div class="kicker">Meta AI · arXiv:2607.08716 · 工程解读</div>
+  <h1>主动记忆代理：让智能体学会「该提醒时才提醒」</h1>
+  <p class="lede">给长任务执行智能体旁挂一个只负责「判断该不该开口」的记忆代理，不改动主模型一行代码。
+  在 Terminal-Bench 2.0 上，Claude Sonnet 4.5 的 pass@1 从 37.6% 提升到 45.9%（+8.3 pp）；
+  消融实验给出的核心结论是——真正起作用的不是「记住了多少」，而是「会不会选择闭嘴」。</p>
+  <div class="metarow">
+    <span class="chip"><b>一手源</b> arXiv:2607.08716v1</span>
+    <span class="chip"><b>提交</b> 2026-07-09</span>
+    <span class="chip"><b>机构</b> Meta AI（8 位作者）</span>
+    <span class="chip"><b>许可</b> Apache-2.0</span>
+    <span class="chip"><b>核验日</b> 2026-09-15</span>
+  </div>
+</header>
+
+<!-- ==================== §0 核验与订正 ==================== -->
+<h2 id="s0"><span class="num">§0</span>一手源核验与订正</h2>
+
+<div class="callout bad">
+  <div class="ct">重要订正：原文「代码仓库是空的」这一判断，已不成立</div>
+  <p>待转换稿件的结论是：<i>「论文正文写的代码仓库经核实是空仓库（size 为 0），截至 2026 年 7 月 13 日尚未真正开源。」</i>
+  该判断在其核验时点（2026-07-13）成立，但<b>在次日即被推翻</b>。本文于 2026-09-15 重新调用 GitHub API 实测，结果如下：</p>
+</div>
+
+<div class="tw">
+<table>
+<thead><tr><th>核验项</th><th>原文判断（核验于 2026-07-13）</th><th>本次实测（2026-09-15）</th></tr></thead>
+<tbody>
+<tr><td>仓库体积 <code>size</code></td><td class="down">0</td><td class="up">3554 KB</td></tr>
+<tr><td>最后推送 <code>pushed_at</code></td><td>从未推送</td><td class="up">2026-07-14T04:48:05Z</td></tr>
+<tr><td>README / 许可证</td><td>无 README、无描述</td><td class="up">README 7,895 B · Apache-2.0</td></tr>
+<tr><td>源码目录</td><td>无</td><td class="up"><code>src/memory_agent/</code></td></tr>
+<tr><td>社区热度</td><td>—</td><td>52 star · 6 fork · 2 open issue</td></tr>
+<tr><td>提交历史</td><td>—</td><td>单次 <code>initial commit</code>（2026-07-14）</td></tr>
+</tbody>
+<caption>数据来源：GitHub REST API <code>/repos/yifannnwu/proactive-memory-agent</code>，2026-09-15 实测。单次 initial commit 的时间戳（2026-07-14T04:48:04Z）正好落在原文核验时点的次日，可解释两结论的差异。</caption>
+</table>
+</div>
+
+<p>因此本文对该条结论作如下订正：<b>代码已于 2026-07-14 开源，且可复现 Terminal-Bench 实验</b>。仓库内已包含
+<code>configs/baseline_terminalbench.yaml</code> 与 <code>configs/memory_terminalbench.yaml</code> 两套对照配置，
+以及 5 条渲染好的任务轨迹（含原文案例所用的 <code>regex-log</code>）。详见 <a href="#s8">§8 落地</a>。</p>
+
+<h3>一手源对齐结果</h3>
+<p>本文所有跑分均已回溯 arXiv 原文（HTML v1 版）逐字核对，未采信二次转述。核对结论：</p>
+<ul>
+  <li><b>论文真实存在</b>：标题《Remember When It Matters: Proactive Memory Agent for Long-Horizon Agents》，2026-07-09 提交，DOI <code>10.48550/arXiv.2607.08716</code>。</li>
+  <li><b>作者为 8 人</b>：Yifan Wu、Lizhu Zhang、Yuhang Zhou、Mingyi Wang、Bo Peng、Serena Li、Xiangjun Fan、Zhuokai Zhao（原文稿件仅列出首尾两位，此处补全）。</li>
+  <li><b>摘要数字一致</b>：摘要原文明确写有 <i>“gains of +8.3 pp on Terminal-Bench and +6.8 pp on τ²-Bench”</i>，与稿件一致。</li>
+  <li><b>Table 1 / Table 2 数字逐格一致</b>，且 macro / micro 两列可由三个分域分数反算复现（见下）。</li>
+</ul>
+
+<details>
+<summary>展开：macro / micro 列的独立复算（Python 实算，非转录）</summary>
+<div class="tw">
+<table>
+<thead><tr><th>方案</th><th>macro 复算</th><th>论文列值</th><th>micro 复算</th><th>论文列值</th><th>偏差</th></tr></thead>
+<tbody>
+<tr><td>基线（Sonnet 4.5 裸跑）</td><td class="n">57.4667</td><td class="n">57.5</td><td class="n">55.0417</td><td class="n">55.0</td><td class="n">0.033 / 0.042</td></tr>
+<tr class="hl"><td>完备记忆代理（可选沉默）</td><td class="n">64.3000</td><td class="n">64.3</td><td class="n">61.1460</td><td class="n">61.2</td><td class="n">0.000 / 0.054</td></tr>
+<tr><td>记忆库全量展示</td><td class="n">61.5000</td><td class="n">61.5</td><td class="n">58.6223</td><td class="n">58.6</td><td class="n">0.000 / 0.022</td></tr>
+<tr><td>强制每步提醒</td><td class="n">63.4667</td><td class="n">63.5</td><td class="n">61.5022</td><td class="n">61.5</td><td class="n">0.033 / 0.002</td></tr>
+<tr><td>无记忆库·只给建议</td><td class="n">61.0333</td><td class="n">61.0</td><td class="n">60.8108</td><td class="n">60.8</td><td class="n">0.033 / 0.011</td></tr>
+<tr><td>Mem0 通用记忆层</td><td class="n">62.1333</td><td class="n">62.1</td><td class="n">60.7827</td><td class="n">60.8</td><td class="n">0.033 / 0.017</td></tr>
+</tbody>
+<caption>macro = 三域等权平均；micro = 按任务数 50 / 114 / 114 加权（合计 278）。复算值与论文列值偏差 ≤ 0.06 pp，差异源于论文各域分数仅保留 1 位小数，属合法舍入，非数据错误。</caption>
+</table>
+</div>
+</details>
+
+<div class="callout warn">
+  <div class="ct">一处原文内部不一致（如实保留）</div>
+  <p>论文 §4.2 正文中 retail 分域的提升写作 <code>+9.7 pp</code>，但 Table 1 同一行为 <code>49.1% → 58.8%</code>、Δ 列写 <code>+9.6 pp</code>。
+  两者相差 0.1 pp。本文一律采用<b>表格值 +9.6 pp</b>（表格为结构化真值源，正文为叙述性舍入）。</p>
+</div>
+
+<!-- ==================== §1 速览 ==================== -->
+<h2 id="s1"><span class="num">§1</span>一分钟速览</h2>
+
+<div class="metrics">
+  <div class="metric"><div class="mv">37.6% → 45.9%</div><div class="ml">Terminal-Bench 2.0，Sonnet 4.5 配记忆代理前后（<b>+8.3 pp</b>）</div></div>
+  <div class="metric"><div class="mv">55.0% → 61.8%</div><div class="ml">τ²-Bench 任务加权平均，Sonnet 4.5 配记忆代理前后（<b>+6.8 pp</b>）</div></div>
+  <div class="metric"><div class="mv">45.9% = 45.9%</div><div class="ml">配记忆代理后，便宜的 Sonnet 4.5 与更贵的 Opus 4.6 在 Terminal-Bench 上<b>打平</b></div></div>
+  <div class="metric"><div class="mv">45.9% &gt; 43.5%</div><div class="ml">配记忆代理的 Sonnet 4.5，<b>反超</b>不配记忆代理的 Opus 4.6</div></div>
+</div>
+
+<ul>
+  <li><b>架构是旁挂式的</b>：干活的执行智能体一个字都不改，旁边另跑一个记忆代理，每隔固定步数被唤醒，先整理结构化记忆库，再决定要不要插一句提醒。它对主链路唯一的影响就是那句可选提醒，作为一次性临时上下文注入，用完即走。</li>
+  <li><b>「保持沉默」是一个正式动作</b>：记忆代理每一步都要在「插一句提醒」与「明确选择闭嘴」之间二选一，只有当某条记忆很可能改变下一步决策时才开口。这是全套设计里最关键的一点。</li>
+  <li><b>消融结论反直觉</b>：自己判断「该不该开口」&gt; 把记忆库全量展示 &gt; 强制每步提醒 &gt;（多数场景下）没有记忆库只给建议 &gt; 通用记忆检索层 Mem0。</li>
+  <li><b>弱模型涨得多，强模型也没白涨</b>：Opus 4.6 加了记忆代理在两个考场分别还能再涨 2.4 pp 与 2.5 pp，说明这不只是替弱模型补能力。</li>
+  <li><b>开源小模型能学会，但增益打折</b>：Qwen3.5-27B 经 SFT + GRPO 训练后当记忆代理，Terminal-Bench 从 37.6% 涨到 41.1%（+3.5 pp），明显小于 Opus 4.6 当记忆代理时的 +8.3 pp。</li>
+  <li><b>成本口径缺失</b>：论文没有报告记忆代理带来的额外 token 消耗与延迟数字。本文 <a href="#s8-1">§8.1</a> 给出可计算的替代模型。</li>
+</ul>
+
+<!-- ==================== §2 问题 ==================== -->
+<h2 id="s2"><span class="num">§2</span>问题：任务做长了，AI 会悄悄忘记该守的规矩</h2>
+
+<p>论文给这个失败模式起了个名字，叫 <b>behavioral state decay（行为状态衰退）</b>。要点是：<b>信息并没有丢，还躺在记录里，只是不再起作用</b>。</p>
+
+<p>一个长任务会不断产生新东西：任务要求、环境事实、之前试过什么、诊断出的毛病、还没做完的子目标。随着轨迹越拉越长，这些信息要么被挤出模型能看到的上下文窗口，要么虽然还留在窗口里，却不再真正左右它下一步怎么做。论文把这类「应该继续约束未来动作」的信息统称为 <b>execution state（执行状态）</b>。</p>
+
+<div class="callout">
+  <div class="ct">打个比方：贴满墙的便利贴</div>
+  <p>就像你把便利贴贴满了整面墙。贴的时候每一张都记得清清楚楚，但贴太多之后，你已经不会再抬头去看了。
+  字还在墙上，只是不再影响你此刻的动作。</p>
+</div>
+
+<p>论文说，这和长上下文里的 <i>lost in the middle</i>（信息夹在中间就被忽视）现象有关，但更强调的是<b>行为层面</b>的失效——不是「检索不到」，而是「检索得到也不照做」。</p>
+
+<h3 id="s2-1">衰退时间线（可交互）</h3>
+<p>下面这条时间线，演示一条早先记下的要求，怎么一步步从「鲜活」褪成「还在记录里，却不再左右下一步」。点击按钮查看各阶段。</p>
+
+<div class="sim">
+  <div class="sim-h"><span class="tag">SANDBOX</span><h4>行为状态衰退：一步一阶段的失效过程</h4></div>
+  <p class="sim-d">数据来自论文 §1 对 regex-log 任务的人工轨迹分析。每一步的圆点代表该时刻「第 2 步记下的约束」是否仍在左右决策。</p>
+  <div class="tldots">
+    <span class="tldot"></span><span class="tlbar"></span>
+    <span class="tldot"></span><span class="tlbar"></span>
+    <span class="tldot"></span><span class="tlbar"></span>
+    <span class="tldot"></span><span class="tlbar"></span>
+    <span class="tldot last"></span>
+  </div>
+  <div class="btnrow">
+    <button class="sbtn" id="tl-b0" type="button">第 2 步 · 记下</button>
+    <button class="sbtn" id="tl-b1" type="button">第 4 步</button>
+    <button class="sbtn" id="tl-b2" type="button">第 6 步</button>
+    <button class="sbtn" id="tl-b3" type="button">第 8 步 · 修另一个 bug</button>
+    <button class="sbtn" id="tl-b4" type="button">结局</button>
+  </div>
+  <div class="tlpanel">
+    <div class="tlst" id="out-tl-step">第 2 步 · 记下</div>
+    <div class="tltt" id="out-tl-title">规矩刚被写进记录</div>
+    <p class="tlbd" id="out-tl-body">执行智能体解析任务要求，明确记下「IP 段可以是单个数字」。此刻这条约束是鲜活的，会直接参与下一步的正则构造。</p>
+  </div>
+  <div class="simnote">信息一路都在，只是不再左右下一步。这正是记忆代理要介入的地方：不是补回丢失的信息，而是<b>在正确的时刻把仍在记录里的信息重新激活</b>。</div>
+</div>
+
+<h3>论文举的三种典型翻车</h3>
+<div class="memgrid">
+  <div class="mem"><div class="mk">FAILURE 01</div><div class="mn">早先的约束被后来的动作覆盖</div><p class="md">任务开头明确记下的边界条件（如「IP 段可以是单个数字」），在若干步之后重写正则时被彻底忽略——不是忘了，是没回看。</p></div>
+  <div class="mem"><div class="mk">FAILURE 02</div><div class="mn">用户口头声称压过工具已验证的事实</div><p class="md">用户自称金卡会员，工具查到的记录显示其实是普通会员。没有记忆代理时，执行智能体照着用户的说法发了补偿。</p></div>
+  <div class="mem"><div class="mk">FAILURE 03</div><div class="mn">在会改变环境状态的调用前忘了政策</div><p class="md">基础经济舱机票不允许修改。执行智能体在真正调用改签工具之前，没有把这条政策条款重新拎出来。</p></div>
+</div>
+
+<p>论文由此提出一个判断：<b>光是把更长的历史记录喂给模型是不够的</b>。真正缺的，是一套机制去决定「这条被记住的信息，现在该不该重新拿出来影响决策」。</p>
+
+<!-- ==================== §3 方法 ==================== -->
+<h2 id="s3"><span class="num">§3</span>方法：旁边站一个记忆管家，不干活只管「该不该提醒」</h2>
+
+<p>做法是：干活的执行智能体<b>一个字都不改</b>，旁边另外跑一个记忆代理。它每隔固定步数被唤醒一次，先整理一份结构化的记忆库，再决定要不要在执行智能体的下一步里插一句提醒。</p>
+
+<figure>
+<svg viewBox="0 0 720 320" role="img" aria-label="主动记忆代理系统集成示意"><rect class="fbox acc" x="60" y="70" width="180" height="66" rx="9"/><text class="ftext" x="150" y="98" text-anchor="middle">执行智能体</text><text class="fsub" x="150" y="118" text-anchor="middle">一字不改 · 保留原有工具与提示</text><rect class="fbox" x="60" y="216" width="180" height="62" rx="9"/><text class="ftext" x="150" y="243" text-anchor="middle">环境</text><text class="fsub" x="150" y="261" text-anchor="middle">shell / 工具 / 服务</text><line class="farrow" x1="150" y1="136" x2="150" y2="216"/><polygon class="fhead" points="150,216 145,205 155,205"/><polygon class="fhead" points="150,136 145,147 155,147"/><text class="flab" x="162" y="180">动作 ⇄ 观测</text><rect class="fbox acc" x="470" y="52" width="212" height="118" rx="9"/><text class="ftext" x="576" y="80" text-anchor="middle">记忆代理</text><text class="fsub" x="576" y="101" text-anchor="middle">Phase 1 · 管理记忆库</text><text class="fsub" x="576" y="121" text-anchor="middle">Phase 2 · 决定开不开口</text><text class="fsub" x="576" y="145" text-anchor="middle">输入：最近 8 条消息窗口</text><rect class="fbox" x="470" y="222" width="212" height="56" rx="9"/><text class="ftext" x="576" y="246" text-anchor="middle">下一次调用</text><text class="fsub" x="576" y="266" text-anchor="middle">提醒作为一次性临时上下文注入</text><path class="farrow" d="M 240 88 C 330 88 380 76 470 78"/><polygon class="fhead" points="470,78 458,73 458,83"/><text class="flab" x="300" y="70">每一步唤醒 · 滑动观察窗口</text><path class="farrow hot" d="M 470 130 C 380 132 330 118 240 118"/><polygon class="fhead hot" points="240,118 252,113 252,123"/><text class="flab" x="292" y="140" fill="var(--accent)">可选提醒 · 用完即走</text><line class="farrow hot" x1="576" y1="170" x2="576" y2="222"/><polygon class="fhead hot" points="576,222 571,211 581,211"/><text class="flab" x="588" y="200">context_for_action</text><text class="flab" x="588" y="214">或 no_intervention</text><path class="farrow" d="M 470 250 C 380 250 300 250 240 148"/><polygon class="fhead" points="240,148 246,158 236,158"/><text class="flab" x="330" y="238">影响下一步决策</text></svg>
+<figcaption>系统集成示意。左侧执行智能体与环境交互；右侧记忆代理并行运行，观察最近若干步的滑动窗口与当前记忆库，可选地向下一次调用注入提醒。依据论文 Figure 1(a) 与 README 架构节绘制。</figcaption>
+</figure>
+
+<p>记忆代理每次被唤醒，都走两个阶段：<b>先管账（管理记忆库），再拿主意（要不要开口）</b>。它对执行智能体唯一的影响，就是那句可选的提醒，作为一次性的临时上下文注入进去，用完即走，不改执行智能体的基础指令、工具和解码方式。</p>
+
+<div class="callout good">
+  <div class="ct">最关键的一点</div>
+  <p><b>「保持沉默」是一个正式动作，不是漏掉了才不说。</b>记忆代理每一步都要在「插一句提醒」和「明确选择闭嘴」之间做二选一，
+  只有当某条记忆很可能改变下一步决策时，它才开口。论文原话将其形式化为 <code>null intervention</code>——一个需要被主动选择的输出，而非缺省分支。</p>
+</div>
+
+<h3 id="s3-1">两阶段内部机制</h3>
+<figure>
+<svg viewBox="0 0 720 250" role="img" aria-label="记忆代理内部两阶段"><rect class="fbox" x="30" y="40" width="150" height="60" rx="9"/><text class="ftext" x="105" y="66" text-anchor="middle">最近轨迹窗口</text><text class="fsub" x="105" y="86" text-anchor="middle">k = 8 条消息</text><rect class="fbox acc" x="240" y="26" width="200" height="88" rx="9"/><text class="ftext" x="340" y="52" text-anchor="middle">Phase 1 · 管账</text><text class="fsub" x="340" y="74" text-anchor="middle">memory_update_status</text><text class="fsub" x="340" y="90" text-anchor="middle">memory_save_knowledge</text><text class="fsub" x="340" y="106" text-anchor="middle">memory_save_procedural / delete</text><rect class="fbox cy" x="490" y="26" width="200" height="88" rx="9"/><text class="ftext" x="590" y="50" text-anchor="middle">结构化记忆库</text><text class="fsub" x="590" y="72" text-anchor="middle">status（私有 · 绝不外显）</text><text class="fsub" x="590" y="89" text-anchor="middle">knowledge（稳定事实）</text><text class="fsub" x="590" y="106" text-anchor="middle">procedural（尝试与结果）</text><rect class="fbox acc" x="240" y="150" width="200" height="72" rx="9"/><text class="ftext" x="340" y="176" text-anchor="middle">Phase 2 · 拿主意</text><text class="fsub" x="340" y="198" text-anchor="middle">读取更新后的记忆库</text><text class="fsub" x="340" y="214" text-anchor="middle">此步不再修改记忆库</text><rect class="fbox" x="490" y="140" width="200" height="42" rx="9"/><text class="fsub" x="590" y="166" text-anchor="middle">context_for_action（开口）</text><rect class="fbox" x="490" y="192" width="200" height="42" rx="9"/><text class="fsub" x="590" y="218" text-anchor="middle">no_intervention（明确沉默）</text><line class="farrow" x1="180" y1="70" x2="240" y2="70"/><polygon class="fhead" points="240,70 229,65 229,75"/><line class="farrow" x1="440" y1="70" x2="490" y2="70"/><polygon class="fhead" points="490,70 479,65 479,75"/><path class="farrow" d="M 590 114 C 590 132 500 132 440 168"/><polygon class="fhead" points="440,168 448,160 437,157"/><line class="farrow" x1="440" y1="172" x2="490" y2="160"/><polygon class="fhead" points="490,160 479,156 479,166"/><line class="farrow" x1="440" y1="196" x2="490" y2="212"/><polygon class="fhead" points="490,212 479,208 479,218"/></svg>
+<figcaption>记忆代理内部：Phase 1 通过工具调用管理记忆库；Phase 2 读取更新后的记忆库，要么发出一条 <code>context_for_action</code> 提醒，要么显式输出 <code>no_intervention</code>。依据论文 Figure 1(b) 与 §3.2 / §3.3 绘制。</figcaption>
+</figure>
+
+<h4>Phase 1 · 管理记忆库</h4>
+<p>记忆代理<b>不直接重写</b>记忆库，而是返回一串预定义的工具调用，由系统照单执行。四个工具分别是
+<code>memory_update_status</code>、<code>memory_save_knowledge</code>、<code>memory_save_procedural</code>、<code>memory_delete</code>，
+每个可调用零次或多次。</p>
+
+<h3 id="s3-2">三类记忆库</h3>
+<div class="memgrid">
+  <div class="mem">
+    <div class="mk">status · s<sub>t</sub></div><div class="mn">私有进度（绝不外显）</div>
+    <p class="md">记忆代理自己对进度、未决问题、潜在风险的看法。<b>只给它自己用，绝不展示给执行智能体。</b>论文原文：<i>“It is never shown to the action agent.”</i></p>
+  </div>
+  <div class="mem">
+    <div class="mk">knowledge · K<sub>t</sub></div><div class="mn">稳定事实</div>
+    <p class="md">任务要求、环境属性、文件路径、配置细节、已被工具或用户验证过的事实、与评测相关的观察。这类事实预期在任务期间保持为真。</p>
+  </div>
+  <div class="mem">
+    <div class="mk">procedural · P<sub>t</sub></div><div class="mn">尝试与结果</div>
+    <p class="md">试过什么命令、哪个失败了、哪个修好了、排除了哪些假设、有过什么诊断信号、有哪些经验性改进。</p>
+  </div>
+</div>
+
+<h4>Phase 2 · 决定开不开口</h4>
+<p>读一遍刚更新完的记忆库，只做一个决定，<b>这一步不改记忆库</b>：</p>
+<ul>
+  <li>把一条即将被违反的要求、一个能解释当前现象的环境事实、一次不该重来的失败、或一个还没做完的子目标，写成一句针对性的提醒，塞进执行智能体的下一次调用。</li>
+  <li>如果没有哪条记忆够重要，就<b>明确选择不说</b>。论文特意强调，它被鼓励只在真正有用时才开口，避免用广泛的策略建议、复述已知信息去打扰执行智能体。</li>
+</ul>
+
+<div class="callout warn">
+  <div class="ct">与「顾问型」方案的划界</div>
+  <p>论文特别把这套记忆代理和「顾问型」方案（advisor，一个模型当军师，给干活模型出各种主意）划清界限：
+  <b>记忆代理不出宽泛的战略建议</b>，它开口的每一句，都必须落在维护好的执行状态上，是某条具体的要求、事实、失败或诊断。
+  后文消融实验里「无记忆库 · 只给建议」那一档，模拟的正是这类系统。</p>
+</div>
+
+<h3>触发方式：主实验其实比方法节更密集</h3>
+<p>论文 §3.4 写的是「第一步 + 之后固定间隔」，并说明更挑时机的触发（只在报错、测试失败、命令重复、上下文大幅漂移后才唤醒）是可行的，
+但主实验用固定节奏是为了单独看清「提醒策略」本身的效果。</p>
+<p>需要留意的是 <b>§4.1 的实际配置</b>：原文写明 <i>“the memory agent runs at the first step and then at every subsequent step”</i>——
+即<b>第一步加之后的每一步都被调用</b>，观察窗口为 <code>k = 8</code> 条消息。这比方法节描述的「固定间隔」要密集得多，也直接决定了成本（见 <a href="#s8-1">§8.1</a>）。</p>
+
+<!-- ==================== §4 数据 ==================== -->
+<h2 id="s4"><span class="num">§4</span>数据：加了记忆代理，分数涨了多少</h2>
+
+<p>论文在两个长任务考场上做了测试：<b>Terminal-Bench 2.0</b>（自主操作命令行，改代码、跑命令、修 bug）与 <b>τ²-Bench</b>（多轮对话式工具调用，模拟航空、零售、电信三个真实服务场景）。
+评分口径是 <b>pass@1</b>：只让 AI 跑一次任务，看这一次能不能做对的成功率，不是跑好几次挑最好的那次算数。</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>考场 / 场景</th><th>动作模型</th><th>n</th><th>基线</th><th>配记忆代理</th><th>Δ</th></tr></thead>
+<tbody>
+<tr class="hl"><td>Terminal-Bench 2.0</td><td>Sonnet 4.5</td><td class="n">85</td><td class="n">37.6%</td><td class="n">45.9%</td><td class="up">+8.3</td></tr>
+<tr><td>Terminal-Bench 2.0</td><td>Opus 4.6</td><td class="n">85</td><td class="n">43.5%</td><td class="n">45.9%</td><td class="up">+2.4</td></tr>
+<tr><td>τ² airline</td><td>Sonnet 4.5</td><td class="n">50</td><td class="n">68.0%</td><td class="n">78.0%</td><td class="up">+10.0</td></tr>
+<tr><td>τ² retail</td><td>Sonnet 4.5</td><td class="n">114</td><td class="n">49.1%</td><td class="n">58.8%</td><td class="up">+9.7</td></tr>
+<tr><td>τ² telecom</td><td>Sonnet 4.5</td><td class="n">114</td><td class="n">55.3%</td><td class="n">57.9%</td><td class="up">+2.6</td></tr>
+<tr><td>τ² 任务加权平均</td><td>Sonnet 4.5</td><td class="n">278</td><td class="n">55.0%</td><td class="n">61.8%</td><td class="up">+6.8</td></tr>
+<tr><td>τ² airline</td><td>Opus 4.6</td><td class="n">50</td><td class="n">76.0%</td><td class="n">76.0%</td><td class="n">±0.0</td></tr>
+<tr><td>τ² retail</td><td>Opus 4.6</td><td class="n">114</td><td class="n">64.9%</td><td class="n">69.3%</td><td class="up">+4.4</td></tr>
+<tr><td>τ² telecom</td><td>Opus 4.6</td><td class="n">114</td><td class="n">63.2%</td><td class="n">64.9%</td><td class="up">+1.7</td></tr>
+<tr><td>τ² 任务加权平均</td><td>Opus 4.6</td><td class="n">278</td><td class="n">66.2%</td><td class="n">68.7%</td><td class="up">+2.5</td></tr>
+</tbody>
+<caption>Table 1 完整数据（arXiv:2607.08716v1）。记忆代理统一为 Claude Opus 4.6。所有分数为 pass@1 百分比，Δ 单位为百分点（pp）。高亮行为本文最常引用的主结果。</caption>
+</table>
+</div>
+
+<div class="callout">
+  <div class="ct">两点值得留意</div>
+  <p><b>第一，弱模型涨得多，强模型也没白涨。</b>Opus 4.6 已经很强，加了记忆代理在两个考场分别还能再涨 2.4 pp 与 2.5 pp，说明这套做法不只是在替弱模型补能力。</p>
+  <p><b>第二，不同场景差别明显。</b>同为 Sonnet 4.5，airline 涨 10.0 pp、retail 涨 9.6 pp，而 telecom 只涨 2.6 pp。
+  这符合论文把记忆当成「随场景调整的干预策略」而非固定套路的定位，也提示落地时必须按自己的场景重跑，而不是照搬 +8.3 这个数字。</p>
+</div>
+
+<div class="callout warn">
+  <div class="ct">一处任务数口径差异</div>
+  <p>论文 Table 1 中 Terminal-Bench 2.0 的 <code>n = 85</code>，而仓库 README 写明两套配置运行的是 <i>“the full terminal-bench@2.0 set (89 tasks)”</i>。
+  85 与 89 的差异论文未作说明（可能源于部分任务被判为无效或环境失败）。本文保留论文表格的 n = 85，此处仅作标注。</p>
+</div>
+
+<!-- ==================== §5 消融 ==================== -->
+<h2 id="s5"><span class="num">§5</span>消融：记性好不如懂得该闭嘴</h2>
+
+<p>为了搞清楚到底是哪一步在起作用，团队做了<b>消融实验</b>（把系统里的某个部件拆掉或换成简化版，看少了这部分之后成绩掉多少）。
+结论指向一件事：<b>真正起作用的不是「记住了多少」，而是「会不会判断该不该开口」</b>。</p>
+
+<p>五种打法分别是：完整两阶段方案（自己选沉默）、把记忆库全量展示给执行智能体、强制每一步都提醒、没有记忆库只当顾问给建议、接一个通用记忆检索层 Mem0。</p>
+
+<h3 id="s5-1">归因沙盘：三种溢价怎么算</h3>
+<p>下面的沙盘把消融表的实测数据拆成三项可解释的溢价，全部由表格数值直接相减得出，不含任何估算。切换场景观察差异。</p>
+
+<div class="sim">
+  <div class="sim-h"><span class="tag">SANDBOX</span><h4>τ²-Bench 消融对照与归因（纯实测数据）</h4></div>
+  <p class="sim-d">选择分域场景，柱状图与三项溢价会实时重算。灰条为 Sonnet 4.5 基线；橙红条表示该方案低于基线。</p>
+  <div class="ctrl">
+    <div>
+      <label for="c-dom">分域场景：<b>airline</b></label>
+      <select id="c-dom">
+        <option value="airline" selected>τ² · airline（n = 50）</option>
+        <option value="retail">τ² · retail（n = 114）</option>
+        <option value="telecom">τ² · telecom（n = 114）</option>
+      </select>
+    </div>
+  </div>
+  <div id="out-c-chart"><svg viewBox="0 0 720 320" role="img" aria-label="τ²-Bench 消融对照柱状图"><line class="axis-l" x1="62.00" y1="26.00" x2="62.00" y2="250.00"/><line class="axis-l" x1="62.00" y1="250.00" x2="700.00" y2="250.00"/><line class="grid" x1="62.00" y1="250.00" x2="700.00" y2="250.00"/><text class="tick" x="54.00" y="254.00" text-anchor="end">55</text><line class="grid" x1="62.00" y1="212.67" x2="700.00" y2="212.67"/><text class="tick" x="54.00" y="216.67" text-anchor="end">60</text><line class="grid" x1="62.00" y1="175.33" x2="700.00" y2="175.33"/><text class="tick" x="54.00" y="179.33" text-anchor="end">65</text><line class="grid" x1="62.00" y1="138.00" x2="700.00" y2="138.00"/><text class="tick" x="54.00" y="142.00" text-anchor="end">70</text><line class="grid" x1="62.00" y1="100.67" x2="700.00" y2="100.67"/><text class="tick" x="54.00" y="104.67" text-anchor="end">75</text><line class="grid" x1="62.00" y1="63.33" x2="700.00" y2="63.33"/><text class="tick" x="54.00" y="67.33" text-anchor="end">80</text><line class="grid" x1="62.00" y1="26.00" x2="700.00" y2="26.00"/><text class="tick" x="54.00" y="30.00" text-anchor="end">85</text><rect class="bar b-base" x="85.39" y="152.93" width="59.55" height="97.07" rx="3"/><text class="bval" x="115.17" y="145.93" text-anchor="middle">68.0</text><text class="blab" x="115.17" y="270.00" text-anchor="middle">基线</text><text class="blab" x="115.17" y="284.00" text-anchor="middle">（Sonnet 4.5 裸跑）</text><rect class="bar b-full" x="191.73" y="78.27" width="59.55" height="171.73" rx="3"/><text class="bval" x="221.50" y="71.27" text-anchor="middle">78.0</text><text class="blab" x="221.50" y="270.00" text-anchor="middle">完备记忆代理</text><text class="blab" x="221.50" y="284.00" text-anchor="middle">（可选沉默）</text><text class="bdelta up" x="221.50" y="306.00" text-anchor="middle">+10.0</text><rect class="bar b-ok" x="298.06" y="108.13" width="59.55" height="141.87" rx="3"/><text class="bval" x="327.83" y="101.13" text-anchor="middle">74.0</text><text class="blab" x="327.83" y="270.00" text-anchor="middle">记忆库全量展示</text><text class="bdelta up" x="327.83" y="292.00" text-anchor="middle">+6.0</text><rect class="bar b-ok" x="404.39" y="123.07" width="59.55" height="126.93" rx="3"/><text class="bval" x="434.17" y="116.07" text-anchor="middle">72.0</text><text class="blab" x="434.17" y="270.00" text-anchor="middle">强制每步提醒</text><text class="bdelta up" x="434.17" y="292.00" text-anchor="middle">+4.0</text><rect class="bar b-bad" x="510.73" y="197.73" width="59.55" height="52.27" rx="3"/><text class="bval" x="540.50" y="190.73" text-anchor="middle">62.0</text><text class="blab" x="540.50" y="270.00" text-anchor="middle">无记忆库·只给建议</text><text class="bdelta down" x="540.50" y="292.00" text-anchor="middle">−6.0</text><rect class="bar b-ok" x="617.06" y="152.93" width="59.55" height="97.07" rx="3"/><text class="bval" x="646.83" y="145.93" text-anchor="middle">68.0</text><text class="blab" x="646.83" y="270.00" text-anchor="middle">Mem0 通用记忆层</text><text class="bdelta up" x="646.83" y="292.00" text-anchor="middle">+0.0</text><line class="dash baseline" x1="62.00" y1="152.93" x2="700.00" y2="152.93"/><text class="axlab" x="700.00" y="314.00" text-anchor="end">pass@1（%）　虚线 = 基线</text></svg></div>
+  <div class="readout">
+    <div class="ro"><div class="rv c" id="out-c-full">78.0</div><div class="rl">完备方案 pass@1（%）</div></div>
+    <div class="ro"><div class="rv g" id="out-c-silence">+6.0</div><div class="rl">沉默溢价 = 完备 − 强制每步</div></div>
+    <div class="ro"><div class="rv g" id="out-c-bank">+16.0</div><div class="rl">记忆库溢价 = 完备 − 只给建议</div></div>
+    <div class="ro"><div class="rv g" id="out-c-mem0">+10.0</div><div class="rl">对通用检索层 = 完备 − Mem0</div></div>
+    <div class="ro"><div class="rv" id="out-c-best">完备记忆代理（可选沉默）</div><div class="rl">该场景实测最高分方案</div></div>
+    <div class="ro"><div class="rv" id="out-c-flow">完备方案 ≥ 强制每步</div><div class="rl">完备 vs 强制每步</div></div>
+  </div>
+  <div class="simnote"><b>口径说明：</b>柱状图数值、macro / micro 与三项溢价<b>全部直接取自论文 Table 2</b>，本沙盘只做减法与加权，不做任何拟合或外推。
+  silence 溢价为正，说明「少说几句」本身带来了分数；为负，说明在该场景下多说反而更好。</div>
+</div>
+
+<p>为什么 airline 场景差距最大：这类任务最怕被过度提醒打扰，一句多余的提醒就可能把执行智能体带偏。
+只有会主动选择闭嘴的完整方案，才在这里拿到最高分。反过来，只会不停出主意的顾问式建议（62.0%，比基线低 6.0），
+和只会检索记忆的 Mem0（68.0%，与基线持平），都栽在这里。</p>
+
+<details>
+<summary>展开：五种打法的完整对比表 + 各自拆了什么（Table 2）</summary>
+<div class="tw">
+<table>
+<thead><tr><th>方案</th><th>airline</th><th>retail</th><th>telecom</th><th>macro</th><th>micro</th><th>到底拆了什么</th></tr></thead>
+<tbody>
+<tr><td><b>基线（Sonnet 4.5 裸跑）</b></td><td class="n">68.0</td><td class="n">49.1</td><td class="n">55.3</td><td class="n">57.5</td><td class="n">55.0</td><td><span style="font-size:12px;color:var(--muted)">不挂记忆代理，Sonnet 4.5 裸跑。</span></td></tr>
+<tr class="hl"><td><b>完备记忆代理（可选沉默）</b></td><td class="n">78.0</td><td class="n">57.0</td><td class="n">57.9</td><td class="n">64.3</td><td class="n">61.2</td><td><span style="font-size:12px;color:var(--muted)"><b>本方案</b>。Phase 1 建库 + Phase 2 自主选择「提醒 / 沉默」。</span></td></tr>
+<tr><td><b>记忆库全量展示</b></td><td class="n">74.0</td><td class="n">52.6</td><td class="n">57.9</td><td class="n">61.5</td><td class="n">58.6</td><td><span style="font-size:12px;color:var(--muted)">保留 Phase 1 建库，去掉 Phase 2 的挑选，把整个记忆库每步全摊给执行智能体。</span></td></tr>
+<tr><td><b>强制每步提醒</b></td><td class="n">72.0</td><td class="n">58.8</td><td class="n">59.6</td><td class="n">63.5</td><td class="n">61.5</td><td><span style="font-size:12px;color:var(--muted)">保留记忆库与 Phase 2 生成提醒，但拿掉「沉默」选项，逼它每步都说。</span></td></tr>
+<tr><td><b>无记忆库·只给建议</b></td><td class="n">62.0</td><td class="n">54.4</td><td class="n">66.7</td><td class="n">61.0</td><td class="n">60.8</td><td><span style="font-size:12px;color:var(--muted)">去掉持久记忆库，只留 Phase 2 出主意，对应顾问式（advisor）系统。</span></td></tr>
+<tr><td><b>Mem0 通用记忆层</b></td><td class="n">68.0</td><td class="n">59.6</td><td class="n">58.8</td><td class="n">62.1</td><td class="n">60.8</td><td><span style="font-size:12px;color:var(--muted)">换成通用记忆层：Mem0 ADD 写入，向量 + BM25 检索取回 top-10。</span></td></tr>
+</tbody>
+<caption>Table 2 完整数据。macro = 三域等权平均；micro = 按任务数加权（50 / 114 / 114）。所有方案的执行智能体为 Sonnet 4.5，记忆代理为 Opus 4.6。高亮行为本方案。</caption>
+</table>
+</div>
+</details>
+
+<p>论文的总结是：光维护记忆库有帮助但不够；没有记忆库的顾问式建议缺少落脚点、不稳；每步硬提醒虽有竞争力但不均衡。
+完整方案最好，正是因为它把「维护好的执行状态」和「一套会挑该说什么、也会选择闭嘴的干预策略」结合在了一起。</p>
+
+<h3 id="s5-2">模型：干预的盈亏平衡与最优开口比例</h3>
+<p>上面的结论目前还只是定性描述。要把「该不该闭嘴」变成可工程调优的参数，需要一个可计算的模型。下面这个模型把论文的实测值作为锚点，反解出「最优开口比例」。</p>
+
+<div class="math">
+<span style="font-size:13px;color:var(--muted)">模型假设</span><br>
+设每条候选提醒携带一个「行动改变价值」 <i>v</i> ~ Uniform(0, <i>V</i>]，各步独立。记忆代理只在价值最高的 <i>f</i> 比例步骤开口，此时被选中步骤的平均价值为 <i>V</i>(1 − <i>f</i>/2)。每次开口引入固定代价 <i>C</i>（噪音干扰、注意力挤占、重写成本）。任务共 <i>T</i> 步，则相对基线的成功率增益为：<br><br>
+Δ(<i>f</i>) = <i>T</i> · <i>f</i> · [ <i>V</i>(1 − <i>f</i>/2) − <i>C</i> ]<br><br>
+一阶条件 dΔ/d<i>f</i> = 0 给出解析最优：<br><br>
+<i>f</i>* = 1 − <span class="mfrac"><span><i>C</i></span><span><i>V</i></span></span>　　　Δ<sub>max</sub> = <span class="mfrac"><span><i>T</i> · <i>V</i> · (1 − <i>C</i>/<i>V</i>)<sup>2</sup></span><span>2</span></span><br><br>
+<span style="font-size:13px;color:var(--muted)">标定：取 airline 场景两个实测锚点 Δ(1) = +4.0（强制每步）与 Δ(<i>f</i>*) = +10.0（完备方案），
+解 <i>u</i> = <i>C</i>/<i>V</i> 的二次方程 <i>u</i><sup>2</sup> + 3<i>u</i> − 1.5 = 0，得 <i>u</i> = (√15 − 3)/2 ≈ 0.4365，
+进而在 <i>T</i> = 30 下反解 <i>V</i> ≈ 2.0995 pp/次、<i>C</i> ≈ 0.9164 pp/次。</span>
+</div>
+
+<div class="sim">
+  <div class="sim-h"><span class="tag">SANDBOX</span><h4>干预盈亏平衡：最优开口比例反解器</h4></div>
+  <p class="sim-d">拖动参数，实时重绘 Δ(<i>f</i>) 曲线并反解最优开口比例 <i>f</i>*。默认参数<b>由论文 airline 场景两个实测锚点反解标定</b>，因此默认态下 Δ<sub>max</sub> 恰好等于实测的 +10.0 pp。</p>
+  <div class="ctrl">
+    <div>
+      <label for="a-t">任务步数 T：<b id="out-a-tv">30</b> 步（<span style="font-size:11.5px">假设值</span>）</label>
+      <input type="range" id="a-t" min="10" max="60" step="1" value="30">
+    </div>
+    <div>
+      <label for="a-c">单次开口代价 C：<b id="out-a-cv">0.9164</b> pp/次</label>
+      <input type="range" id="a-c" min="0" max="2" step="0.0001" value="0.9164">
+    </div>
+  </div>
+  <div id="out-a-chart"><svg viewBox="0 0 720 360" role="img" aria-label="干预净增益随开口比例变化曲线"><g class="axis"><line x1="66.00" y1="26.00" x2="66.00" y2="286.00"/><line x1="66.00" y1="286.00" x2="694.00" y2="286.00"/></g><line class="grid" x1="66.00" y1="286.00" x2="694.00" y2="286.00"/><text class="tick" x="58.00" y="290.00" text-anchor="end">-2</text><line class="grid" x1="66.00" y1="248.86" x2="694.00" y2="248.86"/><text class="tick" x="58.00" y="252.86" text-anchor="end">0</text><line class="grid" x1="66.00" y1="211.71" x2="694.00" y2="211.71"/><text class="tick" x="58.00" y="215.71" text-anchor="end">2</text><line class="grid" x1="66.00" y1="174.57" x2="694.00" y2="174.57"/><text class="tick" x="58.00" y="178.57" text-anchor="end">4</text><line class="grid" x1="66.00" y1="137.43" x2="694.00" y2="137.43"/><text class="tick" x="58.00" y="141.43" text-anchor="end">6</text><line class="grid" x1="66.00" y1="100.29" x2="694.00" y2="100.29"/><text class="tick" x="58.00" y="104.29" text-anchor="end">8</text><line class="grid" x1="66.00" y1="63.14" x2="694.00" y2="63.14"/><text class="tick" x="58.00" y="67.14" text-anchor="end">10</text><line class="grid" x1="66.00" y1="26.00" x2="694.00" y2="26.00"/><text class="tick" x="58.00" y="30.00" text-anchor="end">12</text><line class="grid" x1="66.00" y1="26.00" x2="66.00" y2="286.00"/><text class="tick" x="66.00" y="306.00" text-anchor="middle">0.0</text><line class="grid" x1="191.60" y1="26.00" x2="191.60" y2="286.00"/><text class="tick" x="191.60" y="306.00" text-anchor="middle">0.2</text><line class="grid" x1="317.20" y1="26.00" x2="317.20" y2="286.00"/><text class="tick" x="317.20" y="306.00" text-anchor="middle">0.4</text><line class="grid" x1="442.80" y1="26.00" x2="442.80" y2="286.00"/><text class="tick" x="442.80" y="306.00" text-anchor="middle">0.6</text><line class="grid" x1="568.40" y1="26.00" x2="568.40" y2="286.00"/><text class="tick" x="568.40" y="306.00" text-anchor="middle">0.8</text><line class="grid" x1="694.00" y1="26.00" x2="694.00" y2="286.00"/><text class="tick" x="694.00" y="306.00" text-anchor="middle">1.0</text><line class="dash ref-a" x1="66.00" y1="63.14" x2="694.00" y2="63.14"/><text class="reflab ref-a" x="76.00" y="56.14" text-anchor="start">实测锚点 +10.0（完备方案 · airline）</text><line class="dash ref-b" x1="66.00" y1="174.57" x2="694.00" y2="174.57"/><text class="reflab ref-b" x="76.00" y="167.57" text-anchor="start">实测锚点 +4.0（强制每步 · airline）</text><polyline class="curve" points="66.00,248.86 78.56,235.91 91.12,223.43 103.68,211.41 116.24,199.87 128.80,188.79 141.36,178.18 153.92,168.04 166.48,158.37 179.04,149.16 191.60,140.42 204.16,132.15 216.72,124.35 229.28,117.02 241.84,110.15 254.40,103.75 266.96,97.82 279.52,92.36 292.08,87.37 304.64,82.84 317.20,78.78 329.76,75.19 342.32,72.06 354.88,69.41 367.44,67.22 380.00,65.50 392.56,64.25 405.12,63.47 417.68,63.15 430.24,63.30 442.80,63.92 455.36,65.01 467.92,66.57 480.48,68.59 493.04,71.08 505.60,74.04 518.16,77.47 530.72,81.36 543.28,85.72 555.84,90.55 568.40,95.85 580.96,101.62 593.52,107.85 606.08,114.56 618.64,121.73 631.20,129.36 643.76,137.47 656.32,146.04 668.88,155.09 681.44,164.60 694.00,174.57"/><text class="axlab" x="380.00" y="332.00" text-anchor="middle">开口比例 f（记忆代理实际开口的步骤占比）</text><text class="axlab" x="18.00" y="156.00" text-anchor="middle" transform="rotate(-90 18.00 156.00)">相对基线增益 Δ（pp）</text><text class="axlab" x="66.00" y="352.00" text-anchor="start">● 模型最优（f* = 0.564）　● 强制每步（f = 1）　虚线 = 论文实测锚点</text></svg></div>
+  <div class="readout">
+    <div class="ro"><div class="rv g" id="out-a-fstar">0.564</div><div class="rl">最优开口比例 f*</div></div>
+    <div class="ro"><div class="rv g" id="out-a-dmax">10.00</div><div class="rl">Δ<sub>max</sub>（pp，模型上限）</div></div>
+    <div class="ro"><div class="rv r" id="out-a-d1">4.00</div><div class="rl">Δ(1)：强制每步提醒</div></div>
+    <div class="ro"><div class="rv" id="out-a-gap">6.00</div><div class="rl">闭嘴带来的净增益（pp）</div></div>
+    <div class="ro"><div class="rv c" id="out-a-vstar">0.9164</div><div class="rl">开口价值门槛 v* = C</div></div>
+    <div class="ro"><div class="rv" id="out-a-steps">16.9</div><div class="rl">折算开口步数（T = 30）</div></div>
+  </div>
+  <div class="btnrow" style="margin-top:16px">
+    <button class="sbtn" id="a-reset" type="button">重置为论文标定值</button>
+  </div>
+  <div class="simnote">
+  <b>参数与口径说明（防造假）：</b>
+  ① <i>V</i> = 2.0994622 pp/次为固定标定值，由 airline 实测两点反解得出，不随滑块变化；
+  ② 滑块 <i>T</i>（任务步数）为<b>假设值</b>，默认 30 步，用于把「每步价值」折算成任务级增益；
+  ③ 滑块 <i>C</i> 默认 0.9164 pp/次为标定值，可自由拖动观察敏感性；
+  ④ 两条虚线为论文 airline 场景的<b>实测锚点</b>（+10.0 与 +4.0），非模型输出；
+  ⑤ 本模型是对「是否开口」这一决策的<b>一阶线性化近似</b>，忽略了提醒之间可能存在的相互增强或相互干扰，用于给出量级与方向，不用于精确预测分数。
+  </div>
+</div>
+
+<div class="callout good">
+  <div class="ct">模型告诉我们的三件事</div>
+  <p><b>一、最优开口比例恒小于 1。</b>只要 <i>C</i> &gt; 0，就有 <i>f</i>* = 1 − <i>C</i>/<i>V</i> &lt; 1。这意味着「每步都提醒」在数学上<b>永远不是最优</b>——
+  这与论文消融中「强制每步提醒」在 macro 上输给完备方案一致。</p>
+  <p><b>二、标定结果 <i>f</i>* ≈ 0.564 与直觉相符。</b>默认参数下模型建议在约 56.4% 的步骤上开口，折算 <i>T</i> = 30 步的任务约 16.9 步。
+  论文没有披露实际的开口比例，这个数字是模型预测，<b>不是实测值</b>。</p>
+  <p><b>三、模型对 <i>C</i>/<i>V</i> 高度敏感。</b>当 <i>C</i> 接近 <i>V</i>/2 时，分母 0.5 − <i>u</i> 趋近 0，Δ(1) 迅速归零并转负——
+  即「过度提醒」会从帮忙变成帮倒忙。这解释了为什么 airline 这种「最怕被打扰」的场景，增益差距被放大到 6.0 pp。</p>
+</div>
+
+<h3 id="s5-3">稳健性复检：这个结论在所有场景下都成立吗</h3>
+
+<p>按验证纪律，在把「会闭嘴更好」写成结论之前，先对三个分域做一次敏感性检验。<b>结果部分推翻了这个直觉</b>：</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>分域</th><th>沉默溢价<br>（完备 − 强制每步）</th><th>记忆库溢价<br>（完备 − 只给建议）</th><th>对通用检索层<br>（完备 − Mem0）</th></tr></thead>
+<tbody>
+<tr><td><b>τ² · airline</b></td><td class="up">+6.0</td><td class="up">+16.0</td><td class="up">+10.0</td></tr>
+<tr><td><b>τ² · retail</b></td><td class="down">−1.8</td><td class="up">+2.6</td><td class="down">−2.6</td></tr>
+<tr><td><b>τ² · telecom</b></td><td class="down">−1.7</td><td class="down">−8.8</td><td class="down">−0.9</td></tr>
+</tbody>
+<caption>三项溢价均由论文 Table 2 实测值直接相减得出。正值为完备方案占优，负值为对照方案占优。</caption>
+</table>
+</div>
+
+<div class="callout bad">
+  <div class="ct">假设被部分推翻（如实记录，不删结论）</div>
+  <p>直觉假设是「会闭嘴的完备方案在所有场景都占优」。实测数据给出三处反例：</p>
+  <ul>
+    <li><b>沉默溢价在 retail 为 −1.8、telecom 为 −1.7</b>，即在这两个场景下强制每步提醒<b>反而更好</b>。完备方案的 +6.0 优势全部来自 airline 一个场景。</li>
+    <li><b>telecom 上「无记忆库 · 只给建议」拿到 66.7%，是全场最高分</b>，比完备方案（57.9%）高出 8.8 pp。这正是论文要划清界限的顾问式方案。</li>
+    <li><b>micro 加权下强制每步（61.5）略高于完备方案（61.2）</b>。论文自己也提到了这一点，并归因于正常波动，指出一到 macro 等权口径，完备方案就重新领先。</li>
+  </ul>
+  <p><b>修正后的结论应当是：</b>完备方案在<b>三域等权（macro）</b>口径下最优（64.3 对 63.5），且在「最怕被打扰」的 airline 上增益最大；
+  但<b>per-domain 并不稳健</b>，retail / telecom 两个场景下它的两项溢价均为负。落地前必须按自己的场景重跑消融，
+  不能把「会闭嘴更好」当成一条无条件成立的工程定律。</p>
+</div>
+
+<div class="callout warn">
+  <div class="ct">自由度警告</div>
+  <p>三个分域只有 3 个数据点，且 airline 样本仅 50 个任务（retail / telecom 各 114 个）。
+  单域 ±3 pp 的波动完全可能落在噪声范围内。<b>不得据此外推到「某类业务适合某种提醒策略」的强结论。</b></p>
+</div>
+
+<!-- ==================== §6 案例 ==================== -->
+<h2 id="s6"><span class="num">§6</span>案例：记忆代理具体在哪一刻插了嘴</h2>
+
+<p>论文人工查看了带记忆的运行轨迹，发现记忆起作用的方式并非泛泛总结。它的高光时刻，是<b>执行智能体正要忽略某条关键信息的那一瞬间，把它重新激活</b>。下面是三个真实案例。</p>
+
+<div class="memgrid">
+  <div class="mem">
+    <div class="mk">① Terminal-Bench · regex-log</div>
+    <div class="mn">正则边界</div>
+    <p class="md">执行智能体在写日志匹配正则时，记忆代理同时提醒了两件事：当前的正则违反了任务规定的边界条件，
+    而且漏掉了单个数字的 IP 段（比如 <code>1.2.3.4</code> 里那种一位数）。</p>
+  </div>
+  <div class="mem">
+    <div class="mk">② τ²-Bench · airline 金卡疑云</div>
+    <div class="mn">金卡核实</div>
+    <p class="md">用户自称是金卡（Gold）会员，但工具查到的记录显示他其实是普通（Regular）会员。
+    没有记忆代理时，执行智能体照着用户的说法发了补偿；有记忆代理时，它提醒以已验证的记录为准。</p>
+    <p class="md" style="border-left:2px solid var(--accent);padding-left:10px;color:var(--text)">「以已验证的会员记录为准，而不是用户自称的等级。」</p>
+  </div>
+  <div class="mem">
+    <div class="mk">③ τ²-Bench · basic economy</div>
+    <div class="mn">改签政策</div>
+    <p class="md">在真正调用改签工具之前，记忆代理把「基础经济舱（basic economy）机票不允许修改」这条政策条款重新拎出来提醒，
+    拦下了一次违规改签。论文说，这类成功的干预往往就发生在<b>一次会改变环境状态的工具调用之前</b>。</p>
+  </div>
+</div>
+
+<p>把这些时刻放到整条轨迹上看：大多数步都是空心圆（保持沉默），只有少数几个节点亮起来（插入提醒），点亮的地方旁边标着它到底说了什么。
+这个稀疏性本身就是设计目标——<b>如果每一步都在提醒，就等于每一步都没提醒</b>。</p>
+
+<p>论文也如实说了剩下的失败情况：主要是<b>校准没做好</b>，比如记忆代理偶尔会把一个只是推测的结论说得太笃定、
+复述执行智能体本来就知道的东西、或者提出一个看似合理但没必要的担忧，害得它多做一遍核查。
+这些恰恰是下一步要训练它「更懂得何时沉默」的动机。</p>
+
+<!-- ==================== §7 训练 ==================== -->
+<h2 id="s7"><span class="num">§7</span>开源训练：把这套判断力教给一个开源小模型</h2>
+
+<p>主实验里的记忆代理用的是 Claude Opus 4.6，每个记忆步都要多调一次这种前沿闭源模型，成本不低。
+团队于是做了一次早期尝试：能不能把同样的判断力，训练进一个开源小模型 <b>Qwen3.5-27B</b>，让它来当记忆代理，
+动作模型换成冻结的 <b>Qwen3.5-122B-A10B</b>。</p>
+
+<p>训练用的是 <b>SETA</b>（一批带评分器的命令行任务集），Terminal-Bench 2.0 留作最后测迁移。方法分两步：</p>
+<ul>
+  <li><b>SFT（监督微调）</b>：拿 Opus 记忆代理跑出的轨迹当范本，教会小模型记忆库操作和「沉默 / 提醒」的接口，先把接口和基本规矩教会。</li>
+  <li><b>GRPO（强化学习）</b>：让模型自己多次尝试、按结果好坏调整策略，进一步优化「什么时候该开口、什么时候该闭嘴」的判断，而不只是模仿范本。</li>
+</ul>
+
+<div class="metrics">
+  <div class="metric"><div class="mv">0.709</div><div class="ml">SETA 验证奖励 · 基线（不用记忆代理，解出 56 道）</div></div>
+  <div class="metric"><div class="mv" style="color:var(--rose)">0.693</div><div class="ml">未训练的 27B 直接上，<b>反而拖累</b>，解出 54 道</div></div>
+  <div class="metric"><div class="mv" style="color:var(--cyan)">0.720</div><div class="ml">SFT 后：把拖累补回来，还略高于基线，解出 58 道</div></div>
+  <div class="metric"><div class="mv" style="color:var(--emerald)">0.734</div><div class="ml">GRPO 后：再往上提一截，解出 58 道</div></div>
+</div>
+
+<div class="tw">
+<table>
+<thead><tr><th>配置</th><th>SETA 平均奖励</th><th>解出任务数</th><th>Δ（对基线）</th></tr></thead>
+<tbody>
+<tr><td>仅动作模型，无记忆</td><td class="n">0.709</td><td class="n">56</td><td class="n">—</td></tr>
+<tr><td>+ Qwen3.5-27B <b>未训练</b>记忆代理</td><td class="n">0.693</td><td class="n">54</td><td class="down">−0.016</td></tr>
+<tr><td>+ SFT 记忆代理</td><td class="n">0.720</td><td class="n">58</td><td class="up">+0.011</td></tr>
+<tr class="hl"><td>+ GRPO 记忆代理</td><td class="n">0.734</td><td class="n">58</td><td class="up">+0.025</td></tr>
+</tbody>
+<caption>Table 5 · SETA 验证集。动作模型为冻结的 Qwen3.5-122B-A10B，可训练记忆代理为 Qwen3.5-27B。</caption>
+</table>
+</div>
+
+<div class="tw">
+<table>
+<thead><tr><th>配置</th><th>n</th><th>pass@1</th><th>Δ</th></tr></thead>
+<tbody>
+<tr><td>Qwen3.5-122B-A10B 仅动作模型</td><td class="n">85</td><td class="n">37.6%</td><td class="n">—</td></tr>
+<tr class="hl"><td>+ 训练后的 Qwen3.5-27B 记忆代理</td><td class="n">85</td><td class="n">41.1%</td><td class="up">+3.5 pp</td></tr>
+</tbody>
+<caption>Table 6 · 迁移到留出的 Terminal-Bench 2.0。</caption>
+</table>
+</div>
+
+<div class="callout">
+  <div class="ct">结论与差距</div>
+  <p><b>结论：</b>这套记忆策略是能被学会的，但确实需要校准——直接拿没训练的小模型上反而添乱（0.709 → 0.693）。</p>
+  <p><b>差距要如实看清：</b>训练后小模型带来的迁移增益是 <b>+3.5 pp</b>，明显小于用 Opus 4.6 当记忆代理时的 <b>+8.3 pp</b>，
+  只有后者的约 <b>42%</b>。论文把这一段定位为「早期探索」，证明这条路走得通，而不是说它已经追平了前沿闭源版本。</p>
+</div>
+
+<!-- ==================== §8 落地 ==================== -->
+<h2 id="s8"><span class="num">§8</span>落地：仓库结构与复现路径</h2>
+
+<p>承接 <a href="#s0">§0</a> 的订正：仓库已于 2026-07-14 开源，Apache-2.0 许可，Python 3.12+，用 <code>litellm</code> 做 LLM 调用（兼容 OpenRouter / OpenAI / Anthropic / 本地 vLLM）。</p>
+
+<h3>已核实的仓库结构</h3>
+<pre><code>proactive-memory-agent/
+├── README.md                        # 7,895 B，含架构图与完整运行说明
+├── LICENSE                          # Apache-2.0
+├── pyproject.toml
+├── configs/
+│   ├── baseline_terminalbench.yaml  # 基线配置（Sonnet 4.5 裸跑）
+│   └── memory_terminalbench.yaml    # 记忆配置（Sonnet 4.5 动作 + Opus 4.6 记忆）
+├── src/memory_agent/                # 核心实现
+├── examples/                        # 5 条渲染好的任务轨迹
+│   ├── regex-log/                   # ← 原文案例所用任务
+│   ├── git-multibranch/
+│   ├── sqlite-with-gcov/
+│   ├── hf-model-inference/
+│   └── adaptive-rejection-sampler/
+└── external/harbor/                 # 内置的 Harbor 运行器</code></pre>
+
+<p>每条示例轨迹都提供<b>三份对照</b>：<code>baseline-sonnet</code>（基线）、<code>memory-v3-opus</code> 下的执行智能体轨迹与记忆代理轨迹。
+这是目前<b>最直接的第一手材料</b>——可以逐字看到记忆代理在哪一步选择了 <code>no_intervention</code>、在哪一步插入了 <code>context_for_action</code>。</p>
+
+<h3>复现步骤</h3>
+<pre><code>git clone https://github.com/yifannnwu/proactive-memory-agent.git
+cd proactive-memory-agent
+
+# 1. 安装内置的 Harbor（Terminal-Bench 运行器依赖）
+pip install -e external/harbor
+# 2. 安装本包
+pip install -e .
+
+# 环境变量
+export OPENROUTER_API_KEY=sk-or-...
+export SQSH_DIR=/path/to/enroot-cache      # 预构建 .sqsh 任务镜像（仅 Enroot）
+export DATA_DIR=/path/to/enroot-data       # 可写 enroot 数据根目录（仅 Enroot）
+
+# 带记忆的运行（Sonnet 4.5 动作 + Opus 4.6 记忆）
+python -m memory_agent.cli run configs/memory_terminalbench.yaml</code></pre>
+
+<div class="callout warn">
+  <div class="ct">环境依赖的实操提醒</div>
+  <p>官方 Terminal-Bench 运行器使用 Harbor + <b>Enroot</b> 做沙箱 shell 执行（README 明确说明原因是其集群为 rootless 且共享 FSx 缓存）。
+  <b>不用 Enroot 的团队</b>需要改两处：把 <code>src/memory_agent/runner.py</code> 中约第 16 行与第 97 行的
+  <code>EnrootEnvironment</code> 换成 Harbor 自带的 <code>DockerEnvironment</code>，并去掉 YAML 配置里的 <code>enroot:</code> 块。
+  这是从「能跑通论文」到「能跑进自己 CI」之间的主要工程量。</p>
+</div>
+
+<h3 id="s8-1">成本：唤醒频率决定一切</h3>
+<p>论文没有报告记忆代理带来的额外 token 消耗与延迟数字。但成本结构是可以算的：它<b>只取决于两个量的比值</b>——
+记忆代理单步调用的 token 开销相对于执行智能体单步的比值 <i>r</i>，以及唤醒间隔 <i>N</i>。</p>
+
+<div class="math">
+额外 token 开销占比 = <span class="mfrac"><span>100 · <i>r</i></span><span><i>N</i></span></span> %
+</div>
+
+<div class="sim">
+  <div class="sim-h"><span class="tag">SANDBOX</span><h4>唤醒频率与额外 token 开销</h4></div>
+  <p class="sim-d">拖动两个参数，实时计算记忆代理引入的额外 token 开销。公式仅含除法，无拟合、无外推。</p>
+  <div class="ctrl">
+    <div>
+      <label for="b-r">单步 token 比 r（记忆 / 执行）：<b id="out-b-rv">0.35</b>（<span style="font-size:11.5px">假设值</span>）</label>
+      <input type="range" id="b-r" min="0.05" max="1" step="0.01" value="0.35">
+    </div>
+    <div>
+      <label for="b-n">唤醒间隔 N：<b id="out-b-nv">1</b> 步</label>
+      <input type="range" id="b-n" min="1" max="10" step="1" value="1">
+    </div>
+  </div>
+  <div class="readout">
+    <div class="ro"><div class="rv" id="out-b-ov">35.0%</div><div class="rl">额外 token 开销</div></div>
+    <div class="ro"><div class="rv c" id="out-b-perstep">0.350</div><div class="rl">每执行步摊销的记忆代理调用</div></div>
+    <div class="ro"><div class="rv g" id="out-b-save">0.0</div><div class="rl">相比 N=1 全量唤醒节省的百分点</div></div>
+    <div class="ro"><div class="rv" id="out-b-verdict">中等开销：需按业务毛利核算</div><div class="rl">判读</div></div>
+  </div>
+  <div class="simnote">
+  <b>参数说明（防造假）：</b>① 比值 <i>r</i> = <b>0.35 是假设值</b>，<b>论文未报告任何 token 数据</b>，实际值取决于记忆代理提示长度、窗口大小（k = 8）与所用模型价格，需自行实测；
+  ② <i>N</i> = 1 对应论文 §4.1 的<b>实际主实验配置</b>（第一步 + 之后每一步都调用），因此默认态下的 35.0% 就是「照论文配置跑」的量级参考；
+  ③ 本模型只计 token 量，未计延迟——每一步多一次串行模型调用会直接叠加到 wall-clock 上，对交互式场景的影响可能比 token 成本更关键。
+  </div>
+</div>
+
+<div class="callout bad">
+  <div class="ct">效果最好的那版，成本口径论文没给数字</div>
+  <p>主实验里验证效果最好的记忆代理是 Claude Opus 4.6，属于前沿闭源模型，而且实际上<b>是第一步加之后的每一步都被调用</b>，
+  比方法节里说的「固定间隔」要更密集。论文自己也承认这不是最实用的部署形态，训练开源小模型正是为了省掉这笔开销。
+  但论文没有报告记忆代理带来的额外 token 消耗和延迟的具体数字，<b>落地时这笔账要自己算</b>。</p>
+</div>
+
+<p>论文同时也说了它的适用面：这套「旁挂一个独立记忆代理决定要不要提醒」的架构，<b>不需要改动主执行模型</b>，可以接进现有的智能体工作流程。
+对搭建长任务 AI 智能体的团队来说，比如自动化命令行操作、多轮工具调用的客服或业务流程，这是一个可以直接叠加的模块。</p>
+
+<!-- ==================== §9 边界 ==================== -->
+<h2 id="s9"><span class="num">§9</span>边界与风险</h2>
+
+<div class="tw">
+<table>
+<thead><tr><th>维度</th><th>论文已证成</th><th>论文未覆盖 / 本文存疑</th></tr></thead>
+<tbody>
+<tr><td><b>有效性</b></td><td>两个基准、两个动作模型上 pass@1 均有提升</td><td>仅两个基准；未验证长程（数小时 / 数天）真实工程任务</td></tr>
+<tr><td><b>场景稳健性</b></td><td>macro 等权口径下完备方案最优</td><td>retail / telecom 上沉默溢价与记忆库溢价<b>均为负</b>（§5.3）</td></tr>
+<tr><td><b>成本</b></td><td>训练开源小模型可替代闭源记忆代理</td><td>无 token / 延迟数字；小模型迁移增益仅为闭源的约 42%</td></tr>
+<tr><td><b>触发策略</b></td><td>固定节奏可隔离「提醒策略」变量</td><td>更挑时机的触发（报错 / 测试失败 / 重复命令后）<b>只提出未实验</b></td></tr>
+<tr><td><b>失败模式</b></td><td>已如实列出：过度笃定、复述已知、不必要的担忧</td><td>无量化失效率；未给出「错误提醒」造成的损失测量</td></tr>
+<tr><td><b>可复现性</b></td><td>代码已开源（§0 订正）、配置齐全、5 条示例轨迹</td><td>单次 initial commit，无后续维护记录；依赖 Enroot，非 Docker 即需改码</td></tr>
+<tr><td><b>任务数口径</b></td><td>Table 1 记 n = 85</td><td>README 称全集 89 个任务，4 个差额未说明</td></tr>
+</tbody>
+</table>
+</div>
+
+<blockquote style="margin:22px 0;padding:16px 22px;border-left:3px solid var(--accent);background:var(--card);border-radius:0 12px 12px 0;color:var(--muted)">
+保持沉默本身是一个明确的动作。记忆代理被鼓励只在某条被记住的信息很可能改变下一步决策时，才开口。
+<div style="margin-top:8px;font-size:12.5px;color:var(--muted)">— 译自论文 §3.3 对 null intervention 的描述</div>
+</blockquote>
+
+<!-- ==================== §10 建议 ==================== -->
+<h2 id="s10"><span class="num">§10</span>行动建议</h2>
+
+<div class="tw">
+<table>
+<thead><tr><th>优先级</th><th>建议</th><th>依据</th></tr></thead>
+<tbody>
+<tr>
+  <td><b style="color:var(--rose)">P0</b></td>
+  <td><b>不要把「会闭嘴更好」当成无条件定律。</b>先在自己的场景上跑 §5.1 的三项溢价，确认沉默溢价为正再上选择性干预；为负的场景直接用强制提醒成本更低。</td>
+  <td>§5.3 稳健性复检：retail −1.8、telecom −1.7</td>
+</tr>
+<tr>
+  <td><b style="color:var(--rose)">P0</b></td>
+  <td><b>先实测 <i>r</i>（记忆代理 / 执行智能体单步 token 比）再决定架构。</b>若 <i>N</i> = 1 下额外开销超过毛利容忍线，先拉大唤醒间隔到报错 / 测试失败后触发，而不是先换模型。</td>
+  <td>§8.1：开销 = 100·<i>r</i>/<i>N</i> %，与模型选择正交</td>
+</tr>
+<tr>
+  <td><b style="color:var(--amber)">P1</b></td>
+  <td><b>优先读 <code>examples/</code> 里的记忆代理轨迹</b>，统计其中 <code>no_intervention</code> 的实际占比，与 §5.2 模型预测的 <i>f</i>* ≈ 0.564 对照校准。</td>
+  <td>§8：5 条轨迹含 regex-log（原文案例），为唯一第一手开口率材料</td>
+</tr>
+<tr>
+  <td><b style="color:var(--amber)">P1</b></td>
+  <td><b>把 status 字段严格隔离。</b>若自建实现中把记忆代理的私有判断泄漏给执行智能体，会引入未经验证的推测，直接对应论文列出的第一类失败模式。</td>
+  <td>§3.2：原文 <i>“never shown to the action agent”</i>；§6 失败模式</td>
+</tr>
+<tr>
+  <td><b style="color:var(--cyan)">P2</b></td>
+  <td><b>Docker 化改造先于效果调优。</b>若团队无 Enroot，需替换 <code>runner.py</code> 中约第 16、97 行的环境类并移除 YAML 的 <code>enroot:</code> 块，这是跑通的前置工程量。</td>
+  <td>§8 环境依赖提醒</td>
+</tr>
+<tr>
+  <td><b style="color:var(--cyan)">P2</b></td>
+  <td><b>用 SFT + GRPO 训练自有小模型当记忆代理时，务必先跑「未训练基线」。</b>论文显示未训练的 27B 会把 SETA 奖励从 0.709 拉低到 0.693，直接上线是负收益。</td>
+  <td>§7 Table 5</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<footer>
+<p><b>来源与核验说明。</b>本文基于 Meta AI 团队 2026 年 7 月 9 日发布的 arXiv 论文
+《Remember When It Matters: Proactive Memory Agent for Long-Horizon Agents》（arXiv:2607.08716v1，
+作者 Yifan Wu、Lizhu Zhang、Yuhang Zhou、Mingyi Wang、Bo Peng、Serena Li、Xiangjun Fan、Zhuokai Zhao）整理解读。</p>
+<p>所有跑分、消融、训练数据均于 2026-09-15 回溯 arXiv HTML v1 原文<b>逐格核对</b>，未采信二次转述；
+Table 1 / Table 2 的 macro 与 micro 列另经 Python 独立复算交叉验证（见 §0）；
+代码仓库状态为 2026-09-15 经 GitHub REST API 实测，<b>并据此订正了原稿件「仓库为空」的过时结论</b>。
+架构图与机制图为依据论文 Figure 1(a)(b) 及仓库 README 重绘，非原图扫描件。</p>
+<p>§5.2 的干预盈亏平衡模型与 §8.1 的唤醒成本模型为本文为便于工程调优所建的<b>一阶近似模型</b>，
+其参数由论文实测值反解标定或明确标注为假设值，模型输出不等于论文实测结果，已在对应位置逐条标注。
+本文只呈现事实、机制与可复算的推导，不代表任何评价或预测。</p>
+</footer>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var doc = document;
+  function byId(id){ return doc.getElementById(id); }
+  function num(id){ var e = byId(id); return e ? parseFloat(e.value) : 0; }
+
+  /* ============ 阅读进度 + 侧栏高亮 + 主题 ============ */
+  var bar = byId("progress");
+  function onScroll(){
+    var de = doc.documentElement;
+    var h = (de.scrollHeight || 0) - (de.clientHeight || 0);
+    var top = (doc.body && doc.body.scrollTop ? doc.body.scrollTop : 0) + (de.scrollTop || 0);
+    var p = h > 0 ? (top / h) * 100 : 0;
+    if (bar) { bar.style.width = p + "%"; }
+    var tb = byId("toTopBtn");
+    if (tb) { tb.style.display = top > 600 ? "block" : "none"; }
+  }
+  if (window.addEventListener) { window.addEventListener("scroll", onScroll, false); }
+  onScroll();
+
+  var links = doc.querySelectorAll("nav a");
+  var secs = [];
+  for (var li = 0; li < links.length; li++) {
+    var href = links[li].getAttribute("href") || "";
+    if (href.charAt(0) === "#") {
+      var t = byId(href.substring(1));
+      if (t) { secs.push({ a: links[li], el: t }); }
+    }
+  }
+  function highlight(){
+    var best = null, bestD = 1e9;
+    for (var i = 0; i < secs.length; i++) {
+      var r = secs[i].el.getBoundingClientRect();
+      var d = r.top < 140 ? 140 - r.top : r.top - 140;
+      if (r.top < 400 && d < bestD) { bestD = d; best = secs[i]; }
+    }
+    for (var j = 0; j < secs.length; j++) {
+      if (secs[j].a.classList) { secs[j].a.classList.toggle("on", secs[j] === best); }
+    }
+  }
+  if (window.addEventListener) { window.addEventListener("scroll", highlight, false); }
+  highlight();
+
+  var THKEY = "aike-theme-pma";
+  function setTheme(t){
+    doc.documentElement.setAttribute("data-theme", t);
+    var o = byId("out-theme");
+    if (o) { o.textContent = t === "dark" ? "深色" : "浅色"; }
+    try { if (window.localStorage) { window.localStorage.setItem(THKEY, t); } } catch (e) {}
+  }
+  var saved = null;
+  try { if (window.localStorage) { saved = window.localStorage.getItem(THKEY); } } catch (e) {}
+  setTheme(saved === "light" ? "light" : "dark");
+  var tBtn = byId("themeBtn");
+  if (tBtn) {
+    tBtn.addEventListener("click", function(){
+      setTheme(doc.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+    });
+  }
+  var mBtn = byId("menuBtn");
+  if (mBtn) { mBtn.addEventListener("click", function(){ byId("sidebar").classList.toggle("open"); }); }
+  var tt = byId("toTopBtn");
+  if (tt) {
+    tt.addEventListener("click", function(){
+      try { if (window.scrollTo) { window.scrollTo(0, 0); } } catch (e) {}
+    });
+  }
+
+  /* ============ 模型常量（标定值，与正文一致） ============ */
+  var V = 2.0994622257;          /* 每次「命中」提醒的价值上限 pp/次 */
+  var C_CAL = 0.9164;      /* 标定后的每次开口代价 pp/次 */
+  var T_CAL = 30;
+
+  function dlt(f, T, Cc){ return T * f * (V * (1 - f / 2) - Cc); }
+
+  /* ============ 沙盘 A：干预盈亏平衡 ============ */
+  var APW = 720, APH = 360, AX0 = 66, AX1 = 694, AY0 = 26, AY1 = 286;
+  function aDomain(T, Cc){
+    var lo = 0, hi = 0;
+    for (var i = 0; i <= 100; i++) {
+      var v = dlt(i / 100, T, Cc);
+      if (v < lo) { lo = v; }
+      if (v > hi) { hi = v; }
+    }
+    var ymax = Math.ceil((hi + 1) / 2) * 2;
+    var ymin = Math.floor((lo - 1) / 2) * 2;
+    if (ymax - ymin < 4) { ymax = ymin + 4; }
+    return [ymin, ymax];
+  }
+  function aStep(ymin, ymax){
+    var s = ymax - ymin;
+    if (s > 30) { return 10; }
+    if (s > 16) { return 5; }
+    return 2;
+  }
+  var REF_W = 195, REF_H = 12;
+  function boxDist(px, py, x0, x1, y0, y1){
+    var dx = Math.max(x0 - px, 0, px - x1);
+    var dy = Math.max(y0 - py, 0, py - y1);
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  /* 标注避让：左右两侧各算一次与曲线的最小间距，取更大的一侧 */
+  function pickSide(dense, y){
+    var cl = 1e9, cr = 1e9, i, d;
+    for (i = 0; i < dense.length; i++) {
+      d = boxDist(dense[i][0], dense[i][1], AX0 + 10, AX0 + 10 + REF_W, y - 7 - REF_H * 0.75, y - 7 + REF_H * 0.25);
+      if (d < cl) { cl = d; }
+      d = boxDist(dense[i][0], dense[i][1], AX1 - 10 - REF_W, AX1 - 10, y - 7 - REF_H * 0.75, y - 7 + REF_H * 0.25);
+      if (d < cr) { cr = d; }
+    }
+    return cr > cl;
+  }
+  function drawA(){
+    var T = num("a-t"), Cc = num("a-c");
+    var dm = aDomain(T, Cc), ymin = dm[0], ymax = dm[1], st = aStep(ymin, ymax);
+    function gx(f){ return AX0 + f * (AX1 - AX0); }
+    function gy(v){ return AY1 - (v - ymin) / (ymax - ymin) * (AY1 - AY0); }
+    function clampY(y){ return Math.max(AY0, Math.min(AY1, y)); }
+
+    var grid = "", i, v, y, x;
+    for (v = ymin; v <= ymax + 1e-9; v += st) {
+      y = gy(v);
+      grid += '<line class="grid" x1="' + AX0 + '" y1="' + y.toFixed(2) + '" x2="' + AX1 + '" y2="' + y.toFixed(2) + '"/>';
+      grid += '<text class="tick" x="' + (AX0 - 8) + '" y="' + (y + 4).toFixed(2) + '" text-anchor="end">' + v + '</text>';
+    }
+    for (i = 0; i < 6; i++) {
+      x = gx(i * 0.2);
+      grid += '<line class="grid" x1="' + x.toFixed(2) + '" y1="' + AY0 + '" x2="' + x.toFixed(2) + '" y2="' + AY1 + '"/>';
+      grid += '<text class="tick" x="' + x.toFixed(2) + '" y="' + (AY1 + 20) + '" text-anchor="middle">' + (i * 0.2).toFixed(1) + '</text>';
+    }
+
+    /* 稠密采样，供标注避让计算（与 Python 侧一致） */
+    var dense = [];
+    for (i = 0; i <= 500; i++) {
+      dense.push([gx(i / 500), clampY(gy(dlt(i / 500, T, Cc)))]);
+    }
+
+    var anch = "";
+    var refs = [[10, "实测锚点 +10.0（完备方案 · airline）", "ref-a"], [4, "实测锚点 +4.0（强制每步 · airline）", "ref-b"]];
+    for (i = 0; i < refs.length; i++) {
+      if (refs[i][0] >= ymin && refs[i][0] <= ymax) {
+        y = gy(refs[i][0]);
+        var rgt = pickSide(dense, y);
+        anch += '<line class="dash ' + refs[i][2] + '" x1="' + AX0 + '" y1="' + y.toFixed(2) + '" x2="' + AX1 + '" y2="' + y.toFixed(2) + '"/>';
+        anch += '<text class="reflab ' + refs[i][2] + '" x="' + (rgt ? (AX1 - 10) : (AX0 + 10)) + '" y="' + (y - 7).toFixed(2) + '" text-anchor="' + (rgt ? "end" : "start") + '">' + refs[i][1] + '</text>';
+      }
+    }
+
+    var pts = "";
+    for (i = 0; i <= 50; i++) {
+      var f = i / 50;
+      pts += (i ? " " : "") + gx(f).toFixed(2) + "," + gy(dlt(f, T, Cc)).toFixed(2);
+    }
+
+    var fs = 1 - Cc / V;
+    if (fs < 0) { fs = 0; }
+    if (fs > 1) { fs = 1; }
+    /* f* 数值标注移出绘图区（底部图例），彻底消除与曲线贴线的可能 */
+    var xf = gx(fs), peak = dlt(fs, T, Cc), yp = clampY(gy(peak));
+    var mk = '<line class="dash opt" x1="' + xf.toFixed(2) + '" y1="' + AY1 + '" x2="' + xf.toFixed(2) + '" y2="' + yp.toFixed(2) + '"/>'
+           + '<circle class="dot opt" cx="' + xf.toFixed(2) + '" cy="' + yp.toFixed(2) + '" r="5"/>'
+           + '<circle class="dot endp" cx="' + gx(1).toFixed(2) + '" cy="' + clampY(gy(dlt(1, T, Cc))).toFixed(2) + '" r="4.5"/>';
+
+    var svg = '<svg viewBox="0 0 ' + APW + ' ' + APH + '" role="img" aria-label="干预净增益曲线">'
+      + '<g class="axis"><line x1="' + AX0 + '" y1="' + AY0 + '" x2="' + AX0 + '" y2="' + AY1 + '"/>'
+      + '<line x1="' + AX0 + '" y1="' + AY1 + '" x2="' + AX1 + '" y2="' + AY1 + '"/></g>'
+      + grid + anch
+      + '<polyline class="curve" points="' + pts + '"/>' + mk
+      + '<text class="axlab" x="' + ((AX0 + AX1) / 2) + '" y="' + (AY1 + 46) + '" text-anchor="middle">开口比例 f（记忆代理实际开口的步骤占比）</text>'
+      + '<text class="axlab" x="18" y="' + ((AY0 + AY1) / 2) + '" text-anchor="middle" transform="rotate(-90 18 ' + ((AY0 + AY1) / 2) + ')">相对基线增益 Δ（pp）</text>'
+      + '<text class="axlab" x="' + AX0 + '" y="' + (APH - 8) + '" text-anchor="start">● 模型最优（f* = ' + fs.toFixed(3) + '）　● 强制每步（f = 1）　虚线 = 论文实测锚点</text>'
+      + '</svg>';
+    byId("out-a-chart").innerHTML = svg;
+
+    var dmax = fs > 0 ? dlt(fs, T, Cc) : 0;   /* fs 可合法取到 1（C=0 时开口全开即最优） */
+    byId("out-a-fstar").textContent = fs.toFixed(3);
+    byId("out-a-dmax").textContent = dmax.toFixed(2);
+    byId("out-a-d1").textContent = dlt(1, T, Cc).toFixed(2);
+    byId("out-a-gap").textContent = (dmax - dlt(1, T, Cc)).toFixed(2);
+    byId("out-a-vstar").textContent = Cc.toFixed(4);
+    byId("out-a-steps").textContent = Math.round(fs * T * 10) / 10;
+    byId("out-a-tv").textContent = T;
+    byId("out-a-cv").textContent = Cc.toFixed(4);
+  }
+  var a1 = byId("a-t"), a2 = byId("a-c");
+  if (a1) { a1.addEventListener("input", drawA); }
+  if (a2) { a2.addEventListener("input", drawA); }
+  var aRst = byId("a-reset");
+  if (aRst) {
+    aRst.addEventListener("click", function(){
+      byId("a-t").value = T_CAL;
+      byId("a-c").value = C_CAL;
+      drawA();
+    });
+  }
+  drawA();
+
+  /* ============ 沙盘 B：唤醒频率与额外 token 开销 ============ */
+  function drawB(){
+    var r = num("b-r"), n = num("b-n");
+    var ov = 100 * r / n;
+    byId("out-b-ov").textContent = ov.toFixed(1) + "%";
+    byId("out-b-rv").textContent = r.toFixed(2);
+    byId("out-b-nv").textContent = n;
+    byId("out-b-save").textContent = (100 * r - ov).toFixed(1);
+    byId("out-b-perstep").textContent = (r / n).toFixed(3);
+    byId("out-b-verdict").textContent = ov > 60 ? "高开销：建议拉大间隔或换轻量记忆模型"
+      : (ov > 25 ? "中等开销：需按业务毛利核算" : "低开销：可直接叠加");
+  }
+  var b1 = byId("b-r"), b2 = byId("b-n");
+  if (b1) { b1.addEventListener("input", drawB); }
+  if (b2) { b2.addEventListener("input", drawB); }
+  drawB();
+
+  /* ============ 沙盘 C：消融归因 ============ */
+  var DATA = {"base": [68.0, 49.1, 55.3], "full": [78.0, 57.0, 57.9], "bank": [74.0, 52.6, 57.9], "always": [72.0, 58.8, 59.6], "inj": [62.0, 54.4, 66.7], "mem0": [68.0, 59.6, 58.8]};
+  var NTASK = [50, 114, 114];
+  var ORDER = ["base", "full", "bank", "always", "inj", "mem0"];
+  var LABEL = {"base": ["基线", "（Sonnet 4.5 裸跑）"], "full": ["完备记忆代理", "（可选沉默）"], "bank": ["记忆库", "全量展示"], "always": ["强制", "每步提醒"], "inj": ["无记忆库", "只给建议"], "mem0": ["Mem0", "通用记忆层"]};
+  var BW = 720, BH = 320, BX0 = 62, BX1 = 700, BY0 = 26, BY1 = 250;
+
+  function drawC(){
+    var sel = byId("c-dom");
+    var key = sel ? sel.value : "airline";
+    var idx = { airline: 0, retail: 1, telecom: 2 }[key];
+    var vals = [];
+    for (var i = 0; i < ORDER.length; i++) { vals.push(DATA[ORDER[i]][idx]); }
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    var ymin = Math.floor((lo - 3) / 5) * 5, ymax = Math.ceil((hi + 3) / 5) * 5;
+    var span = ymax - ymin, st = span > 40 ? 10 : 5;
+    function gy(v){ return BY1 - (v - ymin) / (ymax - ymin) * (BY1 - BY0); }
+
+    var out = "", v, y;
+    for (v = ymin; v <= ymax + 1e-9; v += st) {
+      y = gy(v);
+      out += '<line class="grid" x1="' + BX0 + '" y1="' + y.toFixed(2) + '" x2="' + BX1 + '" y2="' + y.toFixed(2) + '"/>';
+      out += '<text class="tick" x="' + (BX0 - 8) + '" y="' + (y + 4).toFixed(2) + '" text-anchor="end">' + v + '</text>';
+    }
+    var n = ORDER.length, slot = (BX1 - BX0) / n, bw = slot * 0.56;
+    var base = vals[0];
+    for (var k = 0; k < n; k++) {
+      var cx = BX0 + slot * (k + 0.5), x = cx - bw / 2, val = vals[k];
+      y = gy(val);
+      var cls = ORDER[k] === "base" ? "b-base" : (ORDER[k] === "full" ? "b-full" : (val < base ? "b-bad" : "b-ok"));
+      out += '<rect class="bar ' + cls + '" x="' + x.toFixed(2) + '" y="' + y.toFixed(2) + '" width="' + bw.toFixed(2) + '" height="' + (BY1 - y).toFixed(2) + '" rx="3"/>';
+      out += '<text class="bval" x="' + cx.toFixed(2) + '" y="' + (y - 7).toFixed(2) + '" text-anchor="middle">' + val.toFixed(1) + '</text>';
+      var lines = LABEL[ORDER[k]];
+      for (var li = 0; li < lines.length; li++) {
+        out += '<text class="blab" x="' + cx.toFixed(2) + '" y="' + (BY1 + 20 + li * 14) + '" text-anchor="middle">' + lines[li] + '</text>';
+      }
+      if (ORDER[k] !== "base") {
+        var dv = val - base;
+        out += '<text class="bdelta ' + (dv >= 0 ? "up" : "down") + '" x="' + cx.toFixed(2) + '" y="' + (BY1 + 42 + (lines.length - 1) * 14) + '" text-anchor="middle">' + (dv >= 0 ? "+" : "−") + Math.abs(dv).toFixed(1) + '</text>';
+      }
+    }
+    out += '<line class="dash baseline" x1="' + BX0 + '" y1="' + gy(base).toFixed(2) + '" x2="' + BX1 + '" y2="' + gy(base).toFixed(2) + '"/>';
+    byId("out-c-chart").innerHTML = '<svg viewBox="0 0 ' + BW + ' ' + BH + '" role="img" aria-label="消融对照柱状图">'
+      + '<line class="axis-l" x1="' + BX0 + '" y1="' + BY0 + '" x2="' + BX0 + '" y2="' + BY1 + '"/>'
+      + '<line class="axis-l" x1="' + BX0 + '" y1="' + BY1 + '" x2="' + BX1 + '" y2="' + BY1 + '"/>'
+      + out
+      + '<text class="axlab" x="' + BX1 + '" y="' + (BH - 6) + '" text-anchor="end">pass@1（%）　虚线 = 基线</text></svg>';
+
+    /* 归因读数：全部由实测值相减 */
+    var full = vals[1], always = vals[3], inj = vals[4], mem0 = vals[5];
+    byId("out-c-silence").textContent = (full - always >= 0 ? "+" : "−") + Math.abs(full - always).toFixed(1);
+    byId("out-c-bank").textContent = (full - inj >= 0 ? "+" : "−") + Math.abs(full - inj).toFixed(1);
+    byId("out-c-mem0").textContent = (full - mem0 >= 0 ? "+" : "−") + Math.abs(full - mem0).toFixed(1);
+    byId("out-c-full").textContent = full.toFixed(1);
+    var bestI = 0;
+    for (var m = 1; m < vals.length; m++) { if (vals[m] > vals[bestI]) { bestI = m; } }
+    byId("out-c-best").textContent = LABEL[ORDER[bestI]].join("");
+    byId("out-c-flow").textContent = full >= always ? "完备方案 ≥ 强制每步" : "强制每步 > 完备方案";
+  }
+  var cS = byId("c-dom");
+  if (cS) { cS.addEventListener("change", drawC); }
+  drawC();
+
+  /* ============ 时间线：行为状态衰退 ============ */
+  var TL = [
+    { st: "第 2 步 · 记下", tt: "规矩刚被写进记录", bd: "执行智能体解析任务要求，明确记下「IP 段可以是单个数字」。此刻这条约束是鲜活的，会直接参与下一步的正则构造。" },
+    { st: "第 4 步", tt: "规矩仍在记录里", bd: "轨迹继续增长。这条要求没有被删除，仍然完整躺在上下文窗口中，但它正在从「刚说过」变成「很久以前说过」。" },
+    { st: "第 6 步", tt: "规矩仍在记录里", bd: "又过了若干轮工具调用与报错修复。窗口里堆积了新的环境事实、新的尝试与失败，这条要求被不断往后挤。" },
+    { st: "第 8 步 · 修另一个 bug", tt: "新写的正则漏了单数字段", bd: "执行智能体专注于修另一个 bug，重新构造正则。此时它已经不再回看第 2 步记下的约束，写出了一份漏掉单个数字 IP 段的正则。" },
+    { st: "结局", tt: "违反了自己早先记下的要求", bd: "任务失败。关键是：信息从未丢失——它一直在记录里，只是不再左右这一步的决策。这就是论文定义的 behavioral state decay（行为状态衰退）。" }
+  ];
+  var dots = doc.querySelectorAll(".tldot");
+  function showTL(i){
+    var t = TL[i];
+    byId("out-tl-step").textContent = t.st;
+    byId("out-tl-title").textContent = t.tt;
+    byId("out-tl-body").textContent = t.bd;
+    for (var k = 0; k < dots.length; k++) {
+      if (dots[k].classList) { dots[k].classList.toggle("on", k <= i); }
+    }
+    for (var b = 0; b < TL.length; b++) {
+      var btn = byId("tl-b" + b);
+      if (btn && btn.classList) { btn.classList.toggle("on", b === i); }
+    }
+  }
+  var TLBTN = ["tl-b0", "tl-b1", "tl-b2", "tl-b3", "tl-b4"];
+  for (var t0 = 0; t0 < TLBTN.length; t0++) {
+    (function(k){
+      var btn = byId(TLBTN[k]);
+      if (btn) { btn.addEventListener("click", function(){ showTL(k); }); }
+    })(t0);
+  }
+  showTL(0);
+})();
+</script>
+</body>
+</html>

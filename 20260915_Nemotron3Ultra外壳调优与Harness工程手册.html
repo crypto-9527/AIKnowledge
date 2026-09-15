@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nemotron 3 Ultra 外壳调优与 Harness 工程手册 · LangChain 方法论消化</title>
+<meta name="description" content="LangChain《Tuning the harness, not the model》深度消化：固定模型权重、只调系统提示/工具描述/中间件，把 Nemotron 3 Ultra 从 0.80 抬到典型 0.84、最佳 0.86，全套成本 $4.48 对 Opus 4.8 $43.48。含四项可计算模型与交互沙盘。">
+<meta name="author" content="WorkBuddy AI · 技术消化">
+<style>
+/* ============================================================
+   零外部依赖排版基线 · 暖羊皮纸 / 黑曜石双主题
+   ============================================================ */
+:root{
+  --aike-sidebar-w: 280px;
+  --aike-content-max: 1180px;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+  --r: 10px;
+}
+html[data-theme="dark"]{
+  --bg:#181715; --bg-card:#1F1E1B; --bg-subtle:#232220; --bg-code:#141311;
+  --text:#E6E1D8; --text-dim:#A8A29A; --text-title:#F2EDE4;
+  --border:#2E2C28; --border-strong:#3E3A35;
+  --accent:#E2886A; --accent-soft:rgba(226,136,106,.14);
+  --emerald:#6FBF8B; --rose:#E0787C; --amber:#D9A94E; --cyan:#7BB6C9;
+  --shadow:0 1px 3px rgba(0,0,0,.4);
+}
+html[data-theme="light"]{
+  --bg:#FAF7F2; --bg-card:#FFFFFF; --bg-subtle:#F3EEE5; --bg-code:#F5F1E9;
+  --text:#33302B; --text-dim:#6B655C; --text-title:#1F1D1A;
+  --border:#E3DCD0; --border-strong:#CFC6B8;
+  --accent:#D97757; --accent-soft:rgba(217,119,87,.12);
+  --emerald:#3F8F5F; --rose:#C0504F; --amber:#A87A1E; --cyan:#2E7D96;
+  --shadow:0 1px 3px rgba(60,50,35,.10);
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-sans); font-size:16px; line-height:1.85;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+::selection{background:var(--accent-soft);}
+
+/* ---------- 阅读进度条 ---------- */
+#progWrap{position:fixed;top:0;left:0;right:0;height:3px;z-index:90;background:transparent;pointer-events:none;}
+#progBar{height:3px;width:0%;background:var(--accent);transition:width .08s linear;}
+
+/* ---------- 侧栏目录 ---------- */
+#sidebar{
+  position:fixed; top:0; left:0; bottom:0; width:var(--aike-sidebar-w);
+  background:var(--bg-card); border-right:1px solid var(--border);
+  overflow-y:auto; padding:26px 0 40px; z-index:60;
+}
+#sidebar .sb-head{padding:0 22px 14px; border-bottom:1px solid var(--border); margin-bottom:12px;}
+#sidebar .sb-kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700;}
+#sidebar .sb-title{font-family:var(--font-serif);font-size:16.5px;font-weight:700;color:var(--text-title);line-height:1.45;margin-top:6px;}
+#sidebar .sb-sub{font-size:12px;color:var(--text-dim);margin-top:6px;}
+#sidebar a{
+  display:block; padding:7px 22px 7px 22px; color:var(--text-dim);
+  text-decoration:none; font-size:13.5px; line-height:1.5;
+  border-left:2px solid transparent; transition:all .15s;
+}
+#sidebar a:hover{color:var(--text); background:var(--bg-subtle);}
+#sidebar a.on{color:var(--accent); border-left-color:var(--accent); background:var(--accent-soft); font-weight:600;}
+#sidebar a .num{display:inline-block;min-width:20px;color:var(--text-dim);font-variant-numeric:tabular-nums;}
+#sidebar a.on .num{color:var(--accent);}
+#sidebar .sb-foot{padding:16px 22px 0;margin-top:14px;border-top:1px solid var(--border);font-size:11.5px;color:var(--text-dim);line-height:1.7;}
+
+/* ---------- 正文容器：侧栏贴左，正文在剩余区域绝对居中 ---------- */
+#main{
+  max-width:var(--aike-content-max);
+  margin-left:calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max))/2));
+  margin-right:max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max))/2));
+  padding:56px 56px 120px;
+}
+@media (max-width:1080px){
+  #sidebar{transform:translateX(-100%);transition:transform .22s;box-shadow:var(--shadow);}
+  #sidebar.open{transform:translateX(0);}
+  #main{margin-left:0;margin-right:0;max-width:100%;width:100%;padding:24px 20px 90px;}
+}
+
+/* ---------- 标题体系 ---------- */
+h1{
+  font-family:var(--font-serif); font-size:2.15rem; line-height:1.35;
+  color:var(--text-title); margin:0 0 14px; font-weight:700; letter-spacing:-.01em;
+}
+h2{
+  font-family:var(--font-serif); font-size:1.6rem; line-height:1.4;
+  color:var(--text-title); margin:64px 0 18px; padding-bottom:12px;
+  border-bottom:1px solid var(--border); font-weight:700;
+}
+h3{
+  font-family:var(--font-sans); font-size:1.16rem; color:var(--text-title);
+  margin:36px 0 12px; font-weight:700; letter-spacing:.01em;
+}
+h4{font-size:1rem;color:var(--text-title);margin:22px 0 8px;font-weight:700;}
+p{margin:0 0 16px;}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent;}
+a:hover{border-bottom-color:var(--accent);}
+strong{color:var(--text-title);font-weight:700;}
+em{font-style:normal;color:var(--accent);}
+ul,ol{margin:0 0 18px;padding-left:24px;}
+li{margin-bottom:8px;}
+code{
+  font-family:var(--font-mono); font-size:.875em; background:var(--bg-subtle);
+  padding:2px 6px; border-radius:4px; border:1px solid var(--border);
+  color:var(--text-title); word-break:break-word;
+}
+hr{border:0;border-top:1px solid var(--border);margin:44px 0;}
+
+/* ---------- 元信息 / 头部 ---------- */
+.hero{padding-bottom:34px;border-bottom:2px solid var(--border-strong);margin-bottom:30px;}
+.kicker{
+  display:inline-block;font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--accent);font-weight:700;margin-bottom:14px;
+}
+.lede{font-size:1.06rem;color:var(--text-dim);line-height:1.8;margin-bottom:20px;}
+.meta{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:1px;
+  background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin:22px 0 0;
+}
+.meta div{background:var(--bg-card);padding:11px 14px;}
+.meta dt{font-size:11px;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;}
+.meta dd{margin:0;font-size:13.5px;color:var(--text-title);font-weight:600;word-break:break-all;line-height:1.5;}
+
+/* ---------- 五句话看完 ---------- */
+.tldr{
+  background:var(--bg-card);border:1px solid var(--border);border-left:3px solid var(--accent);
+  border-radius:var(--r);padding:22px 26px;margin:0 0 12px;box-shadow:var(--shadow);
+}
+.tldr h3{margin:0 0 12px;font-size:1.02rem;color:var(--accent);}
+.tldr ol{margin:0;padding-left:20px;}
+.tldr li{margin-bottom:9px;line-height:1.75;}
+.tldr li:last-child{margin-bottom:0;}
+
+/* ---------- 立场提示 / 警示卡 ---------- */
+.callout{
+  border-radius:var(--r);padding:16px 20px;margin:20px 0;font-size:14.5px;line-height:1.78;
+  border:1px solid var(--border);background:var(--bg-subtle);
+}
+.callout .tag{font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px;}
+.c-warn{border-left:3px solid var(--amber);}
+.c-warn .tag{color:var(--amber);}
+.c-info{border-left:3px solid var(--cyan);}
+.c-info .tag{color:var(--cyan);}
+.c-key{border-left:3px solid var(--rose);}
+.c-key .tag{color:var(--rose);}
+.c-ok{border-left:3px solid var(--emerald);}
+.c-ok .tag{color:var(--emerald);}
+
+/* ---------- 数字卡 ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:24px 0;}
+.stat{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);
+  padding:18px 16px;text-align:center;box-shadow:var(--shadow);
+}
+.stat .v{font-family:var(--font-serif);font-size:1.9rem;font-weight:700;color:var(--accent);line-height:1.15;font-variant-numeric:tabular-nums;}
+.stat .v.sm{font-size:1.45rem;}
+.stat .l{font-size:12.5px;color:var(--text-dim);margin-top:6px;line-height:1.5;}
+
+/* ---------- 图 ---------- */
+figure{margin:26px 0 30px;}
+.figbox{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);
+  padding:18px;overflow-x:auto;box-shadow:var(--shadow);
+}
+.figbox svg{display:block;width:100%;height:auto;max-width:100%;}
+figcaption{
+  font-size:12.5px;color:var(--text-dim);margin-top:10px;line-height:1.7;
+  padding-left:2px;border-left:2px solid var(--border);padding-left:10px;
+}
+figcaption b{color:var(--text-title);}
+
+/* ---------- 表格 ---------- */
+.tw{overflow-x:auto;margin:22px 0;}
+table{border-collapse:collapse;width:100%;font-size:14px;background:var(--bg-card);border-radius:var(--r);overflow:hidden;}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.7;}
+th{background:var(--bg-subtle);color:var(--text-title);font-weight:700;font-size:13px;letter-spacing:.02em;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:var(--bg-subtle);}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--font-mono);font-size:13px;}
+
+/* ---------- 代码块 ---------- */
+pre{
+  background:var(--bg-code);border:1px solid var(--border);border-radius:var(--r);
+  padding:16px 18px;overflow-x:auto;margin:18px 0;font-size:13px;line-height:1.7;
+}
+pre code{background:none;border:none;padding:0;font-size:13px;color:var(--text);}
+.cb-head{
+  display:flex;justify-content:space-between;align-items:center;
+  background:var(--bg-subtle);border:1px solid var(--border);border-bottom:none;
+  border-radius:var(--r) var(--r) 0 0;padding:8px 14px;font-size:12px;color:var(--text-dim);
+  font-family:var(--font-mono);
+}
+.cb-head + pre{margin-top:0;border-radius:0 0 var(--r) var(--r);}
+.copybtn{
+  background:var(--bg-card);border:1px solid var(--border-strong);color:var(--text-dim);
+  font-size:11.5px;padding:3px 10px;border-radius:5px;cursor:pointer;font-family:var(--font-sans);
+}
+.copybtn:hover{color:var(--accent);border-color:var(--accent);}
+
+/* ---------- 引用 ---------- */
+blockquote{
+  margin:26px 0;padding:16px 22px;border-left:3px solid var(--accent);
+  background:var(--bg-subtle);border-radius:0 var(--r) var(--r) 0;
+  font-family:var(--font-serif);font-size:1.02rem;line-height:1.8;color:var(--text-title);
+}
+blockquote cite{display:block;margin-top:10px;font-family:var(--font-sans);font-size:12.5px;color:var(--text-dim);font-style:normal;}
+
+/* ---------- 数学排版（MathML + 纯 CSS 降级） ---------- */
+.math-block{
+  margin:20px 0;padding:16px 18px;background:var(--bg-subtle);
+  border:1px solid var(--border);border-radius:var(--r);overflow-x:auto;text-align:center;
+  display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;
+}
+math{font-family:"Latin Modern Math","Cambria Math","STIX Two Math","Newsreader","Songti SC",Georgia,serif;font-size:1.16rem;color:var(--text-title);direction:ltr;line-height:1.4;}
+math mfrac{padding:0 .15em;}
+math mo{padding:0 .18em;}
+.mfrac{display:inline-flex;flex-direction:column;vertical-align:-0.55em;text-align:center;margin:0 .25em;}
+.mfrac .num{border-bottom:1.4px solid currentColor;padding:0 .35em;line-height:1.35;}
+.mfrac .den{padding:0 .35em;line-height:1.35;}
+.msqrt{display:inline-flex;align-items:stretch;margin:0 .2em;}
+.msqrt::before{content:"√";font-size:1.25em;margin-right:1px;line-height:1;}
+.msqrt > .radicand{border-top:1.4px solid currentColor;padding-top:.12em;display:inline-block;line-height:1.2;}
+.mi{font-style:italic;font-family:var(--font-serif);padding:0 .05em;}
+
+/* ---------- 交互沙盘 ---------- */
+.sandbox{
+  background:var(--bg-card);border:1px solid var(--border-strong);border-radius:12px;
+  padding:24px 26px;margin:26px 0 30px;box-shadow:var(--shadow);
+}
+.sandbox > h4{
+  margin:0 0 4px;font-size:1.02rem;color:var(--accent);
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+}
+.sandbox .sb-note{font-size:12.5px;color:var(--text-dim);margin:0 0 18px;line-height:1.7;}
+.sb-badge{
+  font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;
+  padding:2px 8px;border-radius:20px;border:1px solid var(--border-strong);color:var(--text-dim);
+}
+.sb-badge.live{border-color:var(--emerald);color:var(--emerald);}
+.sb-badge.assume{border-color:var(--amber);color:var(--amber);}
+.ctrl{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px 22px;margin-bottom:20px;}
+.ctrl label{display:block;font-size:12.5px;color:var(--text-dim);margin-bottom:7px;line-height:1.5;}
+.ctrl label b{color:var(--text-title);font-variant-numeric:tabular-nums;}
+.ctrl input[type=range]{
+  width:100%;height:4px;border-radius:3px;background:var(--border-strong);
+  -webkit-appearance:none;appearance:none;outline:none;cursor:pointer;margin:6px 0;
+}
+.ctrl input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--bg-card);box-shadow:0 0 0 1px var(--accent);cursor:pointer;
+}
+.ctrl input[type=range]::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;background:var(--accent);
+  border:2px solid var(--bg-card);box-shadow:0 0 0 1px var(--accent);cursor:pointer;border-width:2px;
+}
+.ctrl select{
+  width:100%;padding:7px 10px;background:var(--bg-subtle);color:var(--text);
+  border:1px solid var(--border-strong);border-radius:6px;font-size:13px;font-family:var(--font-sans);
+}
+.readout{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;
+  padding:16px 0 4px;border-top:1px dashed var(--border-strong);
+}
+.ro{background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+.ro .k{font-size:11.5px;color:var(--text-dim);margin-bottom:5px;line-height:1.45;}
+.ro .v{font-family:var(--font-mono);font-size:1.22rem;font-weight:700;color:var(--text-title);font-variant-numeric:tabular-nums;line-height:1.25;}
+.ro .v.up{color:var(--emerald);}
+.ro .v.dn{color:var(--rose);}
+.ro .v.acc{color:var(--accent);}
+.verdict{
+  margin-top:16px;padding:13px 16px;border-radius:8px;font-size:13.5px;line-height:1.75;
+  background:var(--bg-subtle);border:1px solid var(--border);border-left:3px solid var(--cyan);
+}
+.verdict b{color:var(--text-title);}
+.vb-ok{border-left-color:var(--emerald);}
+.vb-no{border-left-color:var(--rose);}
+.vb-wa{border-left-color:var(--amber);}
+.bar-row{display:flex;align-items:center;gap:12px;margin:9px 0;font-size:12.5px;}
+.bar-row .bl{width:104px;flex:none;color:var(--text-dim);text-align:right;line-height:1.4;}
+.bar-track{flex:1;height:20px;background:var(--bg-subtle);border:1px solid var(--border);border-radius:5px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:4px 0 0 4px;transition:width .12s;}
+.bar-row .bv{width:96px;flex:none;font-family:var(--font-mono);font-size:12px;color:var(--text-title);font-variant-numeric:tabular-nums;}
+
+/* ---------- 落地清单 ---------- */
+.step{
+  display:flex;gap:16px;padding:16px 0;border-bottom:1px solid var(--border);
+}
+.step:last-child{border-bottom:none;}
+.step .sn{
+  flex:none;width:30px;height:30px;border-radius:50%;background:var(--accent-soft);
+  border:1px solid var(--accent);color:var(--accent);font-weight:700;font-size:13px;
+  display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);
+}
+.step .sc{flex:1;}
+.step .sc b{display:block;color:var(--text-title);margin-bottom:4px;font-size:15px;}
+.step .sc span{font-size:13.5px;color:var(--text-dim);line-height:1.72;display:block;}
+.pri{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:4px;margin-left:8px;vertical-align:2px;letter-spacing:.06em;}
+.pri.p0{background:rgba(224,120,124,.16);color:var(--rose);border:1px solid var(--rose);}
+.pri.p1{background:rgba(217,169,78,.16);color:var(--amber);border:1px solid var(--amber);}
+.pri.p2{background:var(--bg-subtle);color:var(--text-dim);border:1px solid var(--border-strong);}
+
+/* ---------- 来源 ---------- */
+.srcbox{background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r);padding:20px 24px;margin-top:20px;}
+.srcbox ul{margin:0;padding-left:20px;font-size:13.5px;}
+.srcbox li{margin-bottom:7px;}
+
+/* ---------- 回到顶部 / 主题切换 ---------- */
+#toTopBtn{
+  position:fixed;right:24px;bottom:26px;z-index:70;width:42px;height:42px;border-radius:50%;
+  background:var(--bg-card);border:1px solid var(--border-strong);color:var(--text-dim);
+  font-size:17px;cursor:pointer;box-shadow:var(--shadow);display:none;line-height:1;
+}
+#toTopBtn:hover{color:var(--accent);border-color:var(--accent);}
+.toolbar{position:fixed;top:14px;right:24px;z-index:80;display:flex;gap:8px;}
+.tbtn{
+  background:var(--bg-card);border:1px solid var(--border-strong);color:var(--text-dim);
+  border-radius:7px;padding:6px 12px;font-size:12.5px;cursor:pointer;box-shadow:var(--shadow);
+  font-family:var(--font-sans);
+}
+.tbtn:hover{color:var(--accent);border-color:var(--accent);}
+#menuBtn{display:none;}
+@media (max-width:1080px){ #menuBtn{display:block;} }
+
+/* ---------- 打印 ---------- */
+@media print{
+  #sidebar,#toolbar,#toTopBtn,#progWrap{display:none !important;}
+  body{background:#fff;color:#111;font-size:11.5pt;}
+  #main{margin:0 !important;max-width:100% !important;padding:0 !important;}
+  h2{page-break-after:avoid;}
+  figure,.sandbox,.math-block,table,pre{page-break-inside:avoid;}
+  .sandbox{border:1px solid #999;}
+  a{color:#111;text-decoration:underline;}
+}
+@media (max-width:640px){
+  h1{font-size:1.6rem;} h2{font-size:1.3rem;}
+  #main{padding:20px 16px 80px;}
+  .ctrl{grid-template-columns:1fr;}
+  .stat .v{font-size:1.55rem;}
+}
+</style>
+</head>
+<body>
+
+<div id="progWrap"><div id="progBar"></div></div>
+
+<div class="toolbar">
+  <button class="tbtn" id="menuBtn" type="button">目录</button>
+  <button class="tbtn" id="themeBtn" type="button">切换主题</button>
+</div>
+
+<aside id="sidebar">
+  <div class="sb-head">
+    <div class="sb-kicker">Harness Engineering</div>
+    <div class="sb-title">Nemotron 3 Ultra 外壳调优与 Harness 工程手册</div>
+    <div class="sb-sub">LangChain 方法论消化 · 2026-09-15</div>
+  </div>
+  <nav id="toc">
+    <a href="#s-tldr"><span class="num">00</span> 五句话看完</a>
+    <a href="#s1"><span class="num">01</span> WHAT：做了什么事</a>
+    <a href="#s2"><span class="num">02</span> MISMATCH：马力去哪了</a>
+    <a href="#s3"><span class="num">03</span> LOOP：闭环而非猜测</a>
+    <a href="#s4"><span class="num">04</span> PROMPTS：对着失败写一小块</a>
+    <a href="#s5"><span class="num">05</span> HERO：位置决定效果</a>
+    <a href="#s6"><span class="num">06</span> FILTER：留下与扔掉</a>
+    <a href="#s7"><span class="num">07</span> RESULTS：数字怎么变</a>
+    <a href="#s8"><span class="num">08</span> CEILING：拧到哪层就停</a>
+    <a href="#s9"><span class="num">09</span> 可计算建模与交互沙盘</a>
+    <a href="#s10"><span class="num">10</span> 落地清单与评审观点</a>
+    <a href="#s-src"><span class="num">11</span> 来源与核验记录</a>
+  </nav>
+  <div class="sb-foot">
+    零外部依赖单文件 · 断网可用<br>
+    全部数值常量由脚本实算后回填
+  </div>
+</aside>
+
+<main id="main">
+
+<header class="hero">
+  <div class="kicker">研究解读 · 技术消化</div>
+  <h1>只调外壳不换模型：Nemotron 3 Ultra 的 Harness 调优手册</h1>
+  <p class="lede">LangChain 固定 Nemotron 3 Ultra 的权重，只在它外面那层脚手架上动刀——系统提示、工具描述、中间件三处。典型跑分从约 0.80 抬到约 0.84，最佳跑 0.86 逼近 Opus 4.8 的 0.87，而整套评测成本约 4.48 美元对 43.48 美元。本文完整消化其方法论，并把定性结论推导为四个可计算模型。</p>
+  <dl class="meta">
+    <div><dt>原文标题</dt><dd>Tuning the harness, not the model</dd></div>
+    <div><dt>作者 / 发布</dt><dd>S. Tangedipalli · 2026-07-08</dd></div>
+    <div><dt>来源</dt><dd>LangChain Blog</dd></div>
+    <div><dt>对象模型</dt><dd>NVIDIA Nemotron 3 Ultra</dd></div>
+    <div><dt>对照模型</dt><dd>Claude Opus 4.8</dd></div>
+    <div><dt>消化日期</dt><dd>2026-09-15</dd></div>
+  </dl>
+</header>
+
+<section id="s-tldr">
+  <h2>00 · 五句话看完</h2>
+  <div class="tldr">
+    <h3>TL;DR</h3>
+    <ol>
+      <li>LangChain 固定 Nemotron 3 Ultra 权重，只改 harness（系统提示、工具描述、中间件），不改模型、不改温度等生成参数。</li>
+      <li>方法是评测驱动闭环：评测 → 读失败轨迹 → 聚类行为 → 改一处外壳 → 再评测；先小样本筛，再上全套。</li>
+      <li>提示词用短的单目标指令块；中间件做强制执行 + 在出错点塞信号。</li>
+      <li>关键机制：同一句规则写在工具描述里无效，塞进工具返回结果就有效；对话中途注入比系统提示常驻更稳。</li>
+      <li>典型约 0.80 → 0.84，最佳 0.86 对 Opus 4.8 最佳 0.87；整套约 4.48 美元对 43.48 美元，中位延迟都约 10 秒/题。</li>
+    </ol>
+  </div>
+  <div class="callout c-warn">
+    <span class="tag">立场提示</span>
+    本文是 LangChain 官方博客的方法论案例，数据来自其 Deep Agents 内部评测与自家 LangSmith trace 分析，<strong>非第三方独立复现</strong>。文中「最佳跑」为多次运行取最大值（best run），而非均值；取最大值会放大随机波动，因此 0.86 与 0.87 这 1 个点的差距在统计上并不构成显著差异——本文第 09 节给出了分辨该差值所需的重复次数。
+  </div>
+</section>
+
+<section id="s1">
+  <h2>01 · WHAT：他们做了一件什么事</h2>
+  <p>LangChain 发了一份 Nemotron 3 Ultra 的 harness 调优手册：模型不动，只改它外面那层脚手架，看开源模型在 agent 任务上能被抬到多高。</p>
+  <p>一句话：同一个开源模型，换一套合身的外壳，最佳跑分逼近 Claude Opus 4.8，全套评测成本大约低一个数量级。</p>
+  <p><strong>为什么值得看：</strong>同一套权重、不同脚手架，分数可以差一截。他们此前把 <code>gpt-5.2-codex</code> 在 Terminal-Bench 2.0 从 52.8 提到 66.5（绝对提升 13.7 分，相对提升 25.9%），没动模型；发布 per-model harness profile 时，又在 tau2-bench 的一个精选子集上提升了 10 到 20 个点。这次把同一思路用在开源模型上，并给出接近 Opus 的成本对照。</p>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 660 320" role="img" aria-label="Harness 包住模型的架构示意：系统提示、工具描述、中间件三块外壳围绕冻结的 Nemotron 3 Ultra 内核">
+        <rect x="0" y="0" width="660" height="320" fill="none"/>
+        <!-- 外壳 -->
+        <rect x="28" y="16" width="604" height="288" rx="18" fill="none" stroke="#D97757" stroke-width="1.8" stroke-dasharray="7 4"/>
+        <text x="44" y="42" font-family="-apple-system,PingFang SC,sans-serif" font-size="13" font-weight="700" fill="#D97757" letter-spacing="1.2">HARNESS · 本次唯一可动区</text>
+        <!-- 三块外壳 -->
+        <rect x="52" y="58" width="178" height="62" rx="9" fill="rgba(217,119,87,.10)" stroke="#D97757" stroke-width="1.2"/>
+        <text x="141" y="84" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="14" font-weight="700" fill="#E6E1D8">系统提示</text>
+        <text x="141" y="104" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">system prompt</text>
+        <rect x="240" y="58" width="178" height="62" rx="9" fill="rgba(217,119,87,.10)" stroke="#D97757" stroke-width="1.2"/>
+        <text x="329" y="84" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="14" font-weight="700" fill="#E6E1D8">工具描述</text>
+        <text x="329" y="104" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">tool descriptions</text>
+        <rect x="428" y="58" width="178" height="62" rx="9" fill="rgba(217,119,87,.10)" stroke="#D97757" stroke-width="1.2"/>
+        <text x="517" y="84" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="14" font-weight="700" fill="#E6E1D8">中间件</text>
+        <text x="517" y="104" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">middleware</text>
+        <!-- 连接线 -->
+        <path d="M141 120 L141 150 L330 150" fill="none" stroke="#6B655C" stroke-width="1.1"/>
+        <path d="M329 120 L329 150" fill="none" stroke="#6B655C" stroke-width="1.1"/>
+        <path d="M517 120 L517 150 L330 150" fill="none" stroke="#6B655C" stroke-width="1.1"/>
+        <!-- 内核 -->
+        <rect x="150" y="164" width="360" height="92" rx="14" fill="rgba(123,182,201,.12)" stroke="#7BB6C9" stroke-width="1.8"/>
+        <text x="330" y="200" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="16" font-weight="700" fill="#E6E1D8">Nemotron 3 Ultra</text>
+        <text x="330" y="224" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="12" fill="#A8A29A">权重冻结 · 零梯度更新</text>
+        <text x="330" y="242" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">生成参数保持厂商推荐默认</text>
+        <!-- 底部说明 -->
+        <text x="330" y="288" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="12" fill="#A8A29A">合得上：能力花在任务上　·　合不上：能力花在和脚手架较劲上</text>
+      </svg>
+    </div>
+    <figcaption><b>图 1</b>　模型在内、harness 在外。本次实验只拧外壳三块，内核权重原封不动；温度、top-p、thinking budget 等生成参数一律保持厂商推荐默认——文中的提升不是靠把 temperature 拧一下「碰运气」得来的。<b>（本地重绘示意，逻辑依据原文描述；原图版权归 LangChain Blog）</b></figcaption>
+  </figure>
+
+  <div class="callout c-info">
+    <span class="tag">站内相关</span>
+    延伸阅读：Lilian Weng 的 harness 工程长文《AI 自我进化的关键，藏在模型外面那层叫 harness 的外壳里》——本篇是 LangChain 在开源模型上的实操手册，两篇互补。
+  </div>
+</section>
+
+<section id="s2">
+  <h2>02 · MISMATCH：外壳不合身时，马力去哪了</h2>
+  <p>开源模型已经能扛真实 agent 活，价格是前沿 API 的零头。但再能干的模型，丢进不是为它建的 harness，也会发挥失常。</p>
+  <h3>打个比方</h3>
+  <p>模型像发动机，harness 像底盘和挡位。发动机再好，挡位和传动对不上，马力也会浪费在空转和打滑上。调 harness，是在改挡位和传动，不是换发动机。</p>
+  <p>他们选 Nemotron 3 Ultra，是因为 NVIDIA 后训练时就让它跨多种 agent harness 表现稳定，而不是只练单轮聊天。无 profile 基线约 0.80，地板已经不低，外壳才有得加。</p>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 660 210" role="img" aria-label="外壳合身与否的对比：完整进度条对断续空转条">
+        <text x="150" y="26" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="13" font-weight="700" fill="#6FBF8B">外壳合身</text>
+        <text x="490" y="26" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="13" font-weight="700" fill="#E0787C">外壳不合身</text>
+        <rect x="40" y="44" width="220" height="20" rx="4" fill="#2E2C28"/>
+        <rect x="40" y="44" width="220" height="20" rx="4" fill="#6FBF8B"/>
+        <text x="40" y="86" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">能力 → 任务</text>
+        <rect x="380" y="44" width="220" height="20" rx="4" fill="#2E2C28"/>
+        <rect x="380" y="44" width="66" height="20" rx="4" fill="#D9A94E"/>
+        <rect x="454" y="44" width="40" height="20" rx="4" fill="#D9A94E"/>
+        <rect x="502" y="44" width="52" height="20" rx="4" fill="#D9A94E"/>
+        <rect x="562" y="44" width="30" height="20" rx="4" fill="#D9A94E"/>
+        <text x="380" y="86" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">能力 → 空转 / 打滑 / 重复索要已有信息</text>
+        <line x1="330" y1="14" x2="330" y2="196" stroke="#3E3A35" stroke-width="1" stroke-dasharray="4 4"/>
+        <text x="40" y="124" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" fill="#E6E1D8">· 一次读到位，直接推进</text>
+        <text x="40" y="148" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" fill="#E6E1D8">· 工具结果直接进答案</text>
+        <text x="40" y="172" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" fill="#E6E1D8">· 长上下文按指引压缩</text>
+        <text x="380" y="124" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" fill="#E6E1D8">· 读满一页就以为读完</text>
+        <text x="380" y="148" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" fill="#E6E1D8">· 工具成功却不报结果</text>
+        <text x="380" y="172" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" fill="#E6E1D8">· 该压不压，或只凭摘要答</text>
+      </svg>
+    </div>
+    <figcaption><b>图 2</b>　同一台发动机，外壳合不合身决定马力进任务还是漏成空转。左为完整进度条，右为断续空转条。<b>（本地重绘示意）</b></figcaption>
+  </figure>
+</section>
+
+<section id="s3">
+  <h2>03 · LOOP：调优靠闭环，不靠猜</h2>
+  <p>没有评测信号就是在猜。Agent 的输入空间大、可接受输出多，改一处可能修好 A 又弄坏 B。所以工作形态是闭环，以 LangSmith 轨迹为真相源。</p>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 660 200" role="img" aria-label="五步闭环：评测、观察、诊断、工程、再评测">
+        <rect x="14" y="60" width="112" height="60" rx="9" fill="rgba(217,119,87,.12)" stroke="#D97757" stroke-width="1.3"/>
+        <text x="70" y="84" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="13.5" font-weight="700" fill="#E6E1D8">1 评测</text>
+        <text x="70" y="104" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">evaluate</text>
+        <rect x="148" y="60" width="112" height="60" rx="9" fill="rgba(217,119,87,.12)" stroke="#D97757" stroke-width="1.3"/>
+        <text x="204" y="84" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="13.5" font-weight="700" fill="#E6E1D8">2 观察</text>
+        <text x="204" y="104" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">read trace</text>
+        <rect x="282" y="60" width="112" height="60" rx="9" fill="rgba(217,119,87,.12)" stroke="#D97757" stroke-width="1.3"/>
+        <text x="338" y="84" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="13.5" font-weight="700" fill="#E6E1D8">3 诊断</text>
+        <text x="338" y="104" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">cluster</text>
+        <rect x="416" y="60" width="112" height="60" rx="9" fill="rgba(217,119,87,.12)" stroke="#D97757" stroke-width="1.3"/>
+        <text x="472" y="84" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="13.5" font-weight="700" fill="#E6E1D8">4 工程</text>
+        <text x="472" y="104" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">one change</text>
+        <rect x="550" y="60" width="96" height="60" rx="9" fill="rgba(217,119,87,.12)" stroke="#D97757" stroke-width="1.3"/>
+        <text x="598" y="84" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="13.5" font-weight="700" fill="#E6E1D8">5 再评测</text>
+        <text x="598" y="104" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">re-run</text>
+        <path d="M126 90 L148 90" fill="none" stroke="#D97757" stroke-width="1.6" marker-end="url(#arw)"/>
+        <path d="M260 90 L282 90" fill="none" stroke="#D97757" stroke-width="1.6" marker-end="url(#arw)"/>
+        <path d="M394 90 L416 90" fill="none" stroke="#D97757" stroke-width="1.6" marker-end="url(#arw)"/>
+        <path d="M528 90 L550 90" fill="none" stroke="#D97757" stroke-width="1.6" marker-end="url(#arw)"/>
+        <path d="M598 120 L598 152 L70 152 L70 120" fill="none" stroke="#D97757" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arw)"/>
+        <defs>
+          <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#D97757"/>
+          </marker>
+        </defs>
+        <text x="334" y="176" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="12" fill="#A8A29A">成本阶梯：候选先过便宜的小样本筛，过了才烧全套预算</text>
+      </svg>
+    </div>
+    <figcaption><b>图 3</b>　面向 harness 调优的 agent 开发生命周期闭环——评测给出信号，trace 告诉你失败在哪一步，聚类成一类行为再改外壳一处，过筛后才上全套。<b>（本地重绘示意，逻辑依据原文五步循环）</b></figcaption>
+  </figure>
+
+  <h3>修行为类，不修单题</h3>
+  <p>聚类的是<strong>失败模式</strong>（比如「读文件半截就答」），不是某道题的措辞。蹭单题短语涨分的改动会被扔掉。</p>
+  <h3>先便宜后昂贵</h3>
+  <p>候选先过有代表性的小样本；过了再上全套。筛的样本要覆盖不同行为类型，避免筛里没碰到的任务全线回退。</p>
+  <div class="callout c-key">
+    <span class="tag">两条纪律</span>
+    <strong>其一</strong>，单次「看起来不错」不算数——运行本身带随机性，一个改动必须<em>在多次试验中重复出现，且不 regressions 其他项</em>，才算拿到位置。<br>
+    <strong>其二</strong>，筛切片的风险是「筛子没碰到的任务悄悄回退」，所以切片必须<em>有代表性</em>：覆盖不同行为类型的样本上站得住的改动，在全套上通常也站得住。第 09 节把这个「代表性」要求推导成了可计算的最小样本量。
+  </div>
+</section>
+
+
+<section id="s4">
+  <h2>04 · PROMPTS：别整页重写，对着失败写一小块</h2>
+  <p>系统提示最便宜，也最容易高估。大段重写和「做个更好的 agent」常常被冲淡，因为能干模型真正的失败点通常不是措辞问题。</p>
+  <p>能留下的是重写的反面：<strong>短的、单目标的指令块</strong>，只对准一个你在 trace 里亲眼看过它失败的行为。如果模型跑完了任务却从不报结果，你就只写这一条，一句都不多写。</p>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 660 236" role="img" aria-label="整页原则堆砌对比单目标指令块">
+        <text x="160" y="24" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="13" font-weight="700" fill="#E0787C">反模式：整页原则堆上去</text>
+        <text x="490" y="24" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="13" font-weight="700" fill="#6FBF8B">正解：对着失败写一小块</text>
+        <rect x="34" y="38" width="252" height="180" rx="9" fill="none" stroke="#E0787C" stroke-width="1.3"/>
+        <rect x="374" y="38" width="252" height="180" rx="9" fill="none" stroke="#6FBF8B" stroke-width="1.3"/>
+        <text x="50" y="62" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">· 你是一个 helpful 的助手</text>
+        <text x="50" y="82" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">· 请仔细思考每一步</text>
+        <text x="50" y="102" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">· 使用工具前先规划</text>
+        <text x="50" y="122" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">· 回答要完整准确</text>
+        <text x="50" y="142" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">· 不要编造信息</text>
+        <text x="50" y="162" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#A8A29A">· …… 再写 40 条</text>
+        <text x="50" y="196" font-family="-apple-system,PingFang SC,sans-serif" font-size="12" font-weight="700" fill="#E0787C">信号稀薄，条条都被冲淡</text>
+        <text x="390" y="62" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#E6E1D8">trace 里看到：</text>
+        <text x="390" y="82" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#D9A94E">「工具成功了却不报结果」</text>
+        <rect x="390" y="96" width="220" height="72" rx="7" fill="rgba(111,191,139,.12)" stroke="#6FBF8B" stroke-width="1.2"/>
+        <text x="402" y="118" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#6FBF8B">&lt;final_answer_completeness&gt;</text>
+        <text x="402" y="136" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#E6E1D8">工具成功后，最终回答必须报出</text>
+        <text x="402" y="152" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#E6E1D8">具体结果，不能只说「任务完成」。</text>
+        <text x="390" y="196" font-family="-apple-system,PingFang SC,sans-serif" font-size="12" font-weight="700" fill="#6FBF8B">只写那一条，不塞别的</text>
+      </svg>
+    </div>
+    <figcaption><b>图 4</b>　左边：整页原则堆上去，信号稀薄。右边：在 trace 里看到「工具成功了却不报结果」，就只写那一条。<b>（本地重绘示意）</b></figcaption>
+  </figure>
+
+  <h3>可复制示例</h3>
+  <p>任务跑完却不报具体结果时，只加这一块，不塞别的：</p>
+  <p><strong>final_answer_completeness（原文可抄）</strong></p>
+  <blockquote>
+    工具成功后，最终回答必须报出具体结果，不能只说「任务完成」。关键实体、动作、标识符、标题、收件人、服务、状态或数值都要写进答案。多问多答，各从对应工具输出取。
+  </blockquote>
+  <div class="cb-head"><span>system prompt · XML 指令块</span><button class="copybtn" type="button" id="copyFac" data-copy="cb-fac">复制</button></div>
+  <pre><code id="cb-fac">&lt;final_answer_completeness&gt;
+After tool calls succeed, the final answer must report the concrete result, not just that the task is done. Include the key entity, action, identifier, title, recipient, service, status, or value that answers the user's request. If the user asked multiple questions, answer each one from its matching tool output.
+&lt;/final_answer_completeness&gt;</code></pre>
+  <div class="callout c-warn">
+    <span class="tag">注意：指令块之间会相互作用</span>
+    单看无效的一条指令，和外壳另一处的改动配对之后可能开始起作用。因此他们<strong>不只对单块做评测，也对组合做评测</strong>——这也是为什么「只报成功的调优循环」通常已经在过拟合。
+  </div>
+</section>
+
+<section id="s5">
+  <h2>05 · HERO：同一句话，放的位置不同，结果完全相反</h2>
+  <p>这是全文最值得盯的机制。他们想要一条规则：文件读取返回刚好满一页时，默认后面还有内容，继续读。</p>
+  <p>把这句话写进 <code>read_file</code> 的工具描述，模型读第一页就收工。<strong>一字不动</strong>，挪到工具返回结果旁边，模型开始继续读。</p>
+
+  <div class="callout c-key">
+    <span class="tag">不是话术问题 · 是注意力落点</span>
+    模型真正在处理的是「当前眼前的那段内容」。规则离那段内容越远，越像没写；贴在那段内容旁边，才会被读到。
+  </div>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 660 268" role="img" aria-label="规则放在工具说明书与放在工具返回结果旁边的注意力扫描带对比">
+        <text x="160" y="22" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="13" font-weight="700" fill="#E0787C">规则挂在工具说明书里 · 无效</text>
+        <text x="490" y="22" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="13" font-weight="700" fill="#6FBF8B">同样文字贴在返回块顶上 · 有效</text>
+        <!-- 左：说明书 -->
+        <rect x="36" y="36" width="248" height="52" rx="7" fill="rgba(224,120,124,.10)" stroke="#E0787C" stroke-width="1.2"/>
+        <text x="160" y="58" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" font-weight="700" fill="#E6E1D8">read_file 工具描述（说明书）</text>
+        <text x="160" y="76" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">「若返回满一页，默认后面还有，继续读」</text>
+        <!-- 左：返回正文 -->
+        <rect x="36" y="112" width="248" height="112" rx="7" fill="#232220" stroke="#3E3A35" stroke-width="1.2"/>
+        <text x="52" y="134" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">[page 1 / 返回正文]</text>
+        <text x="52" y="154" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">...content line ...</text>
+        <text x="52" y="174" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">...content line ...</text>
+        <text x="52" y="194" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">...content line ...</text>
+        <!-- 左：扫描带 -->
+        <rect x="30" y="106" width="260" height="124" rx="9" fill="none" stroke="#D9A94E" stroke-width="2.2" stroke-dasharray="5 3"/>
+        <text x="160" y="252" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" font-weight="700" fill="#E0787C">扫描带只落在返回正文 · 说明书已在注意力外</text>
+        <!-- 右：规则+数据同块 -->
+        <rect x="376" y="36" width="248" height="188" rx="7" fill="rgba(111,191,139,.08)" stroke="#6FBF8B" stroke-width="1.2"/>
+        <rect x="376" y="36" width="248" height="42" rx="7" fill="rgba(111,191,139,.16)"/>
+        <text x="500" y="54" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" font-weight="700" fill="#6FBF8B">「若返回满一页，后面还有，继续读」</text>
+        <text x="500" y="70" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="10.5" fill="#A8A29A">↑ 同一句话，只是换了位置</text>
+        <text x="392" y="102" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">[page 1 / 返回正文]</text>
+        <text x="392" y="122" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">...content line ...</text>
+        <text x="392" y="142" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">...content line ...</text>
+        <text x="392" y="162" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">...content line ...</text>
+        <text x="392" y="182" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">...content line ...</text>
+        <text x="392" y="206" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#6FBF8B">→ 模型继续读下一页</text>
+        <rect x="370" y="30" width="260" height="200" rx="9" fill="none" stroke="#D9A94E" stroke-width="2.2" stroke-dasharray="5 3"/>
+        <text x="500" y="252" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" font-weight="700" fill="#6FBF8B">扫描带同时扫到规则 + 数据</text>
+      </svg>
+    </div>
+    <figcaption><b>图 5</b>　核心机制：同样文字，左边挂在工具说明书里（扫描带落在返回正文上，说明书已在注意力外），右边贴在返回块顶上（扫描带扫到规则 + 数据）。<b>（本地重绘示意）</b></figcaption>
+  </figure>
+
+  <h3>中间件在干什么：两种钩子</h3>
+  <p>有些行为必须「次次发生」，靠提示词不够。中间件挂在模型调用和工具调用周围，做两种性质不同的工作：</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th style="width:22%">类型</th><th style="width:30%">机制</th><th>典型例子</th><th style="width:16%">是否请求模型配合</th></tr></thead>
+      <tbody>
+        <tr><td><strong>强制执行</strong><br><span style="color:var(--text-dim);font-size:12.5px">enforcement in code</span></td><td>在代码里硬性约束循环行为</td><td>模型/工具调用次数上限，在超时前掐断跑飞的任务；一次性重试吸收瞬时工具故障</td><td>否——改的是循环本身</td></tr>
+        <tr><td><strong>塞信号</strong><br><span style="color:var(--text-dim);font-size:12.5px">context engineering</span></td><td>在模型走偏<em>那一刻</em>把正确信息送到眼前</td><td>满页读取提醒、先规划后行动、写完计划再要求回看计划</td><td>是——但只在那一个时刻</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>本案例的主力是后者。他们没有把所有规则前置塞进系统提示然后祈祷它生效，而是<strong>在 trace 里盯轨迹，在模型出错的那个点位把指引注入进去</strong>。</p>
+
+  <h3>对话中途注入：比系统提示更稳</h3>
+  <p>Nemotron 对「进行到需要时出现的一条消息」比系统提示里的常驻规则更听话。中间件于是按这个节奏注两针：</p>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 660 176" role="img" aria-label="对话中途注入时间线：橙色块为中间件注入消息，白色块为模型回应">
+        <line x1="40" y1="88" x2="620" y2="88" stroke="#3E3A35" stroke-width="1.4"/>
+        <rect x="60" y="60" width="112" height="48" rx="7" fill="rgba(217,119,87,.18)" stroke="#D97757" stroke-width="1.3"/>
+        <text x="116" y="80" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" font-weight="700" fill="#E6E1D8">注入 ①</text>
+        <text x="116" y="97" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="10.5" fill="#A8A29A">先规划再行动</text>
+        <rect x="200" y="60" width="112" height="48" rx="7" fill="#232220" stroke="#3E3A35" stroke-width="1.3"/>
+        <text x="256" y="80" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" font-weight="700" fill="#E6E1D8">模型回应</text>
+        <text x="256" y="97" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="10.5" fill="#A8A29A">产出一份计划</text>
+        <rect x="340" y="60" width="112" height="48" rx="7" fill="rgba(217,119,87,.18)" stroke="#D97757" stroke-width="1.3"/>
+        <text x="396" y="80" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" font-weight="700" fill="#E6E1D8">注入 ②</text>
+        <text x="396" y="97" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="10.5" fill="#A8A29A">执行前回看计划</text>
+        <rect x="480" y="60" width="112" height="48" rx="7" fill="#232220" stroke="#3E3A35" stroke-width="1.3"/>
+        <text x="536" y="80" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" font-weight="700" fill="#E6E1D8">模型回应</text>
+        <text x="536" y="97" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="10.5" fill="#A8A29A">回看并开始执行</text>
+        <path d="M172 84 L200 84" fill="none" stroke="#6B655C" stroke-width="1.5" marker-end="url(#arw2)"/>
+        <path d="M312 84 L340 84" fill="none" stroke="#6B655C" stroke-width="1.5" marker-end="url(#arw2)"/>
+        <path d="M452 84 L480 84" fill="none" stroke="#6B655C" stroke-width="1.5" marker-end="url(#arw2)"/>
+        <defs>
+          <marker id="arw2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#6B655C"/>
+          </marker>
+        </defs>
+        <text x="330" y="140" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="12" fill="#A8A29A">橙色 = 中间件现塞进对话的消息　白色 = 模型回应</text>
+        <text x="330" y="162" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="12" fill="#D97757">同样内容写在系统提示开头往往被冲淡；在需要的那一刻出现才管用</text>
+      </svg>
+    </div>
+    <figcaption><b>图 6</b>　对话中途注入时间线。在 trace 里可以看到模型确实读到了这两针注入消息，并开始「先规划、再回看、再执行」；同样的指令放在系统提示里则趋于被冲淡。<b>（本地重绘示意）</b></figcaption>
+  </figure>
+</section>
+
+<section id="s6">
+  <h2>06 · FILTER：什么留下，什么扔掉</h2>
+  <p>试过的东西大多数没活下来。只报成功的调优循环，通常已经在过拟合。有一批看上去合理的改动什么也没做，有一两个反而更差，还有一个以上的杠杆必须和另一个配合才起作用，单独上阵无效。</p>
+  <p>他们守住的判据是：<strong>留行为类修复，不留基准技巧</strong>。好杠杆应该对<em>真实工况</em>开火（例如任何满页文件读），就像一个设计良好的工具本来就会做的那样，而对眼前具体是哪道题一无所知。他们扔掉了一个确实涨分的改动——因为它蹭了某一道评测题里的措辞，那只会讨好分数，教不会你下一个 agent 怎么建。</p>
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 660 150" role="img" aria-label="筛选漏斗：大量候选改动中只有少数行为类修复留下">
+        <path d="M60 24 L600 24 L470 66 L470 96 L190 96 L190 66 Z" fill="rgba(217,119,87,.10)" stroke="#D97757" stroke-width="1.4"/>
+        <text x="330" y="46" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" font-weight="700" fill="#E6E1D8">全部试过的候选改动</text>
+        <rect x="190" y="96" width="280" height="42" rx="6" fill="rgba(111,191,139,.14)" stroke="#6FBF8B" stroke-width="1.4"/>
+        <text x="330" y="122" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" font-weight="700" fill="#6FBF8B">留下的：对真实工况开火的行为类修复</text>
+        <text x="330" y="26" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">—</text>
+        <text x="620" y="60" text-anchor="end" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#E0787C">扔掉：啥也没做 / 更差</text>
+        <text x="40" y="60" font-family="-apple-system,PingFang SC,sans-serif" font-size="11.5" fill="#E0787C">扔掉：蹭单题短语</text>
+      </svg>
+    </div>
+    <figcaption><b>图 7</b>　筛选漏斗。好杠杆对真实工况开火（例如任何满页文件读）；蹭单题短语涨分的改动讨好分数但学不到下一次 agent 怎么建，扔掉。<b>（本地重绘示意）</b></figcaption>
+  </figure>
+</section>
+
+
+<section id="s7">
+  <h2>07 · RESULTS：调完数字怎么变</h2>
+  <p>一个总分只告诉你更好或更差。他们按 agent 常干的活分项打分：文件、工具、检索、多轮对话、长上下文摘要。</p>
+
+  <div class="stats">
+    <div class="stat"><div class="v">0.80</div><div class="l">无 profile 基线（典型）</div></div>
+    <div class="stat"><div class="v">0.84</div><div class="l">调 harness 后典型分</div></div>
+    <div class="stat"><div class="v">0.86</div><div class="l">Nemotron 最佳跑</div></div>
+    <div class="stat"><div class="v">0.87</div><div class="l">Opus 4.8 最佳（典型约 0.86）</div></div>
+  </div>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 660 268" role="img" aria-label="五个分项的定性变化示意：摘要抬升最大、工具明显抬升、检索与文件小幅抬升、对话几乎不动">
+        <line x1="196" y1="30" x2="196" y2="240" stroke="#3E3A35" stroke-width="1"/>
+        <text x="196" y="258" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">无 profile 基线</text>
+        <text x="640" y="258" text-anchor="end" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">→ 调后</text>
+        <!-- 摘要 -->
+        <text x="188" y="52" text-anchor="end" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" font-weight="700" fill="#E6E1D8">长上下文摘要</text>
+        <rect x="196" y="40" width="150" height="17" rx="3" fill="#3E3A35"/>
+        <rect x="346" y="40" width="250" height="17" rx="3" fill="#6FBF8B"/>
+        <text x="606" y="54" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" font-weight="700" fill="#6FBF8B">抬升最大 · 几乎拉满</text>
+        <!-- 工具 -->
+        <text x="188" y="94" text-anchor="end" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" font-weight="700" fill="#E6E1D8">工具使用</text>
+        <rect x="196" y="82" width="230" height="17" rx="3" fill="#3E3A35"/>
+        <rect x="426" y="82" width="150" height="17" rx="3" fill="#7BB6C9"/>
+        <text x="586" y="96" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" font-weight="700" fill="#7BB6C9">明显抬升</text>
+        <!-- 检索 -->
+        <text x="188" y="136" text-anchor="end" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" font-weight="700" fill="#E6E1D8">检索</text>
+        <rect x="196" y="124" width="290" height="17" rx="3" fill="#3E3A35"/>
+        <rect x="486" y="124" width="80" height="17" rx="3" fill="#D97757"/>
+        <text x="576" y="138" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" font-weight="700" fill="#D97757">基线已强 · 再抬一点</text>
+        <!-- 文件 -->
+        <text x="188" y="178" text-anchor="end" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" font-weight="700" fill="#E6E1D8">文件操作</text>
+        <rect x="196" y="166" width="300" height="17" rx="3" fill="#3E3A35"/>
+        <rect x="496" y="166" width="70" height="17" rx="3" fill="#D97757"/>
+        <text x="576" y="180" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" font-weight="700" fill="#D97757">基线已强 · 再抬一点</text>
+        <!-- 对话 -->
+        <text x="188" y="220" text-anchor="end" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" font-weight="700" fill="#E6E1D8">多轮对话</text>
+        <rect x="196" y="208" width="330" height="17" rx="3" fill="#3E3A35"/>
+        <rect x="526" y="208" width="6" height="17" rx="2" fill="#E0787C"/>
+        <text x="542" y="222" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" font-weight="700" fill="#E0787C">平线 · 几乎不动</text>
+      </svg>
+    </div>
+    <figcaption><b>图 8</b>　五项能力的<strong>定性</strong>变化示意：摘要空间最大、调完几乎拉满；工具使用明显抬升；检索与文件基线已强仍再抬；对话几乎不动。<b>原文未公布分项绝对数值，本图只表达方向与相对量级，不含任何虚构数字。</b>（本地重绘示意）</figcaption>
+  </figure>
+
+  <div class="callout c-ok">
+    <span class="tag">读图</span>
+    摘要原来最乱（没压缩指引），外壳补上后抬得最多。对话几乎不动，说明长程状态这类问题<strong>不在脚手架能拧的范围里</strong>。<br>
+    无 profile 时没给压缩指引：该压不压，或只凭摘要对话答、不去读卸出的历史文件。补上显式指引后几乎拉满。<br>
+    很多工具失败来自<em>怎么描述、怎么重试、怎么收口</em>，而不只是模型「不会用工具」。检索与文件开箱已强（后训练痕迹），外壳微调仍再挖一点。<br>
+    长程保持后端状态一类问题几乎不动——他们<strong>不为此去扭曲 profile 刷榜</strong>。
+  </div>
+
+  <h3>成本与延迟</h3>
+  <div class="stats">
+    <div class="stat"><div class="v sm">$4.48</div><div class="l">调优后开源模型整套约价</div></div>
+    <div class="stat"><div class="v sm">$43.48</div><div class="l">Opus 同套约价（约 10×）</div></div>
+    <div class="stat"><div class="v sm">3–10×</div><div class="l">视精度与 prompt 缓存</div></div>
+    <div class="stat"><div class="v sm">~10s</div><div class="l">中位延迟与 Opus 持平</div></div>
+  </div>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 660 176" role="img" aria-label="成本对照条形图：4.48 美元对 43.48 美元">
+        <text x="330" y="22" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" fill="#A8A29A">同一套 Deep Agents 评测 · 单套成本（美元）</text>
+        <text x="52" y="66" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" font-weight="700" fill="#6FBF8B">Nemotron 3 Ultra</text>
+        <rect x="180" y="52" width="420" height="22" rx="4" fill="#232220"/>
+        <rect x="180" y="52" width="43.26" height="22" rx="4" fill="#6FBF8B"/>
+        <text x="233" y="69" font-family="ui-monospace,Menlo,monospace" font-size="12.5" font-weight="700" fill="#6FBF8B">$4.48</text>
+        <text x="52" y="112" font-family="-apple-system,PingFang SC,sans-serif" font-size="12.5" font-weight="700" fill="#D97757">Claude Opus 4.8</text>
+        <rect x="180" y="98" width="420" height="22" rx="4" fill="#232220"/>
+        <rect x="180" y="98" width="420" height="22" rx="4" fill="#D97757"/>
+        <text x="612" y="115" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="12.5" font-weight="700" fill="#FAF7F2">$43.48</text>
+        <line x1="223.26" y1="46" x2="223.26" y2="140" stroke="#D9A94E" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="330" y="160" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="12" fill="#D9A94E">比值 9.71×　·　条形按同一比例绘制（43.26 / 420）</text>
+      </svg>
+    </div>
+    <figcaption><b>图 9</b>　质量接近前沿最佳跑时，全套成本大约低一个数量级。条形按 4.48 / 43.48 = 10.30% 的真实比例绘制。<b>（本地重绘示意，数值来自原文）</b></figcaption>
+  </figure>
+</section>
+
+<section id="s8">
+  <h2>08 · CEILING：外壳拧到哪一层就拧不动了</h2>
+  <p>调 harness 有天花板。认清边界和认清收益一样重要。</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th style="width:26%">失败所在层</th><th style="width:30%">判据</th><th>正确动作</th></tr></thead>
+      <tbody>
+        <tr><td><strong>脚手架层</strong><br><span style="color:var(--text-dim);font-size:12.5px">harness</span></td><td>改提示 / 工具描述 / 中间件就能跟着变好</td><td>继续调 harness。生产里让 agent 不可靠的大多数原因都住在这一层，所以这是<strong>让一个能干的模型真正干活的最快路径</strong></td></tr>
+        <tr><td><strong>权重层</strong><br><span style="color:var(--text-dim);font-size:12.5px">weights</span></td><td>周围全试过，它仍然平线不动</td><td>转 post-training，而不是再加一个 hook。本案例的「多轮对话」平线就是这一类信号</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>第二道线画在 harness 内部：什么该进「所有 agent 共用的<strong>核心</strong>」，什么只是「某一个模型的 <strong>profile</strong>」。</p>
+  <ul>
+    <li><strong>核心改进</strong>：满页继续读的提醒。它对<em>任何</em>满页读取都开火，与具体模型无关——所以属于所有人的 harness。</li>
+    <li><strong>Profile 配置</strong>：把 Nemotron 的指引放在带内（对话消息）而不是系统提示里。这是适配<em>这一台发动机</em>的挡位，别误当成宇宙真理。</li>
+  </ul>
+  <div class="callout c-key">
+    <span class="tag">值得反复问的一句</span>
+    这个改动，能不能<strong>诚实地往「核心」再推一点</strong>？因为模型和评测题过期之后，核心层还在付钱。
+  </div>
+  <blockquote>
+    When a failure doesn't respond to anything you change around the model, that's the signal it lives in the weights, and the fix is post-training, not another hook.
+    <cite>LangChain · Tuning the harness, not the model（2026-07-08）</cite>
+  </blockquote>
+</section>
+
+<section id="s9">
+  <h2>09 · 可计算建模与交互沙盘</h2>
+  <p>上文是定性方法论。本节把四个可判定的问题推导为可计算模型，供你在自己的项目里直接代参数使用。<strong>所有沙盘的输出均由公式实时运算得出，无任何预置虚构数字</strong>；凡非原文数据的输入参数，均在界面上以「假设」徽章标注。</p>
+
+  <h3>模型 A · 筛选切片的覆盖漏检与成本阶梯</h3>
+  <p>原文只说「筛的样本要有代表性」，没给量。把它写成可解的式子：全套 <span class="mi">N</span> 题、均匀分成 <span class="mi">K</span> 个行为类（Deep Agents 明确给出 5 类：文件 / 工具 / 检索 / 对话 / 摘要），无放回抽 <span class="mi">n</span> 题做筛选，则某一个行为类完全没被抽到的概率为超几何尾概率：</p>
+  <div class="math-block">
+    <math display="block">
+      <mi>P</mi><mo stretchy="false">(</mo><mi>miss</mi><mo stretchy="false">)</mo>
+      <mo>=</mo>
+      <munderover>
+        <mo>∏</mo>
+        <mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow>
+        <mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow>
+      </munderover>
+      <mfrac>
+        <mrow><mi>N</mi><mo>−</mo><mi>N</mi><mo>/</mo><mi>K</mi><mo>−</mo><mi>i</mi></mrow>
+        <mrow><mi>N</mi><mo>−</mo><mi>i</mi></mrow>
+      </mfrac>
+      <mspace width="1.6em"></mspace>
+      <mi>E</mi>
+      <mo>=</mo>
+      <mi>K</mi><mo>·</mo><mi>P</mi><mo stretchy="false">(</mo><mi>miss</mi><mo stretchy="false">)</mo>
+    </math>
+  </div>
+  <p>成本侧有一个干净的解析结论：设候选改动数 <span class="mi">M</span>、筛选通过率 <span class="mi">p</span>、全套成本 <span class="mi">C</span>，则「每次改动都跑全套」的期望成本为 <span class="mi">M·C</span>，「先筛后跑」为 <span class="mi">M·C·(n/N + p)</span>，于是<strong>节约比恒等于 1 − n/N − p，与候选数 M 无关</strong>。</p>
+
+  <div class="sandbox" id="box-a">
+    <h4>沙盘 1 · 筛选样本量与成本阶梯 <span class="sb-badge live">公式实时运算</span> <span class="sb-badge assume">N / M / p 为假设基线</span></h4>
+    <p class="sb-note">真实锚点：K = 5（原文五类）、全套成本 4.48 美元（原文）。全套题数 N、候选改动数 M、筛选通过率 p 为演示基线，可自行调整。</p>
+    <div class="ctrl">
+      <div><label>全套题数 <b>N</b> = <span id="out-a-Nlab">40</span></label><input type="range" id="a-N" min="20" max="120" step="5" value="40"></div>
+      <div><label>筛选样本 <b>n</b> = <span id="out-a-nlab">10</span> 题</label><input type="range" id="a-n" min="1" max="120" step="1" value="10"></div>
+      <div><label>候选改动数 <b>M</b> = <span id="out-a-Mlab">60</span></label><input type="range" id="a-M" min="10" max="200" step="5" value="60"></div>
+      <div><label>筛选通过率 <b>p</b> = <span id="out-a-plab">20</span>%</label><input type="range" id="a-p" min="5" max="60" step="1" value="20"></div>
+    </div>
+    <figure style="margin:6px 0 14px;">
+      <div class="figbox">
+        <svg viewBox="0 0 620 260" role="img" aria-label="漏检概率随筛选样本量 n 下降的对数曲线">
+          <line x1="56" y1="24" x2="56" y2="214" stroke="#3E3A35" stroke-width="1"/>
+          <line x1="56" y1="214" x2="596" y2="214" stroke="#3E3A35" stroke-width="1"/>
+          <line x1="56" y1="24" x2="596" y2="24" stroke="#2E2C28" stroke-width="1"/>
+          <line x1="56" y1="119" x2="596" y2="119" stroke="#2E2C28" stroke-width="1"/>
+          <line x1="56" y1="71.5" x2="596" y2="71.5" stroke="#2E2C28" stroke-width="1"/>
+          <line x1="56" y1="166.5" x2="596" y2="166.5" stroke="#2E2C28" stroke-width="1"/>
+          <text x="48" y="28" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#A8A29A">100%</text>
+          <text x="48" y="75" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#A8A29A">10%</text>
+          <text x="48" y="123" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#A8A29A">1%</text>
+          <text x="48" y="170" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#A8A29A">0.1%</text>
+          <text x="48" y="218" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#A8A29A">0.01%</text>
+          <text x="596" y="232" text-anchor="end" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">筛选样本量 n</text>
+          <text x="20" y="126" transform="rotate(-90 20 126)" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#A8A29A">单类漏检概率</text>
+          <line id="a-thresh" x1="56" y1="85.8" x2="596" y2="85.8" stroke="#D9A94E" stroke-width="1.3" stroke-dasharray="6 4"/>
+          <text x="600" y="89" font-family="-apple-system,PingFang SC,sans-serif" font-size="10.5" fill="#D9A94E">5%</text>
+          <polyline id="a-curve" points="56.00,28.60 69.85,33.34 83.69,38.22 97.54,43.24 111.38,48.43 125.23,53.78 139.08,59.31 152.92,65.04 166.77,70.97 180.62,77.13 194.46,83.53 208.31,90.19 222.15,97.13 236.00,104.38 249.85,111.97 263.69,119.92 277.54,128.29 291.38,137.10 305.23,146.43 319.08,156.32 332.92,166.86 346.77,178.13 360.62,190.26 374.46,203.38 388.31,214.00 402.15,214.00 416.00,214.00 429.85,214.00 443.69,214.00 457.54,214.00 471.38,214.00 485.23,214.00 499.08,214.00 512.92,214.00 526.77,214.00 540.62,214.00 554.46,214.00 568.31,214.00 582.15,214.00 596.00,214.00" fill="none" stroke="#D97757" stroke-width="2.2"/>
+          <circle id="a-mark" cx="208.31" cy="85.8" r="4.5" fill="#6FBF8B" stroke="#181715" stroke-width="1.5"/>
+          <text id="a-marklab" x="208.31" y="254" text-anchor="middle" font-family="-apple-system,PingFang SC,sans-serif" font-size="11" fill="#6FBF8B">n* = 12</text>
+        </svg>
+      </div>
+    </figure>
+    <div class="readout">
+      <div class="ro"><div class="k">单类漏检概率 P(miss)</div><div class="v" id="out-a-pmiss">7.61%</div></div>
+      <div class="ro"><div class="k">期望漏检类数 E</div><div class="v" id="out-a-emiss">0.38</div></div>
+      <div class="ro"><div class="k">筛选单次成本</div><div class="v" id="out-a-screen">$1.12</div></div>
+      <div class="ro"><div class="k">成本节约比</div><div class="v up" id="out-a-save">55.0%</div></div>
+      <div class="ro"><div class="k">全量直跑总成本</div><div class="v" id="out-a-cost1">$268.80</div></div>
+      <div class="ro"><div class="k">先筛后跑总成本</div><div class="v" id="out-a-cost2">$120.96</div></div>
+    </div>
+    <div class="verdict" id="out-a-verdict"><b>未达标</b>：当前 n = 10 题，压到 5% 漏检线需要 n ≥ 12 题。切片代表性不足时，筛子没碰到的那类任务会静默回退。</div>
+  </div>
+
+  <div class="callout c-warn">
+    <span class="tag">敏感性检验 · 一个被自己的数据推翻的假设</span>
+    我们最初的直觉是「筛选样本取全套的 30% 就能把单类漏检压到 5% 以下」。把 N 从 20 扫到 120（步长 5，K = 5）之后，<strong>这个假设被推翻</strong>：所需比例 <span class="mi">n*/N</span> 从 0.500 一路塌到 0.108，根本不是常数；而<strong>绝对题数 <span class="mi">n*</span> 却稳定在 10–13 题</strong>。<br>
+    正确结论应改写为：<em>最小筛选量是一个近似绝对常数（10–13 题），不是一个固定比例</em>——小套件（N = 20）反而要抽掉一半才安全，大套件（N = 120）只需 11%。渐近上界可由 (1 − 1/K)<sup>n</sup> ≤ α 反解：n ≥ ln α / ln(1 − 1/K) = 13.43，即 14 题，与有限总体修正下的 10–13 题一致。<br>
+    <strong>工程含义</strong>：别用「抽 30%」这类比例规则做筛选预算，直接按绝对题数给（≥ 14 题 / 类数 5），否则小套件会系统性欠采。
+  </div>
+
+  <h3>模型 B · 成本–质量前沿与 3–10× 区间反解</h3>
+  <p>原文给出「3× 到 10×，取决于精度与 prompt caching」。把它反解成可算的：成本倍数 <span class="mi">r</span> 给定时，开源侧单套成本为 <span class="mi">43.48 / r</span>。于是 3× 对应 14.49 美元、10× 对应 4.35 美元——<strong>原文实测的 4.48 美元落在 9.71×，几乎贴着区间上沿</strong>，说明该数字对应「低精度 + prompt caching 充分命中」的理想工况。</p>
+  <div class="math-block">
+    <math display="block">
+      <mi>r</mi><mo>=</mo><mfrac><msub><mi>C</mi><mi>Opus</mi></msub><msub><mi>C</mi><mi>open</mi></msub></mfrac>
+      <mspace width="1.6em"></mspace>
+      <mtext>每分成本</mtext><mo>=</mo><mfrac><mi>C</mi><mi>Q</mi></mfrac>
+      <mspace width="1.6em"></mspace>
+      <mtext>质量每美元</mtext><mo>=</mo><mfrac><mi>Q</mi><mi>C</mi></mfrac>
+    </math>
+  </div>
+
+  <div class="sandbox" id="box-b">
+    <h4>沙盘 2 · 成本–质量前沿 <span class="sb-badge live">公式实时运算</span></h4>
+    <p class="sb-note">真实锚点：Opus 侧 43.48 美元 / 最佳 0.87（原文）。开源侧成本与得分可在原文给出的量程内拖动，观察「每分成本」与「质量每美元」两个比值如何变化。</p>
+    <div class="ctrl">
+      <div><label>开源侧单套成本 = <b>$<span id="out-b-costlab">4.48</span></b></label><input type="range" id="b-cost" min="4.35" max="14.49" step="0.01" value="4.48"></div>
+      <div><label>开源侧得分 = <b><span id="out-b-scorelab">0.84</span></b></label><input type="range" id="b-score" min="0.80" max="0.87" step="0.01" value="0.84"></div>
+    </div>
+    <div style="margin:4px 0 16px;">
+      <div class="bar-row"><span class="bl">Nemotron</span><span class="bar-track"><span class="bar-fill" id="b-bar-open" style="width:10.3%;background:#6FBF8B"></span></span><span class="bv" id="out-b-c1">$4.48</span></div>
+      <div class="bar-row"><span class="bl">Opus 4.8</span><span class="bar-track"><span class="bar-fill" id="b-bar-opus" style="width:100%;background:#D97757"></span></span><span class="bv" id="out-b-c2">$43.48</span></div>
+    </div>
+    <div class="readout">
+      <div class="ro"><div class="k">成本倍数 r</div><div class="v acc" id="out-b-mult">9.71×</div></div>
+      <div class="ro"><div class="k">开源每分成本</div><div class="v" id="out-b-perpt">$5.33</div></div>
+      <div class="ro"><div class="k">Opus 每分成本</div><div class="v" id="out-b-perpto">$49.98</div></div>
+      <div class="ro"><div class="k">质量每美元倍数</div><div class="v up" id="out-b-ratio">9.37×</div></div>
+    </div>
+    <div class="verdict" id="out-b-verdict"><b>贴着区间上沿</b>：当前 9.71× 已接近原文给出的 10× 上限，意味着该数字依赖 prompt caching 充分命中；缓存命中率下滑时优势会向 3× 退化。</div>
+  </div>
+
+  <h3>模型 C · 调优投入的盈亏平衡运行次数</h3>
+  <p>harness 调优不是免费的：工程师读 trace、聚类失败模式、改外壳、跑评测都要钱。设投入为工程师工时 <span class="mi">E</span> × 时薪 <span class="mi">R</span> 加上 <span class="mi">T</span> 轮评测算力（每轮按开源侧全套成本计），每次生产运行相对闭源方案节省 <span class="mi">ΔC</span>，则回本运行次数：</p>
+  <div class="math-block">
+    <math display="block">
+      <msup><mi>n</mi><mo>*</mo></msup>
+      <mo>=</mo>
+      <mfrac>
+        <mrow><mi>E</mi><mo>·</mo><mi>R</mi><mo>+</mo><mi>T</mi><mo>·</mo><msub><mi>C</mi><mi>open</mi></msub></mrow>
+        <mrow><mi>Δ</mi><mi>C</mi></mrow>
+      </mfrac>
+      <mspace width="1.6em"></mspace>
+      <mi>Δ</mi><mi>C</mi><mo>=</mo><msub><mi>C</mi><mi>Opus</mi></msub><mo>−</mo><msub><mi>C</mi><mi>open</mi></msub>
+    </math>
+  </div>
+
+  <div class="sandbox" id="box-c">
+    <h4>沙盘 3 · 盈亏平衡反解 <span class="sb-badge live">公式实时运算</span> <span class="sb-badge assume">工时 / 时薪 / 轮数为假设基线</span></h4>
+    <p class="sb-note">真实锚点：ΔC 由原文 4.48 / 43.48 美元推出（9.71× 情形为 39.00 美元）。工时、时薪、评测轮数为演示基线，请替换为你自己的数字。</p>
+    <div class="ctrl">
+      <div><label>工程师工时 <b>E</b> = <span id="out-c-elab">40</span> h</label><input type="range" id="c-e" min="8" max="160" step="2" value="40"></div>
+      <div><label>综合时薪 <b>R</b> = $<span id="out-c-rlab">120</span>/h</label><input type="range" id="c-r" min="40" max="300" step="5" value="120"></div>
+      <div><label>评测轮数 <b>T</b> = <span id="out-c-tlab">60</span></label><input type="range" id="c-t" min="10" max="300" step="5" value="60"></div>
+      <div><label>成本倍数情形</label>
+        <select id="c-save">
+          <option value="9.7" selected>9.71×（原文实测，ΔC = $39.00）</option>
+          <option value="10">10×（caching 充分，ΔC = $39.13）</option>
+          <option value="3">3×（caching 未命中，ΔC = $28.99）</option>
+        </select>
+      </div>
+    </div>
+    <div class="readout">
+      <div class="ro"><div class="k">调优总投入</div><div class="v" id="out-c-invest">$5,068.80</div></div>
+      <div class="ro"><div class="k">每次运行节省 ΔC</div><div class="v acc" id="out-c-dc">$39.00</div></div>
+      <div class="ro"><div class="k">回本运行次数 n*</div><div class="v up" id="out-c-nstar">130</div></div>
+    </div>
+    <div class="verdict" id="out-c-verdict"><b>130 次</b>：在这组假设下，调优投入约需 130 次生产运行即可回本。对日均百次以上的 agent 服务，这是 1–2 天量级；对低频批处理任务则可能永远回不了本——判据是 n*，不是「成本便宜 10 倍」这个口号。</div>
+  </div>
+
+  <h3>模型 D · 天花板归因判定器：外壳层还是权重层</h3>
+  <p>原文的天花板判据是定性的：「怎么调都不动，就是权重层」。把它写成统计判定：对某个失败模式做了改动后，观测到分数变化 <span class="mi">Δ</span>，每组重复 <span class="mi">m</span> 次、单次跑分标准差 <span class="mi">σ</span>，则两均值差的显著性阈值为</p>
+  <div class="math-block">
+    <math display="block">
+      <msup><mi>δ</mi><mo>*</mo></msup><mo>=</mo><mi>z</mi><mo>·</mo><mi>σ</mi><mo>·</mo><msqrt><mfrac><mn>2</mn><mi>m</mi></mfrac></msqrt>
+      <mspace width="1.6em"></mspace>
+      <mo>|</mo><mi>Δ</mi><mo>|</mo><mo>≥</mo><msup><mi>δ</mi><mo>*</mo></msup><mo>⟹</mo><mtext>外壳层</mtext>
+    </math>
+  </div>
+  <p>反解所需重复次数：<span class="mi">m ≥ 2·(z·σ/Δ)²</span>。用原文数字校验：总分典型增幅 Δ = 0.04，在 σ = 0.02、m = 3 时 δ* = 0.0320，判定为<strong>外壳层</strong>——与原文结论一致；而对话项 Δ = 0.00 时任何 m 都判不出显著性，落入<strong>权重层</strong>——同样与原文一致。这两个自洽校验说明该判定器没有和事实打架。</p>
+
+  <div class="sandbox" id="box-d">
+    <h4>沙盘 4 · 天花板归因判定 <span class="sb-badge live">公式实时运算</span> <span class="sb-badge assume">σ 为假设基线</span></h4>
+    <p class="sb-note">真实锚点：Δ 的预置档位取自原文（0.00 = 对话项平线；0.04 = 总分 0.80→0.84 的典型增幅；0.01 = 0.86 与 0.87 之差）。单次跑分标准差 σ 原文未公布，此处以 0.02 作为演示基线。</p>
+    <div class="ctrl">
+      <div><label>观测增幅 <b>Δ</b> = <span id="out-d-dlab">0.040</span></label><input type="range" id="d-delta" min="0" max="0.06" step="0.005" value="0.04"></div>
+      <div><label>每组重复 <b>m</b> = <span id="out-d-mlab">3</span> 次</label><input type="range" id="d-m" min="2" max="30" step="1" value="3"></div>
+      <div><label>跑分标准差 <b>σ</b> = <span id="out-d-slab">0.020</span></label><input type="range" id="d-sig" min="0.005" max="0.05" step="0.001" value="0.02"></div>
+      <div><label>置信水平</label>
+        <select id="d-z">
+          <option value="1.96" selected>95%（z = 1.96）</option>
+          <option value="2.576">99%（z = 2.576）</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin:4px 0 16px;">
+      <div class="bar-row"><span class="bl">观测增幅 Δ</span><span class="bar-track"><span class="bar-fill" id="d-bar-delta" style="width:80.0%;background:#D97757"></span></span><span class="bv" id="out-d-dv">0.0400</span></div>
+      <div class="bar-row"><span class="bl">判定阈值 δ*</span><span class="bar-track"><span class="bar-fill" id="d-bar-dstar" style="width:64.0%;background:#7BB6C9"></span></span><span class="bv" id="out-d-dstar">0.0320</span></div>
+    </div>
+    <div class="readout">
+      <div class="ro"><div class="k">判定阈值 δ*</div><div class="v" id="out-d-dstar2">0.0320</div></div>
+      <div class="ro"><div class="k">分辨该 Δ 所需 m</div><div class="v acc" id="out-d-mneed">2</div></div>
+    </div>
+    <div class="verdict vb-ok" id="out-d-verdict"><b>外壳层（harness 可解）</b>：|Δ| = 0.0400 ≥ δ* = 0.0320，该失败模式对脚手架有响应，继续调 harness。</div>
+  </div>
+
+  <div class="callout c-key">
+    <span class="tag">一个反直觉的推论</span>
+    把 Δ 调到 0.01（即 0.86 与 0.87 的差距）时，判定器会告诉你需要 <strong>每组约 31 次重复</strong> 才能在 95% 置信度下分辨它。而原文这两个数字都是 <em>best run</em>（多次运行取最大值），取最大值会进一步放大方差、且不满足两均值差检验的前提。因此<strong>「Nemotron 最佳跑 0.86 逼近 Opus 0.87」这一说法在统计上是不定项的</strong>——严谨的表述应当是「两者典型与最佳区间高度重叠」。这一点也提醒：读任何 harness 调优报告，先问它报的是均值、中位数还是 best run。
+  </div>
+</section>
+
+<section id="s10">
+  <h2>10 · 落地清单与评审观点</h2>
+  <p>按可直接执行的动作排序，每条都对应上文的具体机制。</p>
+
+  <div class="step"><div class="sn">1</div><div class="sc"><b>先建评测与 trace 闭环，再动任何一个字<span class="pri p0">P0</span></b><span>没有学习信号就是在猜。闭环五步：评测 → 读失败轨迹 → 聚类行为模式 → 改一处外壳 → 再评测。以 trace 而非印象为真相源。</span></div></div>
+  <div class="step"><div class="sn">2</div><div class="sc"><b>把「规则写在哪」当成一等设计决策<span class="pri p0">P0</span></b><span>同一句话写在工具描述里无效、挪到工具返回结果旁就有效。停止只问「规则该说什么」，开始问「它必须出现在哪里才会被读到」。对长上下文模型，距离即效力。</span></div></div>
+  <div class="step"><div class="sn">3</div><div class="sc"><b>优先用中间件做「在出错点塞信号」，而不是往系统提示里堆规则<span class="pri p0">P0</span></b><span>常驻规则会被冲淡，进行到需要时才出现的一条消息更稳。可复制的两针：先要求规划，写完计划后再注入一条要求回看计划。</span></div></div>
+  <div class="step"><div class="sn">4</div><div class="sc"><b>提示词只写短的、单目标指令块<span class="pri p1">P1</span></b><span>整页重写和「做个更好的 agent」会被冲淡。对准一个你在 trace 里亲眼看过它失败的行为写一块，并且<em>对组合也做评测</em>——指令块之间会相互作用。</span></div></div>
+  <div class="step"><div class="sn">5</div><div class="sc"><b>给筛选切片定绝对题数，不要定比例<span class="pri p1">P1</span></b><span>敏感性扫描显示 K = 5 时最小筛选量稳定在 10–13 题（渐近上界 14 题），而「抽 30%」这类比例规则在小套件上会系统性欠采。</span></div></div>
+  <div class="step"><div class="sn">6</div><div class="sc"><b>用 δ* 判定器决定「继续调」还是「转训练」<span class="pri p1">P1</span></b><span>对某个失败模式做改动后观测 Δ，若 |Δ| &lt; z·σ·√(2/m) 且重复次数已经拉满，就别再加 hook 了，那是权重层问题。</span></div></div>
+  <div class="step"><div class="sn">7</div><div class="sc"><b>每个改动都问一句：能不能诚实地往「核心」推一点？<span class="pri p1">P1</span></b><span>对真实工况开火（如任何满页读取）的改动属于核心，所有 agent 共用；只在某一个模型上生效的属于 profile，模型过期就作废。</span></div></div>
+  <div class="step"><div class="sn">8</div><div class="sc"><b>扔掉蹭单题短语的涨分改动，并公开记录失败项<span class="pri p2">P2</span></b><span>只报成功的调优循环通常已经在过拟合。留行为类修复，不留基准技巧。</span></div></div>
+  <div class="step"><div class="sn">9</div><div class="sc"><b>用 n* 而不是「便宜 10 倍」决定要不要做调优<span class="pri p2">P2</span></b><span>成本优势依赖 prompt caching 命中率，从 9.71× 退化到 3× 时回本次数从 130 涨到 175。低频场景可能永远回不了本。</span></div></div>
+
+  <h3>评审观点（本文立场，非原文主张）</h3>
+  <ul>
+    <li><strong>最大的可迁移产出不是那几个分数，而是「位置即效力」这条机制</strong>。它解释了为什么大量 prompt 工程是无效劳动：规则没错，是它离被约束的数据太远。</li>
+    <li><strong>「核心 / profile」的二分是本篇最有长期价值的框架</strong>。它把「这次调优的经验」从一次性收益变成了可折旧资产——判断标准不是涨了多少分，而是模型与评测题过期后它还是否付钱。</li>
+    <li><strong>需要打折看的地方</strong>：数据全部来自 LangChain 自家内部评测与自家 trace 工具链，非第三方复现；成本对照只比了单套评测成本，未计开源模型自托管的固定成本与运维成本；「最佳跑」为取最大值，统计效力弱于均值比较（见模型 D）。</li>
+  </ul>
+</section>
+
+<section id="s-src">
+  <h2>11 · 来源与核验记录</h2>
+  <div class="srcbox">
+    <ul>
+      <li><strong>原文</strong>：LangChain Blog《<a href="https://www.langchain.com/blog/tuning-the-harness-not-the-model-a-nemotron-3-ultra-playbook" target="_blank" rel="noopener">Tuning the harness, not the model: a Nemotron 3 Ultra playbook</a>》，作者 S. Tangedipalli，2026-07-08。</li>
+      <li><strong>文中引用的前序工作</strong>：<a href="https://www.langchain.com/blog/improving-deep-agents-with-harness-engineering" target="_blank" rel="noopener">Improving Deep Agents with harness engineering</a>（Terminal-Bench 2.0 上 gpt-5.2-codex 52.8 → 66.5）。</li>
+      <li><a href="https://www.langchain.com/blog/tuning-deep-agents-different-models" target="_blank" rel="noopener">Tuning Deep Agents to different models</a>（per-model harness profile，tau2-bench 精选子集 +10–20 点）。</li>
+      <li><a href="https://www.langchain.com/blog/better-harness-a-recipe-for-harness-hill-climbing-with-evals" target="_blank" rel="noopener">Better Harness：以评测做 harness 爬山的配方</a>；<a href="https://www.langchain.com/blog/the-art-of-loop-engineering" target="_blank" rel="noopener">The art of loop engineering</a>。</li>
+      <li><strong>模型侧</strong>：<a href="https://developer.nvidia.com/blog/nvidia-nemotron-3-ultra-powers-faster-more-efficient-reasoning-for-long-running-agents/" target="_blank" rel="noopener">NVIDIA Nemotron 3 Ultra 发布说明</a>（agentic 后训练与架构）。</li>
+      <li><strong>中文解读源</strong>：<a href="https://best.xiaohu.ai/article/nemotron-harness-playbook/" target="_blank" rel="noopener">小互解读 · nemotron-harness-playbook</a>（付费内容，本文结构参考其分节，数据已回溯英文原文逐项核验）。</li>
+    </ul>
+  </div>
+  <div class="callout c-ok" style="margin-top:18px;">
+    <span class="tag">核验记录</span>
+    <strong>事实核验</strong>：本篇全部硬数字（0.80 / 0.84 / 0.86 / 0.87、4.48 美元 / 43.48 美元、3–10×、约 10 秒中位延迟、Terminal-Bench 52.8 → 66.5、tau2-bench +10–20 点、五个分项类别、两针注入、final_answer_completeness 原文）均已回溯 LangChain 英文原博客逐项比对，无二次传播失真。<br>
+    <strong>常量实算</strong>：全文派生数值（9.71×、39.00 美元、每分成本 5.33 / 49.98 美元、质量每美元 9.37×、漏检概率 7.61%、最小筛选量 12 题、回本 130 次、δ* = 0.0320、所需重复 31 次）均由脚本实算后回填，未用心算或估算。<br>
+    <strong>稳健性</strong>：模型 A 已跑 N ∈ [20, 120] 全域扫描，扫描结果推翻了本文初稿「固定比例」的假设，结论已按实测改写并保留被推翻的过程。<br>
+    <strong>未虚构项</strong>：原文未公布分项绝对数值，图 8 只表达定性方向与相对量级，未编造任何分项数字。
+  </div>
+</section>
+</main>
+
+<button id="toTopBtn" type="button" title="回到顶部">↑</button>
+
+<script>
+(function(){
+  'use strict';
+  var CUR = "$";
+
+  function byId(id){ return document.getElementById(id); }
+  function money(v){
+    var s = Math.abs(v).toFixed(2);
+    var p = s.split('.');
+    var a = p[0];
+    var out = '';
+    for (var i = 0; i < a.length; i++){
+      if (i > 0 && (a.length - i) % 3 === 0){ out += ','; }
+      out += a.charAt(i);
+    }
+    return (v < 0 ? '-' : '') + out + '.' + p[1];
+  }
+  function clamp0(v){ if (Math.abs(v) < 1e-9){ return 0; } return v; }
+
+  /* ================= 模型 A：筛选覆盖与成本阶梯 ================= */
+  var C_OPEN = 4.48, C_OPUS = 43.48, K = 5;
+
+  function pMiss(N, Kk, n){
+    var m = N / Kk, out = 1, i;
+    for (i = 0; i < n; i++){ out = out * (N - m - i) / (N - i); }
+    if (out < 0){ out = 0; }
+    return out;
+  }
+  function minN(N, Kk, alpha){
+    var n;
+    for (n = 1; n <= N; n++){ if (pMiss(N, Kk, n) <= alpha){ return n; } }
+    return N;
+  }
+
+  var PX0 = 56, PX1 = 596, PY0 = 24, PY1 = 214, LO = 1e-4;
+  function yOf(v){
+    if (v < LO){ v = LO; }
+    if (v > 1){ v = 1; }
+    return PY1 - (Math.log(v) / Math.LN10 - Math.log(LO) / Math.LN10) / 4 * (PY1 - PY0);
+  }
+  function xOf(i, N){ return PX0 + (i - 1) * (PX1 - PX0) / (N - 1); }
+
+  function updA(){
+    var N = parseInt(byId('a-N').value, 10);
+    var nRaw = parseInt(byId('a-n').value, 10);
+    var M = parseInt(byId('a-M').value, 10);
+    var p = parseInt(byId('a-p').value, 10) / 100;
+    var n = nRaw;
+    if (n > N){ n = N; }
+
+    byId('out-a-Nlab').textContent = String(N);
+    byId('out-a-nlab').textContent = String(n);
+    byId('out-a-Mlab').textContent = String(M);
+    byId('out-a-plab').textContent = String(Math.round(p * 100));
+
+    var pm = pMiss(N, K, n);
+    var em = clamp0(K * pm);
+    var screen = C_OPEN * n / N;
+    var save = clamp0(1 - n / N - p);
+    var c1 = M * C_OPEN;
+    var c2 = M * C_OPEN * (n / N + p);
+    var ns = minN(N, K, 0.05);
+
+    byId('out-a-pmiss').textContent = (pm * 100).toFixed(2) + '%';
+    byId('out-a-emiss').textContent = em.toFixed(2);
+    byId('out-a-screen').textContent = CUR + money(screen);
+    byId('out-a-save').textContent = (save * 100).toFixed(1) + '%';
+    byId('out-a-cost1').textContent = CUR + money(c1);
+    byId('out-a-cost2').textContent = CUR + money(c2);
+
+    byId('out-a-save').className = 'v ' + (save >= 0 ? 'up' : 'dn');
+
+    /* 曲线重绘 */
+    var pts = [], i;
+    for (i = 1; i <= N; i++){
+      pts.push(xOf(i, N).toFixed(2) + ',' + yOf(pMiss(N, K, i)).toFixed(2));
+    }
+    byId('a-curve').setAttribute('points', pts.join(' '));
+    var mx = xOf(ns, N);
+    byId('a-mark').setAttribute('cx', mx.toFixed(2));
+    byId('a-mark').setAttribute('cy', yOf(0.05).toFixed(2));
+    byId('a-marklab').setAttribute('x', mx.toFixed(2));
+    byId('a-marklab').textContent = 'n* = ' + ns;
+
+    var v = byId('out-a-verdict');
+    if (save < 0){
+      v.className = 'verdict vb-no';
+      v.innerHTML = '<b>策略失效</b>：n/N + p = ' + (n / N + p).toFixed(2) + ' &gt; 1，筛选本身加上通过者的全套复跑比直接全量跑更贵（节约比 ' + (save * 100).toFixed(1) + '%）。当筛选样本接近全套规模时，应当直接跑全套——此时覆盖率再好也没有意义。';
+    } else if (n >= ns){
+      v.className = 'verdict vb-ok';
+      v.innerHTML = '<b>达标</b>：当前 n = ' + n + ' 题，已把单类漏检概率压到 ' + (pm * 100).toFixed(2) + '%（阈值 5%，最小需要 ' + ns + ' 题）。先筛后跑相对全量直跑节约 ' + (save * 100).toFixed(1) + '% 评测预算。';
+    } else {
+      v.className = 'verdict vb-wa';
+      v.innerHTML = '<b>未达标</b>：当前 n = ' + n + ' 题，压到 5% 漏检线需要 n ≥ ' + ns + ' 题。切片代表性不足时，筛子没碰到的那类任务会静默回退。';
+    }
+  }
+
+  /* ================= 模型 B：成本-质量前沿 ================= */
+  function updB(){
+    var cost = parseFloat(byId('b-cost').value);
+    var score = parseFloat(byId('b-score').value);
+    byId('out-b-costlab').textContent = cost.toFixed(2);
+    byId('out-b-scorelab').textContent = score.toFixed(2);
+
+    var mult = C_OPUS / cost;
+    var perpt = cost / score;
+    var perptO = C_OPUS / 0.87;
+    var qpd = score / cost;
+    var qpdO = 0.87 / C_OPUS;
+    var ratio = qpd / qpdO;
+
+    byId('out-b-mult').textContent = mult.toFixed(2) + '×';
+    byId('out-b-perpt').textContent = CUR + money(perpt);
+    byId('out-b-perpto').textContent = CUR + money(perptO);
+    byId('out-b-ratio').textContent = ratio.toFixed(2) + '×';
+    byId('out-b-c1').textContent = CUR + money(cost);
+    byId('out-b-c2').textContent = CUR + money(C_OPUS);
+    byId('b-bar-open').style.width = (cost / C_OPUS * 100).toFixed(1) + '%';
+
+    var v = byId('out-b-verdict');
+    if (mult >= 9.5){
+      v.className = 'verdict vb-wa';
+      v.innerHTML = '<b>贴着区间上沿</b>：当前 ' + mult.toFixed(2) + '× 已接近原文给出的 10× 上限，意味着该数字依赖 prompt caching 充分命中；缓存命中率下滑时优势会向 3× 退化（单套成本升至 ' + CUR + money(C_OPUS / 3) + '）。';
+    } else if (mult >= 5){
+      v.className = 'verdict vb-ok';
+      v.innerHTML = '<b>区间中部</b>：' + mult.toFixed(2) + '×，质量每美元 ' + ratio.toFixed(2) + '× 于 Opus。此时开源侧每分成本 ' + CUR + money(perpt) + '，仍显著优于 Opus 的 ' + CUR + money(perptO) + '。';
+    } else {
+      v.className = 'verdict vb-no';
+      v.innerHTML = '<b>优势收窄</b>：' + mult.toFixed(2) + '× 已接近原文 3× 下限。若得分还要低于 Opus，则「便宜」未必等于「划算」——回到沙盘 3 看回本次数 n*。';
+    }
+  }
+
+  /* ================= 模型 C：盈亏平衡 ================= */
+  function updC(){
+    var E = parseInt(byId('c-e').value, 10);
+    var Rr = parseInt(byId('c-r').value, 10);
+    var T = parseInt(byId('c-t').value, 10);
+    var mode = byId('c-save').value;
+    byId('out-c-elab').textContent = String(E);
+    byId('out-c-rlab').textContent = String(Rr);
+    byId('out-c-tlab').textContent = String(T);
+
+    var dC;
+    if (mode === '3'){ dC = C_OPUS - C_OPUS / 3; }
+    else if (mode === '10'){ dC = C_OPUS - C_OPUS / 10; }
+    else { dC = C_OPUS - C_OPEN; }
+
+    var invest = E * Rr + T * C_OPEN;
+    var nstar = dC > 0 ? Math.ceil(invest / dC) : 0;
+
+    byId('out-c-invest').textContent = CUR + money(invest);
+    byId('out-c-dc').textContent = CUR + money(dC);
+    byId('out-c-nstar').textContent = String(nstar);
+
+    var v = byId('out-c-verdict');
+    if (nstar <= 200){
+      v.className = 'verdict vb-ok';
+      v.innerHTML = '<b>' + nstar + ' 次</b>：在这组假设下，调优投入约需 ' + nstar + ' 次生产运行即可回本。对日均百次以上的 agent 服务，这是 1–2 天量级；对低频批处理任务则可能永远回不了本——判据是 n*，不是「成本便宜 10 倍」这个口号。';
+    } else {
+      v.className = 'verdict vb-wa';
+      v.innerHTML = '<b>' + nstar + ' 次</b>：回本门槛已高，说明在该调用量级下 harness 调优的<em>经济</em>理由不充分（它仍然可能是质量理由）。要么降低调优投入（缩小范围、复用已有 profile），要么等调用量上来再做。';
+    }
+  }
+
+  /* ================= 模型 D：天花板归因 ================= */
+  function updD(){
+    var sig = parseFloat(byId('d-sig').value);
+    var m = parseInt(byId('d-m').value, 10);
+    var d = parseFloat(byId('d-delta').value);
+    var z = parseFloat(byId('d-z').value);
+    byId('out-d-dlab').textContent = d.toFixed(3);
+    byId('out-d-mlab').textContent = String(m);
+    byId('out-d-slab').textContent = sig.toFixed(3);
+
+    var dstar = z * sig * Math.sqrt(2 / m);
+    var mneed = d > 0 ? Math.ceil(2 * Math.pow(z * sig / d, 2)) : 0;
+
+    byId('out-d-dstar').textContent = dstar.toFixed(4);
+    byId('out-d-dstar2').textContent = dstar.toFixed(4);
+    byId('out-d-dv').textContent = d.toFixed(4);
+    byId('out-d-mneed').textContent = d > 0 ? String(mneed) : '不可分辨';
+
+    var scale = Math.max(d, dstar, 0.001) * 1.25;
+    byId('d-bar-delta').style.width = (d / scale * 100).toFixed(1) + '%';
+    byId('d-bar-dstar').style.width = (dstar / scale * 100).toFixed(1) + '%';
+
+    var v = byId('out-d-verdict');
+    if (d >= dstar && d > 0){
+      v.className = 'verdict vb-ok';
+      v.innerHTML = '<b>外壳层（harness 可解）</b>：|Δ| = ' + d.toFixed(4) + ' ≥ δ* = ' + dstar.toFixed(4) + '，该失败模式对脚手架有响应，继续调 harness。分辨该幅度最少需要每组 ' + mneed + ' 次重复。';
+    } else if (d <= 0){
+      v.className = 'verdict vb-no';
+      v.innerHTML = '<b>权重层（转 post-training）</b>：Δ = 0，无论重复多少次都不可能显著。这正是原文「多轮对话」那一条平线的形状——别再加 hook 了。';
+    } else {
+      v.className = 'verdict vb-wa';
+      v.innerHTML = '<b>尚不能判定</b>：|Δ| = ' + d.toFixed(4) + ' &lt; δ* = ' + dstar.toFixed(4) + '。有两种可能：真的是权重层，或者重复次数不够。把每组重复提到 ' + mneed + ' 次再测一次即可区分。';
+    }
+  }
+
+  /* ================= 绑定 ================= */
+  function bindRange(id, fn){
+    var el = byId(id);
+    if (!el){ return; }
+    el.addEventListener('input', fn);
+  }
+  function bindSel(id, fn){
+    var el = byId(id);
+    if (!el){ return; }
+    el.addEventListener('change', fn);
+  }
+  bindRange('a-N', updA); bindRange('a-n', updA); bindRange('a-M', updA); bindRange('a-p', updA);
+  bindRange('b-cost', updB); bindRange('b-score', updB);
+  bindRange('c-e', updC); bindRange('c-r', updC); bindRange('c-t', updC); bindSel('c-save', updC);
+  bindRange('d-sig', updD); bindRange('d-m', updD); bindRange('d-delta', updD); bindSel('d-z', updD);
+
+  updA(); updB(); updC(); updD();
+
+  /* ================= 主题切换（默认深色） ================= */
+  var saved = null;
+  try { saved = window.localStorage.getItem('aike-theme'); } catch (e) { saved = null; }
+  if (!saved){ saved = 'dark'; }
+  document.documentElement.setAttribute('data-theme', saved);
+
+  byId('themeBtn').addEventListener('click', function(){
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { window.localStorage.setItem('aike-theme', next); } catch (e2) { /* 隐私模式忽略 */ }
+  });
+
+  /* ================= 目录 / 进度 / 回到顶部 ================= */
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var secs = [];
+  for (var i = 0; i < links.length; i++){
+    var href = links[i].getAttribute('href');
+    if (href && href.charAt(0) === '#'){
+      var el = byId(href.substring(1));
+      if (el){ secs.push({ a: links[i], el: el }); }
+    }
+  }
+  var bar = byId('progBar');
+  var topBtn = byId('toTopBtn');
+
+  function onScroll(){
+    var de = document.documentElement;
+    var y = de.scrollTop || (document.body ? document.body.scrollTop : 0) || 0;
+    var h = (de.scrollHeight || 0) - (de.clientHeight || 0);
+    var pct = h > 0 ? (y / h * 100) : 0;
+    if (pct < 0){ pct = 0; }
+    if (pct > 100){ pct = 100; }
+    if (bar){ bar.style.width = pct.toFixed(2) + '%'; }
+    if (topBtn){ topBtn.style.display = y > 400 ? 'block' : 'none'; }
+
+    var active = 0, j, top;
+    for (j = 0; j < secs.length; j++){
+      top = 0;
+      if (secs[j].el.getBoundingClientRect){ top = secs[j].el.getBoundingClientRect().top; }
+      if (top <= 140){ active = j; }
+    }
+    for (j = 0; j < secs.length; j++){
+      if (j === active){ secs[j].a.className = 'on'; }
+      else { secs[j].a.className = ''; }
+    }
+  }
+  window.addEventListener('scroll', onScroll, false);
+  onScroll();
+
+  topBtn.addEventListener('click', function(){
+    if (window.scrollTo){ window.scrollTo(0, 0); }
+  });
+
+  var mb = byId('menuBtn');
+  if (mb){
+    mb.addEventListener('click', function(){
+      var sb = byId('sidebar');
+      if (sb.className === 'open'){ sb.className = ''; }
+      else { sb.className = 'open'; }
+    });
+  }
+
+  var cp = byId('copyFac');
+  if (cp){
+    cp.addEventListener('click', function(){
+      var src = byId('cb-fac');
+      if (!src){ return; }
+      var txt = src.textContent || '';
+      try {
+        if (document.execCommand){
+          var ta = document.createElement('textarea');
+          ta.value = txt;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        cp.textContent = '已复制';
+      } catch (e3) {
+        cp.textContent = '复制失败';
+      }
+      var btn = cp;
+      window.setTimeout(function(){ btn.textContent = '复制'; }, 1600);
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,2130 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Anthropic 企业级 AI Agent 架构指南深度消化：六种架构模式、三问决策框架、多智能体成本盈亏平衡模型与上下文预算沙盘。">
+<meta name="author" content="WorkBuddy AI">
+<title>Anthropic 多智能体架构选型与三问决策框架</title>
+<style>
+/* ============================================================
+   Anthropic Agent 架构指南 · 单文件零依赖白皮书
+   零外部依赖：无 CDN、无远程字体、无外链资源
+   ============================================================ */
+:root{
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-head: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+  --sidebar-w: 286px;
+  --content-max: 1180px;
+
+  --bg:        #181715;
+  --bg-elev:   #201E1A;
+  --bg-card:   #23211D;
+  --bg-inset:  #141311;
+  --border:    #35322B;
+  --border-2:  #4A463C;
+  --text:      #E9E4D9;
+  --text-dim:  #A9A294;
+  --text-faint:#7C766A;
+  --accent:    #E2886A;
+  --accent-2:  #C9703F;
+  --accent-soft: rgba(226,136,106,.14);
+  --emerald:   #7FC39A;
+  --emerald-soft: rgba(127,195,154,.13);
+  --rose:      #E28B87;
+  --rose-soft: rgba(226,139,135,.13);
+  --amber:     #E3B75C;
+  --amber-soft: rgba(227,183,92,.13);
+  --cyan:      #8FC2CE;
+  --cyan-soft: rgba(143,194,206,.13);
+  --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.28);
+  --radius: 12px;
+}
+html[data-theme="light"]{
+  --bg:        #FAF7F2;
+  --bg-elev:   #FFFFFF;
+  --bg-card:   #FFFDF8;
+  --bg-inset:  #F3EEE5;
+  --border:    #E2DACD;
+  --border-2:  #CFC5B4;
+  --text:      #2A2622;
+  --text-dim:  #6B6357;
+  --text-faint:#948A7C;
+  --accent:    #D97757;
+  --accent-2:  #B85C3C;
+  --accent-soft: rgba(217,119,87,.12);
+  --emerald:   #3F8F63;
+  --emerald-soft: rgba(63,143,99,.11);
+  --rose:      #B54E49;
+  --rose-soft: rgba(181,78,73,.10);
+  --amber:     #9A7318;
+  --amber-soft: rgba(154,115,24,.11);
+  --cyan:      #3A7C8C;
+  --cyan-soft: rgba(58,124,140,.11);
+  --shadow: 0 1px 2px rgba(60,48,30,.08), 0 8px 24px rgba(60,48,30,.07);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; -webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-body); font-size:16.5px; line-height:1.85;
+  letter-spacing:.01em; overflow-x:hidden;
+}
+::selection{background:var(--accent-soft); color:var(--text)}
+
+/* ---------- 顶部进度条 ---------- */
+#topbar{
+  position:fixed; top:0; left:0; right:0; height:3px; z-index:90;
+  background:transparent; pointer-events:none;
+}
+#topbar-progress{
+  height:100%; width:0%; background:linear-gradient(90deg,var(--accent-2),var(--accent));
+  transition:width .1s linear;
+}
+
+/* ---------- 侧栏目录 ---------- */
+#sidebar{
+  position:fixed; top:0; left:0; bottom:0; width:var(--sidebar-w); z-index:70;
+  background:var(--bg-elev); border-right:1px solid var(--border);
+  overflow-y:auto; padding:26px 18px 40px 22px;
+  transition:transform .28s cubic-bezier(.4,0,.2,1);
+}
+#sidebar .toc-title{
+  font-family:var(--font-head); font-size:15px; font-weight:700;
+  letter-spacing:.14em; color:var(--text-faint);
+  text-transform:uppercase; margin:0 0 16px 4px;
+}
+#sidebar ol{list-style:none; margin:0; padding:0; counter-reset:toc}
+#sidebar li{counter-increment:toc; margin:0 0 2px}
+#sidebar a{
+  display:block; padding:7px 10px 7px 30px; position:relative;
+  color:var(--text-dim); text-decoration:none; font-size:13.6px; line-height:1.55;
+  border-radius:7px; transition:background .16s, color .16s;
+}
+#sidebar a::before{
+  content:counter(toc,decimal-leading-zero); position:absolute; left:8px; top:7px;
+  font-family:var(--font-mono); font-size:11px; color:var(--text-faint);
+}
+#sidebar a:hover{background:var(--bg-inset); color:var(--text)}
+#sidebar a.active{background:var(--accent-soft); color:var(--accent); font-weight:600}
+#sidebar a.active::before{color:var(--accent)}
+#sidebar .toc-foot{
+  margin-top:22px; padding:12px 10px 0; border-top:1px solid var(--border);
+  font-size:12px; color:var(--text-faint); line-height:1.7;
+}
+
+/* ---------- 正文容器：侧栏右侧剩余区域居中 ---------- */
+#main{
+  display:block; max-width:var(--content-max); width:auto;
+  margin-left:calc(var(--sidebar-w) + max(0px, (100% - var(--sidebar-w) - var(--content-max)) / 2));
+  margin-right:max(0px, calc((100% - var(--sidebar-w) - var(--content-max)) / 2));
+  padding:52px 40px 120px;
+}
+
+/* ---------- 排版 ---------- */
+h1,h2,h3,h4{font-family:var(--font-head); font-weight:700; line-height:1.35; letter-spacing:.01em}
+h1{font-size:38px; margin:0 0 18px}
+h2{font-size:26px; margin:64px 0 20px; padding-bottom:12px; border-bottom:1px solid var(--border); scroll-margin-top:24px}
+h3{font-size:20px; margin:38px 0 14px; color:var(--text); scroll-margin-top:24px}
+h4{font-size:16.5px; margin:26px 0 10px; color:var(--accent)}
+p{margin:0 0 16px}
+a{color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent-soft)}
+a:hover{border-bottom-color:var(--accent)}
+strong{color:var(--text); font-weight:650}
+em{color:var(--accent); font-style:normal; font-weight:600}
+ul,ol{margin:0 0 18px; padding-left:24px}
+li{margin:0 0 8px}
+li::marker{color:var(--text-faint)}
+code{
+  font-family:var(--font-mono); font-size:.875em; background:var(--bg-inset);
+  border:1px solid var(--border); border-radius:5px; padding:.12em .42em; color:var(--cyan);
+}
+hr{border:0; border-top:1px solid var(--border); margin:44px 0}
+
+/* ---------- Hero ---------- */
+.hero{padding:14px 0 8px; border-bottom:1px solid var(--border); margin-bottom:34px}
+.kicker{
+  display:inline-block; font-size:12px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--accent); font-weight:700; margin-bottom:16px;
+}
+.hero h1{margin-bottom:20px; letter-spacing:-.005em}
+.lede{font-size:18.5px; line-height:1.78; color:var(--text-dim); max-width:100%; margin-bottom:26px}
+.lede strong{color:var(--text)}
+.meta-line{
+  display:flex; flex-wrap:wrap; gap:10px 22px; font-size:13px; color:var(--text-faint);
+  padding:14px 0 22px; border-top:1px dashed var(--border); margin-top:8px;
+}
+.meta-line span b{color:var(--text-dim); font-weight:600}
+
+/* ---------- 速览卡 ---------- */
+.box{
+  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:22px 26px; margin:26px 0; box-shadow:var(--shadow);
+}
+.box-t{
+  font-family:var(--font-head); font-size:16px; font-weight:700; margin:0 0 14px;
+  color:var(--accent); letter-spacing:.06em;
+}
+.box.inset{background:var(--bg-inset); box-shadow:none}
+.box-tight{padding:16px 20px}
+
+/* ---------- 数字卡 ---------- */
+.stat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:14px; margin:24px 0}
+.stat{
+  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:18px 18px 16px; text-align:left; position:relative; overflow:hidden;
+}
+.stat::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent)}
+.stat.a-emerald::before{background:var(--emerald)}
+.stat.a-rose::before{background:var(--rose)}
+.stat.a-amber::before{background:var(--amber)}
+.stat.a-cyan::before{background:var(--cyan)}
+.stat .v{font-family:var(--font-head); font-size:31px; font-weight:700; line-height:1.1; color:var(--text); letter-spacing:-.01em}
+.stat .l{font-size:12.5px; color:var(--text-dim); margin-top:8px; line-height:1.6}
+.stat .s{font-size:11.5px; color:var(--text-faint); margin-top:5px; line-height:1.55}
+
+/* ---------- 对比双栏 ---------- */
+.duo{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:24px 0}
+.card{
+  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:20px 22px;
+}
+.card h4{margin:0 0 10px; font-size:16px}
+.card.bad{border-left:3px solid var(--rose)}
+.card.good{border-left:3px solid var(--emerald)}
+.card p:last-child{margin-bottom:0}
+.card ul{margin-bottom:0}
+
+/* ---------- 表格 ---------- */
+.table-wrap{overflow-x:auto; margin:24px 0; border:1px solid var(--border); border-radius:var(--radius)}
+table{width:100%; border-collapse:collapse; font-size:14.6px; min-width:620px}
+thead th{
+  background:var(--bg-inset); color:var(--text); font-weight:700; text-align:left;
+  padding:12px 16px; border-bottom:1px solid var(--border-2); font-size:13.5px; letter-spacing:.03em;
+  white-space:nowrap;
+}
+tbody td{padding:12px 16px; border-bottom:1px solid var(--border); vertical-align:top; line-height:1.7}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:nth-child(even){background:var(--bg-inset)}
+td.k{font-weight:650; color:var(--text); white-space:nowrap}
+
+/* ---------- 标签 / 徽章 ---------- */
+.tag{
+  display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.06em;
+  padding:2px 9px; border-radius:20px; border:1px solid var(--border-2);
+  color:var(--text-dim); background:var(--bg-inset); vertical-align:middle;
+}
+.tag.t-accent{color:var(--accent); border-color:var(--accent); background:var(--accent-soft)}
+.tag.t-emerald{color:var(--emerald); border-color:var(--emerald); background:var(--emerald-soft)}
+.tag.t-rose{color:var(--rose); border-color:var(--rose); background:var(--rose-soft)}
+.tag.t-amber{color:var(--amber); border-color:var(--amber); background:var(--amber-soft)}
+.tag.t-cyan{color:var(--cyan); border-color:var(--cyan); background:var(--cyan-soft)}
+
+/* ---------- 术语卡 ---------- */
+.term{border-left:3px solid var(--accent); background:var(--bg-inset); padding:14px 18px; margin:16px 0; border-radius:0 8px 8px 0}
+.term .n{font-weight:700; color:var(--accent); font-size:15px; margin-bottom:4px}
+.term .d{font-size:14.5px; color:var(--text-dim); line-height:1.75; margin:0}
+
+/* ---------- SVG ---------- */
+.figure{margin:28px 0; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 18px 14px; overflow-x:auto}
+.figure svg{display:block; width:100%; max-width:680px; height:auto; margin:0 auto}
+.figcap{font-size:12.5px; color:var(--text-faint); text-align:center; margin:10px 0 2px; line-height:1.7}
+svg .n-box{fill:var(--bg-elev); stroke:var(--border-2); stroke-width:1.2}
+svg .n-box-a{fill:var(--accent-soft); stroke:var(--accent); stroke-width:1.5}
+svg .n-box-e{fill:var(--emerald-soft); stroke:var(--emerald); stroke-width:1.3}
+svg .n-box-c{fill:var(--cyan-soft); stroke:var(--cyan); stroke-width:1.3}
+svg .n-box-r{fill:var(--rose-soft); stroke:var(--rose); stroke-width:1.3}
+svg .n-box-m{fill:var(--amber-soft); stroke:var(--amber); stroke-width:1.3}
+svg .n-t{fill:var(--text); font-size:13px; font-family:var(--font-body); font-weight:600}
+svg .n-s{fill:var(--text-dim); font-size:10.8px; font-family:var(--font-body)}
+svg .e{stroke:var(--border-2); stroke-width:1.2; fill:none}
+svg .e-a{stroke:var(--accent); stroke-width:1.7; fill:none}
+svg .e-c{stroke:var(--cyan); stroke-width:1.4; fill:none}
+svg .e-r{stroke:var(--rose); stroke-width:1.5; fill:none; stroke-dasharray:5 4}
+svg .e-d{stroke:var(--text-faint); stroke-width:1.2; fill:none; stroke-dasharray:4 4}
+svg .grid{stroke:var(--border); stroke-width:1}
+svg .axis-t{fill:var(--text-faint); font-size:11px; font-family:var(--font-mono)}
+svg .lbl{fill:var(--text-dim); font-size:11.5px; font-family:var(--font-body)}
+svg .badge{fill:var(--text-faint); font-size:10.5px; font-family:var(--font-mono)}
+
+/* ---------- 折叠块 ---------- */
+details{border:1px solid var(--border); border-radius:var(--radius); background:var(--bg-card); margin:20px 0; overflow:hidden}
+summary{
+  cursor:pointer; padding:14px 22px; font-weight:650; color:var(--text);
+  background:var(--bg-inset); font-size:15px; list-style:none;
+}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸ "; color:var(--accent); font-weight:700}
+details[open] summary::before{content:"▾ "}
+details[open] summary{border-bottom:1px solid var(--border)}
+.details-body{padding:18px 26px 8px}
+
+/* ---------- 代码块 ---------- */
+pre{
+  background:var(--bg-inset); border:1px solid var(--border); border-radius:var(--radius);
+  padding:18px 20px; overflow-x:auto; margin:20px 0; position:relative;
+}
+pre code{
+  background:none; border:0; padding:0; color:var(--text-dim); font-size:13.4px; line-height:1.8;
+  display:block; white-space:pre;
+}
+.code-head{
+  display:flex; justify-content:space-between; align-items:center;
+  font-size:12px; color:var(--text-faint); padding-bottom:10px; margin-bottom:12px;
+  border-bottom:1px solid var(--border);
+}
+
+/* ---------- 沙盘 ---------- */
+.sim{
+  border:1px solid var(--border-2); border-radius:var(--radius); background:var(--bg-card);
+  padding:24px 26px; margin:30px 0; box-shadow:var(--shadow);
+}
+.sim-h{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:6px}
+.sim-h .t{font-family:var(--font-head); font-size:19px; font-weight:700; color:var(--text)}
+.sim-h .tag{align-self:center}
+.sim-sub{font-size:13.5px; color:var(--text-dim); margin-bottom:20px; line-height:1.7}
+.sim-grid{display:grid; grid-template-columns:minmax(260px,320px) 1fr; gap:26px; align-items:start}
+@media (max-width:900px){ .sim-grid{grid-template-columns:1fr} }
+.ctrl{margin-bottom:16px}
+.ctrl label{display:flex; justify-content:space-between; align-items:baseline; font-size:13.5px; color:var(--text-dim); margin-bottom:6px; gap:8px}
+.ctrl label b{font-family:var(--font-mono); font-size:13.5px; color:var(--accent); font-weight:700; white-space:nowrap}
+input[type=range]{
+  width:100%; -webkit-appearance:none; appearance:none; height:4px; border-radius:3px;
+  background:var(--border-2); outline:none; margin:6px 0 2px;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; appearance:none; width:17px; height:17px; border-radius:50%;
+  background:var(--accent); border:2px solid var(--bg-card); cursor:pointer;
+  box-shadow:0 1px 4px rgba(0,0,0,.4);
+}
+input[type=range]::-moz-range-thumb{
+  width:15px; height:15px; border-radius:50%; background:var(--accent);
+  border:2px solid var(--bg-card); cursor:pointer;
+}
+.readout{display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); gap:12px; margin-bottom:16px}
+.ro{background:var(--bg-inset); border:1px solid var(--border); border-radius:9px; padding:12px 14px}
+.ro .k{font-size:11.5px; color:var(--text-faint); line-height:1.5; margin-bottom:5px}
+.ro .v{font-family:var(--font-mono); font-size:19px; font-weight:700; color:var(--text); line-height:1.2; word-break:break-all}
+.ro .u{font-size:11.5px; color:var(--text-faint); margin-top:3px}
+.ro.hl{border-color:var(--accent); background:var(--accent-soft)}
+.ro.hl .v{color:var(--accent)}
+.ro.ok .v{color:var(--emerald)}
+.ro.bad .v{color:var(--rose)}
+.verdict{
+  border-radius:9px; padding:14px 16px; font-size:14.5px; line-height:1.75;
+  border:1px solid var(--border-2); background:var(--bg-inset);
+}
+.verdict b{color:var(--accent)}
+.verdict.good{border-color:var(--emerald); background:var(--emerald-soft)}
+.verdict.good b{color:var(--emerald)}
+.verdict.bad{border-color:var(--rose); background:var(--rose-soft)}
+.verdict.bad b{color:var(--rose)}
+.assume{
+  font-size:12.3px; color:var(--text-faint); line-height:1.72; margin-top:16px;
+  padding-top:14px; border-top:1px dashed var(--border);
+}
+.assume b{color:var(--text-dim)}
+
+/* ---------- 选择器 ---------- */
+.qblock{margin-bottom:18px}
+.qblock .q{font-size:14px; font-weight:650; color:var(--text); margin-bottom:9px}
+.opts{display:flex; flex-wrap:wrap; gap:8px}
+.opt{
+  font-family:inherit; font-size:13.2px; padding:8px 15px; border-radius:8px; cursor:pointer;
+  background:var(--bg-inset); border:1px solid var(--border-2); color:var(--text-dim);
+  transition:all .16s; line-height:1.4;
+}
+.opt:hover{border-color:var(--accent); color:var(--text)}
+.opt.on{background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:650}
+
+/* ---------- Tab ---------- */
+.tabs{display:flex; gap:6px; margin-bottom:18px; border-bottom:1px solid var(--border); flex-wrap:wrap}
+.tab{
+  font-family:inherit; font-size:14px; padding:10px 18px; cursor:pointer; background:none;
+  border:0; border-bottom:2px solid transparent; color:var(--text-dim); transition:all .16s;
+}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--accent); border-bottom-color:var(--accent); font-weight:650}
+.panel{display:none}
+.panel.on{display:block}
+
+/* ---------- 按钮 ---------- */
+.btn{
+  font-family:inherit; font-size:12.5px; padding:6px 13px; border-radius:7px; cursor:pointer;
+  background:var(--bg-inset); border:1px solid var(--border-2); color:var(--text-dim); transition:all .16s;
+}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+#btn-theme,#btn-toc{
+  position:fixed; z-index:95; width:40px; height:40px; border-radius:50%; font-size:16px;
+  display:flex; align-items:center; justify-content:center; padding:0;
+  background:var(--bg-elev); border:1px solid var(--border-2); color:var(--text-dim);
+  cursor:pointer; box-shadow:var(--shadow);
+}
+#btn-theme{top:16px; right:22px}
+#btn-toc{top:16px; left:16px; display:none}
+#btn-top{
+  position:fixed; bottom:26px; right:26px; z-index:95; width:44px; height:44px; border-radius:50%;
+  background:var(--bg-elev); border:1px solid var(--border-2); color:var(--text-dim);
+  cursor:pointer; font-size:15px; box-shadow:var(--shadow); display:none;
+  align-items:center; justify-content:center; padding:0;
+}
+#btn-top:hover{color:var(--accent); border-color:var(--accent)}
+
+/* ---------- 引文 ---------- */
+blockquote{
+  margin:26px 0; padding:16px 24px; border-left:3px solid var(--accent);
+  background:var(--accent-soft); border-radius:0 8px 8px 0; font-size:16px; line-height:1.8;
+}
+blockquote p:last-child{margin:0}
+
+/* ---------- 核验表 ---------- */
+.vt{width:100%; font-size:13.8px}
+.vt td{padding:10px 14px}
+.vt .st{white-space:nowrap; font-weight:700; font-size:12px}
+.st.ok{color:var(--emerald)}
+.st.warn{color:var(--amber)}
+.st.no{color:var(--rose)}
+
+/* ---------- 脚注 ---------- */
+footer{
+  margin-top:70px; padding-top:26px; border-top:1px solid var(--border);
+  font-size:12.8px; color:var(--text-faint); line-height:1.8;
+}
+footer a{color:var(--text-dim)}
+
+/* ---------- 数学排版（纯 CSS，无 KaTeX） ---------- */
+.eq{
+  font-family:var(--font-mono); background:var(--bg-inset); border:1px solid var(--border);
+  border-radius:9px; padding:16px 20px; margin:18px 0; text-align:center;
+  font-size:15px; color:var(--text); overflow-x:auto; line-height:2.1;
+}
+.mfrac{display:inline-flex; flex-direction:column; vertical-align:middle; text-align:center; margin:0 .3em; line-height:1.35}
+.mfrac .num{padding:0 .35em; border-bottom:1.4px solid currentColor}
+.mfrac .den{padding:0 .35em}
+.msub{font-size:.72em; vertical-align:sub; line-height:0}
+.msup{font-size:.72em; vertical-align:super; line-height:0}
+.mop{color:var(--accent); font-weight:700; margin:0 .25em}
+.eq-note{font-size:12.5px; color:var(--text-faint); text-align:center; margin:-8px 0 20px; line-height:1.7}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:1080px){
+  #main{margin-left:0 !important; margin-right:0 !important; max-width:100% !important; width:100% !important; padding:44px 22px 100px}
+  #sidebar{transform:translateX(-100%)}
+  #sidebar.open{transform:translateX(0); box-shadow:0 0 40px rgba(0,0,0,.5)}
+  #btn-toc{display:flex}
+  h1{font-size:30px}
+  h2{font-size:23px}
+  .duo{grid-template-columns:1fr}
+  .meta-line{gap:8px 16px}
+}
+@media (max-width:620px){
+  body{font-size:16px}
+  h1{font-size:26px}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .sim{padding:18px 16px}
+}
+
+/* ---------- 打印 ---------- */
+@media print{
+  #sidebar,#btn-theme,#btn-toc,#btn-top,#topbar{display:none !important}
+  body{background:#fff; color:#000; font-size:11pt}
+  #main{margin:0 !important; max-width:100% !important; padding:0}
+  h2{page-break-after:avoid; break-after:avoid}
+  .sim,.figure,.box,pre,table,blockquote{page-break-inside:avoid; break-inside:avoid; box-shadow:none}
+  .panel{display:block !important}
+  a{color:#000; border:0}
+  .figure svg{max-width:100%}
+}
+</style>
+</head>
+<body>
+
+<div id="topbar"><div id="topbar-progress"></div></div>
+
+<button id="btn-toc" type="button" aria-label="打开目录">☰</button>
+<button id="btn-theme" type="button" aria-label="切换深浅主题">◐</button>
+<button id="btn-top" type="button" aria-label="回到顶部">↑</button>
+
+<aside id="sidebar">
+  <div class="toc-title">目录</div>
+  <ol>
+    <li><a href="#s1">这是什么：一份架构手册</a></li>
+    <li><a href="#s2">起步：单智能体够不够用</a></li>
+    <li><a href="#s3">那笔账：什么时候上多智能体</a></li>
+    <li><a href="#s4">分层监督式：总管带专家</a></li>
+    <li><a href="#s5">协作式：平级互相对话</a></li>
+    <li><a href="#s6">顺序 vs 并行工作流</a></li>
+    <li><a href="#s7">评估器-优化器：自我打磨</a></li>
+    <li><a href="#s8">三问框架与演进路线</a></li>
+    <li><a href="#s9">事实核验与口径边界</a></li>
+    <li><a href="#s10">工程落地建议 P0/P1/P2</a></li>
+  </ol>
+  <div class="toc-foot">
+    单文件零依赖 · 断网可用<br>
+    定稿 2026-09-15 · 源文 2026-07-03
+  </div>
+</aside>
+
+<main id="main">
+<!-- ==================== HERO ==================== -->
+<header class="hero">
+  <span class="kicker">深度 · Anthropic 企业级指南解读</span>
+  <h1>Anthropic 发布 AI Agent 架构指南：<br>先问三个问题，再决定要不要上多智能体</h1>
+  <p class="lede">
+    多智能体系统在需要同时探索多条独立路径的复杂任务上，效果比单智能体高出 <strong>90.2%</strong>；
+    但它的 token 消耗是单智能体的 <strong>10&ndash;15 倍</strong>。
+    这份指南真正要教的不是「怎么搭多智能体」，而是<strong>怎么用三个问题判断该不该搭</strong>。
+  </p>
+  <div class="meta-line">
+    <span><b>源文日期</b> 2026-07-03</span>
+    <span><b>来源</b> Anthropic《Building Effective AI Agents》</span>
+    <span><b>覆盖客户</b> Coinbase · Intercom · Thomson Reuters · Tines · Inscribe</span>
+    <span><b>本文性质</b> 依据 Anthropic 官方工程博客交叉核验的解读与建模</span>
+  </div>
+</header>
+
+<div class="box">
+  <div class="box-t">一分钟速览</div>
+  <ul>
+    <li>Anthropic 发布企业级 AI Agent 架构指南，基于 Coinbase、Intercom、Thomson Reuters 等客户真实落地案例，整理出<strong>六种架构模式</strong>与一套<strong>选型决策框架</strong>。</li>
+    <li>六种核心架构：<strong>单智能体、分层监督式、协作式、顺序工作流、并行工作流、评估器-优化器工作流</strong>。</li>
+    <li>核心量化权衡：面向需要同时探索多条独立方向的复杂任务，多智能体效果比单智能体高出 <strong>90.2%</strong>，token 消耗为 <strong>10&ndash;15 倍</strong>。</li>
+    <li>三问决策框架（<strong>要多高的可控性 / 问题跨几个领域 / 资源预算多少</strong>），对号入座选架构，而不是一味追最复杂的方案。</li>
+    <li>核心方法是「<strong>从简单开始、逐步演进</strong>」：先用单智能体验证价值，再按业务需求和数据反馈升级。</li>
+  </ul>
+</div>
+
+<div class="stat-grid">
+  <div class="stat a-emerald">
+    <div class="v">+90.2%</div>
+    <div class="l">多智能体 vs 单智能体效果提升</div>
+    <div class="s">仅限「需同时探索多条独立方向」的复杂任务</div>
+  </div>
+  <div class="stat a-rose">
+    <div class="v">10&ndash;15&times;</div>
+    <div class="l">多智能体 token 消耗倍数</div>
+    <div class="s">解读稿口径为「相对单智能体」，官方口径为「相对 chat」</div>
+  </div>
+  <div class="stat a-cyan">
+    <div class="v">6 种</div>
+    <div class="l">核心架构模式</div>
+    <div class="s">3 类动态决策 + 2 类静态工作流 + 1 类质检闭环</div>
+  </div>
+  <div class="stat a-amber">
+    <div class="v">3 问</div>
+    <div class="l">决策框架必答问题</div>
+    <div class="s">可控性 · 领域复杂度 · 资源约束（另补第 4 问）</div>
+  </div>
+</div>
+
+<!-- ==================== §1 ==================== -->
+<h2 id="s1">这是什么：一份企业级 agent 架构手册</h2>
+
+<p>
+  Anthropic 面向企业发布了一份 AI Agent 架构指南，汇总 Coinbase、Intercom、Thomson Reuters 等客户的真实落地案例，
+  给出六种架构模式和一套选型决策框架。白皮书开篇第一句就把定位挑明了：
+  <strong>生成式 AI 回答问题，AI agent 解决问题</strong>。而这份手册要回答的是下一个更实际的问题——
+  同一个业务，到底该用一个 AI 智能体单干，还是搭一整套多智能体系统。
+</p>
+
+<p>
+  <strong>为什么值得看：</strong>指南给出一组关键量化权衡。一升一降之间，构成了全文所有选型判断的地基。
+  但先要说清楚一件事：AI 智能体（agent）和普通自动化脚本，运作方式差别很大。
+</p>
+
+<div class="duo">
+  <div class="card bad">
+    <h4>传统自动化</h4>
+    <p>每一步都要预先写好。流程固定、能追溯，但只会走事先铺好的那条路，碰到没预设过的边界情况就断。</p>
+  </div>
+  <div class="card good">
+    <h4>AI Agent</h4>
+    <p>拿到任务后自己规划：读问题、查账户历史、翻知识库、起草回复、必要时拉人工介入，全程根据中间结果动态调整策略。</p>
+  </div>
+</div>
+
+<h3>客户成绩单：四种完全不同的活</h3>
+
+<p>指南开头列了一批客户成绩单，用来说明这些系统在真实生产环境里跑出了什么。</p>
+
+<div class="stat-grid">
+  <div class="stat">
+    <div class="v">99.99%</div>
+    <div class="l">Coinbase 用 Claude 驱动的客服 agent 维持的服务可用性</div>
+    <div class="s">在 2,260 亿美元季度交易量下</div>
+  </div>
+  <div class="stat a-cyan">
+    <div class="v">100&times;</div>
+    <div class="l">Tines 把安全运营的多步流程折叠成单 agent 操作后的交付提速</div>
+    <div class="s">安全运营场景</div>
+  </div>
+  <div class="stat a-emerald">
+    <div class="v">20&times;</div>
+    <div class="l">Inscribe 欺诈审核 agent 的提速：30 分钟 &rarr; 90 秒</div>
+    <div class="s">内部一致：1800 秒 / 90 秒 = 20 倍</div>
+  </div>
+  <div class="stat a-amber">
+    <div class="v">86%</div>
+    <div class="l">Intercom 的 Fin AI agent 达到的问题解决率上限</div>
+    <div class="s">覆盖 2.5 万多家客户</div>
+  </div>
+</div>
+
+<p>
+  这四块数字看的不是大小，是<strong>覆盖面</strong>：客服、安全运营、欺诈审核、跨行业解决率，
+  四种完全不同的活都有 agent 在生产环境里扛住了。它们证明的是「值得投入」，
+  还回答不了「该选哪种架构」。
+</p>
+
+<p>
+  指南还给了一个更贴近日常运营的例子：某零售银行用 agent 处理信贷风险备忘录，
+  过去关系经理要花好几周手动核对十个数据源，现在带来 <strong>20% 到 60%</strong> 的生产力提升，
+  信贷周转时间缩短 <strong>30%</strong>。
+</p>
+
+<h3>六种架构，其实分三家</h3>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:38%">归类</th><th>包含的架构模式</th></tr></thead>
+    <tbody>
+      <tr><td class="k">让 AI 自己拿主意</td><td>单智能体 · 分层监督式 · 协作式</td></tr>
+      <tr><td class="k">流程由人预先写死</td><td>顺序工作流 · 并行工作流</td></tr>
+      <tr><td class="k">专管质检</td><td>评估器-优化器工作流</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>下面按从简单到复杂的顺序逐个拆解。</p>
+
+<!-- ==================== §2 ==================== -->
+<h2 id="s2">起步：先看单智能体够不够用</h2>
+
+<p>
+  指南反复强调的第一原则是「<strong>从简单开始</strong>」。别一上来就搭复杂系统，
+  先看单智能体能不能解决问题——它更便宜、更好排查、指标也更能对上业务结果。
+</p>
+
+<p>
+  单智能体系统就是一个 AI 智能体在跑一个连续循环：<strong>感知环境、决定下一步、动手执行</strong>，
+  直到任务完成或者撞上「暂停等人工复核」这样的停止条件。
+</p>
+
+<div class="figure">
+  <svg viewBox="0 0 680 330" role="img" aria-label="单智能体架构：AI 模型居中，向下连接 MCP、Agent Skills、工具与数据源三个能力组件，整体在感知-决策-行动循环里运转">
+    <!-- 任务输入 -->
+    <text class="n-s" x="120" y="57" text-anchor="end">任务</text>
+    <line class="e" x1="128" y1="53" x2="240" y2="53"/>
+    <polygon class="e-a" points="246,53 236,47 236,59" fill="var(--accent)"/>
+
+    <!-- 模型 -->
+    <rect class="n-box-a" x="250" y="24" width="180" height="58" rx="10"/>
+    <text class="n-t" x="340" y="48" text-anchor="middle">AI 模型 · 推理中枢</text>
+    <text class="n-s" x="340" y="67" text-anchor="middle">评估 → 选工具 → 执行 → 看结果</text>
+
+    <!-- 下行箭头 -->
+    <line class="e-a" x1="340" y1="84" x2="340" y2="104"/>
+    <polygon points="340,112 334,101 346,101" fill="var(--accent)"/>
+
+    <!-- 循环虚线框 -->
+    <rect class="n-box" x="70" y="118" width="540" height="132" rx="12" stroke-dasharray="6 5" fill="none"/>
+    <text class="badge" x="86" y="140">感知 → 决策 → 行动 循环</text>
+
+    <!-- 三个组件 -->
+    <rect class="n-box-c" x="90" y="156" width="160" height="58" rx="9"/>
+    <text class="n-t" x="170" y="180" text-anchor="middle">MCP 接口层</text>
+    <text class="n-s" x="170" y="199" text-anchor="middle">数据库 · 搜索 · 内部工具</text>
+
+    <rect class="n-box-m" x="260" y="156" width="160" height="58" rx="9"/>
+    <text class="n-t" x="340" y="180" text-anchor="middle">Agent Skills</text>
+    <text class="n-s" x="340" y="199" text-anchor="middle">领域知识 · SOP · 工具用法</text>
+
+    <rect class="n-box-e" x="430" y="156" width="160" height="58" rx="9"/>
+    <text class="n-t" x="510" y="180" text-anchor="middle">工具与数据源</text>
+    <text class="n-s" x="510" y="199" text-anchor="middle">SQL · 知识库 · 业务系统</text>
+
+    <text class="n-s" x="340" y="240" text-anchor="middle">三个组件由一个推理循环统一调度，不存在第二个决策主体</text>
+
+    <!-- 回流箭头 -->
+    <path class="e-d" d="M 610 180 L 656 180 L 656 53 L 444 53"/>
+    <polygon points="436,53 447,47 447,59" fill="var(--text-faint)"/>
+    <text class="n-s" x="648" y="120" text-anchor="end">环境反馈</text>
+
+    <text class="badge" x="340" y="316" text-anchor="middle">停止条件：任务完成 或 触发人工复核</text>
+  </svg>
+  <div class="figcap">图 1 &nbsp;单智能体架构：一个 AI 模型居中，向下接三个能力组件，整体在一个感知-决策-行动的循环里运转</div>
+</div>
+
+<p>图里三个组件中有两个是专门术语，先说明白。</p>
+
+<div class="term">
+  <div class="n">MCP（Model Context Protocol）</div>
+  <p class="d">一套让 agent 连外部系统（数据库、网页搜索、内部工具）的标准接口。agent 靠它才能真正动手查数据、调工具，而不是只会聊天。像给 AI 装了一套万能转接头，不管连数据库还是搜索引擎，接口标准统一，不用每次单独开发对接代码。</p>
+</div>
+
+<div class="term">
+  <div class="n">Agent Skills（技能包）</div>
+  <p class="d">把某个领域的专业知识、标准流程、工具用法打包成一个模块，agent 需要时调用，不用把所有专业知识都塞进提示词里。像给 agent 配一套专业工具箱，遇到法律问题掏法律工具箱，遇到财务问题换一套，一个 agent 脑子里不用装满所有领域。</p>
+</div>
+
+<div class="duo">
+  <div class="card good">
+    <h4><span class="tag t-emerald">适合</span> 开放式问题</h4>
+    <p>一开始看不清路怎么走，不知道要几步、会碰到什么障碍，让 agent 自己边走边调整。</p>
+  </div>
+  <div class="card bad">
+    <h4><span class="tag t-rose">别用</span> 要求一次做对的场景</h4>
+    <p>需要第一次就 100% 拿到完美答案时，单智能体力不从心。此时先想清楚：<strong>给单智能体加 Skills 是不是就够了</strong>，再考虑多智能体。</p>
+  </div>
+</div>
+
+<details>
+  <summary>展开看：一个研究 agent 怎么用 8 步走完一次复杂查询</summary>
+  <div class="details-body">
+    <p>员工问：「研究工程团队正在采用的远程办公效率工具，看看有没有跟我们内部生产力指标相关的。」这个 agent 配了 MCP 连到内容库、业务工具和开发环境，它这样处理：</p>
+    <ol>
+      <li><strong>接收问题 → 初步分析：</strong>判断出这需要两个数据源（外部工具研究 + 内部公司指标），且外部研究一开始不依赖内部数据，可以拆成并行搜索，最后再做关联。</li>
+      <li><strong>激活技能：</strong>调用研究方法、数据关联、商业洞察三类技能，套用成熟框架而不是从零推理。</li>
+      <li><strong>任务拆解与规划：</strong>定下外部网页搜索、内部数据库查询、并行执行、关联综合的方案。</li>
+      <li><strong>并行调工具：</strong>同时跑网页搜索（找效率工具趋势）和 SQL 数据库（查内部生产力指标），两个工具并发，大幅缩短总耗时。</li>
+      <li><strong>迭代精修：</strong>看完初步结果，发现需要更具体的工程团队数据，据此追加更精准的二次查询。</li>
+      <li><strong>综合关联 → 生成结果：</strong>把外部趋势和内部指标交叉比对，产出整合结论。</li>
+    </ol>
+  </div>
+</details>
+
+<!-- ==================== §3 ==================== -->
+<h2 id="s3">那笔账要先算清楚：什么信号说明该上多智能体</h2>
+
+<p>
+  当单智能体撞上<strong>根本性的天花板</strong>，才轮到多智能体登场。
+  多智能体把任务拆开、分给多个各有专长的智能体，各自干完再把结果综合成一个连贯回答。
+  Anthropic 的判断是：智能到了某个临界点，「多智能体系统成为扩展性能的关键路径」，
+  因为一群智能体能完成的事远超单个，就像人类组织一样。
+</p>
+
+<div class="figure">
+  <svg viewBox="0 0 680 260" role="img" aria-label="效果提升与 token 消耗对比柱状图：效果不到 2 倍，成本 15 倍">
+    <text class="n-t" x="190" y="34" text-anchor="middle">效果（基线 = 100）</text>
+    <text class="n-s" x="190" y="50" text-anchor="middle">内部研究评测，多方向并行任务</text>
+    <text class="n-t" x="510" y="34" text-anchor="middle">token 消耗（基线 = 100）</text>
+    <text class="n-s" x="510" y="50" text-anchor="middle">按 k = 15 计</text>
+
+    <line class="grid" x1="74" y1="214" x2="330" y2="214"/>
+    <line class="grid" x1="394" y1="214" x2="636" y2="214"/>
+    <line class="e" x1="352" y1="60" x2="352" y2="226" stroke-dasharray="4 4"/>
+
+    <rect class="n-box" x="110" y="140" width="54" height="60" rx="3"/>
+    <rect class="n-box-e" x="190" y="86" width="54" height="114" rx="3"/>
+    <text class="n-s" x="137" y="132" text-anchor="middle">100</text>
+    <text class="n-s" x="217" y="78" text-anchor="middle">190.2</text>
+    <text class="n-s" x="137" y="232" text-anchor="middle">单智能体</text>
+    <text class="n-s" x="217" y="232" text-anchor="middle">多智能体</text>
+    <text class="n-s" x="217" y="246" text-anchor="middle">+90.2%</text>
+
+    <rect class="n-box" x="470" y="194" width="54" height="6" rx="2"/>
+    <rect class="n-box-r" x="550" y="88" width="54" height="112" rx="3"/>
+    <text class="n-s" x="497" y="186" text-anchor="middle">100</text>
+    <text class="n-s" x="577" y="80" text-anchor="middle">1500</text>
+    <text class="n-s" x="497" y="232" text-anchor="middle">单智能体</text>
+    <text class="n-s" x="577" y="232" text-anchor="middle">多智能体</text>
+    <text class="n-s" x="577" y="246" text-anchor="middle">15&times;</text>
+  </svg>
+  <div class="figcap">图 2 &nbsp;两组各自独立归一化，纵轴刻度不同：效果不到 2 倍，成本 15 倍</div>
+</div>
+
+<p>
+  这两根条子放一起，就是全文的定盘星：<strong>效果确实能大幅往上，但成本也成倍往上翻</strong>。
+  另外必须盯紧 90.2% 的适用范围——这是全书最容易被断章取义的数字：
+  它只在「<strong>需要同时探索多条独立方向</strong>」的复杂任务上测出来，别拿去给所有场景背书。
+  官方原文的表述是「对需要同时追踪多个独立方向的广度优先查询表现尤为突出」，
+  对照组是 <em>Opus 4 主智能体 + Sonnet 4 子智能体</em> 对阵 <em>单个 Opus 4</em>。
+  所以告诫也很直接：简单查询不该触发昂贵的多智能体流程，系统要能按任务价值动态调配投入。
+</p>
+
+<h3>三类触发信号</h3>
+
+<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+  <div class="stat a-cyan">
+    <div class="v" style="font-size:26px">① 开放式问题</div>
+    <div class="l">很难预判需要几步，需要在调查过程中随时转向、探索岔路。</div>
+  </div>
+  <div class="stat a-amber">
+    <div class="v" style="font-size:26px">② 跨多个领域</div>
+    <div class="l">一件任务里混进<strong>两个以上互不相干的专业领域</strong>（如既要审法律条款、又要算财务模型），单智能体就会顾此失彼。</div>
+  </div>
+  <div class="stat a-emerald">
+    <div class="v" style="font-size:26px">③ 广域并行</div>
+    <div class="l">问题需要同时追多个独立方向，并行处理能带来实质性能收益。</div>
+  </div>
+</div>
+
+<p>
+  代价还不止 token：多智能体让<strong>排查问题变难了</strong>。传统调试办法在这里失效，
+  因为智能体是动态决策、每次运行都不确定的。当决策成倍增加，
+  必须做能捕捉智能体之间怎么沟通、怎么分派、怎么综合结果的追踪，否则协调一出岔子就几乎无从排查。
+</p>
+
+<h3>把权衡算成可决策的数：每次成功成本模型</h3>
+
+<p>
+  「效果 +90.2%、成本 15 倍」这两个数单独看都不构成决策依据。真正要回答的是
+  <strong>「每拿到一次成功结果，到底多花了多少钱」</strong>。设单智能体基线成功率为 p<sub>0</sub>，
+  多智能体相对提升幅度为 g，token 成本倍数为 k，则：
+</p>
+
+<div class="eq">
+每次成功成本 &nbsp;=&nbsp; <span class="mfrac"><span class="num">单次成本 C</span><span class="den">成功率 p</span></span>
+&nbsp;&nbsp;&rArr;&nbsp;&nbsp;
+比值 &nbsp;=&nbsp; <span class="mfrac"><span class="num">C<sub>1</sub> / p<sub>1</sub></span><span class="den">C<sub>0</sub> / p<sub>0</sub></span></span>
+&nbsp;=&nbsp; <span class="mfrac"><span class="num">k · p<sub>0</sub></span><span class="den">p<sub>1</sub></span></span>
+&nbsp;=&nbsp; <span class="mfrac"><span class="num">k</span><span class="den">1 + g</span></span>
+</div>
+<div class="eq-note">其中 p<sub>1</sub> = min(1, p<sub>0</sub>·(1+g))，C<sub>1</sub> = k·C<sub>0</sub>。该式与基线成功率 p<sub>0</sub> 无关——换基线不改变结论形状。</div>
+
+<p>由此得到两条硬结论：</p>
+
+<div class="eq">
+盈亏平衡所需提升 &nbsp; g* &nbsp;=&nbsp; k &minus; 1
+&nbsp;&nbsp;&nbsp;&middot;&nbsp;&nbsp;&nbsp;
+临界失败损失 &nbsp; L* &nbsp;=&nbsp; <span class="mfrac"><span class="num">(k &minus; 1) · C<sub>0</sub></span><span class="den">Δp</span></span>
+</div>
+<div class="eq-note">g* 含义：只有当效果提升 ≥ (k&minus;1) 时，多智能体的「每次成功成本」才不劣于单智能体。L* 含义：单次失败的代价（返工、客诉、合规罚金）必须超过 L*，多智能体才划算。</div>
+
+<div class="box inset box-tight">
+  <p style="margin:0">
+    <strong>读法提示：</strong>k = 15 时 g* = <strong>1400%</strong>。也就是说，
+    若只按「每次成功成本」这一把尺子量，90.2% 的提升<strong>远远填不满 15 倍成本的坑</strong>。
+    多智能体真正的立足点不是「更划算」，而是「<strong>有些任务单智能体根本做不成</strong>」——
+    这类任务的失败代价 L 天然极高，足以越过 L* 这条线。
+  </p>
+</div>
+
+<!-- ---------- 沙盘 M1 ---------- -->
+<div class="sim" id="box-sim-cost">
+  <div class="sim-h">
+    <span class="t">沙盘 · 多智能体成本盈亏平衡</span>
+    <span class="tag t-accent">解析式实时反解</span>
+  </div>
+  <div class="sim-sub">
+    拖动四个参数，实时反解「每次成功成本比」「临界失败损失 L*」与「盈亏平衡所需提升 g*」。
+    曲线族由上方解析式给出，当前参数点在曲线上以实心点标出。
+  </div>
+
+  <div class="sim-grid">
+    <div>
+      <div class="ctrl">
+        <label for="cost-p0"><span>单智能体基线成功率 p<sub>0</sub></span><b id="lab-cost-p0">35.0%</b></label>
+        <input type="range" id="cost-p0" min="5" max="90" step="1" value="35">
+      </div>
+      <div class="ctrl">
+        <label for="cost-g"><span>效果相对提升 g</span><b id="lab-cost-g">90.2%</b></label>
+        <input type="range" id="cost-g" min="0" max="300" step="0.2" value="90.2">
+      </div>
+      <div class="ctrl">
+        <label for="cost-k"><span>token 成本倍数 k</span><b id="lab-cost-k">15.0&times;</b></label>
+        <input type="range" id="cost-k" min="1" max="20" step="0.5" value="15">
+      </div>
+      <div class="ctrl">
+        <label for="cost-c0"><span>单智能体单次成本 C<sub>0</sub></span><b id="lab-cost-c0">2.00 元</b></label>
+        <input type="range" id="cost-c0" min="0.1" max="20" step="0.1" value="2">
+      </div>
+      <div class="assume">
+        <b>参数说明：</b>p<sub>0</sub>、C<sub>0</sub>、任务失败代价均为<b>演示基线假设值</b>，需按你的真实业务替换；
+        g 与 k 取自源文（90.2%、10&ndash;15&times;）。模型只做量纲一致的代数反解，不含任何拟合或外推。
+      </div>
+    </div>
+
+    <div>
+      <div class="readout">
+        <div class="ro"><div class="k">多智能体成功率 p<sub>1</sub></div><div class="v" id="out-cost-p1">66.57%</div><div class="u">min(1, p₀·(1+g))</div></div>
+        <div class="ro"><div class="k">成功率绝对提升 Δp</div><div class="v" id="out-cost-dp">31.57 pp</div><div class="u">p₁ − p₀</div></div>
+        <div class="ro"><div class="k">多智能体单次成本 C<sub>1</sub></div><div class="v" id="out-cost-c1">30.00 元</div><div class="u">k · C₀</div></div>
+        <div class="ro"><div class="k">单智能体每成功成本</div><div class="v" id="out-cost-cs0">5.71 元</div><div class="u">C₀ / p₀</div></div>
+        <div class="ro hl"><div class="k">多智能体每成功成本</div><div class="v" id="out-cost-cs1">45.07 元</div><div class="u">C₁ / p₁</div></div>
+        <div class="ro hl"><div class="k">每次成功成本比</div><div class="v" id="out-cost-ratio">7.89&times;</div><div class="u">k / (1 + g)</div></div>
+        <div class="ro"><div class="k">临界失败损失 L*</div><div class="v" id="out-cost-lstar">88.69 元</div><div class="u">(k−1)·C₀ / Δp</div></div>
+        <div class="ro"><div class="k">盈亏平衡所需 g*</div><div class="v" id="out-cost-gstar">1400.0%</div><div class="u">k − 1</div></div>
+      </div>
+
+      <div class="verdict bad" id="out-cost-verdict">当前参数下多智能体的每次成功成本是单智能体的 <b>7.89 倍</b>；只有当单次失败代价超过 <b>88.69 元</b> 时才划算。</div>
+
+      <div class="figure" style="margin:18px 0 0; padding:14px 10px 8px">
+        <svg viewBox="0 0 680 420" role="img" aria-label="每次成功成本比随 token 成本倍数变化的曲线族">
+          <!-- 网格与 y 轴刻度 -->
+          <line class="grid" x1="74" y1="352" x2="636" y2="352"/>
+          <line class="grid" x1="74" y1="313.5" x2="636" y2="313.5"/>
+          <line class="grid" x1="74" y1="275" x2="636" y2="275"/>
+          <line class="grid" x1="74" y1="236.5" x2="636" y2="236.5"/>
+          <line class="grid" x1="74" y1="198" x2="636" y2="198"/>
+          <line class="grid" x1="74" y1="159.5" x2="636" y2="159.5"/>
+          <line class="grid" x1="74" y1="121" x2="636" y2="121"/>
+          <line class="grid" x1="74" y1="82.5" x2="636" y2="82.5"/>
+          <line class="grid" x1="74" y1="44" x2="636" y2="44"/>
+          <text class="axis-t" x="66" y="356" text-anchor="end">0</text>
+          <text class="axis-t" x="66" y="317.5" text-anchor="end">2</text>
+          <text class="axis-t" x="66" y="279" text-anchor="end">4</text>
+          <text class="axis-t" x="66" y="240.5" text-anchor="end">6</text>
+          <text class="axis-t" x="66" y="202" text-anchor="end">8</text>
+          <text class="axis-t" x="66" y="163.5" text-anchor="end">10</text>
+          <text class="axis-t" x="66" y="125" text-anchor="end">12</text>
+          <text class="axis-t" x="66" y="86.5" text-anchor="end">14</text>
+          <text class="axis-t" x="66" y="48" text-anchor="end">16</text>
+
+          <!-- x 轴刻度 -->
+          <text class="axis-t" x="74" y="372" text-anchor="middle">1</text>
+          <text class="axis-t" x="192.32" y="372" text-anchor="middle">5</text>
+          <text class="axis-t" x="340.21" y="372" text-anchor="middle">10</text>
+          <text class="axis-t" x="488.11" y="372" text-anchor="middle">15</text>
+          <text class="axis-t" x="636" y="372" text-anchor="middle">20</text>
+          <text class="lbl" x="340" y="394" text-anchor="middle">token 成本倍数 k（相对单智能体）</text>
+          <text class="lbl" x="20" y="198" text-anchor="middle" transform="rotate(-90 20 198)">每次成功成本比（相对单智能体）</text>
+
+          <!-- 盈亏平衡线 -->
+          <line class="e-d" x1="74" y1="332.75" x2="636" y2="332.75"/>
+          <text class="axis-t" x="632" y="327" text-anchor="end">盈亏平衡线（成本比 = 1）</text>
+
+          <!-- 参考曲线 -->
+          <polyline id="chart-ref-g30" class="e-r" points="74.00,337.19 102.10,323.12 130.20,309.06 158.30,294.99 186.40,280.92 214.50,266.86 242.60,252.79 270.70,238.72 298.80,224.65 326.90,210.59 355.00,196.52 383.10,182.45 411.20,168.38 439.30,154.32 467.40,140.25 495.50,126.18 523.60,112.12 551.70,98.05 579.80,83.98 607.90,69.91 636.00,55.85"/>
+          <polyline id="chart-ref-g200" class="e-c" points="74.00,345.26 102.10,338.86 130.20,332.46 158.30,326.06 186.40,319.66 214.50,313.26 242.60,306.86 270.70,300.46 298.80,294.06 326.90,287.66 355.00,281.26 383.10,274.86 411.20,268.45 439.30,262.05 467.40,255.65 495.50,249.25 523.60,242.85 551.70,236.45 579.80,230.05 607.90,223.65 636.00,217.25"/>
+          <polyline id="chart-gcur" class="e-a" points="74.00,341.88 102.10,332.26 130.20,322.65 158.30,313.03 186.40,303.42 214.50,293.80 242.60,284.19 270.70,274.57 298.80,264.96 326.90,255.35 355.00,245.73 383.10,236.12 411.20,226.50 439.30,216.89 467.40,207.27 495.50,197.66 523.60,188.04 551.70,178.43 579.80,168.81 607.90,159.20 636.00,149.58"/>
+
+          <!-- 当前参数点 -->
+          <line id="chart-vline" class="e-d" x1="488.11" y1="200.19" x2="488.11" y2="352"/>
+          <circle id="chart-dot" cx="488.11" cy="200.19" r="5.5" fill="var(--accent)" stroke="var(--bg-card)" stroke-width="2"/>
+
+          <!-- 图例（固定位于左上空白区，全参数域内不与任何曲线相交） -->
+          <rect class="n-box" x="92" y="58" width="216" height="88" rx="8"/>
+          <line class="e-a" x1="104" y1="76" x2="132" y2="76"/>
+          <text class="n-s" x="140" y="80">g = 当前滑块值</text>
+          <line class="e-r" x1="104" y1="95" x2="132" y2="95"/>
+          <text class="n-s" x="140" y="99">g = 30%（保守复现口径）</text>
+          <line class="e-c" x1="104" y1="114" x2="132" y2="114"/>
+          <text class="n-s" x="140" y="118">g = 200%（乐观口径）</text>
+          <text id="chart-dotlabel" class="n-t" x="104" y="136" text-anchor="start">当前：k=15.0 → 7.89×</text>
+
+          <text class="badge" x="636" y="410" text-anchor="end">曲线由解析式 k/(1+g) 生成，无拟合、无采样噪声</text>
+        </svg>
+        <div class="figcap">图 3 &nbsp;每次成功成本比随 token 成本倍数 k 的变化：未触及上限时斜率即 1/(1+g)，落在虚线下方才谈得上划算；p<sub>1</sub> 取 min(1, p<sub>0</sub>·(1+g))，故高 p<sub>0</sub> 配高 g 时曲线会被压平</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="box inset box-tight">
+  <p style="margin:0">
+    <strong>口径警告（务必读）：</strong>官方工程博客的原文是「agent 大约消耗 chat 的 4 倍 token，
+    多智能体系统大约消耗 chat 的 15 倍 token」——基准是 <em>chat</em>；
+    而本解读稿写的是「10&ndash;15 倍于<em>单智能体</em>」。两个基准不同，
+    若按官方 4× 与 15× 同基准折算，多智能体对单 agent 约为 <strong>3.75 倍</strong>而非 15 倍。
+    沙盘默认取 k = 15 是<strong>保守上界</strong>；把滑块拉到 k = 4 可看乐观口径下的结果
+    （每次成功成本比降至 <strong>2.10×</strong>）。完整口径对照见 <a href="#s9">§9 事实核验</a>。
+  </p>
+</div>
+
+<!-- ==================== §4 ==================== -->
+<h2 id="s4">分层监督式：一个总管带几个专家</h2>
+
+<p>
+  决定上多智能体之后，第一个要回答的问题是怎么组织这群智能体：<strong>有人管，还是没人管</strong>。
+  有人管的版本叫<strong>分层监督式</strong>，也是最常见的多智能体模式：
+  一个中央监督者分析请求、把任务派给合适的专家智能体、再把结果综合起来，形成一条清晰的责任链。
+</p>
+
+<p>
+  关键机制是：在分层系统里，<strong>每个专家子智能体被当成一个「工具」</strong>，
+  监督者用工具调用的方式决定该唤起哪个专家。这跟高效人类团队的运作一样——
+  专家专注自己的领域，协调者负责分派和整合。子智能体自己还能带子智能体，
+  这些下层被对上层监督者屏蔽：监督者只跟子团队的组长打交道，不知道下面还有几层。
+</p>
+
+<div class="figure">
+  <svg viewBox="0 0 680 300" role="img" aria-label="分层监督式架构：一个监督者向下分派给四个专家智能体，结果汇总后输出">
+    <rect class="n-box-a" x="250" y="20" width="180" height="54" rx="10"/>
+    <text class="n-t" x="340" y="42" text-anchor="middle">监督者 · 营销总监 agent</text>
+    <text class="n-s" x="340" y="61" text-anchor="middle">分析请求 → 分派 → 综合审批</text>
+
+    <line class="e-a" x1="340" y1="74" x2="340" y2="108"/>
+    <line class="e" x1="100" y1="108" x2="580" y2="108"/>
+    <line class="e" x1="100" y1="108" x2="100" y2="146"/>
+    <line class="e" x1="260" y1="108" x2="260" y2="146"/>
+    <line class="e" x1="420" y1="108" x2="420" y2="146"/>
+    <line class="e" x1="580" y1="108" x2="580" y2="146"/>
+    <polygon points="100,150 95,139 105,139" fill="var(--border-2)"/>
+    <polygon points="260,150 255,139 265,139" fill="var(--border-2)"/>
+    <polygon points="420,150 415,139 425,139" fill="var(--border-2)"/>
+    <polygon points="580,150 575,139 585,139" fill="var(--border-2)"/>
+
+    <rect class="n-box-c" x="30" y="152" width="140" height="54" rx="9"/>
+    <text class="n-t" x="100" y="176" text-anchor="middle">受众洞察</text>
+    <text class="n-s" x="100" y="195" text-anchor="middle">专家子智能体</text>
+
+    <rect class="n-box-c" x="190" y="152" width="140" height="54" rx="9"/>
+    <text class="n-t" x="260" y="176" text-anchor="middle">文案创意</text>
+    <text class="n-s" x="260" y="195" text-anchor="middle">专家子智能体</text>
+
+    <rect class="n-box-c" x="350" y="152" width="140" height="54" rx="9"/>
+    <text class="n-t" x="420" y="176" text-anchor="middle">媒介投放</text>
+    <text class="n-s" x="420" y="195" text-anchor="middle">专家子智能体</text>
+
+    <rect class="n-box-c" x="510" y="152" width="140" height="54" rx="9"/>
+    <text class="n-t" x="580" y="176" text-anchor="middle">数据归因</text>
+    <text class="n-s" x="580" y="195" text-anchor="middle">专家子智能体</text>
+
+    <line class="e" x1="100" y1="206" x2="100" y2="220"/>
+    <line class="e" x1="260" y1="206" x2="260" y2="220"/>
+    <line class="e" x1="420" y1="206" x2="420" y2="220"/>
+    <line class="e" x1="580" y1="206" x2="580" y2="220"/>
+    <line class="e" x1="100" y1="220" x2="580" y2="220"/>
+    <line class="e-a" x1="340" y1="220" x2="340" y2="232"/>
+    <polygon points="340,236 335,225 345,225" fill="var(--accent)"/>
+
+    <rect class="n-box-e" x="190" y="238" width="300" height="42" rx="9"/>
+    <text class="n-t" x="340" y="264" text-anchor="middle">综合 → 完整 campaign</text>
+
+    <text class="n-s" x="340" y="294" text-anchor="middle">专家彼此不直接对话，所有协调经监督者中转 → 责任链清晰、可审计</text>
+  </svg>
+  <div class="figcap">图 4 &nbsp;营销总监 agent 把任务分派给四个专家，各自完成后回报，总管再综合审批</div>
+</div>
+
+<h3>最要命的坑：上下文管理</h3>
+
+<p>
+  系统跑久了，对话历史和中间结果会把 AI 的「脑容量」（上下文窗口）塞满，
+  表现为<strong>窗口溢出、推理能力下降、智能体之间协调失灵</strong>。解法有三条：
+</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:26%">解法</th><th>机制</th></tr></thead>
+    <tbody>
+      <tr><td class="k">上下文编辑<br><span class="tag">context editing</span></td><td>快到 token 上限时，自动清理过时的工具调用记录和结果，同时保持对话流不断。</td></tr>
+      <tr><td class="k">记忆工具<br><span class="tag">memory tools</span></td><td>把信息存到上下文窗口<strong>外</strong>的文件系统里，需要时再读取，还能跨会话保留。</td></tr>
+      <tr><td class="k">工具自带节流</td><td>给工具加分页、范围选择、过滤、截断，用合理默认值把单次响应封顶在可控大小（比如 <strong>2.5 万 token</strong> 左右），防止上下文被撑爆。</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>
+  指南也承认这套模式 token 用量更高，但判断是账算得过来：
+  对那些需要专门知识、或超出单智能体上下文极限的<strong>高价值复杂任务</strong>，性能收益撑得起这笔成本。
+</p>
+
+<!-- ---------- 沙盘 M3 ---------- -->
+<div class="sim" id="box-sim-ctx">
+  <div class="sim-h">
+    <span class="t">沙盘 · 上下文窗口预算</span>
+    <span class="tag t-cyan">线性预算反解</span>
+  </div>
+  <div class="sim-sub">
+    按「上下文上限 ÷ 每轮净增 token」反解 agent 能支撑的轮数，对比开启 context editing 前后的差距。
+    这是判断「要不要为分层架构引入上下文治理」的第一道算术。
+  </div>
+
+  <div class="sim-grid">
+    <div>
+      <div class="ctrl">
+        <label for="ctx-cap"><span>上下文窗口上限</span><b id="lab-ctx-cap">200k</b></label>
+        <input type="range" id="ctx-cap" min="100" max="1000" step="10" value="200">
+      </div>
+      <div class="ctrl">
+        <label for="ctx-r"><span>单轮工具返回 token</span><b id="lab-ctx-r">25k</b></label>
+        <input type="range" id="ctx-r" min="2" max="60" step="1" value="25">
+      </div>
+      <div class="ctrl">
+        <label for="ctx-e"><span>context editing 清理率 e</span><b id="lab-ctx-e">40%</b></label>
+        <input type="range" id="ctx-e" min="0" max="80" step="5" value="40">
+      </div>
+      <div class="assume">
+        <b>模型假设：</b>每轮净增 = 单轮返回 × (1 &minus; e)，忽略系统提示词与历史压缩之外的其他占用。
+        25k 默认值取自源文「把单次响应封顶在 2.5 万 token 左右」的工程建议。
+        真实系统还需扣除系统提示词、工具定义与输出预留，此处为<b>上界估计</b>。
+      </div>
+    </div>
+
+    <div>
+      <div class="readout">
+        <div class="ro"><div class="k">每轮净增 token</div><div class="v" id="out-ctx-net">15.0k</div><div class="u">R × (1 − e)</div></div>
+        <div class="ro hl"><div class="k">可支撑轮数</div><div class="v" id="out-ctx-turns">13.33</div><div class="u">上限 ÷ 每轮净增</div></div>
+        <div class="ro"><div class="k">不清理时轮数</div><div class="v" id="out-ctx-base">8.00</div><div class="u">e = 0 的基线</div></div>
+        <div class="ro ok"><div class="k">寿命延长倍数</div><div class="v" id="out-ctx-gain">1.67&times;</div><div class="u">有清理 ÷ 无清理</div></div>
+      </div>
+      <div class="verdict" id="out-ctx-verdict">开启 40% 清理率后，agent 可支撑轮数从 <b>8.00</b> 提升到 <b>13.33</b>，延长 <b>1.67 倍</b>。</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== §5 ==================== -->
+<h2 id="s5">协作式：智能体之间互相对话解决问题</h2>
+
+<p>
+  这就是「<strong>没人管</strong>」的那个版本，也是最容易和分层监督式搞混的一种。
+  它和分层监督的<strong>本质差别就一条：没有谁管谁</strong>。
+  协调是从智能体的互动里自己长出来的，不是被一个中央权威强加的。
+</p>
+
+<p>
+  在协作式系统里，智能体是平级的自主个体，直接点对点沟通、动态商量各自的角色、一起把复杂问题解决掉。
+  它靠三种机制达成共识：
+</p>
+
+<div class="figure">
+  <svg viewBox="0 0 680 310" role="img" aria-label="协作式架构：六个平级智能体网状互联，无中央指挥">
+    <line class="e-c" x1="340" y1="42" x2="433.5" y2="96"/>
+    <line class="e-c" x1="433.5" y1="96" x2="433.5" y2="204"/>
+    <line class="e-c" x1="433.5" y1="204" x2="340" y2="258"/>
+    <line class="e-c" x1="340" y1="258" x2="246.5" y2="204"/>
+    <line class="e-c" x1="246.5" y1="204" x2="246.5" y2="96"/>
+    <line class="e-c" x1="246.5" y1="96" x2="340" y2="42"/>
+    <line class="e-d" x1="340" y1="42" x2="340" y2="258"/>
+    <line class="e-d" x1="433.5" y1="96" x2="246.5" y2="204"/>
+    <line class="e-d" x1="433.5" y1="204" x2="246.5" y2="96"/>
+
+    <rect class="n-box-c" x="278" y="19" width="124" height="46" rx="9"/>
+    <text class="n-t" x="340" y="40" text-anchor="middle">定价</text>
+    <text class="n-s" x="340" y="57" text-anchor="middle">peer agent</text>
+
+    <rect class="n-box-c" x="371.5" y="73" width="124" height="46" rx="9"/>
+    <text class="n-t" x="433.5" y="94" text-anchor="middle">产品</text>
+    <text class="n-s" x="433.5" y="111" text-anchor="middle">peer agent</text>
+
+    <rect class="n-box-c" x="371.5" y="181" width="124" height="46" rx="9"/>
+    <text class="n-t" x="433.5" y="202" text-anchor="middle">营销</text>
+    <text class="n-s" x="433.5" y="219" text-anchor="middle">peer agent</text>
+
+    <rect class="n-box-c" x="278" y="235" width="124" height="46" rx="9"/>
+    <text class="n-t" x="340" y="256" text-anchor="middle">财务</text>
+    <text class="n-s" x="340" y="273" text-anchor="middle">peer agent</text>
+
+    <rect class="n-box-c" x="184.5" y="181" width="124" height="46" rx="9"/>
+    <text class="n-t" x="246.5" y="202" text-anchor="middle">社媒</text>
+    <text class="n-s" x="246.5" y="219" text-anchor="middle">peer agent</text>
+
+    <rect class="n-box-c" x="184.5" y="73" width="124" height="46" rx="9"/>
+    <text class="n-t" x="246.5" y="94" text-anchor="middle">战略情报</text>
+    <text class="n-s" x="246.5" y="111" text-anchor="middle">peer agent</text>
+
+    <rect class="n-box" x="272" y="132" width="136" height="38" rx="9"/>
+    <text class="n-t" x="340" y="148" text-anchor="middle" style="font-size:12.5px">无中央指挥</text>
+    <text class="n-s" x="340" y="163" text-anchor="middle">共识从互动中涌现</text>
+
+    <text class="n-s" x="340" y="302" text-anchor="middle">竞争情报场景：六个平级 agent 实时互相共享发现、交叉验证</text>
+  </svg>
+  <div class="figcap">图 5 &nbsp;协作式网状结构：点对点通信（实线）+ 跨节点交叉验证（虚线）</div>
+</div>
+
+<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+  <div class="stat a-cyan">
+    <div class="v" style="font-size:23px">群聊式讨论</div>
+    <div class="l">多个智能体拉一个共享对话线程，边聊边解决问题、做决策、互相验证，像拉了个项目群。</div>
+  </div>
+  <div class="stat a-amber">
+    <div class="v" style="font-size:23px">事件驱动协调</div>
+    <div class="l">用「事件」当共享语言，每个动作都广播成一条结构化更新，其他智能体据此接活、同步上下文。</div>
+  </div>
+  <div class="stat a-emerald">
+    <div class="v" style="font-size:23px">黑板式共享库</div>
+    <div class="l">立一块所有智能体都能读写的中央「黑板」，谁有发现就写上去，当作集体记忆。</div>
+  </div>
+</div>
+
+<p>
+  协作式的风险恰恰长在它的自由度上。智能体之间频繁通信会<strong>推高计算成本和复杂度</strong>；
+  更麻烦的是会冒出「<strong>涌现行为</strong>」——没人专门编程、却自己冒出来的行为，
+  一个小改动可能不可预测地影响整个系统怎么动。应对的思路不是下死命令，而是立好协作框架：
+  定义分工、解决问题的方式、投入预算，同时<strong>防止智能体把任务无限踢皮球</strong>，并配好冲突解决机制。
+</p>
+
+<h3>两种多智能体模式并排放</h3>
+
+<div class="tabs">
+  <button class="tab on" type="button" id="tab-hier">分层监督式（树状）</button>
+  <button class="tab" type="button" id="tab-colla">协作式（网状）</button>
+</div>
+
+<div class="panel on" id="box-panel-hier">
+  <p><strong>树状指挥链。</strong>一个监督者在顶端，专家在下层，任务自上而下派、结果自下而上汇。</p>
+  <ul>
+    <li>有清晰责任链，<strong>可审计、可追溯</strong></li>
+    <li>监督者能强制执行业务规则，<strong>保留把关</strong></li>
+    <li>适合客服、内容创作、数据分析这类<strong>需要灵活又要监督的中等可控场景</strong></li>
+  </ul>
+</div>
+
+<div class="panel" id="box-panel-colla">
+  <p><strong>网状对等连接。</strong>智能体全平级，谁都能直接跟谁对话，靠讨论自己达成共识。</p>
+  <ul>
+    <li><strong>无中心决策</strong>，协调从互动里涌现</li>
+    <li>行为更难预测，这在<strong>探索性场景里是特性不是缺陷</strong></li>
+    <li>适合研究、头脑风暴、复杂分析这类<strong>低可控要求的场景</strong></li>
+  </ul>
+</div>
+
+<!-- ==================== §6 ==================== -->
+<h2 id="s6">顺序 vs 并行：任务到底该排队还是同时冲</h2>
+
+<p>
+  前面几种是智能体动态决策，接下来两种是<strong>预先写死、静态的工作流编排</strong>（agentic workflows），
+  它定义了智能体按什么顺序、在什么条件下执行任务。核心区别就一个：<strong>任务排队走，还是同时冲</strong>。
+</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:16%">维度</th><th style="width:42%">顺序工作流</th><th>并行工作流</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="k">怎么跑</td>
+        <td>一条线依次执行，每一步的产出是下一步的输入</td>
+        <td>多条线同时执行，各自独立出结果，最后汇总</td>
+      </tr>
+      <tr>
+        <td class="k">核心价值</td>
+        <td><strong>用等待换准确率</strong>：多花一点时间，换每次 AI 调用都变成更聚焦、更不容易错的简单任务；流程可预测、可估成本、可按阶段排查</td>
+        <td><strong>要的是快和多视角</strong>：几路同时开工，从不同角度把问题覆盖住，结论更有底</td>
+      </tr>
+      <tr>
+        <td class="k">什么时候用</td>
+        <td>任务能干净拆成固定子任务、有明确线性依赖、需要审计追溯（合规检查、审批链、草稿&rarr;审核&rarr;发布）</td>
+        <td>子任务互相独立能同时跑、多视角能提质、速度比协调开销更重要（风险评估要多视角、护栏审查：一个模型干活另一个专门筛不当内容、多路并行评测）</td>
+      </tr>
+      <tr>
+        <td class="k">什么时候别用</td>
+        <td>只有几步单智能体就能搞定、智能体需要协作而非交接、流程需要回溯迭代</td>
+        <td>智能体要在彼此成果上叠加、需要特定执行顺序、要改共享状态却没有冲突解决策略、结果聚合逻辑太复杂反而降质</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h3>两种流程各配了一个真实案例</h3>
+
+<div class="duo">
+  <div class="card">
+    <h4><span class="tag t-cyan">顺序</span> 数据科学洞察</h4>
+    <p>分析请求先走<strong>界定 agent</strong>（判断分析类型、路由）→ <strong>数据工程 agent</strong>（抽取清洗数据）→ <strong>分析 agent</strong>（跑统计建模，或标记复杂请求转人工）→ 最后进<strong>人工复核</strong>。</p>
+  </div>
+  <div class="card">
+    <h4><span class="tag t-amber">并行</span> 金融风险评估</h4>
+    <p>信用、市场、操作、合规四个风险 agent <strong>同时开跑</strong>，各出各的评分，再由决策引擎按机构政策加权汇总。</p>
+  </div>
+</div>
+
+<div class="figure">
+  <svg viewBox="0 0 680 262" role="img" aria-label="并行工作流：四个风险 agent 同时执行后由决策引擎加权汇总">
+    <rect class="n-box" x="20" y="100" width="100" height="56" rx="9"/>
+    <text class="n-t" x="70" y="122" text-anchor="middle">风险评估</text>
+    <text class="n-s" x="70" y="139" text-anchor="middle">请求</text>
+    <line class="e" x1="120" y1="128" x2="170" y2="128"/>
+
+    <line class="e-a" x1="170" y1="46" x2="170" y2="208"/>
+    <line class="e-a" x1="170" y1="46" x2="194" y2="46"/>
+    <line class="e-a" x1="170" y1="100" x2="194" y2="100"/>
+    <line class="e-a" x1="170" y1="154" x2="194" y2="154"/>
+    <line class="e-a" x1="170" y1="208" x2="194" y2="208"/>
+    <polygon points="200,46 190,41 190,51" fill="var(--accent)"/>
+    <polygon points="200,100 190,95 190,105" fill="var(--accent)"/>
+    <polygon points="200,154 190,149 190,159" fill="var(--accent)"/>
+    <polygon points="200,208 190,203 190,213" fill="var(--accent)"/>
+
+    <rect class="n-box-c" x="202" y="24" width="110" height="44" rx="9"/>
+    <text class="n-t" x="257" y="51" text-anchor="middle">信用风险</text>
+    <rect class="n-box-c" x="202" y="78" width="110" height="44" rx="9"/>
+    <text class="n-t" x="257" y="105" text-anchor="middle">市场风险</text>
+    <rect class="n-box-c" x="202" y="132" width="110" height="44" rx="9"/>
+    <text class="n-t" x="257" y="159" text-anchor="middle">操作风险</text>
+    <rect class="n-box-c" x="202" y="186" width="110" height="44" rx="9"/>
+    <text class="n-t" x="257" y="213" text-anchor="middle">合规风险</text>
+
+    <line class="e" x1="312" y1="46" x2="360" y2="46"/>
+    <line class="e" x1="312" y1="100" x2="360" y2="100"/>
+    <line class="e" x1="312" y1="154" x2="360" y2="154"/>
+    <line class="e" x1="312" y1="208" x2="360" y2="208"/>
+    <line class="e-a" x1="360" y1="46" x2="360" y2="208"/>
+    <line class="e-a" x1="360" y1="128" x2="378" y2="128"/>
+    <polygon points="384,128 374,123 374,133" fill="var(--accent)"/>
+
+    <rect class="n-box-m" x="386" y="96" width="140" height="64" rx="9"/>
+    <text class="n-t" x="456" y="120" text-anchor="middle">决策引擎</text>
+    <text class="n-s" x="456" y="139" text-anchor="middle">按机构政策加权</text>
+
+    <line class="e-a" x1="526" y1="128" x2="552" y2="128"/>
+    <polygon points="558,128 548,123 548,133" fill="var(--accent)"/>
+    <rect class="n-box-e" x="560" y="104" width="100" height="48" rx="9"/>
+    <text class="n-t" x="610" y="133" text-anchor="middle">汇总评分</text>
+
+    <text class="n-s" x="340" y="250" text-anchor="middle">四条分支同时开跑，总耗时 = 最慢分支 + 聚合开销</text>
+  </svg>
+  <div class="figcap">图 6 &nbsp;并行工作流：信用、市场、操作、合规四个风险 agent 同时开跑，各出各的评分</div>
+</div>
+
+<!-- ---------- 沙盘 M2 ---------- -->
+<div class="sim" id="box-sim-wf">
+  <div class="sim-h">
+    <span class="t">沙盘 · 顺序与并行工作流耗时</span>
+    <span class="tag t-amber">波次模型</span>
+  </div>
+  <div class="sim-sub">
+    并行不是免费的：总耗时 = 波次数 × 单步耗时 + 聚合开销，其中波次数 = ⌈子任务数 / 并发额度⌉。
+    当并发额度不足时，并行加上聚合开销反而比顺序<strong>更慢</strong>。
+  </div>
+
+  <div class="sim-grid">
+    <div>
+      <div class="ctrl">
+        <label for="wf-n"><span>子任务数 n</span><b id="lab-wf-n">4</b></label>
+        <input type="range" id="wf-n" min="2" max="8" step="1" value="4">
+      </div>
+      <div class="ctrl">
+        <label for="wf-t"><span>单个子任务耗时 t</span><b id="lab-wf-t">8.0 分钟</b></label>
+        <input type="range" id="wf-t" min="1" max="30" step="0.5" value="8">
+      </div>
+      <div class="ctrl">
+        <label for="wf-w"><span>并发额度 W</span><b id="lab-wf-w">4</b></label>
+        <input type="range" id="wf-w" min="1" max="8" step="1" value="4">
+      </div>
+      <div class="ctrl">
+        <label for="wf-c"><span>聚合开销 c</span><b id="lab-wf-c">5.0 分钟</b></label>
+        <input type="range" id="wf-c" min="0" max="30" step="0.5" value="5">
+      </div>
+      <div class="assume">
+        <b>模型假设：</b>各子任务耗时相同、互相独立；并发额度 W 表示同一批最多同时跑几个 agent；
+        聚合开销 c 含结果汇总、冲突消解与质量控制。忽略排队等待与失败重试。
+        这是<strong>确定性算术模型</strong>，非排队论随机模型。
+      </div>
+    </div>
+
+    <div>
+      <div class="readout">
+        <div class="ro"><div class="k">顺序总耗时</div><div class="v" id="out-wf-seq">32.0 分钟</div><div class="u">n × t</div></div>
+        <div class="ro"><div class="k">并行波次数</div><div class="v" id="out-wf-waves">1</div><div class="u">⌈n / W⌉</div></div>
+        <div class="ro hl"><div class="k">并行总耗时</div><div class="v" id="out-wf-par">13.0 分钟</div><div class="u">⌈n/W⌉ × t + c</div></div>
+        <div class="ro ok"><div class="k">加速比</div><div class="v" id="out-wf-speed">2.46&times;</div><div class="u">顺序 ÷ 并行</div></div>
+      </div>
+      <div class="verdict good" id="out-wf-verdict">并发额度 W=4 覆盖全部 4 个子任务，1 个波次完成，加速比 <b>2.46×</b>：并行占优。</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== §7 ==================== -->
+<h2 id="s7">评估器-优化器：让 AI 自己改自己的作业</h2>
+
+<p>
+  这是最后一种工作流，用<strong>两个 AI 分工</strong>，在反复循环里把质量磨到达标：
+  一个 AI 负责生成内容，另一个专门挑毛病、给可执行的反馈，来回改直到达标，不是一次性生成就完事。
+  像一个写手配一个编辑，编辑不断打回重写，直到点头通过才发表。
+</p>
+
+<div class="figure">
+  <svg viewBox="0 0 680 230" role="img" aria-label="评估器-优化器循环：生成 agent 出稿，评估 agent 核对打回，反复 2 到 4 轮后发布">
+    <rect class="n-box-a" x="60" y="70" width="170" height="64" rx="10"/>
+    <text class="n-t" x="145" y="95" text-anchor="middle">生成 agent</text>
+    <text class="n-s" x="145" y="114" text-anchor="middle">分析代码库 → 写初稿</text>
+
+    <line class="e-a" x1="230" y1="102" x2="322" y2="102"/>
+    <polygon points="328,102 318,97 318,107" fill="var(--accent)"/>
+    <text class="n-s" x="276" y="92" text-anchor="middle">初稿</text>
+
+    <rect class="n-box-m" x="330" y="70" width="170" height="64" rx="10"/>
+    <text class="n-t" x="415" y="95" text-anchor="middle">评估 agent</text>
+    <text class="n-s" x="415" y="114" text-anchor="middle">对着真实实现逐条核对</text>
+
+    <line class="e-a" x1="500" y1="102" x2="552" y2="102"/>
+    <polygon points="558,102 548,97 548,107" fill="var(--accent)"/>
+    <text class="n-s" x="526" y="92" text-anchor="middle">达标</text>
+    <rect class="n-box-e" x="560" y="78" width="100" height="48" rx="9"/>
+    <text class="n-t" x="610" y="107" text-anchor="middle">发布</text>
+
+    <path class="e-r" d="M 415 134 L 415 182 L 145 182 L 145 140"/>
+    <polygon points="145,134 151,145 139,145" fill="var(--rose)"/>
+    <text class="n-s" x="280" y="176" text-anchor="middle">打回：可执行的修改意见</text>
+
+    <text class="n-s" x="145" y="212" text-anchor="middle">吸收反馈再改</text>
+    <text class="n-s" x="415" y="212" text-anchor="middle">参数类型 / 端点覆盖 / 示例可跑</text>
+  </svg>
+  <div class="figcap">图 7 &nbsp;生成 agent 出稿 → 评估 agent 核对打回 → 生成 agent 吸收反馈再改，通常跑 2&ndash;4 轮收敛到可发布质量</div>
+</div>
+
+<p>
+  <strong>API 文档生成的案例</strong>是这样跑的：生成 agent 分析代码库、写出初稿（端点说明、参数、示例、认证要求）；
+  技术评估 agent 对着真实代码实现逐条核对（参数类型对不对、端点覆盖全不全、示例能不能跑），把问题打回去；
+  生成 agent 吸收反馈再改。
+</p>
+
+<div class="duo">
+  <div class="card good">
+    <h4><span class="tag t-emerald">适合</span></h4>
+    <p>有明确评估标准、迭代打磨能带来可见价值的场景：文学翻译、带安全要求的代码生成、语气拿捏严格的专业文书、需要多步推理加验证的研究任务。</p>
+  </div>
+  <div class="card bad">
+    <h4><span class="tag t-rose">别用</span></h4>
+    <p>第一次出稿就已达标、评估标准主观模糊、时间成本压过质量收益的场景；也不适用于要即时响应的实时应用、基础分类这类简单任务、token 预算吃紧的环境，以及<strong>评估器本身缺乏领域专业度、给不出有意义反馈</strong>的情况。</p>
+  </div>
+</div>
+
+<!-- ==================== §8 ==================== -->
+<h2 id="s8">三问框架与演进路线：拿去就能用</h2>
+
+<p>
+  先把前面走过的链条拉直：<strong>单智能体够用就别加人</strong>；
+  撞上三类信号（开放式、跨领域、广域并行）才上多智能体；
+  上了多智能体，先选有人管还是没人管；流程能预先写死的交给工作流，写不死的才留给智能体自己决策。
+  这条链收敛下来，就是全书最值钱的部分——<strong>三个必答问题</strong>。
+</p>
+
+<!-- ---------- 沙盘 M4: 三问选择器 ---------- -->
+<div class="sim" id="box-sim-sel">
+  <div class="sim-h">
+    <span class="t">沙盘 · 三问架构决策器</span>
+    <span class="tag t-emerald">逐条映射原文</span>
+  </div>
+  <div class="sim-sub">
+    按你自己的情况点一下，看它指向哪种架构。<strong>可控性是硬约束，先定族；领域复杂度定形态；资源约束定节奏。</strong>
+    映射规则逐条对应原文三问清单，不含任何自由发挥的评分权重。
+  </div>
+
+  <div class="qblock">
+    <div class="q">问题一：你需要多高的可控性？</div>
+    <div class="opts">
+      <button class="opt on" type="button" id="q1-hi">高（合规 · 金融交易 · 安全攸关）</button>
+      <button class="opt" type="button" id="q1-mid">中（客服 · 内容 · 数据分析）</button>
+      <button class="opt" type="button" id="q1-lo">低（研究 · 头脑风暴 · 复杂分析）</button>
+    </div>
+  </div>
+
+  <div class="qblock">
+    <div class="q">问题二：你的问题域有多复杂？</div>
+    <div class="opts">
+      <button class="opt on" type="button" id="q2-single">单一领域（答产品问题 · 处理退货）</button>
+      <button class="opt" type="button" id="q2-multi">多领域但可预测（入职 · 合规流程）</button>
+      <button class="opt" type="button" id="q2-open">复杂开放（战略分析 · 研究 · 排障）</button>
+    </div>
+  </div>
+
+  <div class="qblock">
+    <div class="q">问题三：你的资源约束是什么？</div>
+    <div class="opts">
+      <button class="opt on" type="button" id="q3-budget">预算 / token 有限</button>
+      <button class="opt" type="button" id="q3-time">上市时间紧</button>
+      <button class="opt" type="button" id="q3-long">长期战略投入</button>
+    </div>
+  </div>
+
+  <div class="readout" style="margin-top:22px">
+    <div class="ro hl" style="grid-column:span 2"><div class="k">主推架构</div><div class="v" id="out-sel-arch">单智能体</div><div class="u" id="out-sel-alt">备选：顺序工作流</div></div>
+    <div class="ro" style="grid-column:span 2"><div class="k">决策路径</div><div class="v" style="font-size:14px;font-family:var(--font-body)" id="out-sel-path">可控性 高 → 领域 单一 → 资源 预算有限 ⇒ 单智能体</div><div class="u">三问优先级：可控性 &gt; 领域复杂度 &gt; 资源约束</div></div>
+  </div>
+
+  <div class="verdict" id="out-sel-why">单一领域 + 高可控 + 流程可重复 → 原文直指单智能体。</div>
+  <div class="verdict" style="margin-top:10px" id="out-sel-tip">落地提示：给单智能体配领域 Skills 与停止条件，先跑通再谈演进。</div>
+</div>
+
+<h3>三问决策清单（拿去评估自己项目该用哪种架构）</h3>
+
+<div class="code-head">
+  <span>中文清单 · 条目与原文逐条对应</span>
+  <button class="btn" type="button" id="btn-copy">复制</button>
+</div>
+<pre><code id="code-checklist">1. 你需要多高的可控性？
+   高可控要求（合规监管、金融交易、安全攸关操作）  → 从单智能体或顺序工作流起步
+   中等可控要求（客服、内容创作、数据分析）        → 考虑分层多智能体系统
+   低可控要求（研究、头脑风暴、复杂分析）          → 协作式多智能体也可行
+
+2. 你的问题领域有多复杂？
+   单一领域问题（答产品问题、处理退货、出报告）    → 单智能体就能高效搞定
+   多领域但流程可预测（入职、合规流程、标准分析）  → 顺序或并行工作流
+   复杂开放式问题（战略分析、研究项目、系统排障）  → 多智能体架构
+
+3. 你的资源约束是什么？
+   预算 / token 有限   → 单智能体，或精心设计的并行工作流
+   上市时间紧          → 先用单智能体，规划好演进路径
+   长期战略投入        → 一开始就为模块化演进设计
+
+4. 你需不需要深度领域专业？
+   单一领域、有成熟流程   → 单智能体，配专门 Skills
+   多个不同领域必须协同   → 多智能体系统，各自配专门 Skills</code></pre>
+
+<p>
+  指南补的<strong>第四问</strong>是「你需不需要深度领域专业」：单一领域有成熟流程，用配了专门 Skills 的单智能体就行；
+  多个不同领域必须协同（比如法律审查要跟财务分析配合），才上带专门 Skills 的多智能体。
+</p>
+
+<h3>各模式适用场景速查表</h3>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:24%">架构模式</th><th>最适合</th></tr></thead>
+    <tbody>
+      <tr><td class="k">单智能体</td><td>品类边界清晰的客服流程 · 业务规则明确的文档处理 · 代码审查和基础开发任务 · 例行分析和报表</td></tr>
+      <tr><td class="k">顺序工作流</td><td>多步审批流程 · 内容生产管线（草稿 &rarr; 审核 &rarr; 发布）· 数据转换与校验 · 按多项标准做合规检查</td></tr>
+      <tr><td class="k">并行工作流</td><td>多视角能提升质量的场景 · 各项分析相互独立可同时跑 · 速度比协调开销更重要 · 需要多元视角的风险评估</td></tr>
+      <tr><td class="k">多智能体系统</td><td>需要多领域专业的复杂问题 · 研究和分析类项目 · 跨多个系统的动态客户交互 · 战略规划与决策支持</td></tr>
+      <tr><td class="k">评估器-优化器</td><td>有明确评估标准的产出 · 文学翻译 · 带安全要求的代码生成 · 语气严格的专业文书 · 需多步推理加验证的研究任务</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<details>
+  <summary>展开看：英文原文对照（三问清单 / 速查表 / 演进模板）</summary>
+  <div class="details-body">
+<pre><code>1. What level of control do you need?
+   High control requirements (regulatory compliance, financial transactions, safety-critical operations)
+     → Start with single agents or sequential workflows
+   Moderate control requirements (customer support, content creation, data analysis)
+     → Consider hierarchical multi-agent systems
+   Low control requirements (research, brainstorming, complex analysis)
+     → Collaborative multi-agent systems become viable
+
+2. How complex is your problem domain?
+   Single domain problems (answering product questions, processing returns, generating reports)
+     → Single agents handle these efficiently
+   Multi-domain but predictable problems (onboarding, compliance workflows, standard analysis)
+     → Sequential or parallel workflows
+   Complex, open-ended problems (strategic analysis, research projects, system troubleshooting)
+     → Multi-agent architectures
+
+3. What are your resource constraints?
+   Limited budget/tokens → Single agents or carefully designed parallel workflows
+   Time-to-market pressure → Start with single agents, plan an evolution path
+   Long-term strategic initiative → Design for modular evolution
+
+4. Do you need deep domain expertise?
+   Single domain with established workflows → Single agent with specialized Skills
+   Multiple distinct domains requiring coordination → Multi-agent systems with specialized Skills
+
+Single agents work best for: customer service / document processing / code review / routine analysis
+Sequential workflows work best for: multi-step approvals / content pipelines (draft → review → publish)
+                                    / data transformation / compliance checking
+Parallel workflows work best for: multiple perspectives / independent analyses / speed over coordination
+                                  / diverse-viewpoint risk assessment
+Multi-Agent systems work best for: complex problem-solving / research and analysis
+                                   / dynamic multi-system interactions / strategic planning
+
+Phase 1: Single agent for customer inquiries (proving value)
+Phase 2: Routing pattern separating order status, product questions, complaints
+Phase 3: Specialized agents for each category with shared context
+Phase 4: Multi-agent system with inventory, payment, and shipping coordination
+Phase 5: Evaluator agents for quality assurance and continuous improvement</code></pre>
+  </div>
+</details>
+
+<h3>一条真实演进路线：某电商平台的五个阶段</h3>
+
+<p>
+  收尾是一条真实路径：一个电商平台从单智能体走到多智能体的五个阶段。
+  它不是一步到位搭复杂系统，而是<strong>每一阶段等到有了可衡量的价值，再加复杂度</strong>。
+</p>
+
+<div class="figure">
+  <svg viewBox="0 0 680 190" role="img" aria-label="电商 agent 演进五阶段：从单智能体到评估器智能体">
+    <text class="badge" x="76" y="34" text-anchor="middle">Phase 1</text>
+    <text class="badge" x="208" y="34" text-anchor="middle">Phase 2</text>
+    <text class="badge" x="340" y="34" text-anchor="middle">Phase 3</text>
+    <text class="badge" x="472" y="34" text-anchor="middle">Phase 4</text>
+    <text class="badge" x="604" y="34" text-anchor="middle">Phase 5</text>
+
+    <rect class="n-box" x="20" y="52" width="112" height="76" rx="9"/>
+    <text class="n-t" x="76" y="80" text-anchor="middle">单智能体</text>
+    <text class="n-s" x="76" y="99" text-anchor="middle">处理客户咨询</text>
+    <text class="n-s" x="76" y="116" text-anchor="middle">先证明价值</text>
+
+    <rect class="n-box-c" x="152" y="52" width="112" height="76" rx="9"/>
+    <text class="n-t" x="208" y="80" text-anchor="middle">加路由模式</text>
+    <text class="n-s" x="208" y="99" text-anchor="middle">订单 · 产品 · 投诉</text>
+    <text class="n-s" x="208" y="116" text-anchor="middle">按类别分流</text>
+
+    <rect class="n-box-c" x="284" y="52" width="112" height="76" rx="9"/>
+    <text class="n-t" x="340" y="80" text-anchor="middle">专门智能体</text>
+    <text class="n-s" x="340" y="99" text-anchor="middle">每类一个</text>
+    <text class="n-s" x="340" y="116" text-anchor="middle">共享上下文</text>
+
+    <rect class="n-box-m" x="416" y="52" width="112" height="76" rx="9"/>
+    <text class="n-t" x="472" y="80" text-anchor="middle">多智能体系统</text>
+    <text class="n-s" x="472" y="99" text-anchor="middle">库存 · 支付</text>
+    <text class="n-s" x="472" y="116" text-anchor="middle">物流协同</text>
+
+    <rect class="n-box-e" x="548" y="52" width="112" height="76" rx="9"/>
+    <text class="n-t" x="604" y="80" text-anchor="middle">评估器智能体</text>
+    <text class="n-s" x="604" y="99" text-anchor="middle">质量保证</text>
+    <text class="n-s" x="604" y="116" text-anchor="middle">持续改进</text>
+
+    <line class="e-a" x1="134" y1="90" x2="146" y2="90"/>
+    <polygon points="152,90 142,85 142,95" fill="var(--accent)"/>
+    <line class="e-a" x1="266" y1="90" x2="278" y2="90"/>
+    <polygon points="284,90 274,85 274,95" fill="var(--accent)"/>
+    <line class="e-a" x1="398" y1="90" x2="410" y2="90"/>
+    <polygon points="416,90 406,85 406,95" fill="var(--accent)"/>
+    <line class="e-a" x1="530" y1="90" x2="542" y2="90"/>
+    <polygon points="548,90 538,85 538,95" fill="var(--accent)"/>
+
+    <text class="n-s" x="340" y="158" text-anchor="middle">复杂度只在上一阶段产出可衡量价值之后才加</text>
+    <text class="n-s" x="340" y="178" text-anchor="middle">单智能体数周可部署 · 多智能体需数月调优</text>
+  </svg>
+  <div class="figcap">图 8 &nbsp;电商平台 agent 架构五阶段演进：每一步都由可衡量的价值触发</div>
+</div>
+
+<blockquote>
+  <p>落脚点始终是那一条：<strong>架构跟着需求演进，从简单开始，度量一切，只在复杂度能带来可衡量价值时才加。</strong>
+  今天最好的架构，是既满足当下要求、又给明天留好路径的那个最简方案。</p>
+</blockquote>
+
+<p>
+  生产系统还常常演化成<strong>混合架构</strong>：分层监督里套并行处理、顺序工作流里带动态路由、
+  单智能体碰到边界情况时自动触发多智能体系统。业务价值撑得起复杂度时，这些组合能解锁单一模式做不到的能力。
+</p>
+
+<!-- ==================== §9 ==================== -->
+<h2 id="s9">事实核验与口径边界</h2>
+
+<p>
+  本文基于第三方解读稿消化，但所有关键数字均已回溯 Anthropic 官方工程博客《How we built our multi-agent research system》交叉核验。
+  下表逐条给出口径、核验结果与置信度。<strong>凡标注为「厂商披露」的数据，均来自客户案例自述，未经第三方独立验证。</strong>
+</p>
+
+<div class="table-wrap">
+  <table class="vt">
+    <thead><tr><th style="width:24%">数字 / 结论</th><th style="width:30%">源文口径</th><th>官方核验结果</th><th style="width:12%">状态</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="k">90.2% 效果提升</td>
+        <td>多智能体 vs 单智能体，复杂任务</td>
+        <td>官方原文：「以 Claude Opus 4 为主智能体、Claude Sonnet 4 为子智能体的多智能体系统，在内部研究评测上比单个 Opus 4 高出 90.2%」，并限定「对需同时追踪多个独立方向的广度优先查询表现尤为突出」</td>
+        <td class="st ok">✔ 已核验</td>
+      </tr>
+      <tr>
+        <td class="k">10&ndash;15&times; token 消耗</td>
+        <td>相对<strong>单智能体</strong></td>
+        <td>官方原文基准是 <strong>chat</strong>：「agent 约为 chat 的 4 倍，多智能体约为 chat 的 15 倍」。同基准折算约为 <strong>3.75 倍</strong>，与解读稿口径不一致</td>
+        <td class="st warn">⚠ 基准不一致</td>
+      </tr>
+      <tr>
+        <td class="k">token 解释 80% 方差</td>
+        <td>解读稿未收录</td>
+        <td>官方补充：BrowseComp 评测中，token 用量单独解释 80% 的性能方差；加工具调用数与模型选择后共解释 95%</td>
+        <td class="st ok">✔ 官方补充</td>
+      </tr>
+      <tr>
+        <td class="k">99.99% / 2,260 亿美元</td>
+        <td>Coinbase 客服 agent 可用性</td>
+        <td>客户案例自述，未见第三方独立验证</td>
+        <td class="st warn">⚠ 厂商披露</td>
+      </tr>
+      <tr>
+        <td class="k">100&times; 交付提速</td>
+        <td>Tines 安全运营</td>
+        <td>客户案例自述，未见第三方独立验证</td>
+        <td class="st warn">⚠ 厂商披露</td>
+      </tr>
+      <tr>
+        <td class="k">20&times;（30 分钟 &rarr; 90 秒）</td>
+        <td>Inscribe 欺诈审核</td>
+        <td>内部自洽：1800 秒 / 90 秒 = 20 倍 ✔，但仍为厂商披露口径</td>
+        <td class="st warn">⚠ 自洽 / 厂商披露</td>
+      </tr>
+      <tr>
+        <td class="k">86% / 2.5 万+ 客户</td>
+        <td>Intercom Fin AI agent 解决率</td>
+        <td>客户案例自述；原文措辞为「解决率上限」，非平均值</td>
+        <td class="st warn">⚠ 厂商披露</td>
+      </tr>
+      <tr>
+        <td class="k">20&ndash;60% 生产力 / 30% 周转</td>
+        <td>某零售银行信贷风险备忘录</td>
+        <td>案例未具名，无法回溯</td>
+        <td class="st warn">⚠ 未具名案例</td>
+      </tr>
+      <tr>
+        <td class="k">2.5 万 token 响应封顶</td>
+        <td>工具节流工程建议</td>
+        <td>属工程建议值而非实测结论，可作为上下文预算的参考量级</td>
+        <td class="st ok">✔ 建议值</td>
+      </tr>
+      <tr>
+        <td class="k">跨 2 个以上领域表现急剧下滑</td>
+        <td>研究结论</td>
+        <td>源文未给出实验设置、样本量与评测基准，无法复核</td>
+        <td class="st warn">⚠ 缺实验细节</td>
+      </tr>
+      <tr>
+        <td class="k">原文 PDF 编辑瑕疵</td>
+        <td>高管摘要句子在「found」处中断</td>
+        <td>源文已自述该瑕疵</td>
+        <td class="st ok">✔ 已注明</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h3>一条需要显式标注的第三方质疑</h3>
+
+<div class="box inset box-tight">
+  <p style="margin:0">
+    有第三方技术博客称：把对照组从「朴素单智能体」换成「做了激进上下文管理与迭代精修的单智能体」后，
+    90.2% 的差距<strong>收窄到约 30&ndash;40%</strong>。
+    <strong>该说法来自二手博客，本轮核验未找到 Anthropic 官方或同行评议的复现证据</strong>，
+    因此本文仅作参考登记，<strong>不把它写进任何结论</strong>。
+    沙盘中已把 g = 30% 作为一条参考曲线画出（<a href="#s3">图 3</a> 虚线），
+    读者可自行观察：即便按最保守口径，k = 15 下每次成功成本比仍高达 <strong>11.54 倍</strong>。
+  </p>
+</div>
+
+<h3>本文自身的边界声明</h3>
+
+<ul>
+  <li>本文是<strong>解读与建模稿</strong>，不是 Anthropic 官方原文的逐字翻译；三问清单与速查表为逐条对应的中文译写。</li>
+  <li>§3 的「每次成功成本」模型、§4 的上下文预算模型、§6 的波次耗时模型，均为<strong>本文为便于决策而构造的代数反解</strong>，不是 Anthropic 官方模型；公式与量纲已在页面内完整披露，可自行复核。</li>
+  <li>沙盘中的 p<sub>0</sub>、C<sub>0</sub>、失败代价等参数为<strong>演示基线假设值</strong>，必须替换为你的真实业务数据才有决策意义。</li>
+  <li>交互沙盘不输出任何未经公式计算的数字；所有回显值均由页面内的解析式实时算出。</li>
+</ul>
+
+<!-- ==================== §10 ==================== -->
+<h2 id="s10">工程落地建议 P0 / P1 / P2</h2>
+
+<div class="table-wrap">
+  <table class="vt">
+    <thead><tr><th style="width:8%">优先级</th><th style="width:26%">建议</th><th>理由与依据</th><th style="width:22%">锚点</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="st no">P0</td>
+        <td class="k">引用前先固定口径</td>
+        <td>任何对外材料引用「10&ndash;15&times;」时必须写明基准是 chat 还是单智能体。两个口径相差约 4 倍，直接决定选型结论，也是最容易被断章取义的一处。</td>
+        <td><a href="#s9">§9 核验表</a> 第 2 行</td>
+      </tr>
+      <tr>
+        <td class="st no">P0</td>
+        <td class="k">立项必须过三问</td>
+        <td>新 agent 项目立项文档需填完三问 + 第四问并落一个明确架构结论，杜绝「因为多智能体先进所以上多智能体」。</td>
+        <td><a href="#s8">§8</a> · 决策器 <code>#box-sim-sel</code></td>
+      </tr>
+      <tr>
+        <td class="st warn">P1</td>
+        <td class="k">改用「每次成功成本 C/p」作北极星指标</td>
+        <td>只看单次调用成本会低估总成本，只看成功率会掩盖 15 倍开销。C/p 是唯一同时含两头的量，且可推出盈亏平衡条件 g* = k &minus; 1。</td>
+        <td><a href="#s3">§3</a> · 沙盘 <code>#box-sim-cost</code></td>
+      </tr>
+      <tr>
+        <td class="st warn">P1</td>
+        <td class="k">分层架构默认开启上下文治理三件套</td>
+        <td>上下文溢出会导致窗口溢出、推理下降、协调失灵三重故障。上线前按 §4 沙盘估算轮数预算，把 context editing 清理率与单轮返回封顶写进工具契约。</td>
+        <td><a href="#s4">§4</a> · 沙盘 <code>#box-sim-ctx</code></td>
+      </tr>
+      <tr>
+        <td class="st warn">P1</td>
+        <td class="k">并行前先算波次数与聚合开销</td>
+        <td>并发额度不足或聚合开销过大时，并行比顺序<strong>更慢</strong>（沙盘拉 W=1 或 c=30 即可复现）。先算 ⌈n/W⌉ &times; t + c，再决定。</td>
+        <td><a href="#s6">§6</a> · 沙盘 <code>#box-sim-wf</code></td>
+      </tr>
+      <tr>
+        <td class="st ok">P2</td>
+        <td class="k">把五阶段演进路径写进设计文档</td>
+        <td>单智能体数周可部署、多智能体需数月调优。第一个单智能体就留好模块化接口，保持用户体验一致，给后端架构升级留余地。</td>
+        <td><a href="#s8">§8</a> · 图 8 演进路线</td>
+      </tr>
+      <tr>
+        <td class="st ok">P2</td>
+        <td class="k">评估器作为可挂载层单独计量 ROI</td>
+        <td>只在有明确评估标准、且首稿达标率明显不足的场景挂载；标准主观模糊或评估器本身缺领域专业度时，该模式只会放大成本。</td>
+        <td><a href="#s7">§7</a> · 别用清单</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<footer>
+  <p>
+    本文基于 Anthropic 官方发布的企业指南《Building Effective AI Agents: Architecture Patterns and Implementation Frameworks》解读，
+    交叉核验自 Anthropic 工程博客《How we built our multi-agent research system》。
+    这是一份带销售落点的厂商白皮书：90.2%、10&ndash;15 倍 token 成本为 Anthropic 内部研究数据；
+    99.99%、100 倍、20 倍、86%、20&ndash;60% 等为对应客户案例的厂商披露数据，
+    <strong>均未经第三方独立验证</strong>。原文 PDF 高管摘要一节存在编辑瑕疵（句子在「found」处中断）。
+  </p>
+  <p>
+    单文件零依赖交付 · 断网可用 · 打印适配 · 定稿 2026-09-15
+  </p>
+</footer>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- 基础工具 ---------- */
+  function byId(id){ return document.getElementById(id); }
+  function txt(id, v){ var e = byId(id); if(e){ e.textContent = v; } }
+  function num(id){ var e = byId(id); return e ? parseFloat(e.value) : 0; }
+
+  /* ---------- 主题切换（默认深色） ---------- */
+  var TKEY = "aike-theme-20260915";
+  var root = document.documentElement;
+  var stored = null;
+  try { stored = window.localStorage.getItem(TKEY); } catch(e){ stored = null; }
+  function applyTheme(t){ root.setAttribute("data-theme", t); }
+  applyTheme((stored === "light" || stored === "dark") ? stored : "dark");
+
+  var btnTheme = byId("btn-theme");
+  if(btnTheme){
+    btnTheme.addEventListener("click", function(){
+      var cur = root.getAttribute("data-theme") === "light" ? "light" : "dark";
+      var nxt = cur === "dark" ? "light" : "dark";
+      applyTheme(nxt);
+      try { window.localStorage.setItem(TKEY, nxt); } catch(e){}
+    });
+  }
+
+  /* ---------- 目录开关 ---------- */
+  var sb = byId("sidebar"), btnToc = byId("btn-toc");
+  if(btnToc && sb){
+    btnToc.addEventListener("click", function(){ sb.classList.toggle("open"); });
+  }
+
+  /* ---------- 阅读进度 + 回到顶部 ---------- */
+  var prog = byId("topbar-progress"), btnTop = byId("btn-top");
+  function onScroll(){
+    var de = document.documentElement;
+    var h = (de.scrollHeight || 0) - (de.clientHeight || 0);
+    var y = de.scrollTop || document.body.scrollTop || 0;
+    var pct = h > 0 ? Math.min(100, Math.max(0, y / h * 100)) : 0;
+    if(prog){ prog.style.width = pct + "%"; }
+    if(btnTop){ btnTop.style.display = y > 600 ? "flex" : "none"; }
+  }
+  window.addEventListener("scroll", onScroll);
+  onScroll();
+  if(btnTop){
+    btnTop.addEventListener("click", function(){
+      try { window.scrollTo(0, 0); } catch(e){}
+    });
+  }
+
+  /* ---------- 目录高亮 ---------- */
+  var tocLinks = document.querySelectorAll("#sidebar a");
+  var SEC_IDS = ["s1","s2","s3","s4","s5","s6","s7","s8","s9","s10"];
+  function setActive(id){
+    for(var i=0;i<tocLinks.length;i++){
+      var href = tocLinks[i].getAttribute("href");
+      if(href === "#" + id){ tocLinks[i].classList.add("active"); }
+      else { tocLinks[i].classList.remove("active"); }
+    }
+  }
+  if(typeof IntersectionObserver !== "undefined" && tocLinks.length){
+    var io = new IntersectionObserver(function(entries){
+      for(var i=0;i<entries.length;i++){
+        if(entries[i].isIntersecting && entries[i].target && entries[i].target.id){ setActive(entries[i].target.id); }
+      }
+    }, { rootMargin: "-18% 0px -72% 0px" });
+    for(var s=0;s<SEC_IDS.length;s++){ var sec = byId(SEC_IDS[s]); if(sec){ io.observe(sec); } }
+  }
+
+  /* ---------- 分层 / 协作 Tab ---------- */
+  var tabH = byId("tab-hier"), tabC = byId("tab-colla");
+  var panH = byId("box-panel-hier"), panC = byId("box-panel-colla");
+  function showTab(which){
+    if(!tabH || !tabC || !panH || !panC){ return; }
+    var isH = which === "hier";
+    tabH.classList.toggle("on", isH);
+    tabC.classList.toggle("on", !isH);
+    panH.classList.toggle("on", isH);
+    panC.classList.toggle("on", !isH);
+  }
+  if(tabH){ tabH.addEventListener("click", function(){ showTab("hier"); }); }
+  if(tabC){ tabC.addEventListener("click", function(){ showTab("colla"); }); }
+
+  /* ---------- 沙盘 M4：三问架构决策器 ---------- */
+  var sel = { q1: "hi", q2: "single", q3: "budget" };
+  var BTNS = [
+    ["q1-hi","q1","hi"], ["q1-mid","q1","mid"], ["q1-lo","q1","lo"],
+    ["q2-single","q2","single"], ["q2-multi","q2","multi"], ["q2-open","q2","open"],
+    ["q3-budget","q3","budget"], ["q3-time","q3","time"], ["q3-long","q3","long"]
+  ];
+  var QNAME = {
+    hi:"高", mid:"中", lo:"低",
+    single:"单一", multi:"多领域可预测", open:"复杂开放",
+    budget:"预算有限", time:"上市时间紧", long:"长期投入"
+  };
+  var RES = {
+    budget:"资源口径：预算 / token 有限 → 原文指向单智能体或精心设计的并行工作流，按预期调用量先把账算一遍。",
+    time:"资源口径：上市时间紧 → 先上单智能体并规划演进路径；单智能体几周可部署，多智能体要几个月才能调好。",
+    long:"资源口径：长期战略投入 → 一开始就为模块化演进设计，第一个单智能体就留好接口，保持用户体验一致。"
+  };
+
+  function decide(a, b, c){
+    var arch, alt, why, tip;
+    if(a === "hi"){
+      if(b === "open" && c === "long"){
+        arch = "分层监督式（叠加业务规则约束）"; alt = "顺序工作流";
+        why = "可控性要求高，但问题域复杂开放且属长期投入：在分层架构上叠加监督者强制执行的业务规则，用可审计的责任链换自由度。";
+        tip = "先把规则写成可测试的断言放进监督者，再放专家子智能体出去跑。";
+      } else if(b === "open"){
+        arch = "顺序工作流 + 人工把关"; alt = "单智能体 + 专项 Skills";
+        why = "可控性要求高而问题域开放：用固定阶段把开放问题切成可审计的子步骤，每个阶段设人工卡点，避免不可预测的分派。";
+        tip = "阶段之间留人工复核点，阶段内部仍可让单智能体自主。";
+      } else if(b === "multi"){
+        arch = "顺序工作流"; alt = "并行工作流";
+        why = "多领域但流程可预测 + 高可控 → 原文「多领域但可预测 → 顺序或并行工作流」；取顺序是为了按阶段排查与审计。";
+        tip = "画出流程步骤图，每一步配不同专业的 Skills。";
+      } else {
+        arch = "单智能体"; alt = "顺序工作流";
+        why = "单一领域 + 高可控 + 流程可重复 → 原文直指单智能体。一个决策标准清晰的单智能体处理贷款审批，比三个 AI 模型协作出来的推荐好审计得多。";
+        tip = "给单智能体配领域 Skills 与明确停止条件，先跑通再谈演进。";
+      }
+    } else if(a === "mid"){
+      if(b === "single"){
+        arch = "单智能体 + 专项 Skills"; alt = "顺序工作流";
+        why = "中等可控且问题域单一 → 复杂度不足以支撑多智能体，按原文第四问，用配了专门 Skills 的单智能体即可。";
+        tip = "把成熟流程固化成 Skills，比引入第二个决策主体更划算。";
+      } else if(b === "multi" && c === "budget"){
+        arch = "单智能体 + 精心设计的并行工作流"; alt = "顺序工作流";
+        why = "多领域但流程可预测，且预算 / token 有限 → 原文明确指向单智能体或并行工作流，避免 10&ndash;15 倍的 token 开销。";
+        tip = "并行只用于真正独立的子任务，聚合逻辑保持简单。";
+      } else if(b === "multi" && c === "time"){
+        arch = "顺序工作流"; alt = "单智能体 + Skills";
+        why = "多领域可预测且上市时间紧 → 顺序工作流给结构又不过度复杂，几周即可上线。";
+        tip = "先上线线性流程，把演化路径写进设计文档。";
+      } else {
+        arch = "分层监督式多智能体"; alt = "协作式（仅低可控场景备选）";
+        why = "中等可控要求（客服、内容创作、数据分析）→ 原文直指分层监督式：监督者强制执行业务规则，专家处理复杂度，两头都占。";
+        tip = "重点投入上下文治理：context editing + memory tools + 工具节流三件套。";
+      }
+    } else {
+      if(b === "single"){
+        arch = "单智能体"; alt = "评估器-优化器工作流";
+        why = "即便可控性要求低，问题域单一也不需要多智能体 —— 自由度用不上，白白付出协调成本。";
+        tip = "若追求的是质量而非探索，改用评估器-优化器迭代打磨更划算。";
+      } else if(b === "multi"){
+        arch = "并行工作流"; alt = "协作式";
+        why = "低可控 + 多领域但可预测 → 并行工作流提供多视角覆盖，同时保留可预测的阶段结构。";
+        tip = "确认子任务互相独立，并预留冲突解决策略与聚合逻辑。";
+      } else {
+        arch = "协作式多智能体"; alt = "分层监督式";
+        why = "低可控要求（研究、头脑风暴、复杂分析）→ 原文明确：目标是探索可能性时，智能体的不可预测性反而是优点，协作式变得可行。";
+        tip = "立好协作框架：分工、解决问题的方式、投入预算，并防踢皮球 + 冲突解决机制。";
+      }
+    }
+    return { arch: arch, alt: alt, why: why, tip: tip };
+  }
+
+  function renderSel(){
+    var r = decide(sel.q1, sel.q2, sel.q3);
+    txt("out-sel-arch", r.arch);
+    txt("out-sel-alt", "备选：" + r.alt);
+    txt("out-sel-path", "可控性 " + QNAME[sel.q1] + " → 领域 " + QNAME[sel.q2] + " → 资源 " + QNAME[sel.q3] + " ⇒ " + r.arch);
+    var whyEl = byId("out-sel-why");
+    if(whyEl){ whyEl.innerHTML = r.why + "<br><span style=\"color:var(--text-faint);font-size:13px\">" + RES[sel.q3] + "</span>"; }
+    var tipEl = byId("out-sel-tip");
+    if(tipEl){ tipEl.innerHTML = "落地提示：" + r.tip; }
+  }
+
+  for(var bi=0; bi<BTNS.length; bi++){
+    (function(entry){
+      var el = byId(entry[0]);
+      if(!el){ return; }
+      el.addEventListener("click", function(){
+        sel[entry[1]] = entry[2];
+        for(var j=0;j<BTNS.length;j++){
+          if(BTNS[j][1] !== entry[1]){ continue; }
+          var o = byId(BTNS[j][0]);
+          if(o){ o.classList.toggle("on", BTNS[j][0] === entry[0]); }
+        }
+        renderSel();
+      });
+    })(BTNS[bi]);
+  }
+  renderSel();
+
+  /* ---------- 沙盘 M1：成本盈亏平衡 + 曲线 ---------- */
+  var CX0 = 74, CX1 = 636, CYB = 352, CYT = 44;
+  var KMIN = 1, KMAX = 20, RMIN = 0, RMAX = 16, CPTS = 21;
+
+  function gx(k){ return CX0 + (k - KMIN) / (KMAX - KMIN) * (CX1 - CX0); }
+  function gy(r){
+    var v = Math.min(Math.max(r, RMIN), RMAX);
+    return CYB - (v - RMIN) / (RMAX - RMIN) * (CYB - CYT);
+  }
+  function ratioAt(k, p0, g){
+    var p1 = Math.min(1, p0 * (1 + g));
+    return p1 > 0 ? k * p0 / p1 : Infinity;
+  }
+  function curvePoints(p0, g){
+    var out = [];
+    for(var i=0;i<CPTS;i++){
+      var k = KMIN + i * (KMAX - KMIN) / (CPTS - 1);
+      out.push(gx(k).toFixed(2) + "," + gy(ratioAt(k, p0, g)).toFixed(2));
+    }
+    return out.join(" ");
+  }
+  /* 标注固定在图例框内（左上空白区）：全参数域扫描已确认该区域不与任何曲线相交，
+     优于浮动跟随标注 —— 后者在曲线族收敛的左下角必然贴线（实测最小间距 0.06px）。 */
+
+  function calcCost(){
+    var p0 = num("cost-p0") / 100;
+    var g  = num("cost-g") / 100;
+    var k  = num("cost-k");
+    var C0 = num("cost-c0");
+
+    var p1 = Math.min(1, p0 * (1 + g));
+    var dp = p1 - p0;
+    var C1 = k * C0;
+    var cs0 = p0 > 0 ? C0 / p0 : Infinity;
+    var cs1 = p1 > 0 ? C1 / p1 : Infinity;
+    var ratio = (isFinite(cs0) && cs0 > 0 && isFinite(cs1)) ? cs1 / cs0 : Infinity;
+    var lstar = dp > 0 ? (k - 1) * C0 / dp : Infinity;
+
+    txt("lab-cost-p0", (p0 * 100).toFixed(1) + "%");
+    txt("lab-cost-g", (g * 100).toFixed(1) + "%");
+    txt("lab-cost-k", k.toFixed(1) + "×");
+    txt("lab-cost-c0", C0.toFixed(2) + " 元");
+
+    txt("out-cost-p1", (p1 * 100).toFixed(2) + "%");
+    txt("out-cost-dp", (dp * 100).toFixed(2) + " pp");
+    txt("out-cost-c1", C1.toFixed(2) + " 元");
+    txt("out-cost-cs0", isFinite(cs0) ? cs0.toFixed(2) + " 元" : "—");
+    txt("out-cost-cs1", isFinite(cs1) ? cs1.toFixed(2) + " 元" : "—");
+    txt("out-cost-ratio", isFinite(ratio) ? ratio.toFixed(2) + "×" : "—");
+    txt("out-cost-lstar", isFinite(lstar) ? lstar.toFixed(2) + " 元" : "∞");
+    txt("out-cost-gstar", ((k - 1) * 100).toFixed(1) + "%");
+
+    var cur = byId("chart-gcur");
+    if(cur){ cur.setAttribute("points", curvePoints(p0, g)); }
+    var r30 = byId("chart-ref-g30");
+    if(r30){ r30.setAttribute("points", curvePoints(p0, 0.30)); }
+    var r200 = byId("chart-ref-g200");
+    if(r200){ r200.setAttribute("points", curvePoints(p0, 2.00)); }
+
+    var mx = gx(k), my = gy(ratioAt(k, p0, g));
+    var dot = byId("chart-dot");
+    if(dot){ dot.setAttribute("cx", mx.toFixed(2)); dot.setAttribute("cy", my.toFixed(2)); }
+    var vl = byId("chart-vline");
+    if(vl){ vl.setAttribute("x1", mx.toFixed(2)); vl.setAttribute("x2", mx.toFixed(2)); vl.setAttribute("y1", my.toFixed(2)); }
+    var lab = byId("chart-dotlabel");
+    if(lab){ lab.textContent = "当前：k=" + k.toFixed(1) + " → " + ratio.toFixed(2) + "×"; }
+
+    var vd = byId("out-cost-verdict");
+    if(vd){
+      if(g <= 0){
+        vd.className = "verdict bad";
+        vd.innerHTML = "效果提升 g = 0 时，多智能体只是<b>纯成本增加</b>：任何 k &gt; 1 的成本倍数都换不来收益。";
+      } else if(!isFinite(lstar)){
+        vd.className = "verdict bad";
+        vd.innerHTML = "当前参数下成功率已达上限（p<sub>1</sub> = 1），Δp 无法继续扩大，多智能体无额外收益空间。";
+      } else {
+        var cls = ratio < 1 ? "good" : (ratio < 1.5 ? "" : "bad");
+        vd.className = "verdict " + cls;
+        vd.innerHTML = "当前参数下多智能体的每次成功成本是单智能体的 <b>" + ratio.toFixed(2) + " 倍</b>；" +
+          "只有当单次失败代价超过 <b>" + lstar.toFixed(2) + " 元</b> 时才划算。" +
+          "<br><span style=\"color:var(--text-faint);font-size:13px\">判据：达到同样的「每次成功成本」需要 g ≥ " +
+          ((k - 1) * 100).toFixed(1) + "%，当前 g = " + (g * 100).toFixed(1) + "%。</span>";
+      }
+    }
+  }
+  ["cost-p0","cost-g","cost-k","cost-c0"].forEach(function(id){
+    var el = byId(id);
+    if(el){ el.addEventListener("input", calcCost); }
+  });
+  calcCost();
+
+  /* ---------- 沙盘 M2：顺序与并行工作流 ---------- */
+  function calcWf(){
+    var n = num("wf-n"), t = num("wf-t"), W = num("wf-w"), c = num("wf-c");
+    var seq = n * t;
+    var waves = Math.ceil(n / W);
+    var par = waves * t + c;
+    var speed = par > 0 ? seq / par : 0;
+
+    txt("lab-wf-n", String(n));
+    txt("lab-wf-t", t.toFixed(1) + " 分钟");
+    txt("lab-wf-w", String(W));
+    txt("lab-wf-c", c.toFixed(1) + " 分钟");
+
+    txt("out-wf-seq", seq.toFixed(1) + " 分钟");
+    txt("out-wf-waves", String(waves));
+    txt("out-wf-par", par.toFixed(1) + " 分钟");
+    txt("out-wf-speed", speed.toFixed(2) + "×");
+
+    var vd = byId("out-wf-verdict");
+    if(vd){
+      if(speed >= 1.05){
+        vd.className = "verdict good";
+        vd.innerHTML = "并发额度 W=" + W + " 下分 <b>" + waves + "</b> 个波次完成，加速比 <b>" + speed.toFixed(2) + "×</b>：并行占优。";
+      } else if(speed >= 0.95){
+        vd.className = "verdict";
+        vd.innerHTML = "加速比 <b>" + speed.toFixed(2) + "×</b>：并行与顺序基本持平，聚合开销 c=" + c.toFixed(1) +
+          " 分钟几乎吃掉了全部并行收益。";
+      } else {
+        vd.className = "verdict bad";
+        vd.innerHTML = "加速比 <b>" + speed.toFixed(2) + "×</b>：<b>并行反而更慢</b>。" +
+          "波次数 " + waves + "、聚合开销 " + c.toFixed(1) + " 分钟，合计 " + par.toFixed(1) +
+          " 分钟已超过顺序执行的 " + seq.toFixed(1) + " 分钟 —— 此场景应按原文建议改用顺序工作流。";
+      }
+    }
+  }
+  ["wf-n","wf-t","wf-w","wf-c"].forEach(function(id){
+    var el = byId(id);
+    if(el){ el.addEventListener("input", calcWf); }
+  });
+  calcWf();
+
+  /* ---------- 沙盘 M3：上下文窗口预算 ---------- */
+  function calcCtx(){
+    var cap = num("ctx-cap"), r = num("ctx-r"), e = num("ctx-e") / 100;
+    var net = r * (1 - e);
+    var turns = net > 0 ? cap / net : 0;
+    var base = r > 0 ? cap / r : 0;
+    var gain = base > 0 ? turns / base : 0;
+
+    txt("lab-ctx-cap", cap + "k");
+    txt("lab-ctx-r", r + "k");
+    txt("lab-ctx-e", (e * 100).toFixed(0) + "%");
+
+    txt("out-ctx-net", net.toFixed(1) + "k");
+    txt("out-ctx-turns", turns.toFixed(2));
+    txt("out-ctx-base", base.toFixed(2));
+    txt("out-ctx-gain", gain.toFixed(2) + "×");
+
+    var vd = byId("out-ctx-verdict");
+    if(vd){
+      vd.className = "verdict " + (e > 0 ? "good" : "");
+      vd.innerHTML = "开启 <b>" + (e * 100).toFixed(0) + "%</b> 清理率后，agent 可支撑轮数从 <b>" +
+        base.toFixed(2) + "</b> 提升到 <b>" + turns.toFixed(2) + "</b>，延长 <b>" + gain.toFixed(2) + " 倍</b>。" +
+        (e <= 0 ? "<br><span style=\"color:var(--text-faint);font-size:13px\">当前未启用任何清理：这正是上下文溢出导致协调失灵的典型起点。</span>" : "");
+    }
+  }
+  ["ctx-cap","ctx-r","ctx-e"].forEach(function(id){
+    var el = byId(id);
+    if(el){ el.addEventListener("input", calcCtx); }
+  });
+  calcCtx();
+
+  /* ---------- 复制三问清单 ---------- */
+  var btnCopy = byId("btn-copy");
+  if(btnCopy){
+    btnCopy.addEventListener("click", function(){
+      var src = byId("code-checklist");
+      if(!src){ return; }
+      var s = src.textContent;
+      var done = false;
+      try {
+        if(typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(s);
+          done = true;
+        }
+      } catch(e){ done = false; }
+      if(!done){
+        try {
+          var ta = document.createElement("textarea");
+          ta.value = s;
+          document.body.appendChild(ta);
+          ta.select();
+          done = document.execCommand("copy");
+          document.body.removeChild(ta);
+        } catch(e2){ done = false; }
+      }
+      btnCopy.textContent = done ? "已复制" : "复制失败";
+      setTimeout(function(){ btnCopy.textContent = "复制"; }, 1600);
+    });
+  }
+})();
+</script>
+
+</body>
+</html>
