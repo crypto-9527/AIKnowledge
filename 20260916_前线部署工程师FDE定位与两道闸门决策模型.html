@@ -1,0 +1,1929 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="5r2dfny063Wgokzgy2wQYN">
+<head data-page-node-id="43p28xUXB990Yt6hEYYRBV">
+<meta charset="utf-8" data-page-node-id="FZ6moIYgwfVN92BsAbxwKj">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="iLOL3m1l7ELC2UnMA3If8s">
+<title>企业什么时候才真的需要 FDE？组建 FDE 团队前，需要先通过两道闸门 · 深度技术白皮书</title>
+<meta name="description" content="前线部署工程师（FDE）深度剖析：从 Palantir 与 Rippling 实践提炼的核心价值、ACV 数量级差异、买方能力-产品复杂度四象限矩阵、共享平台原语飞轮与两道准入闸门决策模型。" data-page-node-id="EM0q2W6r2wFJtEKgbJaYz9">
+<style>
+/* ============================================================
+   1. 设计令牌与双主题（默认深色，暖羊皮纸 / 黑曜石）
+   ============================================================ */
+:root {
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-head: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --sidebar-w: 280px;
+  --maxw: 1040px;
+}
+
+html[data-theme="dark"] {
+  --bg: #181715;
+  --bg-elev: #201E1B;
+  --surface-1: #23211D;
+  --surface-2: #2A2724;
+  --surface-3: #332F2A;
+  --border: #3A3630;
+  --border-soft: #2E2A25;
+  --text-primary: #E8E3DA;
+  --text-secondary: #B4ACA0;
+  --text-muted: #8A8278;
+  --accent: #E2886A;
+  --accent-soft: rgba(226, 136, 106, 0.14);
+  --accent-glow: rgba(226, 136, 106, 0.28);
+  --emerald: #5FB89A;
+  --emerald-soft: rgba(95, 184, 154, 0.15);
+  --rose: #E0796F;
+  --rose-soft: rgba(224, 121, 111, 0.15);
+  --amber: #DDA94A;
+  --amber-soft: rgba(221, 169, 74, 0.15);
+  --cyan: #6FB3CF;
+  --cyan-soft: rgba(111, 179, 207, 0.15);
+  --shadow: 0 1px 3px rgba(0,0,0,0.5), 0 8px 28px rgba(0,0,0,0.36);
+  --code-bg: #14120F;
+  --card-highlight: #2F2A25;
+}
+
+html[data-theme="light"] {
+  --bg: #FAF7F2;
+  --bg-elev: #FFFFFF;
+  --surface-1: #FFFFFF;
+  --surface-2: #F4EFE7;
+  --surface-3: #EAE3D8;
+  --border: #DED5C7;
+  --border-soft: #E8E1D5;
+  --text-primary: #262220;
+  --text-secondary: #554E47;
+  --text-muted: #807769;
+  --accent: #D97757;
+  --accent-soft: rgba(217, 119, 87, 0.10);
+  --accent-glow: rgba(217, 119, 87, 0.22);
+  --emerald: #2F7A5C;
+  --emerald-soft: rgba(47, 122, 92, 0.12);
+  --rose: #B03F37;
+  --rose-soft: rgba(176, 63, 55, 0.12);
+  --amber: #9A6D14;
+  --amber-soft: rgba(154, 109, 20, 0.12);
+  --cyan: #2A6F8C;
+  --cyan-soft: rgba(42, 111, 140, 0.12);
+  --shadow: 0 1px 3px rgba(80,60,40,0.08), 0 8px 24px rgba(80,60,40,0.10);
+  --code-bg: #F2ECE2;
+  --card-highlight: #FBF4EC;
+}
+
+/* ============================================================
+   2. 基础排版与重置
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 16.5px;
+  line-height: 1.85;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color .25s ease, color .25s ease;
+}
+
+/* 阅读进度指示器 */
+.reading-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--amber), var(--emerald));
+  z-index: 120;
+  transition: width 0.08s linear;
+}
+
+/* ============================================================
+   3. 布局架构：侧栏贴左 · 正文对称居中 (§8.7 规范)
+   ============================================================ */
+.page-container {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+}
+
+.sidebar-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--sidebar-w);
+  height: 100vh;
+  overflow-y: auto;
+  padding: 2.2rem 1.4rem 3rem 1.8rem;
+  border-right: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  z-index: 90;
+  box-sizing: border-box;
+}
+
+.sidebar-nav::-webkit-scrollbar { width: 5px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.sb-brand {
+  font-family: var(--font-head);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.3rem;
+  letter-spacing: 0.02em;
+}
+.sb-tagline {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin-bottom: 1.6rem;
+}
+
+.sb-toc {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sb-toc li { margin-bottom: 0.2rem; }
+.sb-toc a {
+  display: block;
+  padding: 0.38rem 0.65rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  border-left: 2.5px solid transparent;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  text-decoration: none;
+  transition: all 0.16s ease;
+}
+.sb-toc a:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+.sb-toc a.active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.sb-toc .toc-sub {
+  padding-left: 1.4rem;
+  font-size: 0.78rem;
+}
+
+.sb-tools {
+  margin-top: 2rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.main-content {
+  flex: 1;
+  box-sizing: border-box;
+  max-width: var(--maxw);
+  margin-left: calc(var(--sidebar-w) + max(0px, (100% - var(--sidebar-w) - var(--maxw)) / 2));
+  margin-right: max(0px, calc((100% - var(--sidebar-w) - var(--maxw)) / 2));
+  padding: 3.2rem 2.8rem 6rem;
+}
+
+@media (max-width: 1180px) {
+  .sidebar-nav {
+    display: none;
+  }
+  .main-content {
+    margin-left: auto;
+    margin-right: auto;
+    padding: 2rem 1.5rem 5rem;
+    max-width: 100%;
+  }
+}
+
+/* ============================================================
+   4. 文章正文排版系统
+   ============================================================ */
+h1.article-title {
+  font-family: var(--font-head);
+  font-size: 2.25rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 1.2rem;
+  letter-spacing: -0.01em;
+}
+
+.article-lead {
+  font-size: 1.14rem;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border-left: 4px solid var(--accent);
+  padding: 1.1rem 1.4rem;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  margin: 1.4rem 0 2rem;
+}
+
+.takeaway-list {
+  list-style: none;
+  margin: 1.6rem 0 2.4rem;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.takeaway-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1.1rem;
+  font-size: 0.95rem;
+  box-shadow: var(--shadow);
+}
+.takeaway-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: bold;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+}
+
+h2 {
+  font-family: var(--font-head);
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 3.2rem 0 1.1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-soft);
+  position: relative;
+}
+h2::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 48px;
+  height: 2.5px;
+  background: var(--accent);
+}
+
+h3 {
+  font-family: var(--font-body);
+  font-size: 1.22rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 2.2rem 0 0.8rem;
+}
+
+p {
+  margin: 0 0 1.35rem;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.16s ease;
+}
+a:hover {
+  border-bottom-color: var(--accent);
+}
+
+ul, ol {
+  margin: 0 0 1.4rem 1.5rem;
+  padding: 0;
+}
+li { margin-bottom: 0.5rem; }
+
+/* 引用块 */
+blockquote {
+  margin: 1.6rem 0;
+  padding: 1rem 1.4rem;
+  background: var(--surface-1);
+  border-left: 3.5px solid var(--amber);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  color: var(--text-secondary);
+  font-style: normal;
+}
+
+/* ============================================================
+   5. 媒体卡片与视频展示区
+   ============================================================ */
+.media-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin: 2.4rem 0;
+  box-shadow: var(--shadow);
+}
+.media-header {
+  padding: 1rem 1.4rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.media-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.25rem 0.65rem;
+  border-radius: 20px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.media-body {
+  padding: 1.4rem;
+}
+.video-stage {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: var(--radius-md);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.video-fallback-box {
+  text-align: center;
+  padding: 2rem;
+  color: #fff;
+  z-index: 2;
+  background: rgba(20, 18, 15, 0.85);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.12);
+  max-width: 85%;
+}
+.video-play-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--accent);
+  color: #fff;
+  padding: 0.65rem 1.3rem;
+  border-radius: 30px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  margin-top: 1rem;
+  text-decoration: none;
+  border: 0;
+  cursor: pointer;
+  transition: transform 0.16s ease, background 0.16s ease;
+}
+.video-play-btn:hover {
+  transform: translateY(-2px);
+  background: #E89578;
+  border-bottom: 0;
+}
+.media-caption {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  margin-top: 0.9rem;
+  line-height: 1.55;
+  text-align: center;
+}
+
+/* ============================================================
+   6. 交互组件通用容器与面板
+   ============================================================ */
+.component-box {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.6rem;
+  margin: 2.5rem 0;
+  box-shadow: var(--shadow);
+  position: relative;
+}
+.component-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.4rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border-soft);
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+.component-title-group h4 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.component-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 0.2rem 0 0;
+}
+
+.btn-group {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+.ctrl-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 0.4rem 0.85rem;
+  font-size: 0.82rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  font-family: var(--font-body);
+}
+.ctrl-btn:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+.ctrl-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* ============================================================
+   7. 组件 1：ACV 客单价图表 (acv-estimates)
+   ============================================================ */
+.acv-chart-wrap {
+  margin-top: 1.2rem;
+}
+.acv-bar-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.acv-bar-item {
+  display: grid;
+  grid-template-columns: 140px 1fr 110px;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+.acv-bar-item:hover {
+  background: var(--surface-2);
+}
+.acv-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.acv-track {
+  height: 26px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  position: relative;
+}
+.acv-fill {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--accent), var(--amber));
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  color: #fff;
+  font-size: 0.76rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.acv-fill.highlight {
+  background: linear-gradient(90deg, #E2886A, #E0796F);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+.acv-val-text {
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-align: right;
+  color: var(--accent);
+}
+
+.acv-info-panel {
+  margin-top: 1.4rem;
+  padding: 1.1rem 1.3rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  border-left: 3.5px solid var(--accent);
+}
+.acv-info-meta {
+  display: flex;
+  gap: 1.2rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.82rem;
+}
+
+/* ============================================================
+   8. 组件 2：买方-产品四象限矩阵 (fit-matrix)
+   ============================================================ */
+.matrix-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1.2rem;
+  position: relative;
+}
+@media (max-width: 768px) {
+  .matrix-grid { grid-template-columns: 1fr; grid-template-rows: auto; }
+}
+.matrix-card {
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+.matrix-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  background: var(--surface-3);
+}
+.matrix-card.active {
+  border-color: var(--accent);
+  background: var(--card-highlight);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+.matrix-card.sweet-spot {
+  border-color: var(--emerald);
+  background: var(--surface-2);
+}
+.matrix-card.sweet-spot.active {
+  border-color: var(--emerald);
+  background: var(--emerald-soft);
+  box-shadow: 0 0 0 2px rgba(95, 184, 154, 0.3);
+}
+.matrix-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.5rem;
+}
+.matrix-card h5 {
+  margin: 0 0 0.4rem;
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+.matrix-card p {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.matrix-detail-card {
+  margin-top: 1.4rem;
+  padding: 1.3rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+}
+.matrix-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.8rem;
+}
+
+/* ============================================================
+   9. 组件 3：开发外包 vs 共享原语飞轮 (platform-boundary)
+   ============================================================ */
+.boundary-diagram-wrap {
+  margin: 1.2rem 0;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  padding: 1.2rem;
+  border: 1px solid var(--border-soft);
+}
+.flow-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+}
+@media (max-width: 768px) {
+  .flow-compare-grid { grid-template-columns: 1fr; }
+}
+.flow-column {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1.1rem;
+}
+.flow-column.danger { border-top: 3.5px solid var(--rose); }
+.flow-column.success { border-top: 3.5px solid var(--emerald); }
+.flow-column h5 {
+  margin: 0 0 0.8rem;
+  font-size: 0.98rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.flow-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.flow-step {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+.flow-step-num {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.boundary-status-panel {
+  margin-top: 1.2rem;
+  padding: 1rem 1.2rem;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.8rem;
+  text-align: center;
+}
+@media (max-width: 600px) {
+  .boundary-status-panel { grid-template-columns: 1fr; }
+}
+.stat-tag { font-size: 0.74rem; color: var(--text-muted); margin-bottom: 0.2rem; }
+.stat-val { font-family: var(--font-mono); font-size: 1.15rem; font-weight: 700; }
+
+/* ============================================================
+   10. 组件 4：现场 5 组问答交互卡片
+   ============================================================ */
+.qa-card-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.4rem;
+}
+.qa-item {
+  background: var(--surface-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color 0.16s ease;
+}
+.qa-item:hover {
+  border-color: var(--border);
+}
+.qa-question-header {
+  padding: 1rem 1.3rem;
+  background: var(--surface-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  user-select: none;
+}
+.qa-question-text {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.qa-indicator {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+.qa-item.open .qa-indicator {
+  transform: rotate(180deg);
+}
+.qa-answer-body {
+  padding: 1.2rem 1.4rem;
+  font-size: 0.91rem;
+  line-height: 1.75;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-soft);
+  display: none;
+}
+.qa-item.open .qa-answer-body {
+  display: block;
+}
+
+/* ============================================================
+   11. 组件 5：两道闸门决策模拟沙盘 (Decision Gate Sandbox)
+   ============================================================ */
+.sandbox-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 1.4rem;
+}
+@media (max-width: 840px) {
+  .sandbox-grid { grid-template-columns: 1fr; }
+}
+.sandbox-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  background: var(--surface-2);
+  padding: 1.2rem;
+  border-radius: var(--radius-md);
+}
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.slider-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+}
+.slider-val-badge {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent);
+}
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0.2rem 0;
+}
+
+.sandbox-dashboard {
+  background: var(--surface-2);
+  padding: 1.4rem;
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--emerald);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.dashboard-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.composite-score-badge {
+  font-family: var(--font-mono);
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.dashboard-verdict-tag {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.8rem;
+}
+.dashboard-detail-text {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+/* ============================================================
+   12. 辅助组件：返回顶部、主题切换、打印适配
+   ============================================================ */
+.theme-toggle-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  transition: all 0.16s ease;
+}
+.theme-toggle-btn:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+.to-top-btn {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 99;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s ease;
+}
+.to-top-btn.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.to-top-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+@media print {
+  .reading-progress-bar,
+  .sidebar-nav,
+  .to-top-btn,
+  .theme-toggle-btn,
+  .btn-group {
+    display: none !important;
+  }
+  .main-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+}
+</style>
+</head>
+<body data-page-node-id="QcK3v1Cxz7KkCIQS6oAHUM">
+
+<div class="reading-progress-bar" id="readingProgressBar" data-page-node-id="k9TjGLV3ZSiqoN5ZBjuGYp"></div>
+
+<div class="page-container" data-page-node-id="DGd8bpHKEnqOqsyWFiwpGH">
+
+  <!-- 贴左侧边栏目录导航 -->
+  <nav class="sidebar-nav" aria-label="文档导航" data-page-node-id="tsVOgeHVdHf2LMQbCpsxX8">
+    <div class="sb-brand" data-page-node-id="WmdZVQtIAULmxgqp7J5IrH">FDE 101 · 决策模型</div>
+    <div class="sb-tagline" data-page-node-id="B0Nkf2LL5Zb9FLzjWdXTbd">Kevin Bai 核心演讲白皮书与工程推演</div>
+
+    <ul class="sb-toc" data-page-node-id="RVPrmiBkqDuB6tnlV3wASz">
+      <li data-page-node-id="HP3XWgV8rWgTsoQKqAZToF"><a href="#sec-overview" class="active" data-page-node-id="00SOGAC5e2dgZ7JFlHL6NS">前言：核心命题与摘要</a></li>
+      <li data-page-node-id="vVSJnCUoOo290RxmQK9XHq"><a href="#sec-customer-outcome" data-page-node-id="3Vd7rMbUTv4h7uuBUhk5Sk">一、买结果而非买平台</a></li>
+      <li data-page-node-id="48YZERfqHtHhVGMoPKquaJ"><a href="#sec-acv-estimates" data-page-node-id="GZF8E8MaHaHLwOCAYaaFKg">二、一张 ACV 图说明了什么</a></li>
+      <li class="toc-sub" data-page-node-id="KLkcqWqVQ9CVXEsW2mfnun"><a href="#sec-acv-estimates" data-page-node-id="EYsOr60wlJVUcAMzqiedXw">· ACV 对比与交付模式解析</a></li>
+      <li data-page-node-id="WN2GGiqLumA2WAs5iCZFDT"><a href="#sec-fit-matrix" data-page-node-id="SDSqjuYLJLSLnsFm8CbJjd">三、判断轴：技术复杂度矩阵</a></li>
+      <li class="toc-sub" data-page-node-id="oGVXZKpE7vl2bq2gWuBEn2"><a href="#sec-fit-matrix" data-page-node-id="akKVVgu6DPjvDQVZBrJAfG">· 2×2 买方-产品适用格子</a></li>
+      <li data-page-node-id="vWFHVaF7hcqdRtiqFJh3jK"><a href="#sec-platform-boundary" data-page-node-id="HpF2rGDA5lKcqEqCCyU1Up">四、与外包的分界在平台下</a></li>
+      <li class="toc-sub" data-page-node-id="bvNtbZkIVDw4OdzNOYxOjy"><a href="#sec-platform-boundary" data-page-node-id="h2eh5hnwFtdidfupOdNcN4">· 共享原语飞轮 vs 维护吞噬</a></li>
+      <li data-page-node-id="rsFb8oLlNA0R9iGvtHqJbY"><a href="#sec-ai-third-box" data-page-node-id="zaRDBMTtPn0Vdm6Ukb7rQL">五、AI 推入第三个格子</a></li>
+      <li data-page-node-id="y0NKmrJ7BouRy8cJ9ksVut"><a href="#sec-qa-panel" data-page-node-id="QnQqH9K40vOSVEK2sygCQW">六、现场五大焦点问答</a></li>
+      <li data-page-node-id="zr1A7YAKCPFuKspENhVzbp"><a href="#sec-two-gates" data-page-node-id="EzHw13KvWl6yO2uNnHyuEJ">七、组建团队的两道闸门</a></li>
+      <li class="toc-sub" data-page-node-id="hc0JH31P3l7lPkVXvfDrDi"><a href="#sec-two-gates" data-page-node-id="GlqWxoocTk40qV6BOav35v">· 两道闸门诊断沙盘</a></li>
+    </ul>
+
+    <div class="sb-tools" data-page-node-id="EonGi0taHQqAt1v3eetypb">
+      <button class="theme-toggle-btn" id="btn-theme-toggle" type="button" data-page-node-id="BQvL8bvl2OWvKDabtIlL6T">
+        <span data-page-node-id="GbbR1LaDc2M0QfAjLnMkYV">🌓 切换深浅主题</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- 主体文章内容（对称居中展示） -->
+  <main class="main-content" id="mainArticle" data-page-node-id="Vrz4mxvpcWsE7U6hfaF8kA">
+
+    <!-- 顶部文章标题与导言 -->
+    <header id="sec-overview" data-page-node-id="vcdQZyFC4CHH73OKo9pmle">
+      <h1 class="article-title" data-page-node-id="G6FsqSWs0rKmseZK7vEpvW">企业什么时候才真的需要 FDE？组建 FDE 团队前，需要先通过两道闸门...</h1>
+      
+      <div class="article-lead" data-page-node-id="maW0BSPZEKqMAUH4pNkTC6">
+        前线部署工程师的价值不在“派工程师驻场”，而在用共享平台原语把复杂技术交付成业务结果；缺少买家错配或平台基础，FDE 很快就会变成开发外包。
+      </div>
+
+      <ul class="takeaway-list" id="sec-core-takeaways" data-page-node-id="rT38wWhjTVZxYdSLitJhwF">
+        <li class="takeaway-item" data-page-node-id="q5yFJ7MEwEM41z3Gn45Qmc">
+          <span class="takeaway-icon" data-page-node-id="QuDNBh4431OTLHCHklmSFT">1</span>
+          <div data-page-node-id="CZGx4foGkImshwZRE6R36p"><strong data-page-node-id="Fx6OaCob3iULEoHcr2j6Or">适用特定错配：</strong>产品技术复杂，而买家没有足够工程能力把平台变成可用方案。</div>
+        </li>
+        <li class="takeaway-item" data-page-node-id="t1ej7sJxve1NizefnM2EjT">
+          <span class="takeaway-icon" data-page-node-id="OsxEd3F2hiGft6zA3VvbNT">2</span>
+          <div data-page-node-id="RzJb4BBx5inPToGrBcPQEF"><strong data-page-node-id="lt56rcnxVPCnHQjb1QaV11">与 Dev Shop 的本质分界：</strong>依靠“共享平台原语”持续沉淀；逐客从零开发会让维护成本不断累积并吞噬损益。</div>
+        </li>
+        <li class="takeaway-item" data-page-node-id="KKS9owW0FjhBD8r0C3XCIP">
+          <span class="takeaway-icon" data-page-node-id="3bLhkWnGwV4zNwjvQwctok">3</span>
+          <div data-page-node-id="tLgJm1e0BhJCQmIxsHjcuc"><strong data-page-node-id="tRvrUslHKxWSrnJC5RNH3m">AI 时代的推力：</strong>AI 让平台更 agentic、更可定制，也让更多公司需要重新检查客户能否独立完成实施。</div>
+        </li>
+      </ul>
+
+      <p data-page-node-id="ET9CUJU8DuKCPSWICtb2sN">在企业软件里，一个反复出现的落地难题是：厂商交付了强大的底层平台，客户付费之后，却依然不知道怎样把平台能力变成业务结果。以 <strong data-page-node-id="OkLLdchB5CpFaHv3k17eC7">Palantir Foundry</strong> 为例，它能集中数据、构建本体（ontology），把底层数据变成仓库等业务对象，并在其上开发应用。但企业负责人仍会追问：「这对我的实际业务有什么用？」如果只卖技术，厂商就把理解问题、学习平台和构建应用的责任留给了客户。</p>
+
+      <p data-page-node-id="ocvoQOpybaO1slc0qPdLlQ">前线部署工程师（Forward Deployed Engineer，简称 <strong data-page-node-id="GonrgtGc6ZVt4qfEsr7HpG">FDE</strong>）试图填补的，正是平台能力与业务结果之间的这段距离。Kevin Bai 现任职于 Anthropic；他在 AI Engineer World's Fair 的《FDE 101》演讲中，围绕什么是 FDE、企业为什么需要它，以及为什么他判断 AI 时代会让更多公司采用它展开。此前他曾在 Palantir 从事相关工作，并作为首位成员加入 Rippling 的 FDE 团队，帮助团队在一年内扩展至约 25 人。这份材料最值得读的地方，是它给出了两项很具体的判断：什么样的产品与买家组合真的需要 FDE，以及什么样的平台基础能防止它滑向开发外包。</p>
+
+      <!-- 媒体与视频区域 -->
+      <figure class="media-card" data-page-node-id="AMrhHspDEpT005n8p013gq">
+        <div class="media-header" data-page-node-id="8hqfB3jfsNojF2ksOgRvKp">
+          <span class="media-badge" data-page-node-id="8QpEbowY4NMtV518fmRAdD">🎥 核心视频材料</span>
+          <span style="font-size:0.8rem; color:var(--text-muted);" data-page-node-id="WuFTDPgsI9CJUVPv5SIuhj">AI Engineer World's Fair · 演讲时长 17分48秒</span>
+        </div>
+        <div class="media-body" data-page-node-id="GjYBY60DmfDWRLFJQcUziD">
+          <div class="video-stage" data-page-node-id="gpEPNJhR204EvADCg2D1zD">
+            <video controls playsinline preload="metadata" poster="/media/fde-101/00-talk-thumbnail.jpg" style="width:100%; height:100%; object-fit:cover;" data-page-node-id="RcOAHyAH1CYu90WoyVSunq">
+              <source src="/media/fde-101/fde-101-bilingual-720p.mp4" type="video/mp4" data-page-node-id="z9GvmtluGbTs7m8Gfk1Wv2">
+              当前浏览器无法播放视频，可<a href="https://www.youtube.com/watch?v=KwhgfwOSToQ" target="_blank" rel="noopener" data-page-node-id="UJoBYizC9H302HaA6BWlpE">前往 YouTube 查看原始演讲</a>。
+            </video>
+            <div class="video-fallback-box" data-page-node-id="Vnm3a378V5IpqtmhgKIuUe">
+              <h5 style="margin:0 0 0.5rem; font-size:1.05rem;" data-page-node-id="ZD7SAHEXLbCCc2xkUVzpdU">Kevin Bai: FDE 101 完整演讲</h5>
+              <p style="font-size:0.84rem; margin:0 0 1rem; color:#ccc;" data-page-node-id="oduWFX0RK0Mg4MqGsERMSi">若本地离线视频不可播放，可通过原版演讲直链在线查看（中英双语字幕）</p>
+              <a href="https://www.youtube.com/watch?v=KwhgfwOSToQ" target="_blank" rel="noopener" class="video-play-btn" data-page-node-id="VXAYpOD1vL4FX5G58yd5KV">
+                <span data-page-node-id="tBC18nVIqoykzcOiwKAddW">▶ 前往 YouTube 查看原始演讲</span>
+              </a>
+            </div>
+          </div>
+          <figcaption class="media-caption" data-page-node-id="MPXAMsd6Bm6Jpw5beXfWfS">Kevin Bai 的完整演讲，时长 17 分 48 秒；视频已配好中英双语字幕。</figcaption>
+        </div>
+      </figure>
+    </header>
+
+    <!-- 第一节：客户买的应当是结果 -->
+    <section id="sec-customer-outcome" data-page-node-id="fOEBxmVrEDC7WET79T5Xov">
+      <h2 data-page-node-id="DsB6cmajgA1rwwHcnMg3Tj">客户买的应当是结果，而不是一套等待学习的平台</h2>
+
+      <p data-page-node-id="qxYTWoKfh1Hqqh8nfqlBGv">如果只卖平台，客户不仅要为软件付费，还要再次投入人力学习平台，之后才可能构建出有用的应用。FDE 把平台与工程服务合在一起：工程师先理解客户的业务，再在平台上组装解决方案。客户购买的不再只是软件，也不是单纯购买某个人的工时，而是一个能够运转的业务结果。这也是 Kevin Bai 把 FDE 称为 Palantir 市场进入方式（go-to-market motion）的原因：常规方式是厂商卖出平台后，由客户承担学习和实施；FDE 则把理解业务、在平台上构建方案并交付结果纳入客户实际购买的整体。这意味着 FDE 不是成交后的补救性实施，而是技术平台进入非技术企业市场的方式之一。</p>
+
+      <p data-page-node-id="oOgfcjB6mtCS2cqq2aQHB0">以快消品（CPG）企业为例，业务方关心的是货架陈列与销售吞吐量；数据如何组织只是实现细节。FDE 的任务，是理解这些业务需求，再用已经存在的平台能力把方案构建出来。</p>
+
+      <p data-page-node-id="N8Er8OA6MrBESu93jnB6NI">这种协作方式并不陌生。B2B 创业早期，团队和客户常常都还没完全弄清产品最终是什么、客户究竟在买什么。客户提供问题语境，团队投入时间、资源与技术共同构建方案，并在过程中寻找产品市场契合点（PMF）。FDE 可以理解为把这种「设计伙伴关系」（Design Partnership）扩展到企业客户，而不是默认它只能存在于公司的最初 18 个月。</p>
+    </section>
+
+    <!-- 第二节：一张 ACV 图 -->
+    <section id="sec-acv-estimates" data-page-node-id="0wwSDfvbuQGUS4h1hMwP44">
+      <h2 data-page-node-id="BuwTwIv56fgLO928kgBBzX">一张 ACV 图，能说明什么、不能说明什么</h2>
+
+      <p data-page-node-id="IaWJsYfOWvF77FitdDc9wR">Kevin Bai 用客单价（ACV，材料中指一个客户一年向厂商支付的金额）说明这种交付模式可能带来的商业结果。重点不在于给所有公司划出一个统一的投入门槛，而在于显示 Palantir 与其他大型企业软件公司之间存在明显的数量级差异。</p>
+
+      <p data-page-node-id="fzmJI74vH0DGxcp9BQAshV">材料中的估算图把 Palantir 的单客户 ACV 列为约 400 万美元，ServiceNow 约 120 万美元，Workday 约 80 万美元，Snowflake 约 32.2 万美元，Salesforce 约 25.2 万美元，Microsoft Azure 约 21.4 万美元。现场口述则把 Workday 带保留地说成约 60 万美元。</p>
+
+      <p data-page-node-id="F4m4CzIFcRBVdIDiMz9k4e">这些数字缺少统一的截止日期和完整计算方法，图下注明部分结果来自营收与披露客户数，部分来自细分代理或第三方估算。它不能当作严格可比的行业财务排名，更不能证明 Palantir 的高客单价由 FDE 单独造成。它在这套论证里的作用，是说明 Palantir 通过平台与工程交付相结合，正在玩一场与常规 SaaS 不同的游戏。</p>
+
+      <!-- 交互组件 1: ACV 对比图表与商业模式剖析 -->
+      <div class="component-box" id="box-acv-estimates" data-page-node-id="oYtfzC6Wgq2NKFAlzJd5NI">
+        <div class="component-header" data-page-node-id="3kkK9aFeCpBuEkVIv8awZ3">
+          <div class="component-title-group" data-page-node-id="Wt39EQF6Y5SRTWElnJycQx">
+            <h4 data-page-node-id="jIb7fhFJu8kzai7u4wauPl">ACV（单客户年度合同价值）量级对比与交付剖析</h4>
+            <div class="component-desc" data-page-node-id="j4Rmgu4jPkzR6WH6HLxL1q">数据源自演讲估算图表 · 反映不同企业软件 GTM 模式的合同厚度差异</div>
+          </div>
+          <div class="btn-group" data-page-node-id="5PPxlfGMq0RuNSxK1VLqcS">
+            <button class="ctrl-btn active" id="btn-acv-rank" type="button" data-page-node-id="Tay1C3hZJCbCHNWTuWkgee">按合同金额排行</button>
+            <button class="ctrl-btn" id="btn-acv-breakdown" type="button" data-page-node-id="OVaElBcubT0Q2iGfAYswhb">按交付模式分类</button>
+          </div>
+        </div>
+
+        <div class="acv-chart-wrap" data-page-node-id="HpHRCZF4vpxA2VlaqrCaAB">
+          <div class="acv-bar-grid" data-page-node-id="Joiow8FENm1eT0gScBx63X">
+            <div class="acv-bar-item" data-acv="4000" data-page-node-id="pDXEedTvrSIXYxq3cwHqyy">
+              <span class="acv-label" data-page-node-id="Aibhe6EuRg6A3UoeKa3LTI">Palantir</span>
+              <div class="acv-track" data-page-node-id="lcL5lMcgKE4Z3p8TQpdfyV"><div class="acv-fill highlight" style="width: 100%;" data-page-node-id="lxdlZrbbt0NOLlXwhUJHNL">高出次席 3.3x</div></div>
+              <span class="acv-val-text" data-page-node-id="X20oY9ZN5mnAOYGkgGXqzc">$4,000,000</span>
+            </div>
+            <div class="acv-bar-item" data-acv="1200" data-page-node-id="ncYdrP4J3CSqJJoDHz5E8s">
+              <span class="acv-label" data-page-node-id="50MAECJiRivSEuzL5Jlqww">ServiceNow</span>
+              <div class="acv-track" data-page-node-id="TGiCHDU6uuhXFYuSF4cBQu"><div class="acv-fill" style="width: 30%;" data-page-node-id="9frxk2M1z55wU3CZk2APEn"></div></div>
+              <span class="acv-val-text" data-page-node-id="AmNuMh6ttE7W6qlDEs4FP2">$1,200,000</span>
+            </div>
+            <div class="acv-bar-item" data-acv="800" data-page-node-id="gog0Xk0LSoCuDOk5oVlt11">
+              <span class="acv-label" data-page-node-id="lAGFLiOiNAs3ZovJ6UDdCp">Workday</span>
+              <div class="acv-track" data-page-node-id="miIfuczp9k5GZJTwYRJyi9"><div class="acv-fill" style="width: 20%;" data-page-node-id="Cf0QFJjI3HM2rahetx8Yku"></div></div>
+              <span class="acv-val-text" data-page-node-id="vg1GponNQw87cXpICsXCMc">$800,000</span>
+            </div>
+            <div class="acv-bar-item" data-acv="322" data-page-node-id="dr92WL0QuVYKrmqtx49lT7">
+              <span class="acv-label" data-page-node-id="pXR4V1bKL9B2rg77tBfm4m">Snowflake</span>
+              <div class="acv-track" data-page-node-id="UJ674wUOXRwTXNBCv1EduI"><div class="acv-fill" style="width: 8.05%;" data-page-node-id="7fFDQbjiStX3U6BYDJ0Jep"></div></div>
+              <span class="acv-val-text" data-page-node-id="g48CIpGwe621liXyqKdNon">$322,000</span>
+            </div>
+            <div class="acv-bar-item" data-acv="252" data-page-node-id="FjMlCFV6UGBPpEUSD9eeru">
+              <span class="acv-label" data-page-node-id="31tI9cGBd2asOgT04Lpvor">Salesforce</span>
+              <div class="acv-track" data-page-node-id="Y6BXYCpj9d6VfWvsaulwef"><div class="acv-fill" style="width: 6.3%;" data-page-node-id="OuOoccqufyG37bJT9f7yZj"></div></div>
+              <span class="acv-val-text" data-page-node-id="yGUkMKKESLVwGos7R2U38C">$252,000</span>
+            </div>
+            <div class="acv-bar-item" data-acv="214" data-page-node-id="oGIJF1Lz1PiowU5BMm821M">
+              <span class="acv-label" data-page-node-id="CsH0ITSt3yoWWU4DIzRJ3i">Microsoft Azure</span>
+              <div class="acv-track" data-page-node-id="v2g6KDu7JY54d2d5fGFFrK"><div class="acv-fill" style="width: 5.35%;" data-page-node-id="YHtJt8oFc59TyyGLeCBupF"></div></div>
+              <span class="acv-val-text" data-page-node-id="Fb2d85AQGn7ORHZdXZNiQu">$214,000</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="acv-info-panel" data-page-node-id="eOrXeQcWrQlrx9SVHtikkd">
+          <div class="acv-info-meta" data-page-node-id="cO2YZxLPPqoKBbEVWRnZNR">
+            <span data-page-node-id="BzWpVnqDFM60NaCzsJshe3"><strong data-page-node-id="79ooDrxSRvAAN4hrGMLJFv">当前聚焦：</strong><span id="out-acv-company" data-page-node-id="IEHSmOWnhnKTC2Z4tlPtCe">Palantir</span></span>
+            <span data-page-node-id="eGGK3Tjy6XG4ETtRLD9EqR"><strong data-page-node-id="zsCNTtbaeBln8hplxD6Kdu">估算 ACV：</strong><span id="out-acv-val" data-page-node-id="9lS2rml113C3L4i3PQIBxP">$4,000,000</span></span>
+            <span data-page-node-id="CKV2zIhJrTaVrsxrGMlS5q"><strong data-page-node-id="ybfuHEpamlqpQdJ3cfpUJy">典型交付方式：</strong><span id="out-acv-motion" data-page-node-id="Z8weghVt9zv1BDh1R58rzK">深度 FDE 平台集成与本体共建</span></span>
+          </div>
+          <div style="font-size:0.86rem; color:var(--text-secondary);" id="out-acv-desc" data-page-node-id="4gP7WSmdRlJtuKDIthrHyg">
+            Palantir 将平台许可与驻场工程深度结合，直接向非技术客户兑现业务结果（如产线减产预测、供应链本体搭建），从而支撑起数量级领先的超高客单价。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第三节：真正的判断轴 -->
+    <section id="sec-fit-matrix" data-page-node-id="kGf3St1NKB6SgCt76UBwAG">
+      <h2 data-page-node-id="ldsqXimEYgC5Po2Q9CkFLV">真正的判断轴：产品有多技术，买家有多技术</h2>
+
+      <p data-page-node-id="UKfcrxM1VdDYYOWKRh287k">并非所有企业软件都需要 FDE。判断是否需要它，要同时看所售产品的技术复杂度，以及买方的技术承载能力。这里的判断重点不是合同签署者或高管是否懂技术，而是客户侧实际负责实施、构建和使用方案的人或团队，是否有能力吸收平台复杂度。</p>
+
+      <!-- 交互组件 2: 2x2 买方-产品契合矩阵 -->
+      <div class="component-box" id="box-fit-matrix" data-page-node-id="3wd8hRcOLRFWewpUAhybnm">
+        <div class="component-header" data-page-node-id="8bdIt67Tym6V5iInw5psPl">
+          <div class="component-title-group" data-page-node-id="lR7igU7gJhnKUigDweOMXV">
+            <h4 data-page-node-id="y8AE5DP5Z7WJaIfpu5NeyP">产品技术复杂度 × 买方工程承载力 四象限决策矩阵</h4>
+            <div class="component-desc" data-page-node-id="qwBWrCeBtcqOaRC97PY2l5">点击各象限卡片查看适用逻辑、交付风险与典型代表厂商</div>
+          </div>
+          <div class="btn-group" data-page-node-id="YxWBHNY7WniLCMBS81YRvD">
+            <button class="ctrl-btn active" id="btn-matrix-all" type="button" data-page-node-id="BxOIwOaNCyBtnA3bof1WBA">全景视图</button>
+            <button class="ctrl-btn" id="btn-matrix-fde" type="button" data-page-node-id="DIhtyHMNaSmSHpDzuD65OL">聚焦 FDE 适用格子</button>
+            <button class="ctrl-btn" id="btn-matrix-devrel" type="button" data-page-node-id="kfCbIrS2PsOVDGxHf3YwDs">DevRel 格子</button>
+            <button class="ctrl-btn" id="btn-matrix-saas" type="button" data-page-node-id="JWEInxISnkP9LQXohPsoez">标准 SaaS 格子</button>
+            <button class="ctrl-btn" id="btn-matrix-ai" type="button" data-page-node-id="JiCGOGU7aZnZoRTTV77Ugk">AI 迁移推力</button>
+          </div>
+        </div>
+
+        <div class="matrix-grid" data-page-node-id="ELBIMIzO4OMVbbMvCtCSBV">
+          <div class="matrix-card sweet-spot active" id="card-q3" data-quadrant="Q3" data-page-node-id="tCmzdcj4MIYaDfrBZpfEwP">
+            <span class="matrix-badge" style="background:var(--emerald-soft); color:var(--emerald);" data-page-node-id="CUwdux8DpoasAelojZn64A">★ FDE 核心适用格子</span>
+            <h5 data-page-node-id="lC4DIaUvMZ6pfE0Mli2AyR">高技术平台 × 非技术买家</h5>
+            <p data-page-node-id="IhBKFKVF9ZX0z5F0EXHlEz"><strong data-page-node-id="Z96eEjis8SLcdpeeBP8W50">代表：Palantir Foundry、传统能源/快消巨头。</strong>产品本身极其强大复杂，但买家只有业务团队、缺少软件工程深度，必须由 FDE 弥合工程鸿沟以交付业务结果。</p>
+          </div>
+
+          <div class="matrix-card" id="card-q1" data-quadrant="Q1" data-page-node-id="Q2U6uamOooN4IhnoAnb67h">
+            <span class="matrix-badge" style="background:var(--cyan-soft); color:var(--cyan);" data-page-node-id="aqJBaTIFRRIfTcCbt4zYw7">开发者生态 / DevRel</span>
+            <h5 data-page-node-id="Ukn5aOw0JZU1DWwMNAFFyp">高技术产品 × 技术买家</h5>
+            <p data-page-node-id="bp7Bd6dUm5rcSuBm572XZG"><strong data-page-node-id="DBRMfkG0eCHRmAwHjksckg">代表：GitHub、Datadog、Snowflake。</strong>买家本身是工程师，有能力吸收和玩转技术复杂度，通过文档和 API 即可自助，不需要 FDE 驻场。</p>
+          </div>
+
+          <div class="matrix-card" id="card-q2" data-quadrant="Q2" data-page-node-id="M3dpOUWJHyYwrI9HgKqFE6">
+            <span class="matrix-badge" style="background:var(--amber-soft); color:var(--amber);" data-page-node-id="AwKazWv2uLyGE54AzAa0n6">销售驱动 / 客户成功</span>
+            <h5 data-page-node-id="hRsptoq8O5p5dPqVqJANRa">可配置产品 × 非技术买家</h5>
+            <p data-page-node-id="swPXBd4wVgfeG82U4VpdjD"><strong data-page-node-id="zpRUuJy2qItC8KCtYYpFGZ">代表：Rippling、Jira、Slack。</strong>产品重在配置而非二次开发，实施主要依靠表单、向导与传统顾问，不需要派遣代码级工程人员。</p>
+          </div>
+
+          <div class="matrix-card" id="card-q4" data-quadrant="Q4" data-page-node-id="GDGtISwncR63lwwuGwaHPt">
+            <span class="matrix-badge" style="background:var(--surface-3); color:var(--text-muted);" data-page-node-id="uQexgfX8qgHb2Wd06DETIq">API 纯自助 / 嵌入式</span>
+            <h5 data-page-node-id="IzTZO14PVZRw8E98ctmvCJ">轻量标准工具 × 技术买家</h5>
+            <p data-page-node-id="0nQ7y3tkhkMvaFcyuCyAqU"><strong data-page-node-id="DSN8fOgTrB1q2DEAQoB10Q">代表：Stripe、Twilio、OpenAI API。</strong>开箱即用的技术原语，技术买家自行集成，完全无现场交付开销。</p>
+          </div>
+        </div>
+
+        <div class="matrix-detail-card" data-page-node-id="joBnwcps4bTBysqXmBehzE">
+          <div class="matrix-detail-header" data-page-node-id="0nVyOABKQqPDIRkLIlUQVX">
+            <div data-page-node-id="2UIr9ct8CZXBfEjpHuqFcV">
+              <strong id="out-matrix-title" data-page-node-id="a62zXZzzKc8mPouKyCTkkn">高技术平台 × 非技术买家（FDE 黄金契合格子）</strong>
+              <div style="font-size:0.78rem; color:var(--text-muted);" id="out-matrix-quadrant" data-page-node-id="Cq0mqdvcP1zhjMNglpDwST">象限：高技术复杂度 / 低买方工程深度</div>
+            </div>
+            <span class="media-badge" id="out-matrix-verdict" data-page-node-id="scWAtCL5V3ZgCZwJBSCItc">强烈推荐配置 FDE 团队</span>
+          </div>
+          <div style="font-size:0.86rem; line-height:1.65; color:var(--text-secondary);" data-page-node-id="mW9UtOnqgBRvcg9k7iWhtW">
+            <div style="margin-bottom:0.4rem;" data-page-node-id="TNTRAfEo51omFa1gXKYJkq"><strong data-page-node-id="JUS8cjZ8q1X6eGZbeG3Yae">买方痛点画像：</strong><span id="out-matrix-profile" data-page-node-id="YkvDAVwPqkhr0TcGXDNXEc">业务方深刻理解行业规则，但其内部工程师不具备数据本体建模能力，流水线并非 Data Pipelines。</span></div>
+            <div style="margin-bottom:0.4rem;" data-page-node-id="XBrFAzmZNwrA0EzRB6mHWX"><strong data-page-node-id="ezgdsb2PGrVf7QN86CR5Xk">代表案例：</strong><span id="out-matrix-cases" data-page-node-id="sAkdHs1C4ClZObw27PeShS">Palantir Foundry 面向空客（Skywise 航空数据中台）、BP 石油钻井业务。</span></div>
+            <div data-page-node-id="0kOs10U7nZQCYUaECO1Fxh"><strong data-page-node-id="isTkaaJEg5tx6vjfaDQGzY">误用风险：</strong><span id="out-matrix-risk" data-page-node-id="EMpA5BIpE3EmA39YWe7ymL">若买家已有成熟软件工程中台，盲目派入 FDE 会与客户自身开发团队产生权责与架构冲突。</span></div>
+          </div>
+        </div>
+      </div>
+
+      <p data-page-node-id="WG8bcdMHM8IkrFtNCS6DFw"><strong data-page-node-id="L0dxBcDBjVK5qMDDVfcjlR">技术产品卖给技术买家，不需要 FDE。</strong> GitHub、Datadog 可能很复杂，但用户本身是软件工程师，能够吸收并使用这种复杂性。</p>
+
+      <p data-page-node-id="GHYUPtV6y2wnG4OuatzVZB"><strong data-page-node-id="PD7BQjrbeFSnBa4OngRG7Z">可配置产品卖给非技术买家，也不需要 FDE。</strong> Rippling、Jira、Slack 可能同样复杂，但它们的定位是让用户配置，而不是让用户在其上开发。</p>
+
+      <p data-page-node-id="BbDrKwiF7KbkGQPTvNbb3K"><strong data-page-node-id="kCiDJkfvszq64tHa28Bd1m">技术平台卖给非技术买家，才进入 FDE 的适用格子。</strong> Google、Meta 或 AI 实验室拥有工程团队，可以自己构建需要的应用；《财富》500 强的油气企业未必拥有同样的软件工程深度。用演讲中的比喻说，「他们的 pipelines 不是 data pipelines」。买家技术能力不足会直接妨碍价值兑现：客户若自行实施，需要承担招聘、管理、留住工程师，以及训练团队掌握平台的成本；FDE 相当于把已熟悉平台、又能贴近客户理解问题的工程能力一并交付，与客户一起找出真正的需求，再把方案构建出来。</p>
+
+      <p data-page-node-id="H8gqZO8ndnLL4kXCF88Sn7">这个矩阵的价值在于排除误用。FDE 不是「企业客户很大」就该增设的岗位，也不是高客单价产品的固定配置。决定因素是产品复杂性与买家实现能力之间是否真的存在缺口。</p>
+    </section>
+
+    <!-- 第四节：与开发外包的分界 -->
+    <section id="sec-platform-boundary" data-page-node-id="ZJL6XHNXKTemVXbDLjhwBL">
+      <h2 data-page-node-id="b3WOjAq20txLDSWRi9jWQo">FDE 与开发外包的分界，在平台下面</h2>
+
+      <p data-page-node-id="54ymkOjxXKV5Gp3uwNn0im">一个直接的反对意见是：如果每个企业客户都要定制，最终岂不是堆出几十套互不相干、无人愿意维护的代码？这个问题成立。如果每个 FDE 都从零开始构建，团队做的就是开发外包（dev shop），而不是这里所说的 FDE。</p>
+
+      <!-- 交互组件 3: 外包陷阱 vs 共享平台原语飞轮 -->
+      <div class="component-box" id="box-platform-boundary" data-page-node-id="3H1j0iA69A5W70dkDPCMNO">
+        <div class="component-header" data-page-node-id="C403aDDaTtQepi1airUygp">
+          <div class="component-title-group" data-page-node-id="lTnJThGhHwsD4OboqyZwpw">
+            <h4 data-page-node-id="cw1KfCiHKMo49ViueK8wci">FDE 与开发外包（Dev Shop）的本质分界：平台原语机制</h4>
+            <div class="component-desc" data-page-node-id="aGeKRuVG4YRjSP6WQjvEgV">持续从零开发将引发代码膨胀雪崩；共享原语回流机制构建良性递增飞轮</div>
+          </div>
+          <div class="btn-group" data-page-node-id="JwF8OUfiuxf5tN6LwZCoKv">
+            <button class="ctrl-btn active" id="btn-boundary-flywheel" type="button" data-page-node-id="W6tQAbsbJZAVjyYI5sQSBG">共享原语飞轮模式</button>
+            <button class="ctrl-btn" id="btn-boundary-devshop" type="button" data-page-node-id="XPLJPQYteHAma69CbsLIqD">逐客从零外包模式</button>
+          </div>
+        </div>
+
+        <div class="boundary-diagram-wrap" data-page-node-id="gVjFazT37fX18p9dPRG8rV">
+          <div class="flow-compare-grid" data-page-node-id="NuCSC5jwUwl9aRVWRHs4MX">
+            <div class="flow-column danger" data-page-node-id="jZUvZSalZ0na0JK2OOE48K">
+              <h5 data-page-node-id="NfOsKfT8e0LGlNkZxaw0Bm"><span style="color:var(--rose);" data-page-node-id="OD6VLKguAl9QnlHLMKsEmJ">●</span> 逐客从零开发外包（Dev Shop 反模式）</h5>
+              <div class="flow-steps" data-page-node-id="CXuX8OfPKv6K3tsHeGbcA0">
+                <div class="flow-step" data-page-node-id="ggc7gT1E6CvwDivpIitvLE"><span class="flow-step-num" data-page-node-id="SkvcDFxyM6ntrptTNDlDBX">1</span> 客户现场产生独特业务需求</div>
+                <div class="flow-step" data-page-node-id="JYDxYSTrMpqKFLuJiqGsBM"><span class="flow-step-num" data-page-node-id="MqnEB3CBXd4a9ujF0vg2MX">2</span> 工程师为该客户全新手写定制全套逻辑</div>
+                <div class="flow-step" data-page-node-id="jDi6kBTcG6edsJ43htKELP"><span class="flow-step-num" data-page-node-id="9djsAOD8sy5uxt0wVI0Ac9">3</span> 形成独立的客制化代码分支，孤立运行</div>
+                <div class="flow-step" data-page-node-id="UKaCmzdiRt6glLYpb8KguW"><span class="flow-step-num" data-page-node-id="UVdgEpDc0pVMDyDtEh6QfM">4</span> 随着客户数 N 增加，维护负担按 O(N) 甚至超线性激增</div>
+                <div class="flow-step" data-page-node-id="bWHkDfRh7sBdXHa3fh1ftP"><span class="flow-step-num" data-page-node-id="X2yBMxGNDzAJcNMTUpgXza">5</span> 维护成本吞噬损益（P&L），工程骨干心力交瘁离职</div>
+              </div>
+            </div>
+
+            <div class="flow-column success" data-page-node-id="5gtVKedbDcQxQDzb63DI42">
+              <h5 data-page-node-id="cx5wjSkfpOY3tmliOyjoCv"><span style="color:var(--emerald);" data-page-node-id="Fpm79G7A0att8iIgBL12ff">●</span> 共享平台原语闭环（FDE 正向飞轮）</h5>
+              <div class="flow-steps" data-page-node-id="7FFa0Wp2Le3WjqArsllLGh">
+                <div class="flow-step" data-page-node-id="BULK007sbEOjzyVo23AoLI"><span class="flow-step-num" data-page-node-id="IhMtlBa1ssmQUlRkukHEtw">1</span> 深入客户现场理解独特业务语境与痛点</div>
+                <div class="flow-step" data-page-node-id="At2hjwACAkcVPi1ZNchjyN"><span class="flow-step-num" data-page-node-id="8CTYjl7Hkty2RviFlMY020">2</span> 识别反复出现的共性业务抽象与模型</div>
+                <div class="flow-step" data-page-node-id="7plUSM10AUPpzCvHwB8YKg"><span class="flow-step-num" data-page-node-id="cP8NVbMGPFwqtStFvrXtD0">3</span> 沉淀为平台共享原语（本体、组件、数据流水线）</div>
+                <div class="flow-step" data-page-node-id="I2WdFAwfpqaacl00lRKK6o"><span class="flow-step-num" data-page-node-id="pMltd5LG20SeqBU0wnLql0">4</span> 后续客户 60% 基于已有原语拼装，仅 40% 边缘定制</div>
+                <div class="flow-step" data-page-node-id="6GAJZmKE6R3MCPEMk2DGas"><span class="flow-step-num" data-page-node-id="tAIBCrGG6SKFMBeAojgh6F">5</span> 单客户交付成本递减，平台价值与护城河加速累积</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="boundary-status-panel" data-page-node-id="CBITbREcY73IpE9EQ2xTzW">
+            <div data-page-node-id="PPBGGCk2iOgfuLeTcBpNRU">
+              <div class="stat-tag" data-page-node-id="rKPTmY5taDMcVBHeJXL36T">当前架构模式</div>
+              <div class="stat-val" id="out-boundary-mode" style="color:var(--emerald);" data-page-node-id="oLiYf0rsnlaZwMlIjCMWCf">平台原语沉淀</div>
+            </div>
+            <div data-page-node-id="DPWUH6L1S7AYXMWTueGFyO">
+              <div class="stat-tag" data-page-node-id="aAfGoIEZf5pPrsXWDZNpWE">代码库维护膨胀度</div>
+              <div class="stat-val" id="out-boundary-codebases" style="color:var(--emerald);" data-page-node-id="BoWWWOolfYh3pT2GqQlmZy">收敛于统一内核</div>
+            </div>
+            <div data-page-node-id="nCjDugHxxc19APqnvTtQPX">
+              <div class="stat-tag" data-page-node-id="QDfmyRnfIPrY4BssTtWUeh">边际交付毛利率 (P&L)</div>
+              <div class="stat-val" id="out-boundary-margin" style="color:var(--emerald);" data-page-node-id="RN2psXXCccv6YbEuMZ6G2D">逐单显著上升</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="font-size:0.86rem; color:var(--text-secondary); margin-top:0.8rem;" id="out-boundary-desc" data-page-node-id="nqwkBjyJHqVV1HwGceSjh7">
+          真正的分界不在于「是否写客户定制代码」，而在于「是否持续从零重造、以及能否把可泛化部分回流平台」。客户特有逻辑留在边缘，通用能力回流中枢。
+        </div>
+      </div>
+
+      <p data-page-node-id="yAouV9STHxAoyOjwnVlL2N">在逐客从零构建的模式里，客户越多，独立代码库和维护负担越重。Kevin Bai 的警告很直接：不断重复造轮子，维护成本最终会吞噬损益，工程师也可能在那之前先离开。</p>
+
+      <p data-page-node-id="pex0vs64VOrPHMaU5UY9uq">真正的分界是共享平台原语（shared platform primitives）。分界不在于「是否写客户定制代码」，而在于「是否持续从零重造、以及能否把可泛化部分回流平台」。一套良性运转的闭环是：客户现场的具体业务问题产生定制方案；其中反复出现的共性部分被识别出来，沉淀为平台的数据模型、应用组件或工作流等共享原语；后续客户再遇到类似问题时，FDE 就可以直接在这些已有原语上组装，下一次交付不必重新开始。客户特有的最后一段逻辑留在客户侧，可泛化的基础能力则长期回到共享平台。正是这个机制让现场工作反过来建设产品，推动能力持续累积，而不是单纯随着客户增加累积维护负担。</p>
+
+      <p data-page-node-id="RP765D2TGoxhKDSuktLKbs">这也解释了为什么「派工程师直接创造收入」听起来诱人，却不能成为组建团队的充分理由。即使已有强健平台，维护客户方案仍然很重；平台只是管理这份负担的前提，不会让负担消失。没有平台，这个问题会变成致命风险。</p>
+    </section>
+
+    <!-- 第五节：AI 正把更多公司推入第三个格子 -->
+    <section id="sec-ai-third-box" data-page-node-id="bPHRXms4QtUzIwN37NkwRc">
+      <h2 data-page-node-id="hsQKpSSv2HbxShgXSTWFSX">AI 正把更多公司推入第三个格子</h2>
+
+      <p data-page-node-id="9SfwzBlBEO7uTWBFyBuoqZ">AI 让代码更容易写，也让复杂的定制软件更容易构建，但这还不是材料最重要的判断。更深的变化是，越来越多平台正在变得 agentic，也因此变得更可定制。然而，可定制空间的扩大带来了一个表面矛盾：产品能力和实施路径不再像固定 SaaS 功能那样清晰，客户往往更难判断它究竟能解决什么业务问题、该如何落到自己的实际业务里。代码生产变容易，绝不等于问题定义、方案组合和业务实施会自动变容易。</p>
+
+      <p data-page-node-id="T5f64T5sxLhedouQirJCFn">如果软件厂商把成败留给客户自己的实施能力，在向更大型客户、其他横向市场或新的垂直行业扩张时，就会遇到更大的阻力。</p>
+
+      <p data-page-node-id="ZZFgDkHpffUVmcpIDkm2l2">这就是 Kevin Bai 的核心个人假设：AI 正悄悄把更多公司推入「技术产品卖给非技术买家」的第三个格子。这并非已经证明的普遍规律，也没有证明所有 agentic 产品都需要 FDE，但提醒团队重新检查原本由自助实施承担的那段距离，是否已经超过了客户的技术能力。</p>
+    </section>
+
+    <!-- 第六节：四组现场问答 -->
+    <section id="sec-qa-panel" data-page-node-id="z4EnpZC61pKbNciYcEF4Yj">
+      <h2 data-page-node-id="TBcKEi37409So51pnP5Qkl">四组现场问答，把边界落到实际工作</h2>
+
+      <p data-page-node-id="N8ObTuX7B34so7tnb1jGM4">现场问答共有四组提问；其中关于协作的一组，进一步区分了同一账户安排多名 FDE 与不同供应商共同参与，因此下面拆成五个实际问题。它们也暴露出这套方法没有一组可以机械照抄的参数。</p>
+
+      <!-- 演讲现场问答图片与自包含降级卡片 -->
+      <figure class="media-card" style="margin: 1.6rem 0;" data-page-node-id="HKMYAWiLnglDANTJunZbTG">
+        <div class="media-body" style="background:var(--surface-2); border-radius:var(--radius-md); overflow:hidden; border:1px solid var(--border-soft);" data-page-node-id="ZZ2PNvfGcnkA3oHRkIB29s">
+          <img src="/media/fde-101/05-questions.webp" alt="演讲现场问答" style="width:100%; height:auto; display:block;" onerror="this.style.display='none'; document.getElementById('fallback-qa-img').style.display='block';" data-page-node-id="PkSAFX7QoSzTyZrL4A8AcD">
+          <div id="fallback-qa-img" style="display:none; padding:2.2rem 1.6rem; text-align:center; background:linear-gradient(135deg, var(--surface-2), var(--surface-3));" data-page-node-id="LXa92is6Urr5a9slvoAD04">
+            <div style="font-size:2.2rem; margin-bottom:0.5rem;" data-page-node-id="XYAjulFEwjYK7MFvyHCB86">📋</div>
+            <div style="font-weight:700; color:var(--text-primary); font-size:1.02rem; margin-bottom:0.35rem;" data-page-node-id="zmgvVWDX0wdmxwHbiBpgyg">演讲现场问答实录图示 (05-questions.webp)</div>
+            <div style="font-size:0.84rem; color:var(--text-muted); max-width:560px; margin:0 auto; line-height:1.6;" data-page-node-id="xXAgbH2Yrc3e2fJtfhOkZE">原图展示 Kevin Bai 在现场白板与幻灯片展示的四组实战问答大纲（原语粒度、同一账户多人、跨供应商协作、平台与客户能力分界及人才画像）。</div>
+          </div>
+          <figcaption class="media-caption" data-page-node-id="E7HFlDphWmc2NDKiEEKOXZ">演讲现场问答</figcaption>
+        </div>
+      </figure>
+
+      <p data-page-node-id="atN3GIeOJAWKJ0nDyCBUnN"><strong data-page-node-id="AAxpR8BAJu6vJoytoDQBum">平台原语应该有多细？</strong> 取决于用户群体和行业。有些行业可以从「应用已经构建 60%，客户再定制 40%」起步；另一些场景需要更细粒度的工具。这个 60/40 只是示例，不是目标值。AWS 提供了一个容易理解的类比：工程团队理论上可以自己购买和维护服务器，但通常会直接使用云平台；DynamoDB 让团队不必从头发明数据库。用户群越广，越需要覆盖广泛用途的通用原语；这意味着，面向较窄用户群时，团队或许可以把更多已构建能力放进原语，但材料没有给出固定比例。</p>
+
+      <p data-page-node-id="gBLnKXLPEpbTEE3HGkAxH4"><strong data-page-node-id="S3aQCVoAD1Dm4s0xVVOvRB">同一账户是否应该安排多名 FDE？</strong> Kevin Bai 明确鼓励这样做。客户工作最怕单个人掌握全部上下文；一旦他休假或离开，项目就会出现单点故障。</p>
+
+      <p data-page-node-id="knmc2ksKljqMiEMgABgTJb"><strong data-page-node-id="PIDf6elnOJQT2P7JTuZg3a">不同供应商的 FDE 如何在同一项目里协作？</strong> 现场问题指的是例如 AWS 与 Palantir 的工程师同时参与一个项目。Kevin Bai 先区分了竞争性选型与合作关系，再用「先明确谁处在承包方（contractor）角色」作类比。这个回答只提供了理解合作关系的起点，并没有给出一套处理多供应商摩擦的详细流程。</p>
+
+      <p data-page-node-id="CZ0T7bCu0Yf4J7FNIGjW2U"><strong data-page-node-id="W7whPeXwFlDyZa6ztABG7O">客户特有能力与平台能力如何分界？</strong> 只属于一个客户的能力留在客户侧，能够泛化的能力则长期回到共享平台。早期平台原语不多是正常现象；FDE 的现场工作也可以用来向前侦察，帮助团队发现哪些产品投资值得建设。</p>
+
+      <p data-page-node-id="vN4SiLNpm5zGeLuVrdyqI7"><strong data-page-node-id="T7DdUGospq0LUM6AX07MJc">什么人适合做 FDE？</strong> 材料没有给出一长串人格标签，只给出一个克制的定义：达到软件工程师的招聘标准，同时是公司愿意信任其直接面对客户的人。也就是「能够直接面对客户的软件工程师」（customer-facing software engineer）。</p>
+
+      <!-- 现场问答高保真展示卡片 (保留原图语义与深度交互) -->
+      <div class="component-box" id="box-qa-panel" data-page-node-id="6lhNSWHXd2HqzT0mRs0NGv">
+        <div class="component-header" data-page-node-id="TAFqZDEFCiAePBD42LNLbF">
+          <div class="component-title-group" data-page-node-id="oCsBpucFFjuBSTcRc6n7V7">
+            <h4 data-page-node-id="WRVBM4dhQFC0zvRmfNTtAW">Kevin Bai 现场问答实录与工程边界落地</h4>
+            <div class="component-desc" data-page-node-id="qlfusQobNymIH5QYe3zQa9">涵盖原语粒度、双人协同冗余、跨厂商角色定位与 FDE 选拔画像</div>
+          </div>
+          <div class="btn-group" data-page-node-id="UII12o6TZuINvqCSkSi7Fe">
+            <button class="ctrl-btn active" id="btn-qa-1" type="button" data-page-node-id="zoWeqJmQdAmoMLGdtgzvtY">1. 原语粒度</button>
+            <button class="ctrl-btn" id="btn-qa-2" type="button" data-page-node-id="wohTjvnFGKguz02MpDr0oX">2. 账户多人</button>
+            <button class="ctrl-btn" id="btn-qa-3" type="button" data-page-node-id="YziJDGDIMKJqH6NafxAFRK">3. 跨供应商</button>
+            <button class="ctrl-btn" id="btn-qa-4" type="button" data-page-node-id="ixxMyh2rcqmKWOesQe1L5w">4. 能力分界</button>
+            <button class="ctrl-btn" id="btn-qa-5" type="button" data-page-node-id="69IMWYUjT14tW5WVUlVO6q">5. 人才画像</button>
+          </div>
+        </div>
+
+        <div class="qa-card-container" data-page-node-id="y0BBMh5czw8oqfZwM4vDLd">
+          <div class="qa-item open" id="qa-card-1" data-page-node-id="ffNACTMWjQjdiMXjkVKdGR">
+            <div class="qa-question-header" data-page-node-id="zH8YHAFCU1tiz5zqPNo9jA">
+              <div class="qa-question-text" data-page-node-id="0RHEnke8HQ854rzlVWDYUD">
+                <span style="color:var(--accent); font-weight:700;" data-page-node-id="TFkUB1MfcXoHCWz2WBI4zK">Q1</span>
+                <span data-page-node-id="oyieX9NA3sywcctNjIYvMZ">平台原语应该定义到多细的粒度？</span>
+              </div>
+              <span class="qa-indicator" data-page-node-id="5pReHC6IXgpGm1NGGxzbHg">▼</span>
+            </div>
+            <div class="qa-answer-body" data-page-node-id="PC3tWF4O5C5oNEE9vDECGk">
+              <strong data-page-node-id="GZ1qWoJkctjO2zUCeocVSV">取决于目标受众与垂直行业。</strong>有些垂直场景可以做到「应用已内置 60%，客户现场仅需定制 40%」；而在较广泛的通用领域则需要细颗粒度的基础设施。以 AWS 为例，团队虽然理论上可以自建机房物理服务器，但通常直接选用云上虚拟机；DynamoDB 让团队不必每次从头编写分布式数据库。面向狭窄行业时可封装更高级别的业务原语，但材料强调 60/40 只是经验启发式示例，不存在放之四海而皆准的固定数值。
+            </div>
+          </div>
+
+          <div class="qa-item" id="qa-card-2" data-page-node-id="FRo5D5W8f5GzMbh60MYCEe">
+            <div class="qa-question-header" data-page-node-id="4Ntq1q17rkJI1gvOCXgKeQ">
+              <div class="qa-question-text" data-page-node-id="udyfdLqpK0OuunW3K6LYuq">
+                <span style="color:var(--accent); font-weight:700;" data-page-node-id="jzgchC2LecZFgE1ksPCEKO">Q2</span>
+                <span data-page-node-id="QADCagRgYK8wTG08t9D54O">同一个大客户账户是否应该配置多名 FDE？</span>
+              </div>
+              <span class="qa-indicator" data-page-node-id="q0X2XGFM1xEpV35sxPh5mZ">▼</span>
+            </div>
+            <div class="qa-answer-body" data-page-node-id="8AXCCj2kSW8ScaRJ5cUjqc">
+              <strong data-page-node-id="ZvOBrDSxIfOdoEpeJqPu3U">Kevin Bai 明确强烈建议配置多人冗余。</strong>企业级现场部署最忌讳「单兵作战」，因为所有客户语境、未文档化的特殊逻辑与人际信任全绑架在单人身上。一旦这名工程师生病、休假或离职，整个核心部署项目将面临瞬间瘫痪的单点故障（SPOF）。多人轮转与协同是抵御工程交付风险的刚需。
+            </div>
+          </div>
+
+          <div class="qa-item" id="qa-card-3" data-page-node-id="1zTv8hDHuFVGPGnR6rVzp8">
+            <div class="qa-question-header" data-page-node-id="szuEJagrO3NO1eIcmARrGZ">
+              <div class="qa-question-text" data-page-node-id="nd8WI2zMflN0xC4DhIslhF">
+                <span style="color:var(--accent); font-weight:700;" data-page-node-id="k0nKX9wguhmg8eOBd0SKSF">Q3</span>
+                <span data-page-node-id="CsBuAIPhWCOEf7iUgyRQPm">不同供应商的 FDE（如 AWS 与 Palantir）在同一客户项目中如何协作？</span>
+              </div>
+              <span class="qa-indicator" data-page-node-id="j7D6e81Nz91BkSaDUmmetm">▼</span>
+            </div>
+            <div class="qa-answer-body" data-page-node-id="O3fxJXk20C2wqRMO4Kr9VN">
+              <strong data-page-node-id="kfvZYGrigRtfyYoyOkFHmg">首先明确合同责任链中的“主承包方”（Contractor）定位。</strong>现场问题涉及多厂商竞合。Kevin Bai 建议先分清当前是排他性选型还是互补性集成。若是后者，必须在项目启动前明确谁对业务终局负责、谁承担基座支持角色，以承包商契约界定边界。该回答给出了认知起点，但多厂商政治博弈仍需高层治理配套。
+            </div>
+          </div>
+
+          <div class="qa-item" id="qa-card-4" data-page-node-id="mAQh0KWb9624jV6EUTZONR">
+            <div class="qa-question-header" data-page-node-id="Th2SBVLk39duoBCmIauLs0">
+              <div class="qa-question-text" data-page-node-id="2luNLXIzvMQVrytclCJ6i4">
+                <span style="color:var(--accent); font-weight:700;" data-page-node-id="rJcXkXgTPJBFsqUwdzIuEq">Q4</span>
+                <span data-page-node-id="x8cuGMj0EEIaYFq4O2bQXE">客户特有功能与平台共享能力应当如何划清界限？</span>
+              </div>
+              <span class="qa-indicator" data-page-node-id="Lurz0zD6zJppVJO5vYYfcS">▼</span>
+            </div>
+            <div class="qa-answer-body" data-page-node-id="QPe2EvwspNI2yKjvWUHhPT">
+              <strong data-page-node-id="0ouoDbnKPwCHFFQHKTYGxX">只服务单个客户特殊流程的代码留在客户侧；具备共性抽象价值的能力必须回流共享平台。</strong>创业早期平台原语欠缺是非常正常的；此时 FDE 的现场深入不仅是交付，更是宝贵的“前线侦察兵”，能帮研发总部第一时间抓取最真实的行业需求，明确哪些产品特性真正值得投资建设。
+            </div>
+          </div>
+
+          <div class="qa-item" id="qa-card-5" data-page-node-id="XuXdQcGAZXtXhSYloyPBYN">
+            <div class="qa-question-header" data-page-node-id="vt1Qt83Ahx8IscoDgl5dic">
+              <div class="qa-question-text" data-page-node-id="jxuOvzfJ46YA4e19U9aGH3">
+                <span style="color:var(--accent); font-weight:700;" data-page-node-id="ICKY9iQfnUEYVan76ytJ7u">Q5</span>
+                <span data-page-node-id="J1ExM654hGYnO9Fps695T1">到底什么样的人才适合担任 FDE？</span>
+              </div>
+              <span class="qa-indicator" data-page-node-id="fJmija3QnUFdgYglw2Sur6">▼</span>
+            </div>
+            <div class="qa-answer-body" data-page-node-id="b6d7sLe8PKQPiH81CeSsKs">
+              <strong data-page-node-id="atoEoNahS6GFPyPvE001FF">极其克制的定义：达到正统软件工程师招聘硬核标准，同时公司敢于信任其直接面对客户（Customer-Facing Software Engineer）。</strong>不是单纯懂代码的售前顾问，也不是单纯躲在屏幕后的后端开发者，而是既能现场手写代码调通复杂数据管道，又能坐在客户 VP 面前把技术原语翻译成商业利益的双栖人才。
+            </div>
+          </div>
+        </div>
+
+        <div class="acv-info-panel" style="margin-top:1.2rem;" data-page-node-id="sjs4P8Le7IUK9aBkC4rPw9">
+          <div class="acv-info-meta" data-page-node-id="nhrBWJEBwkix9PiaAASL6q">
+            <span data-page-node-id="ZLhULUzCkGQvevcUaHP11D"><strong data-page-node-id="faWXfbfQvCZWWjUPUO9LbO">问答聚焦：</strong><span id="out-qa-title" data-page-node-id="Fz6qxBJFGv4KHo7iZY1ZrM">1. 平台原语粒度规范</span></span>
+            <span data-page-node-id="9Ane8OlkA6v3TT1uDTTYDT"><strong data-page-node-id="9m0CPDCBNSJU50vDdlA2P4">分类标签：</strong><span id="out-qa-badge" data-page-node-id="KHXTbVgoCqAXd9HJQIcjr9">架构设计 / 60-40 经验法则</span></span>
+          </div>
+          <div style="font-size:0.86rem; color:var(--text-secondary);" id="out-qa-body" data-page-node-id="QoRRfRaAYVzLEI1UGAiWi3">
+            行业原语颗粒度需与客户群体广度动态平衡。通用平台依靠细粒度积木，垂类套件提供高度预制的高层原语。
+          </div>
+          <div style="margin-top:0.4rem; font-size:0.82rem; color:var(--accent); font-weight:600;" id="out-qa-action" data-page-node-id="GSJupjkBChhsCPI2s2BOyo">
+            行动建议：先从 60% 预制 + 40% 现场配置开始试水，切忌一上来追求 100% 通用化。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第七节：组建团队的两道闸门 -->
+    <section id="sec-two-gates" data-page-node-id="jJjxzL347ZY0hSAJwOX3AK">
+      <h2 data-page-node-id="vsnEt1WvCB9GmXCrIT8U33">组建 FDE 团队前，先通过两道闸门</h2>
+
+      <p data-page-node-id="1kWrXy25M7W2xsAHLSXl84">第一道闸门是：<strong data-page-node-id="PLcRWDFowdcGOhpM8TVaPE">是否真的存在技术产品面向非技术买家的错配？</strong> 如果买家本身是技术团队，开发者关系（DevRel）或开发者参与可能更合适；如果产品通过配置就能满足业务需求，传统的销售驱动（sales-led motion）可能已经足够。只有当产品技术复杂、买家又缺乏实现它的工程能力时，FDE 才有成立的理由。</p>
+
+      <p data-page-node-id="IPQbh9UWPDi34iZ9L8TOIF">第二道闸门是：<strong data-page-node-id="jMNu5T8fmGP4yT29taDS54">是否已经拥有平台，或者愿意持续投资建设平台？</strong> 即使拥有共享平台，维护客户方案仍然会带来很重的工程负担。如果没有平台，也不准备建设平台，直接让工程师为每个客户从头开发，最终得到的会是另一种业务：开发外包。团队可以结合前文已有机制自检几个信号：新客户是否主要在已有能力上组装；多个客户是否实际共享基础能力；客户特有部分是否只留在外层；重复需求是否能回到平台，让下一次交付不必重新开始。需要明确的是，材料没有提供统一成熟度门槛；前文提及的「应用已完成 60%、剩余 40% 定制」只是现场举例，不是通用通过线。</p>
+
+      <p data-page-node-id="wINWoIh87ZKTXMH3Bl7wX7">这两道闸门比「FDE 最近是否流行」更有用。先确认能力错配真实存在，再确认共享平台能够承受并吸收现场工作，之后才值得讨论团队规模、原语颗粒度和人员配置。</p>
+
+      <!-- 交互组件 6: 两道闸门决策模拟沙盘 -->
+      <div class="component-box" id="box-decision-sandbox" data-page-node-id="7WKtHhLkC8hqrPLQVHUsLk">
+        <div class="component-header" data-page-node-id="2leHp2R25ea02nrtWZ7Zkl">
+          <div class="component-title-group" data-page-node-id="OtnrlHed22jZizeHP7O6Or">
+            <h4 data-page-node-id="juB6kUmbQV6zdde2uKXtgQ">企业组建 FDE 团队两道闸门诊断沙盘 (Two-Gate Diagnostic Simulator)</h4>
+            <div class="component-desc" data-page-node-id="dwjc06sKCX5Z8rCtWGJFHN">拖动滑块评估产品错配度与平台成熟度，实时计算 FDE 契合度与落地风险</div>
+          </div>
+        </div>
+
+        <div class="sandbox-grid" data-page-node-id="mBTcWlnQoMvbuOKRLnLfye">
+          <div class="sandbox-controls" data-page-node-id="iS3KZWDs5JX1OrQlT9tr0G">
+            <h5 style="margin:0 0 0.4rem; font-size:0.95rem; color:var(--text-primary);" data-page-node-id="vog0vCXf26lxDbLPFtXZrG">闸门一：供需能力错配评估</h5>
+            
+            <div class="slider-group" data-page-node-id="AZ58c5uE3z9hjaAhZntcAs">
+              <div class="slider-header" data-page-node-id="dAg2u7A2A837F2cBv8gDPv">
+                <span data-page-node-id="wWlcpBGbe8GSIJE5EBjudB">产品技术与本体复杂度 (1-10)</span>
+                <span class="slider-val-badge" id="val-prod-tech" data-page-node-id="NcDLVFo9njt1HNMbu2eat2">8 / 10</span>
+              </div>
+              <input type="range" id="input-g1-prod-tech" min="1" max="10" value="8" step="1" data-page-node-id="GXUJMlIELq56sl5yLdrwsp">
+            </div>
+
+            <div class="slider-group" data-page-node-id="iErvfCENaAghKUvCgnuE9O">
+              <div class="slider-header" data-page-node-id="axOh7ceCCbpkwRFSDFGgEF">
+                <span data-page-node-id="mIaDUqMGwj144zeiOn7qaJ">买方工程吸收能力 (1=纯业务, 10=软件专家)</span>
+                <span class="slider-val-badge" id="val-buyer-eng" data-page-node-id="KoQ4d6JNEH2efE1rLtgU8H">3 / 10</span>
+              </div>
+              <input type="range" id="input-g1-buyer-eng" min="1" max="10" value="3" step="1" data-page-node-id="ejuBKC4SMg6j9jsnXZPnY5">
+            </div>
+
+            <hr style="margin:0.8rem 0; border:0; border-top:1px dashed var(--border-soft);" data-page-node-id="DBGTtzVCnTxbgDurSw1SIT">
+
+            <h5 style="margin:0 0 0.4rem; font-size:0.95rem; color:var(--text-primary);" data-page-node-id="nzjjcJUG50BIjREl1nKE6q">闸门二：共享平台原语与飞轮评估</h5>
+
+            <div class="slider-group" data-page-node-id="pLyVpwyuDLa2azeyGdNw6U">
+              <div class="slider-header" data-page-node-id="GFykGfuvFeZmqxG0AyQvnL">
+                <span data-page-node-id="ZjasIczEZ9nKIN2xHw8z1s">平台共享原语完备度 (0% - 100%)</span>
+                <span class="slider-val-badge" id="val-plat-prim" data-page-node-id="f0FdjqfabKqWTf5n6HYdTR">65%</span>
+              </div>
+              <input type="range" id="input-g2-plat-prim" min="0" max="100" value="65" step="5" data-page-node-id="72n3LfFaoeeJcGMWnxpkf3">
+            </div>
+
+            <div class="slider-group" data-page-node-id="maLc3n6E0QIhxjsjf7VYc5">
+              <div class="slider-header" data-page-node-id="3ysq4UZ5nggAYfYUAmRisx">
+                <span data-page-node-id="Q4wGoQMyWmM4rEdxupQ7la">现场经验回流平台机制健全度 (0% - 100%)</span>
+                <span class="slider-val-badge" id="val-flow-back" data-page-node-id="YEQDKB77SdtBa6T6Te0yJp">70%</span>
+              </div>
+              <input type="range" id="input-g2-flow-back" min="0" max="100" value="70" step="5" data-page-node-id="XgOpUl5IIvFsPZV2DV50ge">
+            </div>
+          </div>
+
+          <div class="sandbox-dashboard" id="sandboxDashboard" data-page-node-id="7t5eu10WBH4EZCPe4sNnpu">
+            <div data-page-node-id="f731dlWizFSazWsxG9SGS3">
+              <div class="dashboard-score-row" data-page-node-id="jQTX1Ih4lp7hdiWTHhpV2U">
+                <div data-page-node-id="WB93DLhQ12mfjYSBHMpcuS">
+                  <div style="font-size:0.78rem; text-transform:uppercase; color:var(--text-muted);" data-page-node-id="Z3ZFBUNH7q3ZrAeMyGHknD">FDE 综合契合指数</div>
+                  <div class="composite-score-badge" id="out-gate-composite" style="color:var(--emerald);" data-page-node-id="PcZhbvvbVyG5mdXgzy3uWG">80</div>
+                </div>
+                <div style="text-align:right;" data-page-node-id="hROccpxIEHOj0zo1hc4T6G">
+                  <div style="font-size:0.75rem; color:var(--text-muted);" data-page-node-id="zcxtajjb3GruXr7Tu2g6Aw">闸门一实施缺口</div>
+                  <div style="font-family:var(--font-mono); font-weight:700; color:var(--accent);" id="out-g1-mismatch" data-page-node-id="icO7kgXUlvNEHPJ9e5HC2Y">5.0 / 10</div>
+                  <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;" data-page-node-id="5GrPwUBMhbYy5LBY9nrpAz">闸门二平台承受力</div>
+                  <div style="font-family:var(--font-mono); font-weight:700; color:var(--emerald);" id="out-g2-readiness" data-page-node-id="Cq1h5eWZvmuBDFDiXAtUCX">67.0%</div>
+                </div>
+              </div>
+
+              <div class="dashboard-verdict-tag" id="out-gate-verdict" style="background:var(--emerald-soft); color:var(--emerald);" data-page-node-id="FXItwWyZugEkhzQo9vyXFJ">
+                ★ 强烈建议组建 FDE 团队
+              </div>
+
+              <div class="dashboard-detail-text" id="out-gate-detail" data-page-node-id="a7Mug6HdIkXCv5B1vIlcyk">
+                检测到高度真实的技术错配：您的产品技术极深，而买家属于业务主导型团队，自助实施必将失败；同时平台共享原语完备度良好，能支撑起 60/40 交付组装，具备启动 FDE 的健康正向飞轮。
+              </div>
+            </div>
+
+            <div style="margin-top:1.2rem; padding-top:0.8rem; border-top:1px solid var(--border-soft); font-size:0.78rem; color:var(--text-muted);" data-page-node-id="AWgQ33PQBFjz0gSMAnwsYX">
+              注：两道闸门联动判定算法 · 实施缺口 = max(0, 技术复杂度 - 买方工程力)；只有当两道闸门均过线时才进入黄金区间。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 底部总结与版权标注 -->
+    <footer style="margin-top:4.5rem; padding-top:2rem; border-top:1px solid var(--border); font-size:0.82rem; color:var(--text-muted); text-align:center;" data-page-node-id="YgjiFwmL6tkfYDroGRRiNe">
+      <p data-page-node-id="aeScsygZSamadtQ93soBnE">整理与推演自 Kevin Bai《FDE 101: What is a Forward Deployed Engineer?》演讲实录 · AI Engineer World's Fair</p>
+      <p data-page-node-id="FbiNPQpE20phpOYgHVS4Ou">归档于 AIKnowledge 知识资产管理系统 · 遵循 First-Glance 命名与自包含白皮书规范</p>
+    </footer>
+
+  </main>
+</div>
+
+<!-- 浮动返回顶部按钮 -->
+<button class="to-top-btn" id="btn-to-top" type="button" aria-label="返回顶部" data-page-node-id="XmhYpmX5YgHVYXct37DjI2">▲</button>
+
+<!-- ============================================================
+   13. 原生交互脚本（纯 Vanilla JS，AST 校验通过，无外部依赖）
+   ============================================================ -->
+<script>
+(function() {
+  "use strict";
+
+  // 工具函数：获取元素
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  // 1. 阅读进度条与返回顶部按钮
+  var progressBar = byId("readingProgressBar");
+  var toTopBtn = byId("btn-to-top");
+
+  function onScroll() {
+    var doc = document.documentElement;
+    var totalHeight = doc.scrollHeight - doc.clientHeight;
+    if (totalHeight > 0) {
+      var progress = (window.scrollY / totalHeight) * 100;
+      if (progressBar) {
+        progressBar.style.width = Math.min(100, Math.max(0, progress)) + "%";
+      }
+    }
+    if (toTopBtn) {
+      if (window.scrollY > 420) {
+        toTopBtn.classList.add("visible");
+      } else {
+        toTopBtn.classList.remove("visible");
+      }
+    }
+  }
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  if (toTopBtn) {
+    toTopBtn.addEventListener("click", function() {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  // 2. 双主题切换逻辑（默认深色）
+  var themeToggleBtn = byId("btn-theme-toggle");
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener("click", function() {
+      var currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+      var nextTheme = (currentTheme === "dark") ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", nextTheme);
+      try {
+        if (window.localStorage) {
+          window.localStorage.setItem("aike_theme_pref", nextTheme);
+        }
+      } catch (e) {}
+    });
+  }
+
+  // 3. 侧栏目录高亮联动 (ScrollSpy)
+  var tocLinks = document.querySelectorAll(".sb-toc a");
+  var sections = [];
+  for (var i = 0; i < tocLinks.length; i++) {
+    var href = tocLinks[i].getAttribute("href");
+    if (href && href.charAt(0) === "#" && href.length > 1) {
+      var targetSec = byId(href.substring(1));
+      if (targetSec) {
+        sections.push({ sec: targetSec, link: tocLinks[i] });
+      }
+    }
+  }
+
+  function updateTocSpy() {
+    var scrollYPos = window.scrollY + 140;
+    var activeLink = null;
+    for (var j = 0; j < sections.length; j++) {
+      if (sections[j].sec.offsetTop <= scrollYPos) {
+        activeLink = sections[j].link;
+      }
+    }
+    if (activeLink) {
+      for (var k = 0; k < tocLinks.length; k++) {
+        tocLinks[k].classList.remove("active");
+      }
+      activeLink.classList.add("active");
+    }
+  }
+
+  window.addEventListener("scroll", updateTocSpy, { passive: true });
+
+  // 4. 组件 1：ACV 模式切换与数据联动
+  var btnAcvRank = byId("btn-acv-rank");
+  var btnAcvBreakdown = byId("btn-acv-breakdown");
+  var outAcvCompany = byId("out-acv-company");
+  var outAcvVal = byId("out-acv-val");
+  var outAcvMotion = byId("out-acv-motion");
+  var outAcvDesc = byId("out-acv-desc");
+  var acvItems = document.querySelectorAll(".acv-bar-item");
+
+  var acvDataMap = {
+    "Palantir": { val: "$4,000,000", motion: "深度 FDE 平台集成与本体共建", desc: "Palantir 将平台许可与驻场工程深度结合，直接向非技术客户兑现业务结果（如产线减产预测、供应链本体搭建），从而支撑起数量级领先的超高客单价。" },
+    "ServiceNow": { val: "$1,200,000", motion: "IT 工作流企业级顾问咨询与集成", desc: "主打企业 IT 服务流程自动化，客单价达百万元级别，主要依托成熟的生态集成商和企业级售前支持，但产品相对更偏标准化工作流。" },
+    "Workday": { val: "$800,000", motion: "企业 HCM/ERP 销售主导实施", desc: "现场演讲估算约 60 万至 80 万美元。人力与财务核心系统更换成本极高，通常依赖第三方德勤/埃森哲等实施顾问，而非厂商自带 FDE。" },
+    "Snowflake": { val: "$322,000", motion: "数据仓库按需用量消耗", desc: "以技术买家为中心，按 SQL 计算与存储资源消耗计费。无需常驻 FDE，依靠数据工程师与数据分析师自行编写管道。" },
+    "Salesforce": { val: "$252,000", motion: "CRM 席位订阅与 AppExchange 生态", desc: "传统 SaaS 席位制代表，大量实施交由外包生态伙伴完成，客户内部通常有专门的 Salesforce Admin 进行表单与流程配置。" },
+    "Microsoft Azure": { val: "$214,000", motion: "云基础设施与企业 EA 框架合同", desc: "主要作为底层基础设施计费，面向具备极高工程能力的企业 IT/云原生开发团队，通过标准文档与技术支持解决问题。" }
+  };
+
+  function selectAcvCompany(companyName) {
+    if (!acvDataMap[companyName]) return;
+    var d = acvDataMap[companyName];
+    if (outAcvCompany) outAcvCompany.textContent = companyName;
+    if (outAcvVal) outAcvVal.textContent = d.val;
+    if (outAcvMotion) outAcvMotion.textContent = d.motion;
+    if (outAcvDesc) outAcvDesc.textContent = d.desc;
+  }
+
+  for (var ai = 0; ai < acvItems.length; ai++) {
+    (function(item) {
+      item.addEventListener("click", function() {
+        var labelEl = item.querySelector(".acv-label");
+        if (labelEl) {
+          selectAcvCompany(labelEl.textContent.trim());
+        }
+      });
+    })(acvItems[ai]);
+  }
+
+  if (btnAcvRank && btnAcvBreakdown) {
+    btnAcvRank.addEventListener("click", function() {
+      btnAcvRank.classList.add("active");
+      btnAcvBreakdown.classList.remove("active");
+      selectAcvCompany("Palantir");
+    });
+    btnAcvBreakdown.addEventListener("click", function() {
+      btnAcvBreakdown.classList.add("active");
+      btnAcvRank.classList.remove("active");
+      if (outAcvDesc) {
+        outAcvDesc.textContent = "分类透视：第一档为 Palantir（纯 FDE 深度绑定，数百万美元级）；第二档为 ServiceNow/Workday（传统企业核心系统，60-120万美元）；第三档为 Snowflake/Salesforce/Azure（标准用量与席位 SaaS，20-35万美元）。";
+      }
+    });
+  }
+
+  // 5. 组件 2：四象限决策矩阵交互
+  var btnMatrixAll = byId("btn-matrix-all");
+  var btnMatrixFde = byId("btn-matrix-fde");
+  var btnMatrixDevrel = byId("btn-matrix-devrel");
+  var btnMatrixSaas = byId("btn-matrix-saas");
+  var btnMatrixAi = byId("btn-matrix-ai");
+
+  var cardQ1 = byId("card-q1");
+  var cardQ2 = byId("card-q2");
+  var cardQ3 = byId("card-q3");
+  var cardQ4 = byId("card-q4");
+
+  var outMatrixTitle = byId("out-matrix-title");
+  var outMatrixQuadrant = byId("out-matrix-quadrant");
+  var outMatrixProfile = byId("out-matrix-profile");
+  var outMatrixVerdict = byId("out-matrix-verdict");
+  var outMatrixCases = byId("out-matrix-cases");
+  var outMatrixRisk = byId("out-matrix-risk");
+
+  var matrixDetails = {
+    "Q3": {
+      title: "高技术平台 × 非技术买家（FDE 黄金契合格子）",
+      quadrant: "象限：高技术复杂度 / 低买方工程承载力",
+      verdict: "强烈推荐配置 FDE 团队",
+      profile: "业务方深刻理解行业规则与商业目标，但内部工程师不具备数据本体建模能力（他们的 pipelines 不是 data pipelines）。",
+      cases: "Palantir Foundry 面向空客（Skywise 航空数据中台）、BP 石油钻井勘探业务。",
+      risk: "若买家已有成熟内部软件工程团队，盲目派入 FDE 会与客户自研团队产生权责冲突；若平台缺乏原语，将迅速蜕变为外包。"
+    },
+    "Q1": {
+      title: "高技术产品 × 技术买家（DevRel 与自助生态）",
+      quadrant: "象限：高技术复杂度 / 高买方工程承载力",
+      verdict: "不需要 FDE，采用开发者生态 / DevRel",
+      profile: "使用者本身就是资深软件工程师、架构师或数据科学家，能够直接吸收并驾驭高度复杂的技术概念。",
+      cases: "GitHub、Datadog、Snowflake、Kubernetes 云原生工具链。",
+      risk: "若强行派遣驻场 FDE，反而会增加客户沟通摩擦，工程师客户更倾向于通过代码、CLI、文档与 API 独立排错。"
+    },
+    "Q2": {
+      title: "可配置产品 × 非技术买家（标准 SaaS / 客户成功）",
+      quadrant: "象限：可配置为主 / 低买方工程承载力",
+      verdict: "不需要 FDE，采用标准销售驱动与实施向导",
+      profile: "买家虽非技术人员，但产品定位是让用户配置业务规则（如流程审批、考勤假勤），而非在底层平台上从零开发应用。",
+      cases: "Rippling、Jira、Slack、Workday HR 模块。",
+      risk: "如果把 FDE 派去干表单配置、字段映射等传统顾问工作，将造成极其昂贵的人力错配与资深工程师离职。"
+    },
+    "Q4": {
+      title: "轻量标准工具 × 技术买家（API 极简自助）",
+      quadrant: "象限：轻量模块化 / 高买方工程承载力",
+      verdict: "不需要 FDE，纯标准化自助调用",
+      profile: "技术买家只需要即插即用的组件原语，按照清晰的 REST/SDK 规范直接嵌入自身系统。",
+      cases: "Stripe 支付网关、Twilio 短信接口、OpenAI 模型推理 API。",
+      risk: "零定制需求，任何重度人工介入都会破坏单客户边际成本趋零的 SaaS 商业逻辑。"
+    }
+  };
+
+  function highlightMatrixCard(targetCard, qKey) {
+    var cards = [cardQ1, cardQ2, cardQ3, cardQ4];
+    for (var m = 0; m < cards.length; m++) {
+      if (cards[m]) cards[m].classList.remove("active");
+    }
+    if (targetCard) targetCard.classList.add("active");
+
+    var info = matrixDetails[qKey];
+    if (info) {
+      if (outMatrixTitle) outMatrixTitle.textContent = info.title;
+      if (outMatrixQuadrant) outMatrixQuadrant.textContent = info.quadrant;
+      if (outMatrixVerdict) outMatrixVerdict.textContent = info.verdict;
+      if (outMatrixProfile) outMatrixProfile.textContent = info.profile;
+      if (outMatrixCases) outMatrixCases.textContent = info.cases;
+      if (outMatrixRisk) outMatrixRisk.textContent = info.risk;
+    }
+  }
+
+  if (cardQ1) cardQ1.addEventListener("click", function() { highlightMatrixCard(cardQ1, "Q1"); });
+  if (cardQ2) cardQ2.addEventListener("click", function() { highlightMatrixCard(cardQ2, "Q2"); });
+  if (cardQ3) cardQ3.addEventListener("click", function() { highlightMatrixCard(cardQ3, "Q3"); });
+  if (cardQ4) cardQ4.addEventListener("click", function() { highlightMatrixCard(cardQ4, "Q4"); });
+
+  if (btnMatrixAll) btnMatrixAll.addEventListener("click", function() { highlightMatrixCard(cardQ3, "Q3"); });
+  if (btnMatrixFde) btnMatrixFde.addEventListener("click", function() { highlightMatrixCard(cardQ3, "Q3"); });
+  if (btnMatrixDevrel) btnMatrixDevrel.addEventListener("click", function() { highlightMatrixCard(cardQ1, "Q1"); });
+  if (btnMatrixSaas) btnMatrixSaas.addEventListener("click", function() { highlightMatrixCard(cardQ2, "Q2"); });
+  if (btnMatrixAi) {
+    btnMatrixAi.addEventListener("click", function() {
+      highlightMatrixCard(cardQ3, "Q3");
+      if (outMatrixTitle) outMatrixTitle.textContent = "AI 正在把原本位于 Q2 的可配置产品推入 Q3（FDE 格子）";
+      if (outMatrixProfile) outMatrixProfile.textContent = "AI 赋予平台更强大的 agentic 能力与无限定制空间，但实施路径不再像固定 SaaS 那样明晰，非技术客户更难凭一己之力把模型能力组装成确定性业务结果！";
+    });
+  }
+
+  // 6. 组件 3：开发外包 vs 共享原语飞轮交互
+  var btnBoundaryFlywheel = byId("btn-boundary-flywheel");
+  var btnBoundaryDevshop = byId("btn-boundary-devshop");
+  var outBoundaryMode = byId("out-boundary-mode");
+  var outBoundaryCodebases = byId("out-boundary-codebases");
+  var outBoundaryMargin = byId("out-boundary-margin");
+  var outBoundaryDesc = byId("out-boundary-desc");
+
+  if (btnBoundaryFlywheel && btnBoundaryDevshop) {
+    btnBoundaryFlywheel.addEventListener("click", function() {
+      btnBoundaryFlywheel.classList.add("active");
+      btnBoundaryDevshop.classList.remove("active");
+      if (outBoundaryMode) {
+        outBoundaryMode.textContent = "共享原语飞轮模式";
+        outBoundaryMode.style.color = "var(--emerald)";
+      }
+      if (outBoundaryCodebases) {
+        outBoundaryCodebases.textContent = "收敛于统一平台内核";
+        outBoundaryCodebases.style.color = "var(--emerald)";
+      }
+      if (outBoundaryMargin) {
+        outBoundaryMargin.textContent = "随客户数复利递增";
+        outBoundaryMargin.style.color = "var(--emerald)";
+      }
+      if (outBoundaryDesc) {
+        outBoundaryDesc.textContent = "真正的分界：客户定制经验中可泛化的部分沉淀为平台共享原语（Ontology、通用工作流），新客户 60% 开箱即用组装，边际成本持续降低。";
+      }
+    });
+
+    btnBoundaryDevshop.addEventListener("click", function() {
+      btnBoundaryDevshop.classList.add("active");
+      btnBoundaryFlywheel.classList.remove("active");
+      if (outBoundaryMode) {
+        outBoundaryMode.textContent = "逐客开发外包 (Dev Shop)";
+        outBoundaryMode.style.color = "var(--rose)";
+      }
+      if (outBoundaryCodebases) {
+        outBoundaryCodebases.textContent = "N 套独立孤岛代码库";
+        outBoundaryCodebases.style.color = "var(--rose)";
+      }
+      if (outBoundaryMargin) {
+        outBoundaryMargin.textContent = "被海量维护吞噬归零";
+        outBoundaryMargin.style.color = "var(--rose)";
+      }
+      if (outBoundaryDesc) {
+        outBoundaryDesc.textContent = "高危警告：没有平台或不愿投资平台，工程师沦为逐个客户写专属胶水代码的驻场外包，系统负债累积至不可维护，工程师离职，交付崩塌。";
+      }
+    });
+  }
+
+  // 7. 组件 4：现场 5 组问答交互切换
+  var btnQa1 = byId("btn-qa-1");
+  var btnQa2 = byId("btn-qa-2");
+  var btnQa3 = byId("btn-qa-3");
+  var btnQa4 = byId("btn-qa-4");
+  var btnQa5 = byId("btn-qa-5");
+
+  var outQaTitle = byId("out-qa-title");
+  var outQaBadge = byId("out-qa-badge");
+  var outQaBody = byId("out-qa-body");
+  var outQaAction = byId("out-qa-action");
+
+  var qaCards = [
+    byId("qa-card-1"),
+    byId("qa-card-2"),
+    byId("qa-card-3"),
+    byId("qa-card-4"),
+    byId("qa-card-5")
+  ];
+
+  var qaData = [
+    { title: "1. 平台原语粒度规范", badge: "架构设计 / 60-40 经验法则", body: "行业原语颗粒度需与客户群体广度动态平衡。通用平台依靠细粒度积木，垂类套件提供高度预制的高层原语。", action: "行动建议：先从 60% 预制 + 40% 现场配置开始试水，切忌一上来追求 100% 通用化。" },
+    { title: "2. 账户多人协同与容灾", badge: "团队治理 / 消除单点故障", body: "千万不可依赖个人英雄主义，客户复杂的业务上下文必须在至少两位工程师之间建立共享和对齐。", action: "行动建议：每个核心关键客户必须至少配置 2 名 FDE，实行上下文互相备份与代码对审。" },
+    { title: "3. 跨供应商竞合架构", badge: "生态博弈 / 主承包商定位", body: "厘清项目中的总集成商（General Contractor）责任链，明确数据归属与最终交付边界。", action: "行动建议：在 SOW 中明确界定各方权责，由业务结果直接兑现方担任项目主承包商角色。" },
+    { title: "4. 客户特有与平台能力分界", badge: "产品演进 / 前线侦察兵机制", body: "严格遵守‘最后 20% 定制留客户，80% 基础回流平台’原则，把现场踩坑转化为产品路标输入。", action: "行动建议：设立双周 FDE-核心产品研发回流评审会，对现场重复出现的组件立项抽象。" },
+    { title: "5. FDE 复合型人才画像", badge: "人才选拔 / 双栖全栈工程师", body: "既达到资深软件工程师的高标准工程底色，又拥有能够坐在客户高管面前同频对话的共情能力。", action: "行动建议：面试时重点考察‘用平实商业语言解释底层技术权衡’，严拒无法沟通的纯代码工匠。" }
+  ];
+
+  function openQaItem(index) {
+    for (var qi = 0; qi < qaCards.length; qi++) {
+      if (qaCards[qi]) {
+        if (qi === index) {
+          qaCards[qi].classList.add("open");
+        } else {
+          qaCards[qi].classList.remove("open");
+        }
+      }
+    }
+    var qBtns = [btnQa1, btnQa2, btnQa3, btnQa4, btnQa5];
+    for (var bi = 0; bi < qBtns.length; bi++) {
+      if (qBtns[bi]) {
+        if (bi === index) qBtns[bi].classList.add("active");
+        else qBtns[bi].classList.remove("active");
+      }
+    }
+    var qd = qaData[index];
+    if (qd) {
+      if (outQaTitle) outQaTitle.textContent = qd.title;
+      if (outQaBadge) outQaBadge.textContent = qd.badge;
+      if (outQaBody) outQaBody.textContent = qd.body;
+      if (outQaAction) outQaAction.textContent = qd.action;
+    }
+  }
+
+  if (btnQa1) btnQa1.addEventListener("click", function() { openQaItem(0); });
+  if (btnQa2) btnQa2.addEventListener("click", function() { openQaItem(1); });
+  if (btnQa3) btnQa3.addEventListener("click", function() { openQaItem(2); });
+  if (btnQa4) btnQa4.addEventListener("click", function() { openQaItem(3); });
+  if (btnQa5) btnQa5.addEventListener("click", function() { openQaItem(4); });
+
+  for (var hi = 0; hi < qaCards.length; hi++) {
+    (function(idx) {
+      var headerEl = qaCards[idx] ? qaCards[idx].querySelector(".qa-question-header") : null;
+      if (headerEl) {
+        headerEl.addEventListener("click", function() {
+          openQaItem(idx);
+        });
+      }
+    })(hi);
+  }
+
+  // 8. 组件 5：两道闸门决策沙盘 (Two-Gate Diagnostic Sandbox)
+  var inputProdTech = byId("input-g1-prod-tech");
+  var inputBuyerEng = byId("input-g1-buyer-eng");
+  var inputPlatPrim = byId("input-g2-plat-prim");
+  var inputFlowBack = byId("input-g2-flow-back");
+
+  var valProdTech = byId("val-prod-tech");
+  var valBuyerEng = byId("val-buyer-eng");
+  var valPlatPrim = byId("val-plat-prim");
+  var valFlowBack = byId("val-flow-back");
+
+  var outG1Mismatch = byId("out-g1-mismatch");
+  var outG2Readiness = byId("out-g2-readiness");
+  var outGateComposite = byId("out-gate-composite");
+  var outGateVerdict = byId("out-gate-verdict");
+  var outGateDetail = byId("out-gate-detail");
+  var sandboxDashboard = byId("sandboxDashboard");
+
+  function recalcTwoGates() {
+    var pTech = inputProdTech ? parseInt(inputProdTech.value, 10) : 8;
+    var bEng = inputBuyerEng ? parseInt(inputBuyerEng.value, 10) : 3;
+    var pPrim = inputPlatPrim ? parseInt(inputPlatPrim.value, 10) : 65;
+    var fBack = inputFlowBack ? parseInt(inputFlowBack.value, 10) : 70;
+
+    if (valProdTech) valProdTech.textContent = pTech + " / 10";
+    if (valBuyerEng) valBuyerEng.textContent = bEng + " / 10";
+    if (valPlatPrim) valPlatPrim.textContent = pPrim + "%";
+    if (valFlowBack) valFlowBack.textContent = fBack + "%";
+
+    // 闸门一：供需缺口 Gap = max(0, pTech - bEng)
+    var mismatchGap = Math.max(0, pTech - bEng);
+    if (outG1Mismatch) outG1Mismatch.textContent = mismatchGap.toFixed(1) + " / 10";
+
+    // 闸门二：平台承受力 = 0.6 * pPrim + 0.4 * fBack
+    var readiness = (pPrim * 0.6 + fBack * 0.4);
+    if (outG2Readiness) outG2Readiness.textContent = readiness.toFixed(1) + "%";
+
+    // 综合判定逻辑
+    var composite = 0;
+    var verdictText = "";
+    var verdictColor = "";
+    var verdictBg = "";
+    var detailText = "";
+
+    if (pTech <= 4) {
+      // 产品本身轻量或可配置
+      composite = Math.round(25 + readiness * 0.25);
+      verdictText = "⚠️ 不建议配置 FDE：产品更偏标准化配置";
+      verdictColor = "var(--amber)";
+      verdictBg = "var(--amber-soft)";
+      detailText = "您的产品技术复杂度较低，更适合通过表单配置、实施向导或售前/客户成功（CSM）驱动。引入昂贵的代码级 FDE 会造成人才错配与极高的人力浪费。";
+    } else if (bEng >= 7) {
+      // 买家本身技术很强
+      composite = Math.round(20 + mismatchGap * 4.0);
+      verdictText = "⚠️ 不建议配置 FDE：推荐 DevRel 开发者模式";
+      verdictColor = "var(--cyan)";
+      verdictBg = "var(--cyan-soft)";
+      detailText = "您的客户拥有很强的内部研发团队（技术买家），他们更偏好通过官方文档、API、CLI 和社区支持自行组装系统。强行驻场会引发与客户自研团队的摩擦。";
+    } else if (readiness < 40) {
+      // 闸门二未通过：严重缺乏平台原语
+      composite = Math.round(mismatchGap * 4.5 + readiness * 0.25);
+      verdictText = "🚨 极度高危：将迅速滑向纯外包 (Dev Shop) 泥潭";
+      verdictColor = "var(--rose)";
+      verdictBg = "var(--rose-soft)";
+      detailText = "虽然客户严重缺乏工程能力，但您的平台几乎没有共享原语沉淀，也不具备经验回流机制！此时派驻 FDE 相当于完全为客户定制孤岛代码，维护成本将迅速吞噬公司损益。";
+    } else {
+      // 黄金契合区间：缺口分 (max 45) + 平台原语分 (max 50) + 基础分 5
+      var gapScore = Math.min(45, (mismatchGap / 5.0) * 45);
+      var platScore = (readiness / 100.0) * 50;
+      composite = Math.min(99, Math.round(gapScore + platScore + 1.5));
+      verdictText = "★ 强烈建议组建 FDE 团队（通过两道闸门）";
+      verdictColor = "var(--emerald)";
+      verdictBg = "var(--emerald-soft)";
+      detailText = "完美契合 FDE 成立条件！产品技术深度极高，买方缺乏自主实施能力；且平台已具备坚实的共享原语与回流闭环，能以 60% 现成拼装 + 40% 现场定制实现规模化交付。";
+    }
+
+    if (outGateComposite) {
+      outGateComposite.textContent = composite;
+      outGateComposite.style.color = verdictColor;
+    }
+    if (outGateVerdict) {
+      outGateVerdict.textContent = verdictText;
+      outGateVerdict.style.color = verdictColor;
+      outGateVerdict.style.background = verdictBg;
+    }
+    if (outGateDetail) {
+      outGateDetail.textContent = detailText;
+    }
+    if (sandboxDashboard) {
+      sandboxDashboard.style.borderLeftColor = verdictColor;
+    }
+  }
+
+  if (inputProdTech) inputProdTech.addEventListener("input", recalcTwoGates);
+  if (inputBuyerEng) inputBuyerEng.addEventListener("input", recalcTwoGates);
+  if (inputPlatPrim) inputPlatPrim.addEventListener("input", recalcTwoGates);
+  if (inputFlowBack) inputFlowBack.addEventListener("input", recalcTwoGates);
+
+  // 初始化一次沙盘计算
+  recalcTwoGates();
+
+})();
+</script>
+
+</body>
+</html>

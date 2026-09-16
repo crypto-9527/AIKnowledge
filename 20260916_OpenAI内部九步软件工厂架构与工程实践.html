@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>当代码变成通用界面：揭秘 OpenAI 内部「软件工厂」运转机制与九步工程闭环</title>
+<meta name="description" content="深度解读 OpenAI 内部软件工厂的演进历程与工程实践：从逐行编码到目标委托、九步闭环流水线、专业化审查智能体、变更级生产观测与自主SRE演进路线。">
+<style>
+:root{
+  --bg:#181715; --bg-soft:#1E1C19; --card:#23211D; --card2:#2A2723;
+  --line:#3A3630; --line-soft:#2E2B26;
+  --fg:#EDE9E1; --fg-mid:#B8B2A8; --fg-dim:#8B857C;
+  --accent:#E2886A; --accent-soft:rgba(226,136,106,.14);
+  --emerald:#7CC39A; --rose:#E07B72; --amber:#DCA84E; --cyan:#82B7C9; --violet:#A99AC9;
+  --sidebar-w:288px; --content-max:1180px;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+  --serif:"Songti SC","SimSun",Newsreader,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+html[data-theme="light"]{
+  --bg:#FAF7F2; --bg-soft:#F3EEE6; --card:#FFFFFF; --card2:#F7F3EC;
+  --line:#E2DACD; --line-soft:#EDE7DC;
+  --fg:#26221E; --fg-mid:#544E46; --fg-dim:#7A736A;
+  --accent:#C25E3A; --accent-soft:rgba(194,94,58,.10);
+  --emerald:#2F7A54; --rose:#B3453C; --amber:#9A7016; --cyan:#2B6D82; --violet:#6B5B95;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--sans); font-size:16.5px; line-height:1.85;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:90;transition:width .12s linear}
+
+/* ---------- 侧栏 ---------- */
+#sidebar{
+  position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh; overflow-y:auto;
+  background:var(--bg-soft); border-right:1px solid var(--line-soft);
+  padding:26px 16px 60px; z-index:60;
+}
+#sidebar .brand{
+  font-family:var(--serif); font-size:15px; font-weight:700; color:var(--fg);
+  padding:0 10px 14px; border-bottom:1px solid var(--line-soft); margin-bottom:14px; letter-spacing:.02em;
+}
+#sidebar .brand span{
+  display:block; font-family:var(--sans); font-size:11px; font-weight:400;
+  color:var(--fg-dim); letter-spacing:.08em; margin-top:4px; text-transform:uppercase;
+}
+.sidebar-ctrls{display:flex; gap:8px; padding:0 10px 14px; border-bottom:1px solid var(--line-soft); margin-bottom:14px}
+.sidebar-btn{
+  flex:1; background:var(--card); color:var(--fg-mid); border:1px solid var(--line);
+  padding:6px 8px; border-radius:6px; font-size:12px; cursor:pointer; font-family:var(--sans);
+  text-align:center; transition:all .15s ease;
+}
+.sidebar-btn:hover{color:var(--accent); border-color:var(--accent)}
+
+.toc a{
+  display:block; padding:6px 10px; margin:1px 0; border-radius:6px; color:var(--fg-dim);
+  text-decoration:none; font-size:13.2px; line-height:1.5; border-left:2px solid transparent;
+  transition:color .15s, background .15s;
+}
+.toc a:hover{color:var(--fg); background:var(--card)}
+.toc a.active{color:var(--accent); border-left-color:var(--accent); background:var(--accent-soft); font-weight:600}
+.toc a.sub{padding-left:22px; font-size:12.4px}
+
+/* ---------- 移动端悬浮栏 ---------- */
+.mob-bar{
+  display:none; position:fixed; bottom:16px; right:16px; z-index:80;
+  background:var(--card); border:1px solid var(--line); border-radius:30px;
+  box-shadow:0 4px 16px rgba(0,0,0,.3); padding:4px 8px;
+}
+.mob-btn{
+  background:none; border:none; color:var(--fg); font-size:12.5px;
+  padding:8px 12px; cursor:pointer; font-family:var(--sans);
+}
+
+/* ---------- 正文排布（居中自适应算法） ---------- */
+#main{
+  max-width:var(--content-max);
+  margin-left:calc(var(--sidebar-w) + max(0px,(100% - var(--sidebar-w) - var(--content-max))/2));
+  margin-right:max(0px,(100% - var(--sidebar-w) - var(--content-max))/2);
+  padding:56px 44px 120px;
+}
+
+header.doc{border-bottom:1px solid var(--line); padding-bottom:30px; margin-bottom:38px}
+.eyebrow{font-size:12.5px; letter-spacing:.16em; color:var(--accent); text-transform:uppercase; font-weight:600; margin-bottom:16px}
+h1{font-family:var(--serif); font-size:34px; line-height:1.35; margin:0 0 16px; font-weight:700; letter-spacing:-.01em}
+.deck{font-size:17.5px; line-height:1.75; color:var(--fg-mid); margin:0 0 24px; font-weight:400}
+.meta{display:flex; flex-wrap:wrap; gap:8px 10px; font-size:12.8px}
+.meta span{background:var(--card); border:1px solid var(--line); border-radius:999px; padding:4px 13px; color:var(--fg-mid)}
+
+h2{
+  font-family:var(--serif); font-size:25px; line-height:1.4; margin:60px 0 20px; padding-top:16px;
+  border-top:1px solid var(--line-soft); font-weight:700; scroll-margin-top:24px;
+}
+h2 .num{color:var(--accent); font-family:var(--mono); font-size:16px; margin-right:12px; vertical-align:2px; font-weight:400}
+h3{font-size:19px; line-height:1.5; margin:36px 0 14px; font-weight:650; color:var(--fg); scroll-margin-top:24px}
+h4{font-size:15px; margin:24px 0 10px; font-weight:650; color:var(--fg-mid); letter-spacing:.03em}
+p{margin:0 0 18px}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+strong{color:var(--fg); font-weight:650}
+em{color:var(--accent); font-style:normal; font-weight:600}
+ul,ol{margin:0 0 20px; padding-left:22px}
+li{margin-bottom:9px}
+li::marker{color:var(--fg-dim)}
+
+/* ---------- 特色区块与卡片 ---------- */
+.lede{
+  background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent);
+  border-radius:10px; padding:22px 24px; margin:0 0 32px;
+}
+.lede h4{margin:0 0 12px; font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent)}
+.lede ul{margin:0; padding-left:20px}
+.lede li{margin-bottom:9px; font-size:15.5px; line-height:1.75}
+
+.interviewees{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:14px; margin:24px 0 32px;
+}
+.person-card{
+  background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 16px;
+}
+.person-name{font-weight:650; color:var(--fg); font-size:15px; margin-bottom:4px}
+.person-role{font-size:12.8px; color:var(--accent); font-family:var(--mono)}
+
+.boundary-note{
+  background:rgba(224,123,114,.08); border:1px solid rgba(224,123,114,.3);
+  border-radius:8px; padding:16px 20px; margin:24px 0; font-size:14.5px; line-height:1.7; color:var(--fg-mid);
+}
+.boundary-note strong{color:var(--rose)}
+
+.data-callout{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin:24px 0 32px;
+}
+.data-card{
+  background:var(--card2); border:1px solid var(--line); border-radius:8px; padding:18px 20px; text-align:center;
+}
+.data-val{font-size:32px; font-weight:700; color:var(--accent); font-family:var(--mono); line-height:1.1; margin-bottom:6px}
+.data-lbl{font-size:13px; color:var(--fg-mid)}
+
+.step-card{
+  background:var(--card); border:1px solid var(--line); border-radius:10px; padding:22px 24px; margin-bottom:20px;
+  transition:border-color .2s ease;
+}
+.step-card:hover{border-color:var(--accent)}
+.step-head{display:flex; align-items:center; gap:12px; margin-bottom:12px}
+.step-num{
+  background:var(--accent); color:var(--bg); font-family:var(--mono); font-weight:700;
+  width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0;
+}
+.step-title{font-size:18px; font-weight:650; margin:0; color:var(--fg)}
+.step-body{color:var(--fg-mid); font-size:15.5px; line-height:1.8}
+.step-tag{display:inline-block; font-size:11.5px; padding:2px 8px; border-radius:4px; margin-left:auto; font-family:var(--mono)}
+.tag-gate{background:rgba(224,123,114,.18); color:var(--rose); border:1px solid rgba(224,123,114,.3)}
+.tag-auto{background:rgba(124,195,154,.18); color:var(--emerald); border:1px solid rgba(124,195,154,.3)}
+.tag-agent{background:rgba(130,183,201,.18); color:var(--cyan); border:1px solid rgba(130,183,201,.3)}
+
+/* ---------- 图表容器 ---------- */
+.figure-box{
+  background:var(--card); border:1px solid var(--line); border-radius:10px; padding:24px; margin:32px 0;
+}
+.figure-title{font-size:14.5px; font-weight:650; margin-bottom:14px; color:var(--fg); display:flex; align-items:center; gap:8px}
+.figure-title::before{content:""; width:4px; height:14px; background:var(--accent); border-radius:2px}
+.figure-caption{font-size:13px; color:var(--fg-dim); margin-top:12px; text-align:center; line-height:1.6}
+svg{display:block; width:100%; height:auto}
+
+/* ---------- 交互沙盘容器 ---------- */
+.sandbox-box{
+  background:var(--card); border:1px solid var(--line); border-radius:12px; padding:26px 28px; margin:36px 0;
+}
+.sandbox-header{border-bottom:1px solid var(--line-soft); padding-bottom:14px; margin-bottom:20px}
+.sandbox-header h4{margin:0 0 6px; font-size:17px; color:var(--fg)}
+.sandbox-header p{margin:0; font-size:13.5px; color:var(--fg-mid)}
+
+.ctrl-row{display:flex; flex-wrap:wrap; gap:20px; margin-bottom:22px}
+.ctrl-item{flex:1; min-width:200px}
+.ctrl-item label{display:flex; justify-content:space-between; font-size:13.5px; margin-bottom:8px; color:var(--fg-mid)}
+.ctrl-item label span{font-family:var(--mono); color:var(--accent); font-weight:600}
+input[type="range"]{
+  width:100%; -webkit-appearance:none; height:6px; border-radius:3px; background:var(--line); outline:none;
+}
+input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); cursor:pointer;
+}
+select{
+  width:100%; background:var(--bg-soft); color:var(--fg); border:1px solid var(--line);
+  padding:8px 12px; border-radius:6px; font-size:14px; font-family:var(--sans); outline:none;
+}
+
+.result-grid{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:20px;
+}
+.res-card{
+  background:var(--bg-soft); border:1px solid var(--line-soft); border-radius:8px; padding:14px 16px;
+}
+.res-card-label{font-size:12.5px; color:var(--fg-dim); margin-bottom:4px}
+.res-card-val{font-size:22px; font-weight:700; color:var(--fg); font-family:var(--mono)}
+
+.verdict-box{
+  background:var(--card2); border:1px solid var(--line); border-left:4px solid var(--accent);
+  border-radius:6px; padding:14px 18px; font-size:14px; line-height:1.7; color:var(--fg-mid);
+}
+
+/* ---------- 表格排版 ---------- */
+.table-wrap{overflow-x:auto; margin:24px 0 32px}
+table{width:100%; border-collapse:collapse; font-size:14.5px; text-align:left}
+th{background:var(--card2); color:var(--fg); font-weight:650; padding:12px 14px; border-bottom:2px solid var(--line)}
+td{padding:12px 14px; border-bottom:1px solid var(--line-soft); color:var(--fg-mid)}
+tr:hover td{background:var(--card)}
+
+@media print{
+  #sidebar, .mob-bar, #progress, .sidebar-ctrls{display:none !important}
+  #main{margin:0 !important; padding:0 !important; max-width:100% !important}
+  body{background:#fff !important; color:#000 !important}
+  .step-card, .figure-box, .sandbox-box{break-inside:avoid; border:1px solid #ccc !important}
+}
+
+@media(max-width:1080px){
+  #sidebar{transform:translateX(-100%); transition:transform .2s ease}
+  #sidebar.open{transform:translateX(0)}
+  .mob-bar{display:flex}
+  #main{margin-left:0 !important; margin-right:0 !important; padding:40px 20px 80px}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+
+<!-- 侧边栏导航 -->
+<aside id="sidebar">
+  <div class="brand">
+    OPENAI 软件工厂
+    <span>Architecture & Engineering Digest</span>
+  </div>
+  <div class="sidebar-ctrls">
+    <button id="btn-theme" class="sidebar-btn">切换明暗主题</button>
+    <button id="btn-top" class="sidebar-btn">回到顶部</button>
+  </div>
+  <nav class="toc">
+    <a href="#sec-intro" class="active">导语：代码作为通用界面</a>
+    <a href="#sec-interviewees" class="sub">七位核心受访者阵容</a>
+    <a href="#sec-boundary" class="sub">报告边界与事实严谨性</a>
+    <a href="#sec-part1">01 全公司的工作入口</a>
+    <a href="#sec-part1-penetration" class="sub">非工程团队扩散与长任务</a>
+    <a href="#sec-part1-cognition" class="sub">认知差距与领域专家嵌入</a>
+    <a href="#sec-part1-metrics" class="sub">官方统计数据与口径辨析</a>
+    <a href="#sec-part2">02 工作的基本单位改变</a>
+    <a href="#sec-part2-ide" class="sub">为什么没有 Fork VS Code</a>
+    <a href="#sec-part2-bottleneck" class="sub">PR 激增与下游瓶颈转移</a>
+    <a href="#sec-part2-mobile" class="sub">移动端应用商店审核硬约束</a>
+    <a href="#sec-part3">03 九步闭环：流水线架构</a>
+    <a href="#sec-part3-blueprint" class="sub">架构总览：传统 vs 智能体</a>
+    <a href="#sec-part3-steps" class="sub">九步全流程深度剖析</a>
+    <a href="#sec-part3-triad" class="sub">三种相互制约的核心力量</a>
+    <a href="#sec-part4">04 人工关卡与自动化演进</a>
+    <a href="#sec-part4-gates" class="sub">当前把守的三大物理关卡</a>
+    <a href="#sec-part4-sre" class="sub">自主 SRE 与常规事故自治</a>
+    <a href="#sec-part5">05 其他团队真正能借鉴什么</a>
+    <a href="#sec-part5-prereq" class="sub">客观支撑条件差距</a>
+    <a href="#sec-part5-order" class="sub">可迁移的落地顺序与稀缺性</a>
+    <a href="#sec-sandboxes">06 交互沙盘与决策模拟器</a>
+    <a href="#box-matrix" class="sub">沙盘一：九步职责矩阵决策器</a>
+    <a href="#box-queue" class="sub">沙盘二：PR 吞吐排队论模拟器</a>
+  </nav>
+</aside>
+
+<!-- 移动端底栏 -->
+<div class="mob-bar">
+  <button id="btn-mob-toc" class="mob-btn">目录</button>
+  <button id="btn-mob-theme" class="mob-btn">🌓</button>
+</div>
+
+<!-- 正文主体 -->
+<main id="main">
+  <header class="doc">
+    <div class="eyebrow">The Pragmatic Engineer × OpenAI 架构深度调研</div>
+    <h1>当代码变成通用界面：揭秘 OpenAI 内部的「软件工厂」是如何运转的</h1>
+    <div class="deck">
+      Codex 把工作的基本单位从逐行编码变成目标委托，也把瓶颈推向 CI、审查、发布与运维。这篇技术解读还原 OpenAI 九步软件工厂的证据、人工关卡与自动化方向。
+    </div>
+    <div class="meta">
+      <span>调研时间：2026 年</span>
+      <span>受访者：7位 OpenAI 工程主管与核心工程师</span>
+      <span>原作者：Gergely Orosz</span>
+      <span>核心范式：Agentic Software Factory</span>
+    </div>
+  </header>
+
+  <!-- 导引结论 -->
+  <section id="sec-intro">
+    <div class="lede">
+      <h4>核心技术结论先行</h4>
+      <ul>
+        <li><strong>通用工作入口的确立：</strong>Codex 在 OpenAI 已从编码工具扩展为全公司通用工作入口；官方公布的 <strong>99.8%</strong> 明确是指全公司每周输出 Token 中 Codex 的份额，而不是员工人数或工时占比。</li>
+        <li><strong>工程瓶颈的结构性后移：</strong>代码生成吞吐飙升后，瓶颈显著后移到 CI、专业审查、风险分流、移动发布和生产观测；部分构建与发布系统在半年内承受了近十倍的负载增长。</li>
+        <li><strong>人机责任边界与演进路线：</strong>当前的人类关卡仍把守三个关键节点：目标定义、生产发布批准与具体故障缓解授权；长期方向则是变更级自主 SRE 和部分常规事故自治。</li>
+      </ul>
+    </div>
+
+    <p>技术作家 Gergely Orosz 再次走进 OpenAI 总部时，距离上一次探访只有一年，内部的工作方式却已经换了底座。Codex 从一个“有也不错”的编程工具，变成了工程、研究、财务、招聘、法律和市场团队共同使用的工作入口；面向通用工作的 ChatGPT Work，也建立在 Codex harness 这套执行框架之上。员工不一定以代码作为最终产物，但智能体会在幕后编写代码、调用工具、生成文档和表格，把目标变成可交付的结果。</p>
+  </section>
+
+  <!-- 受访者卡片 -->
+  <section id="sec-interviewees">
+    <h3>证词来源：跨全链路的七位核心实践者</h3>
+    <p>这份观察来自七位受访者，不同岗位的证词拼出了一条完整链路：智能体先改变个人如何工作，随后放大代码产量，最后迫使测试、审查、发布和线上运维一起重构。</p>
+    <div class="interviewees">
+      <div class="person-card">
+        <div class="person-name">Venkat Venkataramani</div>
+        <div class="person-role">应用基础设施工程副总裁 (VP of Applied Infra)</div>
+        <div style="font-size:13px; color:var(--fg-dim); margin-top:6px;">见证每名工程师 PR 数量呈“曲棍球棒”式激增，主导基础设施十倍扩容与瓶颈治理。</div>
+      </div>
+      <div class="person-card">
+        <div class="person-name">Sulman Choudhry</div>
+        <div class="person-role">ChatGPT 工程负责人 (Head of ChatGPT Engineering)</div>
+        <div style="font-size:13px; color:var(--fg-dim); margin-top:6px;">剖析移动客户端发布的物理现实，对比 Facebook 经验揭示应用商店审核的不可压缩性。</div>
+      </div>
+      <div class="person-card">
+        <div class="person-name">Andrew Ambrosino</div>
+        <div class="person-role">桌面端负责人 (Head of Desktop)</div>
+        <div style="font-size:13px; color:var(--fg-dim); margin-top:6px;">主导 Codex 桌面应用开发，洞察长周期任务对人类多任务心智模型的收敛效应。</div>
+      </div>
+      <div class="person-card">
+        <div class="person-name">Joe Gershenson</div>
+        <div class="person-role">核心智能体团队负责人 (Core Agents Lead)</div>
+        <div style="font-size:13px; color:var(--fg-dim); margin-top:6px;">负责智能体核心执行环境与多任务协作编排，定义自主执行与人类确认的技术契约。</div>
+      </div>
+      <div class="person-card">
+        <div class="person-name">Akshay Nathan</div>
+        <div class="person-role">生产力团队工程负责人 (Productivity Engineering Lead)</div>
+        <div style="font-size:13px; color:var(--fg-dim); margin-top:6px;">提出“认知差距”理论，主导跨部门成熟工作流向团队插件化沉淀。</div>
+      </div>
+      <div class="person-card">
+        <div class="person-name">Ahmed Ibrahim</div>
+        <div class="person-role">Codex 工程师 (Codex Engineer)</div>
+        <div style="font-size:13px; color:var(--fg-dim); margin-top:6px;">参与 Codex Harness 底座研发，推动模型能力与内部系统深度集成。</div>
+      </div>
+      <div class="person-card">
+        <div class="person-name">Steve Coffey</div>
+        <div class="person-role">Responses API 工程师 (Responses API Engineer)</div>
+        <div style="font-size:13px; color:var(--fg-dim); margin-top:6px;">深入探索 API 吞吐能力、高可靠性接入及底层运行时支撑机制。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 边界说明 -->
+  <section id="sec-boundary">
+    <div class="boundary-note">
+      <strong>严格的材料与证据边界声明：</strong><br>
+      原报告元数据标记全文为 7,686 个英文词且属于付费内容；当前公开页面只提供引言、第 1～3 节全文和第 4 节的开头一段，实际约 3,536 词，相当于全文约 46%。后续关于内部工具和调试、十亿用户基础设施、API 可靠性与性能，以及工程岗位变化的正文并未公开。本解读<strong>严格只还原能够逐项核对的公开内容</strong>，绝不根据目录预告凭空脑补后半篇的论据与结论。
+    </div>
+  </section>
+
+  <!-- 第一节 -->
+  <section id="sec-part1">
+    <h2><span class="num">01</span>从编程工具到全公司的工作入口</h2>
+    
+    <div id="sec-part1-penetration">
+      <p>转折发生得很快。Codex 桌面应用在 2 月推出 Mac 版，3 月推出 Windows 版，随后在 7 月推出由 Codex harness 驱动的 ChatGPT Work。几个月内，财务、招聘、法律等非工程团队从几乎不用 Codex，转向大多数人每周都会使用。这个扩散并非来自管理层强制推行。</p>
+
+      <!-- 图表 1: 部门渗透演进矢量图 -->
+      <div class="figure-box">
+        <div class="figure-title">OpenAI 各部门 Codex 使用渗透变化（月度输出 Token 份额）</div>
+        <svg viewBox="0 0 760 300">
+          <!-- 背景网格与刻度 -->
+          <line x1="60" y1="40" x2="720" y2="40" stroke="var(--line-soft)" stroke-dasharray="4"/>
+          <line x1="60" y1="90" x2="720" y2="90" stroke="var(--line-soft)" stroke-dasharray="4"/>
+          <line x1="60" y1="140" x2="720" y2="140" stroke="var(--line-soft)" stroke-dasharray="4"/>
+          <line x1="60" y1="190" x2="720" y2="190" stroke="var(--line-soft)" stroke-dasharray="4"/>
+          <line x1="60" y1="240" x2="720" y2="240" stroke="var(--line)"/>
+          
+          <text x="45" y="45" fill="var(--fg-dim)" font-size="11" text-anchor="end" font-family="var(--mono)">100%</text>
+          <text x="45" y="95" fill="var(--fg-dim)" font-size="11" text-anchor="end" font-family="var(--mono)">75%</text>
+          <text x="45" y="145" fill="var(--fg-dim)" font-size="11" text-anchor="end" font-family="var(--mono)">50%</text>
+          <text x="45" y="195" fill="var(--fg-dim)" font-size="11" text-anchor="end" font-family="var(--mono)">25%</text>
+          <text x="45" y="245" fill="var(--fg-dim)" font-size="11" text-anchor="end" font-family="var(--mono)">0%</text>
+
+          <!-- 时间轴刻度 -->
+          <text x="90" y="262" fill="var(--fg-mid)" font-size="12" text-anchor="middle" font-family="var(--mono)">1月</text>
+          <text x="210" y="262" fill="var(--fg-mid)" font-size="12" text-anchor="middle" font-family="var(--mono)">2月 (Mac)</text>
+          <text x="330" y="262" fill="var(--fg-mid)" font-size="12" text-anchor="middle" font-family="var(--mono)">3月 (Win)</text>
+          <text x="450" y="262" fill="var(--fg-mid)" font-size="12" text-anchor="middle" font-family="var(--mono)">5月 (长任务)</text>
+          <text x="570" y="262" fill="var(--fg-mid)" font-size="12" text-anchor="middle" font-family="var(--mono)">7月 (Work)</text>
+          <text x="690" y="262" fill="var(--fg-mid)" font-size="12" text-anchor="middle" font-family="var(--mono)">9月 (全景)</text>
+
+          <!-- 曲线 1: 工程团队 (始终处于高位) -->
+          <path d="M 90 100 Q 210 70 330 55 T 570 45 T 690 42" fill="none" stroke="var(--accent)" stroke-width="3"/>
+          <circle cx="690" cy="42" r="4" fill="var(--accent)"/>
+          <text x="700" y="44" fill="var(--accent)" font-size="12" font-weight="bold">工程 (99%+)</text>
+
+          <!-- 曲线 2: 研究团队 -->
+          <path d="M 90 130 Q 210 100 330 75 T 570 52 T 690 46" fill="none" stroke="var(--cyan)" stroke-width="2.5"/>
+          <circle cx="690" cy="46" r="3.5" fill="var(--cyan)"/>
+          <text x="700" y="60" fill="var(--cyan)" font-size="11.5">研究 (95%+)</text>
+
+          <!-- 曲线 3: 财务/招聘/法律/市场等非工程团队 (爆发式陡升) -->
+          <path d="M 90 235 Q 210 220 330 165 T 450 120 T 570 65 T 690 58" fill="none" stroke="var(--emerald)" stroke-width="3" stroke-dasharray="2,2"/>
+          <circle cx="690" cy="58" r="4" fill="var(--emerald)"/>
+          <text x="700" y="78" fill="var(--emerald)" font-size="11.5" font-weight="bold">非工程部门 (85%+)</text>
+          
+          <!-- 里程碑标注虚线 -->
+          <line x1="450" y1="40" x2="450" y2="240" stroke="var(--amber)" stroke-width="1.2" stroke-dasharray="3,3"/>
+          <rect x="385" y="14" width="130" height="22" rx="4" fill="var(--card2)" stroke="var(--amber)" stroke-width="1"/>
+          <text x="450" y="29" fill="var(--amber)" font-size="11" text-anchor="middle" font-weight="600">/goal 长周期任务爆发点</text>
+        </svg>
+        <div class="figure-caption">图 1：各部门平均用户的月度输出 Token 中 Codex 所占份额变化趋势（数据源：OpenAI / The Pragmatic Engineer）</div>
+      </div>
+
+      <p>更值得注意的是，产品当时并不好用。2 月至 4 月的 Codex 应用仍会把代码直接显示在屏幕上，对非技术用户相当不友好，但非工程团队的采用率依然接近 40%。原因很现实：即使界面像开发工具，它已经能完成调研、制作演示文稿、生成文档、处理电子表格等复杂工作，产出的价值足以抵消使用门槛。</p>
+
+      <p>随后，长周期任务能力把使用率从大约 60% 推到 90%。用户可以通过 <code>/goal</code> 交代一个目标，让智能体持续工作，线程甚至延续数天。Andrew Ambrosino 观察到一个反直觉变化：<strong>智能体工作得越久，人反而越少同时管理多个任务</strong>，因为一个长线程会自行派生其他智能体并行处理子问题。人负责的对象从许多零散对话，收束为少数几个目标及其验收。</p>
+    </div>
+
+    <div id="sec-part1-cognition">
+      <h3>认知差距、团队插件化与领域专家嵌入</h3>
+      <p>另一个动力是 Akshay Nathan 所说的<strong>“认知差距”（awareness gap）</strong>。模型能力早已存在，但许多人不知道能力可以落到哪些工作上。有人先用 Codex 完成一个任务，后来从同事那里发现它还可以监控 Slack、更新 Airtable、制作入职材料。用途通过口口相传扩散，各团队再把成熟流程封装成角色或团队插件。通用智能体由此不再只是一个空白输入框，而是带着业务上下文和惯用工具进入具体岗位。</p>
+
+      <p>这种适配也暴露了工程团队的知识边界。开发者知道怎样构建 harness，却未必知道一份优秀的演示文稿、电子表格或商业报告应达到什么标准。因此，OpenAI 将领域专家嵌入 ChatGPT Work 的工程团队，让专业人员直接定义“好结果”的品味和要求。这里的关键并不是模型在所有领域都胜过专家，而是<strong>开发者无法凭自己的经验替每个专业领域设定质量标准</strong>。</p>
+
+      <p>OpenAI 内部的 Codex 还比公开产品接入了更多公司系统，这一点限制了外部类比。它已经深到足以形成运营依赖：即使只是一次轻微故障，同事发给 Codex 和 Work 团队的消息，也可能与自动监控告警同时甚至更早抵达。外部团队不能只安装同名产品，就假定会自然获得相同效果。</p>
+    </div>
+
+    <div id="sec-part1-metrics">
+      <h3>官方统计数据核查与口径辨析</h3>
+      <p>OpenAI 后来公布的数据能补充这次访谈，但必须严格保留统计口径，不可偷换概念：</p>
+
+      <div class="data-callout">
+        <div class="data-card">
+          <div class="data-val">99.8%</div>
+          <div class="data-lbl">公司每周输出 Token 中 Codex 占比</div>
+          <div style="font-size:11.5px; color:var(--fg-dim); margin-top:4px;">明确为 Token 份额，不是人数或工时占比</div>
+        </div>
+        <div class="data-card">
+          <div class="data-val">85%+</div>
+          <div class="data-lbl">员工 AI 工具输出 Token 中 Codex 占比</div>
+          <div style="font-size:11.5px; color:var(--fg-dim); margin-top:4px;">平均单名员工的工具使用倾斜度</div>
+        </div>
+        <div class="data-card">
+          <div class="data-val">&gt; 60 h</div>
+          <div class="data-lbl">P99 重度用户每日 Agent 并行运行时间</div>
+          <div style="font-size:11.5px; color:var(--fg-dim); margin-top:4px;">多 Agent 并行累加，非人类挂钟时长</div>
+        </div>
+      </div>
+
+      <ul>
+        <li><strong>Token 份额而非工时：</strong>对平均一名 OpenAI 员工而言，Codex 已占其 AI 工具输出 Token 的 85% 以上；全公司每周生成的输出 Token 中，Codex 占 99.8%。这是 Token 份额，不是使用人数或工作时间占比。</li>
+        <li><strong>并行时间超越物理 24 小时：</strong>在 OpenAI 日活用户中，位于第 99 百分位的重度用户每天经由多个并行智能体产生超过 60 小时的 agent-turn 运行时间。并行运行时间可以超过一天的 24 小时，不能等同于人类一天工作了 60 小时。</li>
+        <li><strong>等效人类任务时长分布：</strong>在 2026 年 5 月的抽样个人用户中，80.6% 至少提交过一次模型估算相当于人类工作超过 30 分钟的请求，70.2% 至少有一次超过 1 小时，25.6% 至少有一次超过 8 小时。这些数字是<strong>模型对“等效人类任务耗时”的方向性估算</strong>，不是请求实际运行的挂钟时间，更不是独立测得的生产率。</li>
+      </ul>
+      <p style="color:var(--fg-dim); font-size:14px;"><em>注：这些数据能证明工作正在从短问答迁移到长期委托，却不能单独证明代码质量更好、人员需求下降，或任何公司照做都能获得相同生产率。</em></p>
+    </div>
+  </section>
+
+  <!-- 第二节 -->
+  <section id="sec-part2">
+    <h2><span class="num">02</span>IDE 没有消失，工作的基本单位先变了</h2>
+    
+    <div id="sec-part2-ide">
+      <p>Codex 桌面应用差点没有发布。2025 年 12 月，团队已经有 Codex CLI，市场上也有功能完整的 IDE，于是一个介于终端和 IDE 之间的工具是否有独立价值，并不明显。Andrew Ambrosino 把这种担忧比作 iPad：用户可能宁可选择更便携的手机，或者功能更强的笔记本电脑，中间设备反而无处安放。</p>
+
+      <p>与此同时，Antigravity 在 11 月以 VS Code 分支的形态出现，更加诱使团队沿用成熟编辑器。但 OpenAI 最终没有 fork VS Code。他们押注的是：<strong>随着智能体能力提高，开发者会减少直接操作 IDE，把工作重心移到目标定义、任务委托和结果判断</strong>。内部 IDE 使用量从 1 月起下降，说明这一变化正在发生；不过 Codex 应用也在 6 月加入了文件编辑功能。这组事实更适合解释为“IDE 不再垄断开发入口”，而不是宣布 IDE 已经死亡。</p>
+    </div>
+
+    <div id="sec-part2-bottleneck">
+      <h3>工作的基本单位跃迁与下游瓶颈转移</h3>
+      <p>真正改变的是工作的基本单位。过去，开发者在编辑器里完成一组行级修改；现在，人可以交代一个结果，让智能体查找上下文、修改多个文件、运行验证并处理后续反馈。<strong>当产出单位从“改一段代码”扩大为“完成一个目标”，代码生成速度就会远超原有研发基础设施的设计容量</strong>。</p>
+
+      <p>Venkat Venkataramani 看到，每名工程师产生的 PR 数量呈“曲棍球棒”式上升，部分构建、测试和部署系统在大约六个月内承受了近十倍负载。其他公司可能用两三年才经历同等增长，OpenAI 却几乎每个月都会遇到一组新的扩容问题：版本控制要接住更多代码，CI/CD 要执行更多任务，发布系统还要吸收更高频的变更。模型能力每前进一步，瓶颈就向下游移动一次。</p>
+
+      <p>这也是传统 PR 和代码审查开始显得不合时宜的原因。如果每次变更仍完全依赖人工逐行检查，人的接受速度会成为固定上限。但取消审查并不能解决问题，只会把风险直接推到生产环境。OpenAI 的做法是<strong>把审查拆成专业化智能体、风险分流和明确的人工关卡</strong>，让审查能力随变更量一起扩展。</p>
+    </div>
+
+    <div id="sec-part2-mobile">
+      <h3>原生移动端：物理世界无法消除的刚性等待</h3>
+      <p>原生移动端则展示了另一类无法靠内部自动化直接消除的瓶颈。iOS 和 Android 更新仍须经过 Apple 与 Google 的应用商店审核，往往需要数小时或数天。Sulman Choudhry 回忆，Facebook 在 2010 年代把移动发布从每月一次逐步提升到双周一次、每周一次，同时依靠实验系统和 Feature Flag 让代码先随版本进入客户端，再远程决定何时开放功能。这曾显著提高移动团队的速度，但面对今天几分钟即可生成的软件变更仍显得迟缓。OpenAI 的 Codex 使用高度偏向移动端，而原生应用发布距离网页部署的速度还很远。</p>
+
+      <p>这个案例揭示了软件工厂的真实约束：<strong>智能体可以压缩内部生产时间，却不能凭空消除商店审核、合规要求和生产风险</strong>。生成变快以后，原先不显眼的外部等待会成为主导交付周期的新瓶颈。</p>
+    </div>
+  </section>
+
+  <!-- 第三节 -->
+  <section id="sec-part3">
+    <h2><span class="num">03</span>九步闭环：代码生成只是中间一环</h2>
+    
+    <div id="sec-part3-blueprint">
+      <p>“软件工厂”借用了制造业的比喻：人和机器人共同生产汽车，在软件里则是人和智能体共同生产、发布并维护系统。制造业甚至存在不需要照明的“黑灯工厂”，但 OpenAI 当前的流程还不是无人系统。人类定义目标、批准生产发布；故障智能体目前也只能建议缓解措施，除非工程师明确授权，否则不会执行。</p>
+
+      <!-- 图表 2: 传统线性流水线 vs 智能体闭环软件工厂架构蓝图 -->
+      <div class="figure-box">
+        <div class="figure-title">传统流水线 vs OpenAI 智能体软件工厂闭环架构对比</div>
+        <svg viewBox="0 0 760 380">
+          <!-- 上部: 传统线性流水线 -->
+          <rect x="20" y="20" width="720" height="90" rx="8" fill="var(--card2)" stroke="var(--line)"/>
+          <text x="35" y="42" fill="var(--fg-dim)" font-size="11.5" font-weight="bold" font-family="var(--mono)">TRADITIONAL LINEAR PIPELINE (单向阻塞型)</text>
+          
+          <rect x="40" y="55" width="95" height="38" rx="6" fill="var(--bg-soft)" stroke="var(--line)"/>
+          <text x="87" y="79" fill="var(--fg)" font-size="12" text-anchor="middle">需求文档</text>
+          <text x="145" y="79" fill="var(--fg-dim)">→</text>
+
+          <rect x="160" y="55" width="95" height="38" rx="6" fill="var(--bg-soft)" stroke="var(--line)"/>
+          <text x="207" y="79" fill="var(--fg)" font-size="12" text-anchor="middle">手动编码</text>
+          <text x="265" y="79" fill="var(--fg-dim)">→</text>
+
+          <rect x="280" y="55" width="105" height="38" rx="6" fill="var(--bg-soft)" stroke="var(--line)"/>
+          <text x="332" y="79" fill="var(--rose)" font-size="12" text-anchor="middle">逐行人工审查</text>
+          <text x="395" y="79" fill="var(--fg-dim)">→</text>
+
+          <rect x="410" y="55" width="95" height="38" rx="6" fill="var(--bg-soft)" stroke="var(--line)"/>
+          <text x="457" y="79" fill="var(--fg)" font-size="12" text-anchor="middle">静态 CI 构建</text>
+          <text x="515" y="79" fill="var(--fg-dim)">→</text>
+
+          <rect x="530" y="55" width="85" height="38" rx="6" fill="var(--bg-soft)" stroke="var(--line)"/>
+          <text x="572" y="79" fill="var(--fg)" font-size="12" text-anchor="middle">手动发布</text>
+          <text x="625" y="79" fill="var(--fg-dim)">→</text>
+
+          <rect x="640" y="55" width="85" height="38" rx="6" fill="var(--bg-soft)" stroke="var(--line)"/>
+          <text x="682" y="79" fill="var(--fg)" font-size="12" text-anchor="middle">人工告警</text>
+
+          <!-- 下部: OpenAI 软件工厂九步闭环 -->
+          <rect x="20" y="130" width="720" height="235" rx="8" fill="var(--card2)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="35" y="152" fill="var(--accent)" font-size="11.5" font-weight="bold" font-family="var(--mono)">OPENAI 9-STEP AGENTIC FACTORY (动态反馈闭环)</text>
+
+          <!-- 步骤节点 1-9 环形排布 -->
+          <!-- 1. 人类定义目标 -->
+          <rect x="35" y="170" width="115" height="42" rx="6" fill="var(--bg-soft)" stroke="var(--rose)" stroke-width="1.5"/>
+          <text x="92" y="188" fill="var(--rose)" font-size="11" font-weight="bold" text-anchor="middle">① 人类定义目标</text>
+          <text x="92" y="202" fill="var(--fg-dim)" font-size="9.5" text-anchor="middle">品味与优先级</text>
+
+          <!-- 2. 上下文汇集 -->
+          <rect x="180" y="170" width="115" height="42" rx="6" fill="var(--bg-soft)" stroke="var(--cyan)"/>
+          <text x="237" y="188" fill="var(--cyan)" font-size="11" font-weight="bold" text-anchor="middle">② 上下文汇集</text>
+          <text x="237" y="202" fill="var(--fg-dim)" font-size="9.5" text-anchor="middle">同仓/Slack/Notion</text>
+
+          <!-- 3. 智能体实现 -->
+          <rect x="325" y="170" width="115" height="42" rx="6" fill="var(--bg-soft)" stroke="var(--emerald)"/>
+          <text x="382" y="188" fill="var(--emerald)" font-size="11" font-weight="bold" text-anchor="middle">③ 智能体实现</text>
+          <text x="382" y="202" fill="var(--fg-dim)" font-size="9.5" text-anchor="middle">自主修改与自验证</text>
+
+          <!-- 4. CI测试看护 -->
+          <rect x="470" y="170" width="115" height="42" rx="6" fill="var(--bg-soft)" stroke="var(--emerald)"/>
+          <text x="527" y="188" fill="var(--emerald)" font-size="11" font-weight="bold" text-anchor="middle">④ CI 看护修补</text>
+          <text x="527" y="202" fill="var(--fg-dim)" font-size="9.5" text-anchor="middle">PR看护+A/B测试</text>
+
+          <!-- 5. 审查与风险路由 -->
+          <rect x="615" y="170" width="115" height="42" rx="6" fill="var(--bg-soft)" stroke="var(--amber)"/>
+          <text x="672" y="188" fill="var(--amber)" font-size="11" font-weight="bold" text-anchor="middle">⑤ 专业审查分流</text>
+          <text x="672" y="202" fill="var(--fg-dim)" font-size="9.5" text-anchor="middle">领域Agent+合规</text>
+
+          <!-- 下排: 6 -> 7 -> 8 -> 9 反向流动 -->
+          <!-- 6. 护送发布 -->
+          <rect x="615" y="255" width="115" height="42" rx="6" fill="var(--bg-soft)" stroke="var(--rose)" stroke-width="1.5"/>
+          <text x="672" y="273" fill="var(--rose)" font-size="11" font-weight="bold" text-anchor="middle">⑥ 护送发布</text>
+          <text x="672" y="287" fill="var(--fg-dim)" font-size="9.5" text-anchor="middle">人类批准/专属SRE</text>
+
+          <!-- 7. 变更级观测 -->
+          <rect x="470" y="255" width="115" height="42" rx="6" fill="var(--bg-soft)" stroke="var(--cyan)"/>
+          <text x="527" y="273" fill="var(--cyan)" font-size="11" font-weight="bold" text-anchor="middle">⑦ 变更级观测</text>
+          <text x="527" y="287" fill="var(--fg-dim)" font-size="9.5" text-anchor="middle">单PR看板+WideEvent</text>
+
+          <!-- 8. 信号回流 (Perf Factory) -->
+          <rect x="325" y="255" width="115" height="42" rx="6" fill="var(--bg-soft)" stroke="var(--accent)"/>
+          <text x="382" y="273" fill="var(--accent)" font-size="11" font-weight="bold" text-anchor="middle">⑧ Perf Factory</text>
+          <text x="382" y="287" fill="var(--fg-dim)" font-size="9.5" text-anchor="middle">回退归因/提出修复</text>
+
+          <!-- 9. Sevbot 事故响应 -->
+          <rect x="180" y="255" width="115" height="42" rx="6" fill="var(--bg-soft)" stroke="var(--rose)" stroke-width="1.5"/>
+          <text x="237" y="273" fill="var(--rose)" font-size="11" font-weight="bold" text-anchor="middle">⑨ Sevbot 协助</text>
+          <text x="237" y="287" fill="var(--fg-dim)" font-size="9.5" text-anchor="middle">建议缓解/人类授权</text>
+
+          <!-- 箭头连线 -->
+          <path d="M 150 191 L 180 191" stroke="var(--fg-mid)" stroke-width="1.5" fill="none"/>
+          <path d="M 295 191 L 325 191" stroke="var(--fg-mid)" stroke-width="1.5" fill="none"/>
+          <path d="M 440 191 L 470 191" stroke="var(--fg-mid)" stroke-width="1.5" fill="none"/>
+          <path d="M 585 191 L 615 191" stroke="var(--fg-mid)" stroke-width="1.5" fill="none"/>
+          
+          <!-- 垂直转折 -->
+          <path d="M 672 212 L 672 255" stroke="var(--fg-mid)" stroke-width="1.5" fill="none"/>
+
+          <!-- 下排反向连线 -->
+          <path d="M 615 276 L 585 276" stroke="var(--fg-mid)" stroke-width="1.5" fill="none"/>
+          <path d="M 470 276 L 440 276" stroke="var(--fg-mid)" stroke-width="1.5" fill="none"/>
+          <path d="M 325 276 L 295 276" stroke="var(--fg-mid)" stroke-width="1.5" fill="none"/>
+
+          <!-- 反馈回路回流到智能体实现 -->
+          <path d="M 382 255 C 382 230, 360 225, 360 215" stroke="var(--accent)" stroke-width="1.8" stroke-dasharray="3,3" fill="none"/>
+          <text x="400" y="238" fill="var(--accent)" font-size="10" font-weight="bold">修复回流</text>
+
+          <path d="M 180 276 C 100 276, 50 250, 50 215" stroke="var(--rose)" stroke-width="1.5" stroke-dasharray="3,3" fill="none"/>
+          <text x="65" y="325" fill="var(--rose)" font-size="10">事故处置反馈</text>
+
+          <!-- 图例 -->
+          <circle cx="210" y="335" r="5" fill="var(--rose)"/>
+          <text x="222" y="339" fill="var(--fg-mid)" font-size="11">人类把关节点 (Gates)</text>
+          <circle cx="370" y="335" r="5" fill="var(--emerald)"/>
+          <text x="382" y="339" fill="var(--fg-mid)" font-size="11">智能体全自动执行</text>
+          <circle cx="510" y="335" r="5" fill="var(--cyan)"/>
+          <text x="522" y="339" fill="var(--fg-mid)" font-size="11">基础设施支撑环境</text>
+        </svg>
+        <div class="figure-caption">图 2：人类定义目标后，Codex 与上下文、CI、审查、发布、生产观测、Perf Factory 和 Sevbot 构成的九步反馈回路（来源：The Pragmatic Engineer / 架构还原）</div>
+      </div>
+    </div>
+
+    <div id="sec-part3-steps">
+      <h3>完整流程：九个相互反馈的环节</h3>
+
+      <div class="step-card">
+        <div class="step-head">
+          <div class="step-num">1</div>
+          <h4 class="step-title">人类定义结果 (Define Outcomes)</h4>
+          <span class="step-tag tag-gate">人类关键关卡</span>
+        </div>
+        <div class="step-body">
+          软件工程师或产品经理先说明问题和期望结果。Venkat 观察到，<strong>工程师正在变得更像产品经理</strong>：编码被大量委托之后，判断、优先级和品味变得更重要。智能体可以扩大执行力，却不能替组织决定什么值得做、什么结果可以接受。
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-head">
+          <div class="step-num">2</div>
+          <h4 class="step-title">Codex 汇集上下文 (Context Synthesis)</h4>
+          <span class="step-tag tag-agent">全维深度连接</span>
+        </div>
+        <div class="step-body">
+          OpenAI 把文档移进源代码仓库，让代码和说明更容易同步演进。Codex 还可以访问 Git 仓库与 GitHub、Slack 与 Notion、Databricks、Datadog、内部日志以及团队技能；有些内部技能甚至由 Codex 自己维护。由于接入足够深，新工程师入职时会被建议直接向 Codex 询问系统问题。
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-head">
+          <div class="step-num">3</div>
+          <h4 class="step-title">智能体实现并验证变更 (Implementation & Local Verify)</h4>
+          <span class="step-tag tag-agent">自主迭代探索</span>
+        </div>
+        <div class="step-body">
+          Codex 根据目标持续修改代码，直到达到要求，并验证软件行为。公开材料没有说明这里必然使用某种特定沙箱，也没有限定验证只能在本地完成，因此不能把未披露的执行环境当成既定事实。
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-head">
+          <div class="step-num">4</div>
+          <h4 class="step-title">构建、测试并等待 CI 通过 (CI Watchdog & Synthetics)</h4>
+          <span class="step-tag tag-auto">自动化看护</span>
+        </div>
+        <div class="step-body">
+          智能体构建代码、运行测试、根据失败结果修正实现，然后创建 PR，触发更完整的 linter 和测试套件。它会持续看护 PR，处理 CI 失败并更新变更。额外的性能 harness 只把被判定为可能有问题的 PR 送入 <strong>Synthetics A/B 框架</strong>，评估性能影响；并非所有 PR 都接受同一套昂贵性能测试。
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-head">
+          <div class="step-num">5</div>
+          <h4 class="step-title">专业审查、风险分流与合规路由 (Review Swarm & Risk Routing)</h4>
+          <span class="step-tag tag-auto">混合分流</span>
+        </div>
+        <div class="step-body">
+          系统不是只调用一个通用代码审查器，而是<strong>派生多个拥有领域配置的审查智能体</strong>。Gergely 最初对此持怀疑态度：仅在提示词里要求模型“扮演云基础设施专家”，并不会自动带来专业判断。这套方式可能有效，依赖的是智能体能访问相关代码和文档，并把有限上下文集中到一个狭窄领域。<strong>低风险 PR 只有在相应代码区域主动 opt-in 后，才可能由智能体自动批准</strong>；高风险变更可以增加更多 AI 审查，或强制加入人工审查。系统还可根据风险自动决定何时需要额外的自动合规检查或人工合规意见。编码智能体会继续跟踪审查评论并修复问题。
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-head">
+          <div class="step-num">6</div>
+          <h4 class="step-title">智能体护送发布 (Deployment Escort)</h4>
+          <span class="step-tag tag-gate">人类批准 + Agent护送</span>
+        </div>
+        <div class="step-body">
+          <strong>人类批准某项变更进入生产后，系统才为它分配发布智能体</strong>。智能体会找到 Feature Flag，理解变更，判断哪些信号代表成功或失败，并为这次变更生成自己的监控看板，再持续观察发布状态。OpenAI 的长期目标，是形成接近“每次变更一个自主 SRE”的能力；这是方向，不是当前已经完全自主发布的事实。
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-head">
+          <div class="step-num">7</div>
+          <h4 class="step-title">按变更粒度观察生产 (Per-Change Observability)</h4>
+          <span class="step-tag tag-agent">高分辨率追踪</span>
+        </div>
+        <div class="step-body">
+          观测来源包括前一步生成的看板，以及 OpenAI 内部产生日志、指标、追踪和 wide events 的可观测系统。过去由工程师为服务搭建看板，现在<strong>智能体能够针对单次变更生成观测视图</strong>，使“这次改动是否健康”成为可以独立追踪的问题。
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-head">
+          <div class="step-num">8</div>
+          <h4 class="step-title">生产信号回流开发 (Perf Factory Feedback)</h4>
+          <span class="step-tag tag-auto">信号降噪与归因</span>
+        </div>
+        <div class="step-body">
+          <strong>Perf Factory</strong> 从告警和看板中筛选信号、去重、识别真正的延迟回退、定位根因并提出修复方案。报告导言还概括说，它可以启动 Codex 智能体处理性能问题；但公开的流程描述只证明它会提出修复，不能据此推断补丁会绕过审查自动合入或上线。
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-head">
+          <div class="step-num">9</div>
+          <h4 class="step-title">Sevbot 协助事故响应 (Sevbot Incident Support)</h4>
+          <span class="step-tag tag-gate">人类授权后执行</span>
+        </div>
+        <div class="step-body">
+          事故发生时，Sevbot 收集上下文、判断可能的缓解措施，并在 Slack 频道回答开发者的问题。<strong>它当前不会自行执行缓解操作；工程师可以指定某项措施，再让它实施</strong>。OpenAI 希望未来让 Sevbot 自主处理一部分常规事故，使人不必在非工作时间被叫醒，事后再审查它的行动，但现阶段 on-call 仍然存在。
+        </div>
+      </div>
+    </div>
+
+    <div id="sec-part3-triad">
+      <h3>三维制衡：机器高频执行、系统验证与人类最终责任</h3>
+      <p>把九步连起来看，工厂的核心并不是“一个模型写完所有代码”，而是<strong>三种能力彼此制约</strong>：</p>
+      <ul>
+        <li><strong>机器力量：</strong>负责高频执行、多文件探索与持续观察（Codex、审查智能体群、发布智能体）；</li>
+        <li><strong>自动化系统力量：</strong>提供可验证反馈与刚性约束（CI、Synthetics A/B、宽事件监控、Perf Factory）；</li>
+        <li><strong>人类力量：</strong>在目标、风险与生产动作上承担最终责任（定义预期、授权上线、批准缓解）。</li>
+      </ul>
+      <p>任何一层缺失，代码吞吐提高都可能只是更快地制造等待、噪声或事故。</p>
+    </div>
+  </section>
+
+  <!-- 第四节 -->
+  <section id="sec-part4">
+    <h2><span class="num">04</span>现在的人工关卡，与未来的自动化方向</h2>
+    
+    <div id="sec-part4-gates">
+      <p>从当前事实看，人类仍严把守三个关键节点：</p>
+      <ol>
+        <li><strong>开头决定问题与期望结果：</strong>人类工程师决定要做什么、为什么做以及验收准则；</li>
+        <li><strong>代码进入生产前给予批准：</strong>变更在合并与部署上线前必须获得人工签字确认；</li>
+        <li><strong>Sevbot 执行具体缓解措施时提供明确指令：</strong>事故中智能体提出方案，但必须经由 On-call 人员按下按钮或下达指令后才能执行。</li>
+      </ol>
+      <p>此外，风险较高的代码还可能被强制送交人工审查。<strong>把 OpenAI 现状描述成完全无人参与的“黑灯软件工厂”并不准确</strong>。</p>
+    </div>
+
+    <div id="sec-part4-sre">
+      <h3>动态演进：变更级自主 SRE 与常规事故自治</h3>
+      <p>但这不意味着边界会永久停在这里。OpenAI 正在探索让发布智能体承担更完整的<strong>变更级 SRE 职责</strong>，也希望 Sevbot 最终可以<strong>自主处置部分常规事故</strong>。</p>
+      <p>真正的演进路线是：<strong>先建立足够可靠的上下文、风险分类、测试和生产信号，再逐步扩大可自主执行的范围</strong>。当前状态与长期目标必须同时保留，既不能把愿景当成已实现能力，也不能把今天的人工关卡说成永远不会移动。</p>
+    </div>
+  </section>
+
+  <!-- 第五节 -->
+  <section id="sec-part5">
+    <h2><span class="num">05</span>其他团队真正可以借鉴什么</h2>
+    
+    <div id="sec-part5-prereq">
+      <p>OpenAI 的实践建立在少见的客观支撑条件上，不能脱离现实基础盲目照搬：</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>关键要素</th>
+              <th>OpenAI 内部现状</th>
+              <th>普通企业/团队常见现状</th>
+              <th>迁移挑战</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>文档与代码</strong></td>
+              <td>文档深度融入代码仓库，与代码同演进</td>
+              <td>文档散落在 Confluence、飞书、本地文档，滞后失修</td>
+              <td>智能体缺乏高置信度事实源，幻觉率上升</td>
+            </tr>
+            <tr>
+              <td><strong>上下文互联</strong></td>
+              <td>深连 GitHub、Slack、Notion、Databricks、Datadog、内部日志</td>
+              <td>系统隔离、权限分散、缺乏统一数据拉取 API</td>
+              <td>需要漫长的基础设施打通与安全授权治理</td>
+            </tr>
+            <tr>
+              <td><strong>反馈回路</strong></td>
+              <td>CI 快速构建、Synthetics A/B 灰度性能验证</td>
+              <td>构建慢、测试用例脆、缺乏沙箱与性能 harness</td>
+              <td>智能体写完代码无处自验证，直接堆积给人工</td>
+            </tr>
+            <tr>
+              <td><strong>风险路由</strong></td>
+              <td>代码区域主动 opt-in，分级派生专业领域 Agent 审查</td>
+              <td>单一 PR 模板，所有代码一刀切排队人工审查</td>
+              <td>吞吐增加后迅速造成人工审查雪崩堵塞</td>
+            </tr>
+            <tr>
+              <td><strong>计算预算</strong></td>
+              <td>高额 Token 与计算预算，单人 P99 每日 60+ 小时 Agent 并发</td>
+              <td>严格按 Token 计费配额，缺乏大规模并行算力</td>
+              <td>长周期任务与多 Agent 派生受成本阻断</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="sec-part5-order">
+      <h3>科学演进次序与稀缺性转移</h3>
+      <p>更可迁移的顺序，是<strong>先让系统变得可被机器理解、可被测试验证、可被生产信号约束，再提高代码生成量</strong>：</p>
+      <ul>
+        <li>把真正影响实现的文档放到代码附近，并建立随代码更新的责任机制；</li>
+        <li>让智能体获得完成任务所需的上下文，同时把读写权限、审计和生产动作的边界说清；</li>
+        <li>用测试、CI、性能评估和生产观测建立短反馈回路，让错误尽早暴露；</li>
+        <li>按变更风险决定需要多少智能体审查、合规输入和人工批准，而不是对所有代码采用同一种流程；</li>
+        <li>先测量下游构建、审查、发布和运维能承受多少吞吐，再决定是否进一步放大生成速度。</li>
+      </ul>
+
+      <div class="lede" style="margin-top:28px;">
+        <h4 style="color:var(--accent);">核心认知跃迁：代码已非稀缺，稀缺的是判断与责任</h4>
+        <p style="margin:0; font-size:15.5px; color:var(--fg-mid);">
+          这套软件工厂最重要的启示，是<strong>代码不再是唯一稀缺资源</strong>。当智能体显著降低实现成本，稀缺性会转移到<strong>高质量上下文、可执行的判断、验证能力和风险承担</strong>上。工程组织要改造的不是一个编辑器入口，而是从目标到生产反馈的整条链路。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 第六节：交互沙盘 -->
+  <section id="sec-sandboxes">
+    <h2><span class="num">06</span>交互沙盘与决策模拟器</h2>
+
+    <!-- 沙盘 1: 九步职责矩阵决策器 -->
+    <div class="sandbox-box" id="box-matrix">
+      <div class="sandbox-header">
+        <h4>沙盘一：九步软件工厂职责矩阵与人机协同决策器</h4>
+        <p>动态探索九大环节中人类、智能体与支撑系统的权责分工、人工关卡与未来自动化演进。</p>
+      </div>
+
+      <div class="ctrl-row">
+        <div class="ctrl-item" style="flex:2;">
+          <label for="sel-step">选择流水线环节：</label>
+          <select id="sel-step">
+            <option value="s1">1. 人类定义结果 (Define Outcomes)</option>
+            <option value="s2">2. Codex 汇集上下文 (Context Synthesis)</option>
+            <option value="s3">3. 智能体实现并验证变更 (Implementation & Verify)</option>
+            <option value="s4">4. 构建、测试并等待 CI 通过 (CI Watchdog)</option>
+            <option value="s5" selected>5. 专业审查、风险分流与合规路由 (Review Swarm)</option>
+            <option value="s6">6. 智能体护送发布 (Deployment Escort)</option>
+            <option value="s7">7. 按变更粒度观察生产 (Per-Change Observability)</option>
+            <option value="s8">8. 生产信号回流开发 (Perf Factory Feedback)</option>
+            <option value="s9">9. Sevbot 协助事故响应 (Sevbot Incident Support)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="result-grid">
+        <div class="res-card">
+          <div class="res-card-label">当前环节名称</div>
+          <div class="res-card-val" id="out-step-name" style="font-size:17px; color:var(--accent);">专业审查与风险分流</div>
+        </div>
+        <div class="res-card">
+          <div class="res-card-label">当前关卡属性</div>
+          <div class="res-card-val" id="out-step-gate" style="font-size:17px; color:var(--amber);">混合分流 (Opt-in)</div>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
+        <div class="res-card">
+          <div class="res-card-label" style="color:var(--rose); font-weight:bold;">人类工程师职责</div>
+          <div id="out-step-human" style="font-size:14px; color:var(--fg); line-height:1.6;">把关高风险核心逻辑，为特定代码区域配置 opt-in 规则与合规审查要求。</div>
+        </div>
+        <div class="res-card">
+          <div class="res-card-label" style="color:var(--cyan); font-weight:bold;">Codex / 智能体角色</div>
+          <div id="out-step-agent" style="font-size:14px; color:var(--fg); line-height:1.6;">派生专属领域审查 Agent 群，自动批准低风险 PR，持续响应修改建议。</div>
+        </div>
+      </div>
+
+      <div class="res-card" style="margin-bottom:18px;">
+        <div class="res-card-label" style="color:var(--emerald); font-weight:bold;">底层支撑系统与接入上下文</div>
+        <div id="out-step-system" style="font-size:14px; color:var(--fg-mid); line-height:1.6;">GitHub PR 评审系统、代码语义拓扑、领域专业上下文配置库。</div>
+      </div>
+
+      <div class="verdict-box" id="out-step-future">
+        未来演进路线：扩大代码区域主动 opt-in 的覆盖面，通过领域 Agent 精准对齐合规与架构规范，实现中低风险 PR 全自治审查闭环。
+      </div>
+    </div>
+
+    <!-- 沙盘 2: PR 吞吐与审查排队论模拟器 -->
+    <div class="sandbox-box" id="box-queue">
+      <div class="sandbox-header">
+        <h4>沙盘二：代码吞吐激增与审查排队论模拟器 (M/M/c Queueing Model)</h4>
+        <p>基于排队论推导，模拟每天 PR 生成吞吐、人工审查耗时与 AI 审查分流对系统排队积压与交付时延的影响。</p>
+      </div>
+
+      <div class="ctrl-row">
+        <div class="ctrl-item">
+          <label for="rng-pr">每日生成 PR 数量：<span id="out-pr-val">30</span> 个/天</label>
+          <input type="range" id="rng-pr" min="10" max="120" value="30" step="5">
+        </div>
+        <div class="ctrl-item">
+          <label for="rng-time">人工单 PR 审查耗时：<span id="out-time-val">35</span> 分钟</label>
+          <input type="range" id="rng-time" min="15" max="60" value="35" step="5">
+        </div>
+        <div class="ctrl-item">
+          <label for="rng-optin">AI 审查自动批准分流比例：<span id="out-optin-val">40%</span></label>
+          <input type="range" id="rng-optin" min="0" max="80" value="40" step="5">
+        </div>
+      </div>
+
+      <div class="result-grid">
+        <div class="res-card">
+          <div class="res-card-label">人工审查负荷率 (&rho;)</div>
+          <div class="res-card-val" id="out-rho-val">26.3%</div>
+        </div>
+        <div class="res-card">
+          <div class="res-card-label">平均审查等待时间</div>
+          <div class="res-card-val" id="out-wait-val">0.0 小时</div>
+        </div>
+        <div class="res-card">
+          <div class="res-card-label">下游 CI 负载倍数</div>
+          <div class="res-card-val" id="out-ci-val">2.0x</div>
+        </div>
+        <div class="res-card">
+          <div class="res-card-label">队列健康状态</div>
+          <div class="res-card-val" id="out-queue-status" style="color:var(--emerald);">受控平稳 (健康)</div>
+        </div>
+      </div>
+
+      <div class="verdict-box" id="out-queue-verdict">
+        排队论判定：系统处于极佳健康状态。得益于 40% 的低风险 PR 经由专业审查 Agent 自动批准，5 名审查工程师的人工利用率仅为 26.3%，平均等待时间接近于 0，有效防止了 PR 在审查环节发生积压。
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  function byId(id){
+    return document.getElementById(id);
+  }
+
+  /* ---------- 主题切换 ---------- */
+  var btnTheme = byId("btn-theme");
+  var btnMobTheme = byId("btn-mob-theme");
+  function toggleTheme(){
+    var html = document.documentElement;
+    var current = html.getAttribute("data-theme") || "dark";
+    var next = current === "dark" ? "light" : "dark";
+    html.setAttribute("data-theme", next);
+    try { localStorage.setItem("theme_pref", next); } catch(e){}
+  }
+  if (btnTheme) { btnTheme.addEventListener("click", toggleTheme); }
+  if (btnMobTheme) { btnMobTheme.addEventListener("click", toggleTheme); }
+
+  /* ---------- 回到顶部 ---------- */
+  var btnTop = byId("btn-top");
+  if (btnTop) {
+    btnTop.addEventListener("click", function(){
+      window.scrollTo({top:0, behavior:"smooth"});
+    });
+  }
+
+  /* ---------- 移动端目录折叠 ---------- */
+  var btnMobToc = byId("btn-mob-toc");
+  var sidebar = byId("sidebar");
+  if (btnMobToc && sidebar) {
+    btnMobToc.addEventListener("click", function(){
+      sidebar.classList.toggle("open");
+    });
+  }
+
+  /* ---------- 阅读进度条与 TOC 高亮 ---------- */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll(".toc a"));
+  var headings = [];
+  tocLinks.forEach(function(link){
+    var href = link.getAttribute("href");
+    if (href && href.charAt(0) === "#") {
+      var el = byId(href.substring(1));
+      if (el) { headings.push({el: el, link: link}); }
+    }
+  });
+
+  function onScroll(){
+    var scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var docHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+    var pct = docHeight > 0 ? (scrollY / docHeight) * 100 : 0;
+    var progress = byId("progress");
+    if (progress) { progress.style.width = pct + "%"; }
+
+    // TOC Active
+    var currentActive = null;
+    for (var i = 0; i < headings.length; i++) {
+      var top = headings[i].el.getBoundingClientRect().top;
+      if (top <= 100) {
+        currentActive = headings[i].link;
+      }
+    }
+    if (currentActive) {
+      tocLinks.forEach(function(a){ a.classList.remove("active"); });
+      currentActive.classList.add("active");
+    }
+  }
+  window.addEventListener("scroll", onScroll);
+  onScroll();
+
+  /* ---------- 沙盘 1：九步职责矩阵 ---------- */
+  var selStep = byId("sel-step");
+  var outStepName = byId("out-step-name");
+  var outStepGate = byId("out-step-gate");
+  var outStepHuman = byId("out-step-human");
+  var outStepAgent = byId("out-step-agent");
+  var outStepSystem = byId("out-step-system");
+  var outStepFuture = byId("out-step-future");
+
+  var stepData = {
+    s1: {
+      name: "人类定义结果",
+      gate: "核心强制关卡",
+      human: "说明问题背景、业务约束与期望达成结果，把控架构优先级与交付品味。",
+      agent: "解析人类意图，拆解工作目标，规划后续执行路径与工具调用链条。",
+      system: "Issue 跟踪系统、项目管理看板、组织级业务指标与架构约束准则。",
+      future: "人类角色持续收束为产品经理与品味仲裁者，智能体逐步承担更复杂的任务自主分解。"
+    },
+    s2: {
+      name: "Codex 汇集上下文",
+      gate: "全自动执行",
+      human: "将核心文档与规范移入源代码同仓，建立代码与文档同步演进机制。",
+      agent: "自主遍历 Git、Slack、Notion、Databricks、Datadog 等全系统，自维护团队技能。",
+      system: "统一数据底座、向量索引库、组织通信系统与内部运行时日志汇聚平台。",
+      future: "形成系统级实时数字孪生，使新工程师和智能体无需人工解释即可理解任意微服务拓扑。"
+    },
+    s3: {
+      name: "智能体实现与自验证",
+      gate: "全自动执行",
+      human: "提供目标与验收准则，不参与逐行编码，仅在智能体卡住或请求明确决策时介入。",
+      agent: "目标驱动持续编写与修改代码，跨多个文件探索，并自运行测试验证预期行为。",
+      system: "隔离执行运行时、代码语言服务器、本地单元测试套件与静态检查工具链。",
+      future: "支持更深层的多智能体分工协同与推测执行，单任务自主探索周期扩展至数天级别。"
+    },
+    s4: {
+      name: "CI 测试看护与修补",
+      gate: "自动化看护",
+      human: "定义 CI 校验规则套件与性能基准线，无需手动干预偶发性构建失败。",
+      agent: "创建 PR 并持续守护构建；遇到测试失败自动分析堆栈、修补代码并再次推送。",
+      system: "分布式 CI 集群、回归测试套件、Synthetics A/B 灰度性能评估框架。",
+      future: "针对高风险变更进行动态测试用例推演合成，消除昂贵的全量测试，实现精准秒级验证。"
+    },
+    s5: {
+      name: "专业审查与风险分流",
+      gate: "混合分流 (Opt-in)",
+      human: "把关高风险核心逻辑，为特定代码区域配置 opt-in 规则与合规审查要求。",
+      agent: "派生专属领域审查 Agent 群，自动批准低风险 PR，持续响应修改建议。",
+      system: "GitHub PR 评审系统、代码语义拓扑、领域专业上下文配置库。",
+      future: "扩大代码区域主动 opt-in 的覆盖面，通过领域 Agent 精准对齐合规与架构规范，实现中低风险 PR 全自治审查闭环。"
+    },
+    s6: {
+      name: "智能体护送发布",
+      gate: "人类授权 + 护送",
+      human: "审核上线风险，给出最终生产发布授权，确认 Feature Flag 开启节奏。",
+      agent: "识别变更对应的 Feature Flag，自动构建单次变更监控看板，全程值守发布进程。",
+      system: "多集群部署系统、灰度分流网关、Feature Flag 配置中心。",
+      future: "演进为变更级自主 SRE，在指标异常时自主执行回滚、降级或流量切换，人后置审计。"
+    },
+    s7: {
+      name: "变更粒度生产观测",
+      gate: "全自动执行",
+      human: "按需查看智能体定制生成的变更专属健康视图，评估改动在生产环境的长期影响。",
+      agent: "汇聚日志、分布式调用链与 wide events，独立计算该次提交的各项健康评分。",
+      system: "Datadog、内部高性能可观测引擎、分布式链路追踪与宽事件流聚合系统。",
+      future: "全链路全景可观测性自主关联分析，从变更直接推导下游业务关键指标的微妙扰动。"
+    },
+    s8: {
+      name: "Perf Factory 信号回流",
+      gate: "自动归因分析",
+      human: "审阅 Perf Factory 提交的性能缺陷诊断报告与修复 PR，批准合入。",
+      agent: "从海量告警看板中去噪降噪，识别真实延迟回退，精确定位根因并生成补丁方案。",
+      system: "Perf Factory 性能分析引擎、告警降噪过滤器、全网性能基准基线。",
+      future: "实现常规性能退化与配置漂移的端到端无人自治修复，形成完全自愈的性能防线。"
+    },
+    s9: {
+      name: "Sevbot 协助事故响应",
+      gate: "人类授权后执行",
+      human: "On-call 响应工程师确认事故级别，挑选或授权 Sevbot 推荐的缓解操作。",
+      agent: "快速聚合事故发生前后的全网上下文，生成排查假设，并在人类明确指令下代为操作。",
+      system: "Slack 故障协同频道、应急控制台、自动化运维脚本库与安全沙箱执行网关。",
+      future: "对低级别非预期故障进行安全边界内的自动化自愈处置，避免在夜间唤醒人类工程师。"
+    }
+  };
+
+  function updateStep(){
+    if (!selStep) { return; }
+    var key = selStep.value;
+    var d = stepData[key] || stepData.s5;
+    if (outStepName) { outStepName.textContent = d.name; }
+    if (outStepGate) { outStepGate.textContent = d.gate; }
+    if (outStepHuman) { outStepHuman.textContent = d.human; }
+    if (outStepAgent) { outStepAgent.textContent = d.agent; }
+    if (outStepSystem) { outStepSystem.textContent = d.system; }
+    if (outStepFuture) { outStepFuture.textContent = "未来演进路线：" + d.future; }
+  }
+  if (selStep) { selStep.addEventListener("change", updateStep); }
+  updateStep();
+
+  /* ---------- 沙盘 2：排队论模拟器 ---------- */
+  var rngPr = byId("rng-pr");
+  var rngTime = byId("rng-time");
+  var rngOptin = byId("rng-optin");
+
+  var outPrVal = byId("out-pr-val");
+  var outTimeVal = byId("out-time-val");
+  var outOptinVal = byId("out-optin-val");
+
+  var outRhoVal = byId("out-rho-val");
+  var outWaitVal = byId("out-wait-val");
+  var outCiVal = byId("out-ci-val");
+  var outQueueStatus = byId("out-queue-status");
+  var outQueueVerdict = byId("out-queue-verdict");
+
+  function updateQueue(){
+    if (!rngPr || !rngTime || !rngOptin) { return; }
+    var lambdaPr = parseInt(rngPr.value, 10);
+    var tReview = parseInt(rngTime.value, 10);
+    var optinPct = parseInt(rngOptin.value, 10);
+    var alpha = optinPct / 100.0;
+
+    if (outPrVal) { outPrVal.textContent = lambdaPr; }
+    if (outTimeVal) { outTimeVal.textContent = tReview; }
+    if (outOptinVal) { outOptinVal.textContent = optinPct + "%"; }
+
+    var cReviewers = 5;
+    var dailyMins = 480.0;
+    var mu = dailyMins / tReview;
+    var lambdaHuman = lambdaPr * (1.0 - alpha);
+    var rho = lambdaHuman / (cReviewers * mu);
+
+    var rhoDisplay = (rho * 100.0).toFixed(1) + "%";
+    if (outRhoVal) { outRhoVal.textContent = rhoDisplay; }
+
+    var ciLoad = (lambdaPr / 15.0).toFixed(1) + "x";
+    if (outCiVal) { outCiVal.textContent = ciLoad; }
+
+    var waitHours = 0.0;
+    var statusText = "受控平稳 (健康)";
+    var statusColor = "var(--emerald)";
+    var verdictHtml = "";
+
+    if (rho >= 1.0) {
+      statusText = "雪崩堵塞 (无法消化)";
+      statusColor = "var(--rose)";
+      if (outWaitVal) { outWaitVal.textContent = "> 24.0 小时"; }
+      verdictHtml = "排队论判定：<b>队列发生雪崩式积压！</b>人工审查负荷率达到 " + rhoDisplay + "（&ge; 100%）。PR 生成吞吐已彻底击穿 5 人审查团队的物理服务上限。若不提高 AI 自动批准比例（当前仅 " + optinPct + "%）或缩短审查耗时，未审核 PR 将无限积压，整个团队的交付彻底停摆！";
+    } else {
+      var expFactor = Math.sqrt(2 * (cReviewers + 1));
+      var pc = Math.pow(rho, expFactor) / (1.0 - rho + 1e-6);
+      var wqMins = (pc * tReview) / cReviewers;
+      waitHours = wqMins / 60.0;
+      if (waitHours < 0.05) { waitHours = 0.0; }
+      if (outWaitVal) { outWaitVal.textContent = waitHours.toFixed(1) + " 小时"; }
+
+      if (rho > 0.8) {
+        statusText = "高压预警 (临界积压)";
+        statusColor = "var(--amber)";
+        verdictHtml = "排队论判定：<b>系统处于高压临界区。</b>人工负荷率为 " + rhoDisplay + "，PR 平均等待时长已达 " + waitHours.toFixed(1) + " 小时。审查人员已疲于奔命，稍微出现突发 PR 洪峰即会引发雪崩，建议进一步扩大低风险代码的 opt-in 分流。";
+      } else {
+        statusText = "受控平稳 (健康)";
+        statusColor = "var(--emerald)";
+        verdictHtml = "排队论判定：系统处于极佳健康状态。得益于 " + optinPct + "% 的低风险 PR 经由专业审查 Agent 自动批准，5 名审查工程师的人工利用率仅为 " + rhoDisplay + "，平均等待时间接近于 0，有效防止了 PR 在审查环节发生积压。";
+      }
+    }
+
+    if (outQueueStatus) {
+      outQueueStatus.textContent = statusText;
+      outQueueStatus.style.color = statusColor;
+    }
+    if (outQueueVerdict) {
+      outQueueVerdict.innerHTML = verdictHtml;
+    }
+  }
+
+  if (rngPr) { rngPr.addEventListener("input", updateQueue); }
+  if (rngTime) { rngTime.addEventListener("input", updateQueue); }
+  if (rngOptin) { rngOptin.addEventListener("input", updateQueue); }
+  updateQueue();
+
+})();
+</script>
+</body>
+</html>

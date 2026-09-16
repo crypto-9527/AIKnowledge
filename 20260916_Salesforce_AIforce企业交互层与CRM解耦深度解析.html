@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="MiDEh3X0z2vBAhw4xEdJGn">
+<head data-page-node-id="XEA6Gz7NxMCwEk4fEYKzNd">
+<meta charset="utf-8" data-page-node-id="cdluwgP82vPWeGT4XPQAUx">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="1H3MPPzro5N17TRkqPTn4g">
+<title>Salesforce AIforce 企业交互层与 CRM 解耦深度解析</title>
+<meta name="description" content="深入解析 Salesforce AIforce 架构：从 Data 360、Customer 360、Agentforce 四层协同体系，到 Claudeforce、Slackforce 动态交互层落地，结合 NVIDIA 全栈基础设施与 Koa 专用推理模型，透视企业软件从固定界面到协议输出的范式重构。" data-page-node-id="2RO7ZoDrSvmz8exgtKzGvu">
+<style>
+:root{
+  --bg:#181715; --bg-soft:#1E1C19; --card:#23211D; --card2:#2A2723;
+  --line:#3A3630; --line-soft:#2E2B26;
+  --fg:#EDE9E1; --fg-mid:#B8B2A8; --fg-dim:#8B857C;
+  --accent:#E2886A; --accent-soft:rgba(226,136,106,.14);
+  --emerald:#7CC39A; --rose:#E07B72; --amber:#DCA84E; --cyan:#82B7C9; --violet:#A99AC9;
+  --sidebar-w:288px; --content-max:1180px;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"JetBrains Mono",monospace;
+  --serif:"Songti SC","SimSun",Newsreader,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+html[data-theme="light"]{
+  --bg:#FAF7F2; --bg-soft:#F3EEE6; --card:#FFFFFF; --card2:#F7F3EC;
+  --line:#E2DACD; --line-soft:#EDE7DC;
+  --fg:#26221E; --fg-mid:#544E46; --fg-dim:#7A736A;
+  --accent:#C25E3A; --accent-soft:rgba(194,94,58,.10);
+  --emerald:#2F7A54; --rose:#B3453C; --amber:#9A7016; --cyan:#2B6D82; --violet:#6B5B95;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--sans); font-size:16.5px; line-height:1.85;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:90;transition:width .12s linear}
+
+/* ---------- 侧栏 ---------- */
+#sidebar{
+  position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh; overflow-y:auto;
+  background:var(--bg-soft); border-right:1px solid var(--line-soft);
+  padding:26px 16px 60px; z-index:60;
+}
+#sidebar .brand{
+  font-family:var(--serif); font-size:15px; font-weight:700; color:var(--fg);
+  padding:0 10px 14px; border-bottom:1px solid var(--line-soft); margin-bottom:14px; letter-spacing:.02em;
+}
+#sidebar .brand span{
+  display:block; font-family:var(--sans); font-size:11px; font-weight:400;
+  color:var(--fg-dim); letter-spacing:.08em; margin-top:4px; text-transform:uppercase;
+}
+.sidebar-ctrls{display:flex; gap:8px; padding:0 10px 14px; border-bottom:1px solid var(--line-soft); margin-bottom:14px}
+.sidebar-btn{
+  flex:1; background:var(--card); color:var(--fg-mid); border:1px solid var(--line);
+  padding:6px 8px; border-radius:6px; font-size:12px; cursor:pointer; font-family:var(--sans);
+  text-align:center; transition:all .15s ease;
+}
+.sidebar-btn:hover{color:var(--accent); border-color:var(--accent)}
+
+.toc a{
+  display:block; padding:6px 10px; margin:1px 0; border-radius:6px; color:var(--fg-dim);
+  text-decoration:none; font-size:13.2px; line-height:1.5; border-left:2px solid transparent;
+  transition:color .15s, background .15s;
+}
+.toc a:hover{color:var(--fg); background:var(--card)}
+.toc a.active{color:var(--accent); border-left-color:var(--accent); background:var(--accent-soft); font-weight:600}
+.toc a.sub{padding-left:22px; font-size:12.4px}
+
+/* ---------- 移动端悬浮栏 ---------- */
+.mob-bar{
+  display:none; position:fixed; bottom:16px; right:16px; z-index:80;
+  background:var(--card); border:1px solid var(--line); border-radius:30px;
+  box-shadow:0 4px 16px rgba(0,0,0,.3); padding:4px 8px;
+}
+.mob-btn{
+  background:none; border:none; color:var(--fg); font-size:12.5px;
+  padding:8px 12px; cursor:pointer; font-family:var(--sans);
+}
+
+/* ---------- 正文排布（居中自适应算法） ---------- */
+#main{
+  max-width:var(--content-max);
+  margin-left:calc(var(--sidebar-w) + max(0px,(100% - var(--sidebar-w) - var(--content-max))/2));
+  margin-right:max(0px,(100% - var(--sidebar-w) - var(--content-max))/2);
+  padding:56px 44px 120px;
+}
+
+header.doc{border-bottom:1px solid var(--line); padding-bottom:30px; margin-bottom:38px}
+.eyebrow{font-size:12.5px; letter-spacing:.16em; color:var(--accent); text-transform:uppercase; font-weight:600; margin-bottom:16px}
+h1{font-family:var(--serif); font-size:32px; line-height:1.35; margin:0 0 16px; font-weight:700; letter-spacing:-.01em}
+.deck{font-size:17px; line-height:1.75; color:var(--fg-mid); margin:0 0 24px; font-weight:400}
+.meta{display:flex; flex-wrap:wrap; gap:8px 10px; font-size:12.8px}
+.meta span{background:var(--card); border:1px solid var(--line); border-radius:999px; padding:4px 13px; color:var(--fg-mid)}
+.meta a{color:var(--accent); text-decoration:none}
+.meta a:hover{text-decoration:underline}
+
+h2{
+  font-family:var(--serif); font-size:24px; line-height:1.4; margin:56px 0 20px; padding-top:16px;
+  border-top:1px solid var(--line-soft); font-weight:700; scroll-margin-top:24px;
+}
+h2 .num{color:var(--accent); font-family:var(--mono); font-size:16px; margin-right:12px; vertical-align:2px; font-weight:400}
+h3{font-size:18.5px; line-height:1.5; margin:36px 0 14px; font-weight:650; color:var(--fg); scroll-margin-top:24px}
+h4{font-size:15px; margin:24px 0 10px; font-weight:650; color:var(--fg-mid); letter-spacing:.03em}
+p{margin:0 0 18px}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+strong{color:var(--fg); font-weight:650}
+em{color:var(--accent); font-style:normal; font-weight:600}
+ul,ol{margin:0 0 20px; padding-left:22px}
+li{margin-bottom:9px}
+li::marker{color:var(--fg-dim)}
+
+/* ---------- 特色区块 ---------- */
+.lede{
+  background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent);
+  border-radius:10px; padding:22px 24px; margin:0 0 32px;
+}
+.lede h4{margin:0 0 12px; font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent)}
+.lede ul{margin:0; padding-left:20px}
+.lede li{margin-bottom:9px; font-size:15.5px; line-height:1.75}
+
+blockquote{
+  margin:24px 0; padding:16px 20px; background:var(--card2);
+  border-left:3px solid var(--line); border-radius:0 8px 8px 0; color:var(--fg-mid);
+  font-style:normal; font-size:15.5px;
+}
+blockquote p{margin:0}
+
+.callout{
+  background:var(--card); border:1px solid var(--line); border-radius:10px;
+  padding:20px 22px; margin:24px 0;
+}
+.callout.warn{border-left:4px solid var(--amber)}
+.callout.info{border-left:4px solid var(--cyan)}
+.callout.danger{border-left:4px solid var(--rose)}
+.callout.success{border-left:4px solid var(--emerald)}
+.callout-title{font-weight:700; font-size:14.5px; margin-bottom:8px; display:flex; align-items:center; gap:8px}
+.callout.warn .callout-title{color:var(--amber)}
+.callout.info .callout-title{color:var(--cyan)}
+.callout.danger .callout-title{color:var(--rose)}
+.callout.success .callout-title{color:var(--emerald)}
+
+/* ---------- 卡片与网格 ---------- */
+.card-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin:24px 0}
+.card{
+  background:var(--card); border:1px solid var(--line); border-radius:10px;
+  padding:20px; transition:border-color .15s, transform .15s;
+}
+.card:hover{border-color:var(--accent); transform:translateY(-2px)}
+.card-tag{font-family:var(--mono); font-size:11px; text-transform:uppercase; color:var(--accent); margin-bottom:8px; font-weight:600; letter-spacing:.08em}
+.card-title{font-weight:700; font-size:16px; margin-bottom:8px; color:var(--fg)}
+.card-body{font-size:14px; line-height:1.65; color:var(--fg-mid)}
+
+/* ---------- 表格 ---------- */
+.table-wrap{overflow-x:auto; margin:24px 0; border:1px solid var(--line); border-radius:10px; background:var(--card)}
+table{width:100%; border-collapse:collapse; font-size:14.5px; text-align:left}
+th{background:var(--bg-soft); color:var(--fg); padding:12px 16px; font-weight:650; border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:12px 16px; border-bottom:1px solid var(--line-soft); color:var(--fg-mid); line-height:1.6}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--card2); color:var(--fg)}
+
+/* ---------- SVG 架构图包装 ---------- */
+.svg-wrap{
+  margin:28px 0; background:var(--card); border:1px solid var(--line);
+  border-radius:12px; padding:24px 20px; overflow-x:auto; text-align:center;
+}
+.svg-wrap svg{max-width:100%; height:auto; display:block; margin:0 auto}
+.svg-caption{
+  font-size:13px; color:var(--fg-dim); margin-top:14px; text-align:center;
+  font-family:var(--sans); line-height:1.5;
+}
+
+/* ---------- 交互沙盘 ---------- */
+.sandbox{
+  background:var(--card); border:1px solid var(--line); border-radius:12px;
+  padding:28px 24px; margin:36px 0; box-shadow:0 4px 20px rgba(0,0,0,.08);
+}
+.sandbox h3{margin-top:0; font-size:18px; color:var(--fg); display:flex; align-items:center; gap:8px}
+.sb-badge{background:var(--accent-soft); color:var(--accent); font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:4px; text-transform:uppercase}
+.sb-desc{font-size:14px; color:var(--fg-mid); margin-bottom:20px; line-height:1.6}
+
+.ctl{margin-bottom:16px}
+.ctl label{display:block; font-size:13.5px; font-weight:600; color:var(--fg-mid); margin-bottom:8px}
+.ctl select, .ctl input[type="range"]{
+  width:100%; background:var(--bg); color:var(--fg); border:1px solid var(--line);
+  border-radius:6px; padding:9px 12px; font-size:14.5px; font-family:var(--sans);
+}
+.ctl select:focus{outline:none; border-color:var(--accent)}
+
+.grid{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+  gap:12px; margin:20px 0;
+}
+.slot{
+  background:var(--bg-soft); border:1px solid var(--line-soft); border-radius:8px;
+  padding:14px 16px;
+}
+.sv{font-size:15px; font-weight:700; color:var(--fg); line-height:1.4; margin-bottom:4px}
+.sv.a{color:var(--accent)}
+.sv.c{color:var(--cyan)}
+.sv.e{color:var(--emerald)}
+.sv.w{color:var(--amber)}
+.sv.r{color:var(--rose)}
+.sk{font-size:12px; color:var(--fg-dim); font-family:var(--sans); letter-spacing:.04em}
+
+.verdict{
+  margin-top:20px; padding:16px 18px; background:var(--card2);
+  border-left:3px solid var(--accent); border-radius:0 8px 8px 0;
+  font-size:14.5px; line-height:1.7; color:var(--fg-mid);
+}
+.verdict b{color:var(--fg)}
+
+/* ---------- 媒体视听卡片 ---------- */
+.media-card{
+  background:var(--card); border:1px solid var(--line); border-radius:12px;
+  margin:28px 0; overflow:hidden;
+}
+.media-header{
+  padding:16px 20px; background:var(--bg-soft); border-bottom:1px solid var(--line-soft);
+  display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;
+}
+.media-title{font-weight:700; font-size:15px; color:var(--fg)}
+.media-tag{font-family:var(--mono); font-size:11px; padding:3px 8px; border-radius:4px; background:var(--line); color:var(--fg-mid)}
+.media-body{padding:20px}
+.media-placeholder{
+  background:var(--bg-soft); border:1px dashed var(--line); border-radius:8px;
+  padding:30px 20px; text-align:center; color:var(--fg-dim); margin-bottom:16px;
+}
+.media-placeholder svg{width:48px; height:48px; stroke:var(--accent); fill:none; margin-bottom:12px}
+.media-caption{font-size:13.5px; color:var(--fg-mid); line-height:1.6; margin:0}
+.media-footer{
+  padding:12px 20px; background:var(--card2); border-top:1px solid var(--line-soft);
+  font-size:12.5px; color:var(--fg-dim); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;
+}
+
+/* ---------- 页脚 ---------- */
+footer.doc{
+  border-top:1px solid var(--line); padding-top:40px; margin-top:80px;
+  font-size:13px; color:var(--fg-dim); line-height:1.8;
+}
+
+/* ---------- 打印样式与自适应 ---------- */
+@media (max-width: 1080px){
+  #sidebar{transform:translateX(-100%); transition:transform .25s ease}
+  #sidebar.open{transform:translateX(0); box-shadow:4px 0 24px rgba(0,0,0,.5)}
+  #main{
+    margin-left:0 !important; margin-right:0 !important;
+    max-width:100% !important; padding:40px 20px 80px !important;
+  }
+  .mob-bar{display:flex; gap:4px}
+}
+@media print{
+  #sidebar, .mob-bar, #progress{display:none !important}
+  #main{margin:0 !important; padding:0 !important; max-width:100% !important}
+  body{background:#fff !important; color:#000 !important; font-size:12pt}
+  .card, .sandbox, .svg-wrap{border:1px solid #ccc !important; break-inside:avoid}
+}
+</style>
+</head>
+<body data-page-node-id="G70UToCdThLFz3gNUvf7tg">
+
+<div id="progress" data-page-node-id="bHbljBnnFDSDeUs4qMvazv"></div>
+
+<!-- 移动端浮动操作条 -->
+<div class="mob-bar" data-page-node-id="Q4WSzqVMdtn0M9hLbgDDH7">
+  <button class="mob-btn" id="btn-mob-toc" data-page-node-id="DVMDZSDkFFSkH2ufhyy11S">目录</button>
+  <button class="mob-btn" id="btn-mob-theme" data-page-node-id="WkRsYyiCPQZZVPOyYhdcr7">换肤</button>
+  <button class="mob-btn" id="btn-mob-top" data-page-node-id="6ZMhADHCNqdpaCNESON1kq">顶部</button>
+</div>
+
+<!-- 左侧浮动目录 -->
+<aside id="sidebar" data-page-node-id="D5X8hhxfdhxUGpVmjtSEEs">
+  <div class="brand" data-page-node-id="G4lcUQT8BElBX4p8CqyJ7i">
+    Salesforce AIforce
+    <span data-page-node-id="npHVoP17oc6sMEBNI57c7p">Architecture Whitepaper</span>
+  </div>
+  <div class="sidebar-ctrls" data-page-node-id="RQQO5HH5HO3TePKS9mU3li">
+    <button class="sidebar-btn" id="btn-theme" data-page-node-id="6iHZvX5ZeduPchYA4YKxCV">切换外观</button>
+    <button class="sidebar-btn" id="btn-top" data-page-node-id="qiSNCmiOypdNyHOyQv8Q9z">返回顶部</button>
+  </div>
+  <nav class="toc" data-page-node-id="DcpAORhUg8iA1IYgsjL1Rn">
+    <a href="#sec-overview" class="active" data-page-node-id="BNj7FCnCKddzhHQK87vpVM">00. 核心定位与导语</a>
+    <a href="#sec-boundary" data-page-node-id="5LCddEihGTP8ynYRCNrMlM">01. 企业软件交互边界重塑</a>
+    <a href="#sec-boundary-pains" class="sub" data-page-node-id="7TZou861iITB74yu3BojDI">固定界面的两大根本痛点</a>
+    <a href="#sec-boundary-dynamic" class="sub" data-page-node-id="n5kLnqLeOAaEdASdEVb5CJ">任务为中心的动态生成界面</a>
+    <a href="#sec-architecture" data-page-node-id="lBKQhEn3oL8garEUip7eEw">02. AIforce 四层架构拓扑</a>
+    <a href="#sec-arch-four-layers" class="sub" data-page-node-id="J61DfDcsnZiUrdXHVvOHAz">从 Data 360 到 AIforce 协同</a>
+    <a href="#sec-arch-mechanism" class="sub" data-page-node-id="kj9G4CgmzRZcJoumaiICeP">受治理双向闭环机制与沙盘</a>
+    <a href="#sec-foundation" data-page-node-id="XvUcs9CP5Ks4XWlOeNL4on">03. 算力与推理底座 (NVIDIA & Koa)</a>
+    <a href="#sec-nvidia-talk" class="sub" data-page-node-id="tScoVBQTGjfLsqVdHRsqfY">黄仁勋与 Benioff 对谈要点</a>
+    <a href="#sec-koa-model" class="sub" data-page-node-id="l1WF5DtbsoUUvKmwbbhwGd">Koa 专用推理模型深度拆解</a>
+    <a href="#sec-claudeforce" data-page-node-id="jDKHtWQHiFdoAMVOLISl3J">04. Claudeforce：官方 MCP 服务端</a>
+    <a href="#sec-claude-skills" class="sub" data-page-node-id="BKO5jSDseoDclWW1pv5YX2">37 项销售技能与 Artifact 工作区</a>
+    <a href="#sec-claude-workflows" class="sub" data-page-node-id="uqhzMa2EN40e4b1tsxs1Qt">五大核心日常销售工作流</a>
+    <a href="#sec-claude-security" class="sub" data-page-node-id="gd0uMA46NsaoERwSPcaY87">连接器、权限继承与逐项审批</a>
+    <a href="#sec-claude-code" class="sub" data-page-node-id="Cw2Eaozdq6mr6gfEJYq8fv">Claude Code 专用开发插件</a>
+    <a href="#sec-slackforce" data-page-node-id="3I1A6vuW7dkfyLVbVja6gc">05. Slackforce：多人实时操作台</a>
+    <a href="#sec-coworker" data-page-node-id="CTVknGybNBkhlGG5fnzwQz">06. Agentforce Coworker 原生副驾</a>
+    <a href="#sec-headless" data-page-node-id="c4U5fq9scgX5XtKPAsOqiH">07. Headless Toolkit 与开放生态</a>
+    <a href="#sec-observation" data-page-node-id="Uq2zn63UHHGwYRXqzF1teK">08. 边界与观察：协议输出新范式</a>
+    <a href="#sec-obs-shift" class="sub" data-page-node-id="MkzY9lBakz5rViyOrjuU9t">前端贬值与数据执行护城河</a>
+    <a href="#sec-obs-limits" class="sub" data-page-node-id="SbZpt5azxNExBAeEMWLddw">落地前置条件与对比沙盘</a>
+  </nav>
+</aside>
+
+<!-- 主正文内容 -->
+<main id="main" data-page-node-id="iGf3OtM0ZyYxHzOy0liX3O">
+
+  <header class="doc" id="sec-overview" data-page-node-id="XOVTdBfL2KH7SSGawl5fgV">
+    <div class="eyebrow" data-page-node-id="JneeCMFFhM9ezeflh4u5Jq">Enterprise Architecture · CRM Decoupling · Agentic Delivery</div>
+    <h1 data-page-node-id="5yIxE3hE2MFLHp7AGxluDr">Salesforce 推出了 AIforce：打破传统 CRM 软件固定的界面和操作壁垒，让企业数据、业务逻辑在各种 AI 中自由流动</h1>
+    <div class="deck" data-page-node-id="EP15pEzx0dNzezoQaTCYBd">
+      AIforce 是连接 Salesforce 数据、业务语义、权限、Agent 与各种 AI 界面的动态交互层，让员工不必进入固定后台，也能在当前工作环境中调用并执行企业能力。
+    </div>
+    <div class="meta" data-page-node-id="RJ6E9shUfIRyHYB3cNmGXy">
+      <span data-page-node-id="rNkHURVhWYUwBgltq8Mi5V">发布主体：Salesforce (Dreamforce 2026)</span>
+      <span data-page-node-id="UDDE1Eb28aw66VBMHPgjmm">协同生态：Anthropic · NVIDIA · Slack</span>
+      <span data-page-node-id="tFSneGrhMX5684M1xPBAg8">基准时间：2026-09-16</span>
+      <span data-page-node-id="6fVd1pzSrfWDWOSt3FHpTh">技术形态：Headless MCP / 动态交互交付层</span>
+      <span data-page-node-id="chrUWmtWqmcfrkzG7Anq9Q">治理规范：零数据留存 (Zero Retention)</span>
+    </div>
+  </header>
+
+  <!-- 核心结论卡片 -->
+  <div class="lede" data-page-node-id="ljfuJd1UjJdspaxc5UC2nX">
+    <h4 data-page-node-id="oSZozuwVjeMGbtuc5IHPuC">核心要点提炼 / Key Takeaways</h4>
+    <ul data-page-node-id="zk5aKW0uqjFzne2k6OJnMv">
+      <li data-page-node-id="ktF42QVoUtls5ANRFUyLkk"><strong data-page-node-id="kxMr6rQUwd5BxiNSMc4wSR">定位界定：</strong>AIforce 不是新的大模型或单一 Agent，而是把 Salesforce 的数据、语义、权限与执行能力送进各种 AI 界面的动态交互层。</li>
+      <li data-page-node-id="yDXSYg4Kc4q7Nqz6kyqS8Y"><strong data-page-node-id="EJON3v0ryyvoOb6e3wAAGT">产品落地矩阵：</strong>Claudeforce、Slackforce 和 Agentforce Coworker 分别落在 Claude、Slack 与 Salesforce Lightning；Koa 则是 Agentforce 可选用的专用 CRM 推理模型，并不是 AIforce 本身。</li>
+      <li data-page-node-id="xi9vYi7LapuEfWTWLu86t7"><strong data-page-node-id="tdCGiooR7rQWP2DJ9KUx2g">护城河转移：</strong>Salesforce 把竞争重心从固定前端转向企业数据与受治理的执行引擎，而定价、区域可用性和安全承诺仍需按客户合同与实际审计判断。</li>
+    </ul>
+  </div>
+
+  <p data-page-node-id="zAvhpxP1P9YRn3VowG4EGn">企业使用 Salesforce，过去依赖的是一套固定入口：员工打开 CRM 网页或 App，在管理员预先配置好的页面、字段、表单和报表之间寻找信息，再把处理结果手动写回系统。数据、业务逻辑和审批权限虽然都在 Salesforce 里，却被锁在 Salesforce 自己的界面中；员工换到 Claude、Slack 等工作环境后，这些能力便很难连贯地跟过去。</p>
+
+  <p data-page-node-id="OoIm0PXCO1a22hXzXnw6qr">Salesforce 在 Dreamforce 推出的 AIforce，就是要拆掉这层「界面围墙」。它不是一个新的大模型，也不是另一个负责独立工作的 Agent，而是位于 Salesforce 数据与各种 AI 界面之间的动态交互与能力交付层：把 Data 360 中的客户数据和历史上下文、Customer 360 中的业务语义与流程、Agentforce 中可执行任务的智能体，按照原有权限和业务规则，送进 Claude、Slack、Lightning 以及未来其他支持的 AI 工作环境。</p>
+
+  <p data-page-node-id="eRhZrb8YMSQwyUUfaQ2upW">因此，标题里所说的「让企业数据、业务逻辑在各种 AI 中自由流动」，并不是把数据库复制给不同模型，更不是让外部 AI 绕过 Salesforce 直接操作企业数据。它指的是一个受治理的双向闭环：AI 界面把员工的自然语言意图交给 AIforce；AIforce 判断该调用哪些数据、流程和 Agent；Salesforce 按原有权限完成读取或执行；结果再回到当前对话，并按任务即时生成可以查看、筛选、修改和确认的动态界面。数据记录仍留在 Salesforce，变化的是员工调用这些能力的入口。</p>
+
+  <p data-page-node-id="eFCYfLw2xOlclFFYtMTeBv">这也是 AIforce 相比普通「给 CRM 加一个聊天框」更关键的地方。它试图让 Salesforce 从一个必须被打开的应用，转变成各种 AI 背后的企业数据与执行引擎：员工在哪里提出问题，Salesforce 的上下文、规则和动作能力就可以在哪里出现。</p>
+
+  <!-- 官方发布媒体卡 -->
+  <div class="media-card" data-page-node-id="UsZCG9RP5iaWtBuoAtUVrv">
+    <div class="media-header" data-page-node-id="cTkxXdsWwtfSCZq79xSXt4">
+      <div class="media-title" data-page-node-id="cKRi59e1PQN4B8sdNGtImP">Salesforce AIforce 官方发布架构</div>
+      <div class="media-tag" data-page-node-id="bRi5gcE8jWIpUI9T730IlP">OFFICIAL ANNOUNCEMENT</div>
+    </div>
+    <div class="media-body" data-page-node-id="uv95lFZep66b1Pwzr4wswT">
+      <!-- 高保真矢量示意图 -->
+      <div class="svg-wrap" style="margin:0 0 12px; border:none; padding:10px 0; background:transparent" data-page-node-id="uqkDWExiHQK7X7qOSEz1g6">
+        <svg viewBox="0 0 880 220" width="880" height="220" xmlns="http://www.w3.org/2000/svg" data-page-node-id="87MDXDYgi38MCM1RcpYkhv">
+          <defs data-page-node-id="FFY74iiz5YdJiHmqeOrtmD">
+            <linearGradient id="grad-bar" x1="0%" y1="0%" x2="100%" y2="0%" data-page-node-id="WImkVSjUG3e1m3FMSrWTD9">
+              <stop offset="0%" stop-color="#E2886A" stop-opacity="0.85" data-page-node-id="HqJxKIRNBbIRnz1Jlce4f3"/>
+              <stop offset="50%" stop-color="#82B7C9" stop-opacity="0.85" data-page-node-id="Vr75YuCguftDID2BXAmUAm"/>
+              <stop offset="100%" stop-color="#7CC39A" stop-opacity="0.85" data-page-node-id="2stvjDwAtI5EC2kwDooGei"/>
+            </linearGradient>
+          </defs>
+          <rect x="40" y="25" width="800" height="170" rx="14" fill="#23211D" stroke="#3A3630" stroke-width="1.5" data-page-node-id="3KsdO5pFkgbVQM1Vfj9Gh6"/>
+          <text x="440" y="65" text-anchor="middle" fill="#EDE9E1" font-size="18" font-weight="700" font-family="sans-serif" data-page-node-id="yXNFd6UZ34rgoQsiPC22lR">AIforce：连接企业数据引擎与多元 AI 前端的动态交互交付层</text>
+          
+          <g transform="translate(70, 95)" data-page-node-id="kPmLZ9HNrLDX5yo23b2ECK">
+            <rect x="0" y="0" width="220" height="75" rx="8" fill="#1E1C19" stroke="#E2886A" stroke-width="1.2" data-page-node-id="VaiDINOF2szzYo27o6bPGG"/>
+            <text x="110" y="32" text-anchor="middle" fill="#E2886A" font-size="14" font-weight="700" data-page-node-id="ZYXw6mx3p8G7Jr0iTI0cTh">外部 AI 前端矩阵</text>
+            <text x="110" y="55" text-anchor="middle" fill="#8B857C" font-size="12" data-page-node-id="Tb4FE29PvqpIh0FsA8xrW2">Claude · Slack · Lightning</text>
+          </g>
+          
+          <g transform="translate(330, 95)" data-page-node-id="wJ7osfaMbeeZgL9wg1L7UC">
+            <rect x="0" y="0" width="220" height="75" rx="8" fill="#2A2723" stroke="#82B7C9" stroke-width="1.5" data-page-node-id="ttGJfCRSrYyntoyqMTTxAB"/>
+            <text x="110" y="32" text-anchor="middle" fill="#82B7C9" font-size="15" font-weight="700" data-page-node-id="OVBC0WFUxOSP6vtk3uidVQ">AIforce 交互交付层</text>
+            <text x="110" y="55" text-anchor="middle" fill="#EDE9E1" font-size="12" data-page-node-id="Zp1L0fQZCyPDTBNzJ5ctSF">意图解析 ⇄ 协议动态投射</text>
+          </g>
+          
+          <g transform="translate(590, 95)" data-page-node-id="LukmMWA6NsxR16bOEftdaq">
+            <rect x="0" y="0" width="220" height="75" rx="8" fill="#1E1C19" stroke="#7CC39A" stroke-width="1.2" data-page-node-id="OvtfCAa5PW1PAWQjTLZ2Oe"/>
+            <text x="110" y="32" text-anchor="middle" fill="#7CC39A" font-size="14" font-weight="700" data-page-node-id="IWOd9GQc2NzrPkTCGENfEV">Salesforce 底层基座</text>
+            <text x="110" y="55" text-anchor="middle" fill="#8B857C" font-size="12" data-page-node-id="zjhh96oY9t510gV0jp15yL">Data 360 · Customer 360 · Agent</text>
+          </g>
+          
+          <path d="M 290 132 L 325 132" stroke="#B8B2A8" stroke-width="1.5" stroke-dasharray="4,3" data-page-node-id="DHrr9GdR84iy4U9tJFdSdf"/>
+          <path d="M 550 132 L 585 132" stroke="#B8B2A8" stroke-width="1.5" stroke-dasharray="4,3" data-page-node-id="N9luBjmVXXwUPNVfbqgB9h"/>
+        </svg>
+      </div>
+      <p class="media-caption" data-page-node-id="aVbHZJ5VmdOtUV6OHO40u6">Salesforce 为 AIforce 公告发布的官方架构定位：作为连接 Salesforce 底层数据资产与外部 AI 界面的受治理动态交互层。</p>
+    </div>
+    <div class="media-footer" data-page-node-id="9k3r6sEgsXt5AjK2xEESUd">
+      <span data-page-node-id="oHhii1mPa0gGEwPAwVt5qu">视觉呈现：自包含内联矢量架构示意</span>
+      <span data-page-node-id="AUZKFpsWSAAn8bKLEYsjvh">资产定位：/media/salesforce-aiforce/salesforce-aiforce-hero.jpg 官方主图语义承载</span>
+    </div>
+  </div>
+
+  <!-- 第一章 -->
+  <h2 id="sec-boundary" data-page-node-id="BdvVsBCRsAyJEQVDF5tiqu"><span class="num" data-page-node-id="ONdEsRQanxDEl5o3tJZHPo">01</span>AIforce 真正改变的，是企业软件的交互边界</h2>
+
+  <p data-page-node-id="1zYGtbrDmh81SsubNUHUzu">过去几十年来，绝大多数企业软件的形态都是静态的。管理员在后台配置好页面布局、必填字段和固定视图，销售代表或客服人员则像在流水线上填表一样，把信息一条条录入进去。当一线员工需要了解一个客户的全貌时，通常要分别打开联系人页面、过往商机列表、服务工单记录以及各类分析仪表板。</p>
+
+  <h3 id="sec-boundary-pains" data-page-node-id="cvuCIlwiXeHAbENTxFd1G0">固定界面的两大根本痛点</h3>
+  <p data-page-node-id="9FUtXN93lsDBh40Ehpsp7W">固定界面的问题并不只是「点击太多」。它同时限制了谁能够使用系统，以及一项任务能调用多少分散的信息：</p>
+  <ol data-page-node-id="E57xxg8dFJAwzgIoBHUnyZ">
+    <li data-page-node-id="Bk7CwfrlQKGVicFg3vQjDy"><strong data-page-node-id="xDEKhBTSxz74ZJLTPh6qiS">使用门槛高：</strong>没有经过专门培训的普通员工，很难熟练从后台系统提取多维度的交叉洞察，大量业务数据实际处于沉睡状态。</li>
+    <li data-page-node-id="7CnLaoP0W0Q8Zt1ffmOvCr"><strong data-page-node-id="4WmmCf58RI8UEFVSxkli0w">信息吞吐受限：</strong>人类在图形界面中一次只能浏览少数几张卡片和表格，无法瞬间消化并关联数百条交互历史背后的逻辑。</li>
+  </ol>
+
+  <h3 id="sec-boundary-dynamic" data-page-node-id="Aejbu5Q8kAF3KC0SGPnq48">任务为中心的动态生成界面</h3>
+  <p data-page-node-id="grHlhbwng4CTVO3696ggNL">AIforce 改变的是这层交互边界：使用者先描述想完成的任务，系统再决定应当取回哪些上下文、调用哪些业务动作，以及当前最合适的界面形态。员工不再需要先理解 CRM 的菜单结构，才能找到正确的数据和操作入口。例如，销售人员可以在 Claude 中要求准备客户会议，系统自动汇总商机、历史沟通与团队讨论；也可以在 Slack 中生成多人共享的动态看板，直接筛选数据、评论并把经确认的修改写回 Salesforce。界面由任务临时生成，底层数据、权限和流程则继续由 Salesforce 管理。</p>
+
+  <div class="table-wrap" data-page-node-id="4Eq2rghUT2Y0tLs1LxEvXl">
+    <table data-page-node-id="sCtpzTR2MVo0dc1mSGFYcY">
+      <thead data-page-node-id="M0HsGwbrYEQlxDqyxr2I1H">
+        <tr data-page-node-id="zgXTgvUq1h62m2CchfkkhZ">
+          <th data-page-node-id="Lqbd3BcCcTugMu35F0YPmG">对比维度</th>
+          <th data-page-node-id="kCHmmbYhKmWuCbMVP9vHFd">传统 CRM 固定界面范式</th>
+          <th data-page-node-id="nTmcGROCiJDqxKdrRag0CS">AIforce 动态交互层范式</th>
+        </tr>
+      </thead>
+      <tbody data-page-node-id="BoZUsMJx1qpYxFC7mcPxiW">
+        <tr data-page-node-id="xnNgZnwnJMntq7CCnt4qs8">
+          <td data-page-node-id="CiPUMXcO4ajtJVYftYZWex"><strong data-page-node-id="AR5EySgY9HxGcD8d4GNGWs">入口与载体</strong></td>
+          <td data-page-node-id="Y26KQ6TCrn3w27xHBn6eCB">必须打开专有 CRM 网页或独立 App</td>
+          <td data-page-node-id="HkFWNaEPACtkUNWAaYaMS1">无缝嵌入 Claude、Slack 等员工日常 AI 协作环境</td>
+        </tr>
+        <tr data-page-node-id="tb3RsDSh2ZzE5XYeotg7KK">
+          <td data-page-node-id="0FbrZqzZPQG6teOQaLcLeT"><strong data-page-node-id="s8YdkmpF06kzULVGkxPA67">交互心智</strong></td>
+          <td data-page-node-id="MEE4rYs31MswSwnt6EIUnX">以软件菜单为中心：用户寻找字段、报表与表单</td>
+          <td data-page-node-id="LYKQVCjA5kQhzJFLhsNcLR">以业务任务为中心：用户表达意图，系统即时组装界面</td>
+        </tr>
+        <tr data-page-node-id="iDl98W6XhGoqqb7oJil0MI">
+          <td data-page-node-id="81xjfJeB7FbLpvwTuMz8iF"><strong data-page-node-id="kjHChHIQxA8XB2ofeE0ocp">信息吞吐</strong></td>
+          <td data-page-node-id="KzHeTu74DPRDyMhlX4Qdea">受限于屏幕网格，逐页跳转，难以关联数百条历史</td>
+          <td data-page-node-id="5ew4dfH5l6VnGGimwDiacY">AI 智能体秒级全量聚合 Data 360 多维上下文与历史记录</td>
+        </tr>
+        <tr data-page-node-id="sMa5pfPAQ7tB2H0CVf76Ct">
+          <td data-page-node-id="Zwcy2mMVVgqVbw5AF2dsuC"><strong data-page-node-id="scM7q61oTWWnDxgIufH90k">操作写回</strong></td>
+          <td data-page-node-id="AjvaKQ62WwxS07e4Rb98Cc">人工逐个页面手工填表并提交</td>
+          <td data-page-node-id="QDaODpsWrstkCVobJkrSjB">生成可交互修改卡片，经人工确认后原子化受控写回</td>
+        </tr>
+        <tr data-page-node-id="UU1NqEUSnHNCOogfgGniDr">
+          <td data-page-node-id="PRLssAHHwNznlijKyzhOT7"><strong data-page-node-id="KZZrjL4olLTWx6khTupHgG">权限继承</strong></td>
+          <td data-page-node-id="UINSoPNIRoXy35Yu65Uxpr">依赖前端路由与界面级权限显隐配置</td>
+          <td data-page-node-id="foJKe2FdCaynEaE8d56vJH">底层全链路继承原有行/列/字段级访问权限与零数据留存</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 第二章 -->
+  <h2 id="sec-architecture" data-page-node-id="ZYOBITHwJlzJwQOGKrwvZb"><span class="num" data-page-node-id="DukAXZbIS0PYP0DzbjU5My">02</span>AIforce 在企业架构中处于什么位置？</h2>
+
+  <h3 id="sec-arch-four-layers" data-page-node-id="VhNMxAsonYorbZwwb6TAJc">从 Data 360 到 AIforce 的四层协同体系</h3>
+  <p data-page-node-id="tC2mUgkxufI2EOO0JCDkOk">为了让外部的 AI 界面能够安全读懂并操作企业系统，Salesforce 在其整体架构中确立了四个协同层次，AIforce 位于最上层的交互输出端：</p>
+
+  <div class="card-grid" data-page-node-id="rq3970wkoYYKJhwpBXvXUw">
+    <div class="card" data-page-node-id="cW5sE183vEBhvCgrtzAuf6">
+      <div class="card-tag" data-page-node-id="iUaeyiWOyisrEI7rHWO1E5">Layer 1 · 数据基底</div>
+      <div class="card-title" data-page-node-id="13pGbby9e96JCojrBMe1rZ">统一数据层（Data 360）</div>
+      <div class="card-body" data-page-node-id="9QBBYEdBDMtZxoaLgHihn2">负责跨系统整合企业内外部的客户数据、元数据以及历史记忆，消除数据孤岛，让 AI 智能体拥有完整的企业全局上下文视角。</div>
+    </div>
+    <div class="card" data-page-node-id="06YqvlMsoO54wKd1OKWStc">
+      <div class="card-tag" data-page-node-id="aKvMTVnnX8SXDYAi96pgUQ">Layer 2 · 规则约束</div>
+      <div class="card-title" data-page-node-id="GmFBrpsjKQgckdRsvEg0My">业务语义与逻辑层（Customer 360）</div>
+      <div class="card-body" data-page-node-id="Ox4WS6FOSGsThRsxd87dBA">承载销售、客服、营销与电商等业务的核心逻辑、审批工作流、动作执行权限、字段级安全（FLS）与企业安全合规规则。</div>
+    </div>
+    <div class="card" data-page-node-id="UfYmO1SXmoEvQEFK9lN0qp">
+      <div class="card-tag" data-page-node-id="UD7Gne0I8G0TJaFHRKvqYk">Layer 3 · 任务执行</div>
+      <div class="card-title" data-page-node-id="NbZqd0qfoWDEG9RuD8oADH">数字劳动力层（Agentforce）</div>
+      <div class="card-body" data-page-node-id="IY3fnuNT1B4TkNJPhnCBUN">提供开箱即用以及由企业自行定制的专用自主智能体（Agent），负责执行特定岗位的具体业务流程与复杂自动化编排。</div>
+    </div>
+    <div class="card" style="border-color:var(--accent)" data-page-node-id="jOQc9UgzHmyqhNK1Q3iJCQ">
+      <div class="card-tag" data-page-node-id="vqBYfufbuqsxNmGipyfPnl">Layer 4 · 交互投影 (New)</div>
+      <div class="card-title" data-page-node-id="5qScoXiqXnvxiaw4A9EgDx">动态交互层（AIforce）</div>
+      <div class="card-body" data-page-node-id="fRz82AlFC2c1E0XM4F84nK">最新加入的顶层架构。其核心功能是将前三层所具备的所有数据、语义与执行能力，原样、受治理地投射到各类外部 AI 界面中。</div>
+    </div>
+  </div>
+
+  <!-- 机制流转 SVG 图解 -->
+  <div class="svg-wrap" id="sec-arch-mechanism" data-page-node-id="lnjDXD4KeroZt4DzdNlvXy">
+    <svg viewBox="0 0 920 380" width="920" height="380" xmlns="http://www.w3.org/2000/svg" data-page-node-id="5eC7psfbeXGr6qaOKrb5PE">
+      <!-- 外部 AI 界面层 -->
+      <g transform="translate(30, 20)" data-page-node-id="4FARjEIEOAYC9bded31Izn">
+        <rect x="0" y="0" width="860" height="70" rx="10" fill="#23211D" stroke="#3A3630" stroke-width="1.5" data-page-node-id="EIg0hEFMJjkhUBU2hxIx0I"/>
+        <text x="25" y="30" fill="#E2886A" font-size="12" font-weight="700" font-family="sans-serif" letter-spacing="1" data-page-node-id="6jA4Df7gHYdB2RL9ZjDnxc">多元 AI 交互界面 (ANY AI SURFACE)</text>
+        <rect x="250" y="18" width="170" height="34" rx="6" fill="#1E1C19" stroke="#E2886A" stroke-width="1" data-page-node-id="B8RGXcU5FDK0xGHWYhHidX"/>
+        <text x="335" y="40" fill="#EDE9E1" font-size="13" text-anchor="middle" data-page-node-id="JYEIw90U73aDJ358jvDABP">Claude / Claudeforce</text>
+        <rect x="440" y="18" width="170" height="34" rx="6" fill="#1E1C19" stroke="#82B7C9" stroke-width="1" data-page-node-id="UKCWIBRSjUVoG7Lp9jROe2"/>
+        <text x="525" y="40" fill="#EDE9E1" font-size="13" text-anchor="middle" data-page-node-id="ChMpsFwG5jw2QESWzPNBgz">Slack / Slackforce</text>
+        <rect x="630" y="18" width="200" height="34" rx="6" fill="#1E1C19" stroke="#7CC39A" stroke-width="1" data-page-node-id="2uVjXXhsUj65ZHp8Gqxi7b"/>
+        <text x="730" y="40" fill="#EDE9E1" font-size="13" text-anchor="middle" data-page-node-id="ax89FRwk7OUdET1GG3cs7H">Lightning / Coworker</text>
+      </g>
+
+      <!-- 双向通信箭头 -->
+      <path d="M 460 90 L 460 125" stroke="#E2886A" stroke-width="2" marker-end="url(#arrow)" data-page-node-id="nsAn8u92ZKqcDBSgS1KsEl"/>
+      <text x="475" y="112" fill="#B8B2A8" font-size="11" font-family="sans-serif" data-page-node-id="yBmz7xEq1n1wPLVULzriMd">自然语言意图 ⇄ 临时动态界面</text>
+
+      <!-- AIforce 动态交互层 -->
+      <g transform="translate(30, 130)" data-page-node-id="urAC0aZ1CzG87pCEkwPCD5">
+        <rect x="0" y="0" width="860" height="80" rx="10" fill="#2A2723" stroke="#E2886A" stroke-width="2" data-page-node-id="ul8pEYQzh240DhXHA8BCgp"/>
+        <text x="25" y="32" fill="#E2886A" font-size="15" font-weight="700" data-page-node-id="7dvFlrfDGAk1T5tzelQpeC">AIforce 动态交互与能力交付层 (DYNAMIC INTERACTION LAYER)</text>
+        <text x="25" y="58" fill="#B8B2A8" font-size="13" data-page-node-id="sl7FCc3qsa0dO3xgDZ2Xka">意图解析 · 权限令牌绑定 · 动态界面组装 (Artifacts/Surfaces) · 动作执行受控回写</text>
+        <rect x="680" y="22" width="150" height="36" rx="6" fill="#1E1C19" stroke="#E07B72" stroke-width="1" data-page-node-id="p4fN4DU7ebsaibgCZUmnWs"/>
+        <text x="755" y="45" fill="#E07B72" font-size="12" text-anchor="middle" data-page-node-id="ICrRbCmDCKNqI1eApUXJY3">逐项手动确认门禁</text>
+      </g>
+
+      <!-- 双向通信箭头 -->
+      <path d="M 460 210 L 460 245" stroke="#82B7C9" stroke-width="2" data-page-node-id="1UCspBwzh4N6U6e8TUSiBe"/>
+      <text x="475" y="232" fill="#B8B2A8" font-size="11" font-family="sans-serif" data-page-node-id="OZ8iFqtRR477Wkx5Cele98">受控 API / MCP 协议调用 ⇄ 业务数据与结果回传</text>
+
+      <!-- Salesforce 核心三层 -->
+      <g transform="translate(30, 250)" data-page-node-id="EIYynnaMBMD53MHP9vtTBx">
+        <rect x="0" y="0" width="860" height="110" rx="10" fill="#1E1C19" stroke="#3A3630" stroke-width="1.5" data-page-node-id="bYhH3cIrtcTJuPlCAwD124"/>
+        <text x="25" y="28" fill="#8B857C" font-size="12" font-weight="700" letter-spacing="1" data-page-node-id="A3hGjIRo3NANTEFemBKFmY">SALESFORCE ENTERPRISE FOUNDATION (记录系统 System of Record)</text>
+        
+        <g transform="translate(25, 42)" data-page-node-id="5wjjuxb89IWlyirMNgvS0f">
+          <rect x="0" y="0" width="255" height="52" rx="6" fill="#23211D" stroke="#7CC39A" stroke-width="1" data-page-node-id="J6znWwP3s5M9mkK1yycUkA"/>
+          <text x="127" y="24" fill="#7CC39A" font-size="13" font-weight="700" text-anchor="middle" data-page-node-id="NpXaUmsxzK9Kq0uxfn9r2q">Agentforce (数字劳动力)</text>
+          <text x="127" y="42" fill="#8B857C" font-size="11" text-anchor="middle" data-page-node-id="gPdbYFhAbmg7ugIkVpWusH">开箱即用与定制化业务自主智能体</text>
+        </g>
+        
+        <g transform="translate(300, 42)" data-page-node-id="RDMVqgEWMkFTqcSXHCh8xz">
+          <rect x="0" y="0" width="255" height="52" rx="6" fill="#23211D" stroke="#82B7C9" stroke-width="1" data-page-node-id="gz7Argzl1BZcpGwIht369Z"/>
+          <text x="127" y="24" fill="#82B7C9" font-size="13" font-weight="700" text-anchor="middle" data-page-node-id="HvlDeoKMs8arBB8KzNvgHk">Customer 360 (业务语义与规则)</text>
+          <text x="127" y="42" fill="#8B857C" font-size="11" text-anchor="middle" data-page-node-id="MGMswQ6xC0AY8Cz5G67i3q">审批工作流 · 访问控制 · 安全合规</text>
+        </g>
+        
+        <g transform="translate(575, 42)" data-page-node-id="ofPSjIYD5W7eLqvIcxZTwy">
+          <rect x="0" y="0" width="255" height="52" rx="6" fill="#23211D" stroke="#DCA84E" stroke-width="1" data-page-node-id="HKAqeHewDPH6VelGPyTvX5"/>
+          <text x="127" y="24" fill="#DCA84E" font-size="13" font-weight="700" text-anchor="middle" data-page-node-id="BvTmYQLboREcfGDsVBHKP5">Data 360 (统一数据基座)</text>
+          <text x="127" y="42" fill="#8B857C" font-size="11" text-anchor="middle" data-page-node-id="HMdGOYIAQHSBSHpJQG4lKL">客户数据湖 · 元数据 · 历史长程记忆</text>
+        </g>
+      </g>
+    </svg>
+    <div class="svg-caption" data-page-node-id="1Dd9eEyCAgid0qLozrvVdo">图 1：Salesforce AIforce 四层协同体系与受治理双向闭环机制拓扑图</div>
+  </div>
+
+  <p data-page-node-id="SN611UAsGVi80S7Vuuq8De">在这套架构下，外部 AI 并不是简单地通过公共网页读取数据，而是严格遵循原有的<strong data-page-node-id="vwjuSwWvxXrSOGmiTZ49Cx">安全与权限继承体系</strong>。每个请求都绑定了发起人员原有的访问权限，AI 智能体只能看到该员工被允许查看的字段；所有由 AI 发起的业务修改，也必须沿着 Salesforce 设定的业务规则回传写入。此外，Salesforce 承诺采取「零数据留存」（Zero Data Retention）策略：企业数据只用于回答当前请求，不由模型提供商留存。这是厂商在发布中给出的安全承诺，不等同于已经独立审计的结果。</p>
+
+  <!-- 交互沙盘 1 -->
+  <div class="sandbox" id="sec-sb-mechanism" data-page-node-id="CYwVBhbeQyhAuurkrVD3BB">
+    <h3 data-page-node-id="ZUMCnMWP2uuHcVLJcch5Oo">
+      交互沙盘 1：AIforce 受治理双向闭环执行模拟器
+      <span class="sb-badge" data-page-node-id="JD6jYQeBTWG8JmkKayKpa6">Interactive Simulator</span>
+    </h3>
+    <div class="sb-desc" data-page-node-id="XE7JHeziFS9avHOtFgiO3n">
+      选择不同业务场景，实时模拟从外部 AI 界面发出自然语言指令后，AIforce 如何向下穿透 Salesforce 既有权限模型、调度 Agentforce 智能体、并在前端动态生成临时可交互界面的全链路执行流。
+    </div>
+
+    <div class="ctl" data-page-node-id="3G0qg6GKT14uf8OUkdtIZx">
+      <label for="sel-scenario" data-page-node-id="psGG22sW3fDXGd8SfKzzfC">选择业务调用场景：</label>
+      <select id="sel-scenario" data-page-node-id="6ztfsikBB7GnqWHWljxerG">
+        <option value="call-prep" selected data-page-node-id="Yku54Y1LIbYoCVHdd2EZyX">1. 客户通话前准备 (Salesforce in Claude)</option>
+        <option value="deal-forecast" data-page-node-id="HyiHelJX8aQlUE8oliEHNP">2. 销售漏斗与业绩预测下钻 (Claude Artifact 交互看板)</option>
+        <option value="slack-surface" data-page-node-id="A4M52GxMUJlecZLj4kbLkq">3. Slack 团队多人实时操作台 (Slackforce Surfaces)</option>
+        <option value="quick-log" data-page-node-id="yl8E1R4bAFntATMmeqYIFO">4. 自然语言通话纪要极简录入 (Slack CRM / Slackbot)</option>
+      </select>
+    </div>
+
+    <div class="grid" data-page-node-id="pJftyBbUekUapp9aJ2zWnQ">
+      <div class="slot" data-page-node-id="xSo3B7bAaI2DecIcsStQN5">
+        <div class="sv a" id="out-sc-front" data-page-node-id="Kv3BCKbdpCebO1oFEdo7wK">Claude / Claudeforce (桌面 & Web)</div>
+        <div class="sk" data-page-node-id="vELlVb8z12FnkbCvSYpbA1">外部发起前端 (Surface)</div>
+      </div>
+      <div class="slot" data-page-node-id="18fITm9dwYh23kXQkEbfOu">
+        <div class="sv c" id="out-sc-data" data-page-node-id="v5wgMP6R5jlek6sw0ZpPOB">Data 360 (拉取未决商机、客户往期工单、团队讨论线程与通话遗留问题)</div>
+        <div class="sk" data-page-node-id="g4La0m7JIMafsXziHdGqhS">统一数据层 (Data 360) 调用</div>
+      </div>
+      <div class="slot" data-page-node-id="ujurfLAJzaG4N8rtoKnPMm">
+        <div class="sv" id="out-sc-logic" data-page-node-id="f4k5NxMKkTIEiILjWuHqEF">Customer 360 (继承当前销售代表原生权限，动态计算字段掩码)</div>
+        <div class="sk" data-page-node-id="VEYDLa7LeYZRPr2uorCYBl">业务语义与权限 (Customer 360)</div>
+      </div>
+      <div class="slot" data-page-node-id="6JIqMCIfTCgvneNE17ECBS">
+        <div class="sv e" id="out-sc-agent" data-page-node-id="TVxCeaon2dzHFmxwkw3cZq">Agentforce: Meeting Prep Agent (上下文聚合与优先级编排)</div>
+        <div class="sk" data-page-node-id="T0PPJxcCv1FmoaOyRXfSjU">调度数字劳动力 (Agentforce)</div>
+      </div>
+      <div class="slot" data-page-node-id="JKwfEOv8pIXmIECsZ4KkvA">
+        <div class="sv" id="out-sc-ui" data-page-node-id="UoFOF9wntjkL6Ob6KN0qp5">Claude Artifact 专属工作空间卡片 (可下钻待办与商机要点)</div>
+        <div class="sk" data-page-node-id="11iL78BubA4o4g0QYXuAU4">即时动态界面形态 (UI Projection)</div>
+      </div>
+      <div class="slot" data-page-node-id="EaeJKqHwdA1oneReQ8WNi8">
+        <div class="sv w" id="out-sc-audit" data-page-node-id="Xz4hMQK3ThHTOWeA8YXNA3">纯读取操作 · 原生权限继承生效 · 零数据留存 (Zero Retention)</div>
+        <div class="sk" data-page-node-id="8njW3n0jc8FqwYrNwEDJSJ">安全合规与写回审计门禁</div>
+      </div>
+    </div>
+
+    <div class="verdict" id="out-sc-verdict" data-page-node-id="Cvj66gB1C2bZxYIyDkdWWe">
+      <b data-page-node-id="ZOeouvgFaijwHXo7DTJtDE">执行成功：</b>AIforce 将销售代表的自然语言意图转化为受治理查询，按原有 CRM 权限从 Data 360 提取多维上下文，由 Meeting Prep Agent 编排并在 Claude 中即时生成专属 Artifact，无需打开 Salesforce 网页即可完成会前准备。
+    </div>
+  </div>
+
+  <!-- 第三章 -->
+  <h2 id="sec-foundation" data-page-node-id="M024wwRkkjI1gMckTIwUEq"><span class="num" data-page-node-id="clTQNMTagRHkFIbrNGrgqn">03</span>模型与运行时底座：NVIDIA 全栈基础设施与 Salesforce Koa 推理模型</h2>
+
+  <p data-page-node-id="rIwDIEWkAdzAL8KHDhnZ1w">在理解 AIforce 的四层架构时，若仅关注顶层交互，容易产生一种误解：以为只要把通用大模型接入企业系统，就能自动跑通复杂的业务流程，甚至容易把合作伙伴的技术栈误当成 AIforce 的组成部分。实际上，AIforce 解决的是<strong data-page-node-id="30p0YnZ0AC8KyhjSzWZR40">交互层</strong>的问题，负责将底层沉淀的数据、权限与动作能力安全投射到外部 AI 界面；而在这一层之下，企业智能体究竟依靠怎样的模型进行业务推理、底层的算力与运行时环境如何保障，构成了另一套平行的技术底座。Salesforce 推出的专用推理模型 Koa 与 NVIDIA 提供的基础设施，正是对这一底座的补全。</p>
+
+  <h3 id="sec-nvidia-talk" data-page-node-id="2E0JCVMnFHa4hyXchFgBrV">NVIDIA 与 Salesforce 的战略协同：黄仁勋与 Marc Benioff 对谈要点</h3>
+  <p data-page-node-id="wqPJIsITJ6xM2zit5xErp6">在 Dreamforce 大会现场，Salesforce 联合创始人 Marc Benioff 与 NVIDIA 首席执行官黄仁勋进行了一场公开对谈。这场交流并非 AIforce 的具体产品演示，而是展示了企业级智能体背后的战略与计算底座：</p>
+  <ul data-page-node-id="NX1CunH69bcRCCXW1jg8Bv">
+    <li data-page-node-id="V0LXAFfQ0lXSiUleWzdJDT"><strong data-page-node-id="kVHUNrl5gzYWihH48gnwdI">全栈 AI 基础设施：</strong>黄仁勋把 NVIDIA 描述为全栈 AI 基础设施公司，提出由「AI 工厂」（AI factory）将电力与企业专有数据转化为智能。</li>
+    <li data-page-node-id="2Km0yqHWcJjHVrwrAEk0eb"><strong data-page-node-id="ZNSnvsMOtqJvg8dBgw0Ek7">开放模型与运行时组合：</strong>他列举了 NVIDIA 的开放模型组合，包括 Nemotron、Cosmos、Alpamayo、BioNeMo / Proteina-Complexa 与人形机器人模型 GR00T；同时提到了开放的智能体控制框架（agentic harness）以及名为 OpenShell 的安全沙箱与运行时环境。必须厘清的是，这些是 NVIDIA 自身的技术底座，不能误写成 AIforce 的组成部分。</li>
+    <li data-page-node-id="6Lb6TyBqkEiBL60MiPBUxW"><strong data-page-node-id="XM4O6NFOZZToSCX5Ib2HwE">闭源与定制模型并存：</strong>黄仁勋明确表示，行业内通用闭源前沿模型会继续存在，但企业同时也会构建属于自己的私有定制模型，而这正是 NVIDIA 与 Salesforce 正在合作的方向。</li>
+    <li data-page-node-id="nn07lS0vJQ9NsiC9TsMepC"><strong data-page-node-id="DwkCW200CriINS3Gw6szgl">安全观与现场观点：</strong>关于 AI 安全，黄仁勋在现场将其称为「工程问题」，强调建立严密的测试环境、开展充分的产品测试并在不确定时不要发布；他同时表达了「不需要新法律或监管」的个人立场。需要明确的是，这属于黄仁勋在现场表达的个人观点，不可写成已经验证的产品保障或行业普遍共识。</li>
+  </ul>
+
+  <!-- 官方对谈视听卡片 -->
+  <div class="media-card" data-page-node-id="DYOrillgP31OrsREamVoa1">
+    <div class="media-header" data-page-node-id="X89wZvLFnoA4Fzc29OTxbv">
+      <div class="media-title" data-page-node-id="o2u7UUTFIzH9P5gkuGOZsa">Dreamforce 现场完整对谈：AI 基础设施与企业定制模型</div>
+      <div class="media-tag" data-page-node-id="EYQagc1Rk6O4nyvBo1erLn">13 分钟 · 中英双语字幕</div>
+    </div>
+    <div class="media-body" data-page-node-id="gqGfeVWm5EheC7XQRI07H1">
+      <div class="media-placeholder" data-page-node-id="XvcvDZCeviGWD9eItnKLk5">
+        <svg viewBox="0 0 24 24" data-page-node-id="fDI8p3IB5CAPYur9zijEFR">
+          <circle cx="12" cy="12" r="10" stroke-width="1.5" data-page-node-id="aaCB121zu10smQCOoTAyEU"/>
+          <polygon points="10,8 16,12 10,16" fill="var(--accent)" data-page-node-id="skQgR7q39DWssyIjK27FrC"/>
+        </svg>
+        <div style="font-weight:700; color:var(--fg); margin-bottom:6px" data-page-node-id="NDjHQkg8oKZTAtd5yJmPw4">黄仁勋 (NVIDIA) × Marc Benioff (Salesforce) 高峰对话</div>
+        <div style="font-size:13px; color:var(--fg-dim)" data-page-node-id="wqd4kHaSu0W1AiHan4Y8rs">探讨全栈基础设施、AI 工厂、企业私有模型演进路径与安全发布准则</div>
+      </div>
+      <p class="media-caption" data-page-node-id="nIT59zEPSw1TJWoE5oOOhj">Dreamforce 现场完整对谈（约 13 分钟，中英双语字幕）。黄仁勋讨论 NVIDIA 的开放模型与运行时、企业定制模型以及安全与发布节奏；这些内容提供 AIforce 之外的技术背景，并非 AIforce 功能演示。</p>
+    </div>
+    <div class="media-footer" data-page-node-id="dhMewDANFlxfY8wtXgvGbk">
+      <span data-page-node-id="H1NJgm7ub50Nly2zPURYEH">视频源地址：<a href="https://pic.xiaohu.ai/jiedu-media/salesforce-aiforce/jensen-benioff-dreamforce-bilingual-web.mp4" target="_blank" rel="noopener" data-page-node-id="aJyvwBGYDbyFgsHrNUJO7L">在线播放 MP4 直链</a></span>
+      <span data-page-node-id="JIGv3oRNHgD4HfM96HnGQW">离线说明：为遵守零依赖自包含铁律，大体积高清视频不内联 Base64，联网时可直连访问</span>
+    </div>
+  </div>
+
+  <h3 id="sec-koa-model" data-page-node-id="2K7BvRogzmzQkWfTtVVZnk">Koa：首个面向 Agentforce 的 CRM 专用推理模型</h3>
+  <p data-page-node-id="5AlVl8qvLcX2zieQ7CEQCI">正是在这种定制模型与垂直推理的路径下，Salesforce 推出了首个面向 Agentforce 的 CRM 专用推理模型——<strong data-page-node-id="vRnSOvouEEoUxG65G6u3p8">Koa</strong>：</p>
+  <ul data-page-node-id="LKIcKFu7L9fJVbebiBS3oA">
+    <li data-page-node-id="DpA5RYxWYUSZTJTSLXCgBH"><strong data-page-node-id="0rMBlXpHxXGStH3ZU1fbyG">模型定位与互补关系：</strong>Koa 基于 NVIDIA Nemotron 3 Super 进行后训练，是 Agentforce 可选用的专用推理模型。AIforce 负责把数据和动作传递到外部前端，Koa 则专注于在底层处理复杂的 CRM 业务逻辑推理，二者相互补充，但不是同一个产品。</li>
+    <li data-page-node-id="zvPAEipq19J9pMQD5NExi0"><strong data-page-node-id="8XGhJPuV1KlmNvwnEPAqcN">训练数据与信任边界：</strong>Salesforce 明确表示<strong data-page-node-id="mr2YC5kJ3GoqrfafNCNgZU">没有使用客户数据训练 Koa</strong>，其训练语料是模拟近三十年 CRM 部署中的企业知识而构造的专有合成数据。Salesforce 控制模型权重，模型的后训练与推理都在 Salesforce 自己的信任边界（trust boundary）内完成。</li>
+    <li data-page-node-id="LbirFe0oDxd1PoQeCT0R4O"><strong data-page-node-id="LkZuhNYRtvHFmrT6AxlYqJ">训练技术栈：</strong>Koa 的后训练采用了监督微调（SFT）与群组相对策略优化（GRPO），并深度使用了 NVIDIA NeMo RL、NeMo Gym 与 NeMo AutoModel 等工具栈。</li>
+    <li data-page-node-id="8nyAjJv3dnbSGpDHJgca3F"><strong data-page-node-id="PWLU7eWJExpHCz33NBWdM7">性能宣称与可用性：</strong>Salesforce 称 Koa 在基准测试中达到了「三倍更少错误」，并紧邻说明该数据来自 Salesforce 自有的 CRM benchmark 与所链接论文，属于官方基准测试结果，并非独立第三方评测。目前 Koa 已在 Salesforce 内部使用并进入部分客户试点，预计于 2026 年冬季在美国区域正式可用。</li>
+  </ul>
+
+  <!-- 第四章 -->
+  <h2 id="sec-claudeforce" data-page-node-id="8CTsJ9V0BYW9Fik2uTWT3i"><span class="num" data-page-node-id="n52b3c5xbYwnvdL0Uk1U97">04</span>Claudeforce：把 CRM 打包进 Claude 的官方 MCP 服务端</h2>
+
+  <h3 id="sec-claude-skills" data-page-node-id="66YMjlUeAHO8aYFJhVD2K0">37 项即开即用销售技能与 Claude Artifact 专属工作空间</h3>
+  <p data-page-node-id="R4FSwUlfqyR9Y6aBTlM4yi">将外部大模型与企业内部业务系统对接，过去往往需要耗费数周手动配置 API 与网关。如果仅把 Salesforce 与 Anthropic 的合作理解为「在对话框里调接口」，就会忽略真实业务中销售人员如何执行具体工作流、多连接器如何协同，以及企业级权限与人工介入的边界。Salesforce 与 Anthropic 联合推出的 <strong data-page-node-id="LacMuNc1bP9wieWVb1djgh">Claudeforce</strong>，首发落地形态是与 Salesforce 共建的 <strong data-page-node-id="uJtntdw6irLIV3FknXzGrZ">Salesforce in Claude</strong> Beta 插件。它直接将客户账户、商机和销售漏斗带入 Claude 界面，并内置了 37 项即开即用的销售技能。首次使用时，插件的设置技能（setup skill）会自动识别可用的工具与连接器，并为销售人员生成一个适配其具体岗位角色与负责客户范围的 Claude Artifact，快速搭建起专属的销售工作空间。</p>
+
+  <h3 id="sec-claude-workflows" data-page-node-id="Tz246Zq0fj7OE54n2ief8K">官方披露的五大核心日常销售工作流</h3>
+  <div class="card-grid" data-page-node-id="0RMxyD5cxjllyT6v5DpUAO">
+    <div class="card" data-page-node-id="WRo1E2F6FSbIX4iHRZGtv7">
+      <div class="card-tag" data-page-node-id="llvgvldKKPAoTPP8cE5YzA">Workflow 01</div>
+      <div class="card-title" data-page-node-id="yA1HRHu2R93gGNA5i5Igzz">每日个性化简报</div>
+      <div class="card-body" data-page-node-id="4tD64qH5aQJbtXVXRzpef6">基于最新的客户动态与跟进节奏，自动梳理销售人员当天的优先事项与待办事项，提供高信噪比晨会指引。</div>
+    </div>
+    <div class="card" data-page-node-id="8BrDAOwO7lq7hHmGnYU2ne">
+      <div class="card-tag" data-page-node-id="Luxg5PYpShD1Yv2sFwcDQa">Workflow 02</div>
+      <div class="card-title" data-page-node-id="uEjSbHWHvKD18YdwmpEDfj">通话前准备</div>
+      <div class="card-body" data-page-node-id="8edBrWZBjLd5Fij3EggNf0">自动拉取未决商机（open opportunities）、客户团队讨论记录、未回复的消息线程（unanswered threads）以及过往通话遗留的问题，帮助销售人员在客户交流前迅速掌握完整上下文。</div>
+    </div>
+    <div class="card" data-page-node-id="3LXIzSb8GracxLY6gTrMAG">
+      <div class="card-tag" data-page-node-id="2o7pGMJI7FuiPDGJQTnjFe">Workflow 03</div>
+      <div class="card-title" data-page-node-id="ouFvmUbPQMKbZzlqLsyC5s">交易评估与共同成交计划</div>
+      <div class="card-body" data-page-node-id="Np4837BGiDiSFzuvzqiF3E">依据销售团队的方法论对交易进展进行评估，并自动生成「共同成交计划」（mutual close plan），明确关键决策人与时间表。</div>
+    </div>
+    <div class="card" data-page-node-id="larvxKT8W7f31R1NzYOytx">
+      <div class="card-tag" data-page-node-id="agKkqgufRbyS4vlg4GGSCQ">Workflow 04</div>
+      <div class="card-title" data-page-node-id="KFiQlpxEpqj5d3p7fqrrEG">会后跟进与写回</div>
+      <div class="card-body" data-page-node-id="yrcoHcBA3TLucx1mFpxYpv">在客户会议结束后，自动草拟跟进邮件草稿、Slack 频道摘要，并提炼需回传写入 Salesforce 的更新内容。</div>
+    </div>
+    <div class="card" style="grid-column:1/-1" data-page-node-id="bEV8L8hWLtIaC6kw8KQDdc">
+      <div class="card-tag" data-page-node-id="ngocVbJU3ZxHXNSVcMQHra">Workflow 05</div>
+      <div class="card-title" data-page-node-id="lszg45DKYxlHQskhHNPUeV">交互式漏斗与预测看板</div>
+      <div class="card-body" data-page-node-id="dRCHFvSVReoEI3e8s49O21">生成可直接下钻、支持交互筛选并允许直接向 Salesforce 写回记录的销售漏斗与业绩预测看板，彻底告别静态报表切屏。</div>
+    </div>
+  </div>
+
+  <!-- Claude in Salesforce 官方演示视听卡片 -->
+  <div class="media-card" data-page-node-id="IwZwbEh5ViNX6cCDVDmXHE">
+    <div class="media-header" data-page-node-id="N4GwufPh7AfeLB1uEe0GPT">
+      <div class="media-title" data-page-node-id="yD9xWdlNlc34YIQMPtcKUG">Salesforce in Claude 官方界面演示</div>
+      <div class="media-tag" data-page-node-id="TRxOCpEGoN6e2DVHrhJDBO">83 秒 · 官方无旁白操作演示</div>
+    </div>
+    <div class="media-body" data-page-node-id="nnaAqeaAeD8lWhn4TSWELH">
+      <div class="media-placeholder" data-page-node-id="wcdGmPHEHYGVsXxzwNfIfY">
+        <svg viewBox="0 0 24 24" data-page-node-id="henzvGPJYaRVwPQ7c3ubnP">
+          <rect x="3" y="3" width="18" height="18" rx="3" stroke-width="1.5" data-page-node-id="ONqbNyzuMHu5lUYObVXUmh"/>
+          <path d="M9 8 L15 12 L9 16 Z" fill="var(--accent)" data-page-node-id="dSZwq7E0pqe8HDgM4c1ClM"/>
+        </svg>
+        <div style="font-weight:700; color:var(--fg); margin-bottom:6px" data-page-node-id="gLZlHlfh8nwbDE1GY13GV7">Claude 与 Salesforce / Slack 协同执行全流程</div>
+        <div style="font-size:13px; color:var(--fg-dim)" data-page-node-id="ryEz2q8SqBnRwlA276hLqk">从 CRM 提取客户记录、自动生成协同工作区、梳理周待办并完成销售漏斗预测</div>
+      </div>
+      <p class="media-caption" data-page-node-id="ixXd9OEQYmAe4PjHoBpCXw">Claude 官方 83 秒界面演示（无旁白）：连接 Salesforce、Slack 与 Gmail，随后从 Salesforce 记录生成客户计划、梳理一周优先事项并建立销售预测。</p>
+    </div>
+    <div class="media-footer" data-page-node-id="pPqNznoajgdXBXPs9WjZDy">
+      <span data-page-node-id="nY0jbIHACFucljBjJW2AkW">视频资产路径：/media/salesforce-aiforce/salesforce-in-claude-demo.mp4</span>
+      <span data-page-node-id="xquHFkEUnYGHiTfmgOd0EB">合规勘误说明：演示界面展示了三方连接状态，但官方确认插件内置核心连接器仅为 Salesforce 与 Slack</span>
+    </div>
+  </div>
+
+  <h3 id="sec-claude-security" data-page-node-id="sdz6sVrcMIsu6Vn2KkDoJ5">连接机制、数据治理与写回批准门禁</h3>
+  <p data-page-node-id="GU4BtzpCc5mZIS2diGrViw">在连接机制上，该插件自带两个核心连接器：<strong data-page-node-id="D2wszQYIzJpFoIANdo7C7W">Salesforce 连接器</strong>与 <strong data-page-node-id="NU6mgK5MpWGeGWF3w840gh">Slack 连接器</strong>。Salesforce 连接器负责读取与更新记录、记录通话内容并创建跟进任务；Slack 连接器则用于读取和写入交易专属频道及客户团队的讨论线程。虽然在官方演示的初始配置界面中同时显示了 Salesforce、Slack 与 Gmail 三者的连接状态，但 Anthropic 官方博客明确说明插件本身仅包含上述两个连接器，不可将 Gmail 误写为插件自带的连接器。</p>
+
+  <div class="callout warn" data-page-node-id="CL4NHS23BWAhayGOU9PvC0">
+    <div class="callout-title" data-page-node-id="oJEtFaRnn3E6gDdEThdsuu">
+      <span data-page-node-id="JNXMlEN8nfZXgOwpyS5f3w">⚠️</span> 记录系统地位与人工确认（Approval Required）机制的边界
+    </div>
+    <p data-page-node-id="I0Uy0ZqUDK3rRMgsDWPPTA">在数据治理与安全控制方面，Salesforce 依然是记录系统（system of record）。销售人员使用自己的 Salesforce 凭据登录，Claude 只能读取该员工原生权限允许访问的数据。为了防止自动化操作带来风险，系统对所有拟写回 Salesforce 的数据变更默认采取逐项批准机制，必须经过销售人员手动确认后才会执行；<strong data-page-node-id="zbioAgZgFL2jC8FaR87gsk">但需要注意，这属于交互层的人工确认机制，并不代表能杜绝大模型的幻觉或用户的误操作。</strong></p>
+  </div>
+
+  <p data-page-node-id="dU2AnoA6wmQ6zwiWlIjSuh">针对企业普遍关注的数据隐私，Anthropic 官方表述为 Team 与 Enterprise 计划默认不使用客户数据训练模型。但必须指出，这并不等同于「绝对不留存数据」，也不能替代 Salesforce 对 AIforce 所承诺的「零数据留存」（Zero Data Retention）产品特性。企业在评估落地时，需要结合自身采购的具体计划、商业合同与管理员配置进行核对。在部署进展上，Anthropic 披露称 GitLab、Siemens 与 Legora 已在组织内部署使用，另有 7,000 名 Salesforce 销售人员在日常工作中使用该插件，这些数据均属于厂商披露的采用情况。</p>
+
+  <p data-page-node-id="pf4iiUSEEeA6glm0PKl5wY">当前该 Beta 版本已面向所有 Claude 付费计划开放。销售人员可以在 Claude 的 marketplace 中安装 Salesforce MCP，但组织管理员仍需先在 AgentExchange 上申请访问权限，并为组织完成 Salesforce 连接配置。此外，Salesforce 原公告中所提及的接入 Tableau 数据分析，以及向客服、营销、电商与垂直行业的扩展，目前均属于后续规划，并未包含在当前的销售 Beta 版本中。</p>
+
+  <h3 id="sec-claude-code" data-page-node-id="8XuUlgTOBgGcP9PvGWf9Al">Claude Code 终端命令行专用开发插件</h3>
+  <p data-page-node-id="QWroSV62MZyRVBu1XHeYoG">除了面向日常办公与销售场景的 Salesforce in Claude，双方还针对技术开发人员并列推出了面向命令行工具 Claude Code 的专用开发插件。这是一个独立的开发者产品，不要与上述销售插件混淆：该插件内置超过 40 项开发技能，直连 GitHub 上的技能库并支持动态加载专用子插件，用于协助开发者在终端环境中直接执行相关的系统集成与代码开发任务。</p>
+
+  <!-- 第五章 -->
+  <h2 id="sec-slackforce" data-page-node-id="B2NedBf5EH4TxAipxPbCUR"><span class="num" data-page-node-id="2KA94jt8HSla7FJ23N49wy">05</span>Slackforce：让聊天窗口变成多人实时操作台</h2>
+
+  <p data-page-node-id="2nAfWMzZ1KAmHGhsuIo7Am">Slack 本身就是许多企业内部协作的主阵地。通过引入 <strong data-page-node-id="vuiQuJiOGaQfj5rqPvTLr5">Slackforce</strong>，Salesforce 尝试把过去必须在独立 CRM 窗口完成的操作，彻底融入到日常会话中：</p>
+
+  <div class="card-grid" data-page-node-id="UulloSycPGeXeZINtjaT1R">
+    <div class="card" data-page-node-id="w0E1CljvpkqakKUblS6aAA">
+      <div class="card-tag" data-page-node-id="bH96sIJuAvoAvwNyYwI4UT">Feature 01 · 协作表面</div>
+      <div class="card-title" data-page-node-id="IhhGgHxr7a32delPAtQC1l">Slackforce Surfaces 动态看板</div>
+      <div class="card-body" data-page-node-id="zIZG8lxzfPE414Xr0BFuzR">允许团队在讨论频道内，直接抓取来自 Salesforce、Slack 及其他关联工具的实时数据，就地拼装成一个可交互的多人操作界面。团队成员无需请求 IT 部门专门制作报表，便能在卡片中共同筛选指标、发表评论并触发业务变更。例如年处理超过 80 万次客户咨询的服务企业 Engine，其团队便借此让一线人员直接用自然语言生成业务界面，无需在不同系统之间来回切屏。</div>
+    </div>
+    <div class="card" data-page-node-id="E3GruD2mPqD8UVjWbwI27B">
+      <div class="card-tag" data-page-node-id="GP91pc3Wfaaw6BPKgmFjPR">Feature 02 · 跨域助理</div>
+      <div class="card-title" data-page-node-id="czwkoL5V3jp7TkYDWx9AAY">Slackbot 跨系统个人助理</div>
+      <div class="card-body" data-page-node-id="EIjDGqmg5lYZTDvmSzeex4">打破聊天记录与 CRM 记录之间的数据壁垒。内置的 Slackbot 能够同时阅读 Slack 频道的会话上下文与 Salesforce 的服务工单。比如，它可以找出互动正在减少的客户，再结合近期支持案例与内部讨论线程判断原因，随后重新分配负责人、创建跟进任务，并草拟挽回邮件。</div>
+    </div>
+    <div class="card" data-page-node-id="ErkKVoBAS0doIK8Tww1zdF">
+      <div class="card-tag" data-page-node-id="KuTeFEhhTiDdZjGYgmzz6x">Feature 03 · 极简交互</div>
+      <div class="card-title" data-page-node-id="oXbjWTtDkl6Sqn5r5qNbEx">Slack CRM 极简录入</div>
+      <div class="card-body" data-page-node-id="8BeVbTtg1ymcJxvPxylvtZ">将繁琐的录入工作简化为简短的自然语言交互。员工在结束一次客户通话后，只需要在聊天窗口发送一句提示词，就能同步在 Salesforce 内新建客户档案、记录通话要点或推进商机阶段，全程不必跳出 Slack 页面。</div>
+    </div>
+    <div class="card" data-page-node-id="exBc0KpOU5ivvTV4iK5TiR">
+      <div class="card-tag" data-page-node-id="MuxW8M3ixKG2OjALkWICkt">Feature 04 · 协同编码</div>
+      <div class="card-title" data-page-node-id="y3WukOHYlOp4XyEYAV5WdH">Slack Code 多人协同编程</div>
+      <div class="card-body" data-page-node-id="pf8yTIHVTopJLRFbi0Cxw1">将 AI 编程体验从个人的单机辅助拓展为多人团队模式。开发团队可以在特定的 Slack 频道中与编码智能体协作完成编码项目，所有操作与调试上下文默认在频道内公开，确保项目进度在团队成员与智能体之间无缝传递，最终直接在 Slack 内输出可运行的代码、原型与文档。</div>
+    </div>
+  </div>
+
+  <!-- 第六章 -->
+  <h2 id="sec-coworker" data-page-node-id="7OPgBB0eMRt1UVF0NB3ly1"><span class="num" data-page-node-id="luFLK26Eg4dcrRcXkomzDE">06</span>Agentforce Coworker：原生后台里的开箱即用副驾</h2>
+
+  <p data-page-node-id="kM9iku2MAHqDg15XzAcbqC">对于习惯留在 Salesforce 原生网页界面（Lightning）中工作的用户，本次发布的对应方案是 <strong data-page-node-id="putYvPrwqXci3F7VC5kP9g">Agentforce Coworker</strong>。</p>
+
+  <p data-page-node-id="Pg2XeNxCAaIDDHcsclPTTZ">与作为外部连接器的 Claudeforce 不同，Coworker 原生运行在 Salesforce 平台内部。它不需要企业进行数据迁移，也不需要重新设计权限模型，系统管理员可以在后台一键激活。其核心机制在于它可以直接调用企业此前已经在 Agentforce 平台中构建并部署好的各类专项 Agent，相当于为企业既有的智能体资产提供了一个统一的调度前台。</p>
+
+  <div class="callout info" data-page-node-id="kBWBzxAbROcAGAuXYaBDzD">
+    <div class="callout-title" data-page-node-id="9qzzYkoIuFHBVx2nbqDQD5">
+      <span data-page-node-id="iRWT0Dn40GlqRFlfH3aKXb">📊</span> 厂商披露规模与客户试点采纳数据
+    </div>
+    <p data-page-node-id="xIWwGOvnyQ5HTYCFJs07wv">按 Salesforce 公布的数据，Coworker 在推出后的前 35 天内有 10 万名用户激活。富顿银行（Fulton Bank）称，该行在数周内上线了 20 多个生产用例，覆盖约 3,000 名员工，并已观察到 Coworker 帮助员工更快查找信息、做好业务准备。<strong data-page-node-id="AbU0XQ6urnD8JpwJewu9VQ">需要客观说明：这些数字来自厂商公告与客户引述，还不是对业务收益的独立评估。</strong></p>
+  </div>
+
+  <!-- 第七章 -->
+  <h2 id="sec-headless" data-page-node-id="7ys1gJ0ljV3Pl9uIjEJeWb"><span class="num" data-page-node-id="Nrm5s4VQGLlgtN7Q7GoitS">07</span>架构解耦：Headless Toolkit 与外部开放生态</h2>
+
+  <p data-page-node-id="Ikb00aorg282O7Iya8tnfq">让 CRM 能力脱离原生 UI 的底层支柱，是 Salesforce 推出的 <strong data-page-node-id="iLdI0qynTqHUgOuizMsLRX">Headless Toolkit</strong>（无头开发工具包）。这套开放架构将整个 Salesforce 平台的底层要素——包括对象数据、业务流、字段语义与操作接口——统一封装为标准的 MCP 接口、API、插件和技能，供外部开发者自由调用。</p>
+
+  <h3 id="sec-agentexchange" data-page-node-id="x5YEBzUajOYEMDHCP4WUXX">AgentExchange 合作生态矩阵</h3>
+  <p data-page-node-id="0AO5C24bRN57KmVW5xsuSD">依托该工具包，Salesforce 建立了 <strong data-page-node-id="HSbFD10CAog8P8P1KOSXhJ">AgentExchange</strong> 合作生态与应用分发市场，汇集了多类合作伙伴：</p>
+  <ul data-page-node-id="WVbO6awqgnDQnwF08HY9Fy">
+    <li data-page-node-id="Q6Fg5cvso2UZGwjCjAttDM"><strong data-page-node-id="gH4MkYbgWEWZhsMHMGAwsL">智能体交互界面：</strong>Anthropic、亚马逊云科技（AWS）、Google、微软；</li>
+    <li data-page-node-id="xyRtBA0U8JGjAN9Z0nhI5S"><strong data-page-node-id="kE5LUyTlO6OqKXGlChso8o">AI 构建与设计平台：</strong>Lovable、Vercel；</li>
+    <li data-page-node-id="o7PK6Wu01FwMhcDV6AFXuh"><strong data-page-node-id="GlQdjEP4M4J5qFtQBBvWPt">垂直业务工具与 Agent：</strong>DocuSign、Gamma、Jasper、Rippling 等。</li>
+  </ul>
+
+  <div class="callout success" data-page-node-id="BenDWykp2M97ZFqa05oE46">
+    <div class="callout-title" data-page-node-id="AVN7ADnV6plbqLMcK7Q1Ov">
+      <span data-page-node-id="6gz4A0cAvdFFhDKDneNPGQ">⚡</span> 20 年 Trailblazer 社区的开发者资产跃迁
+    </div>
+    <p data-page-node-id="XBdRPJrgoBvGltd7n3TTb7">伴随着这套开放架构的发布，Salesforce 也特别提到了其拥有 20 年历史的 Trailblazer（开发者与管理员）技术社区。平台开放后，社区开发者过去累计构建的 1,200 万个应用与日常 96 亿次 API 调用经验，将能够进一步转化为适配各类 AI 前端的技能与插件。</p>
+  </div>
+
+  <!-- 第八章 -->
+  <h2 id="sec-observation" data-page-node-id="xzxDqZHuh8JExpwtSrolj1"><span class="num" data-page-node-id="ImYPVtp6g8YDaRAz8UJYMt">08</span>边界与观察：从「围墙花园」转向「协议输出」</h2>
+
+  <h3 id="sec-obs-shift" data-page-node-id="X4lS7MzGoR8jOlfVHHdhMm">软件竞争重心位移：前端界面贬值与数据执行引擎护城河</h3>
+  <p data-page-node-id="0EW9cDYgp23T1PMLdEv2je">传统企业级 SaaS 软件的核心商业壁垒之一，往往是依靠前端界面的高粘性把用户留存在自己的应用生态内。而从这次发布可以看出，面对大模型与智能体的兴起，企业软件的竞争重心正在发生位移：<strong data-page-node-id="iZOsEamjQh3GgpDAQEPgZ7">前端界面正在快速被对话框、协作工具或自主 Agent 替代，真正的护城河变成了底层不可替代的业务数据、审批权限与合规逻辑</strong>。</p>
+
+  <p data-page-node-id="umq5hPX4HUyM5S7Bx6nDRZ">Salesforce 选择通过 AIforce 主动退居幕后，将自己转变为一个带有严格权限治理的「企业数据与执行引擎」，把交互前端拱手让给 Claude 和 Slack。</p>
+
+  <h3 id="sec-obs-limits" data-page-node-id="FBS7fS2fMiR0Fn8l13XFAx">落地实施边界与客观前置条件</h3>
+  <p data-page-node-id="wI3fDrptSeQBHgNDV6hhci">不过对于企业采购与实施团队而言，仍需注意官方提及的落地边界：</p>
+  <ul data-page-node-id="tB6q5P6NszatK12JyxQwWa">
+    <li data-page-node-id="Ps4Vbb15BAEACwXEVs0A3u"><strong data-page-node-id="XdVAOSaFxowWcCD9Ui5aen">计费与服务条款：</strong>相关功能的定价机制与产品打包方式未来可能发生调整，实际可用性受不同地区和具体客户合同约束；</li>
+    <li data-page-node-id="ptE8eCqKQfvNI9c6If47O6"><strong data-page-node-id="NNH56SRoID2uIRW4QA4MWe">数据治理前置条件：</strong>尽管系统声称零迁移且权限自动继承，但动态界面与外部 Agent 输出的质量，依然完全取决于企业在 Salesforce 内部沉淀的原有元数据规范、字段清晰度以及工作流规则的完备程度。如果底层数据本身存在断层，投射到外部界面的智能化体验同样会受到制约。</li>
+  </ul>
+
+  <!-- 交互沙盘 2 -->
+  <div class="sandbox" id="sec-sb-modes" data-page-node-id="tF1n3uBvcHmFx4GKqABYEX">
+    <h3 data-page-node-id="gMa9q2s0l0av7VreaMnyHt">
+      交互沙盘 2：企业级 CRM 接入模式与治理模型对比
+      <span class="sb-badge" data-page-node-id="aFlXGtUc4iuZgAHNADIaCV">Strategy Matrix</span>
+    </h3>
+    <div class="sb-desc" data-page-node-id="dRSutNKpCFRqqqH2ZZ1ELl">
+      对比企业将核心业务接入 AI 时采取的三种典型架构方案：Salesforce AIforce 协议解耦、传统自研 API 网关中间件、以及外挂通用聊天框，评估各方案在实施周期、权限安全性与写回闭环上的核心权衡。
+    </div>
+
+    <div class="ctl" data-page-node-id="NEWom0HvYVhxE3B6F2qAxr">
+      <label for="sel-crm-mode" data-page-node-id="fFbspuGWlJGAFOArHmmLm7">选择企业接入方案：</label>
+      <select id="sel-crm-mode" data-page-node-id="RAA6awl7IaENnwsWiYwMDa">
+        <option value="aiforce" selected data-page-node-id="YHZV7dsei6U9mmLMoOLzWO">1. Salesforce AIforce 协议解耦模式 (官方推荐)</option>
+        <option value="custom-gateway" data-page-node-id="Uxx0lmhyHbkz9gJYb4e2yD">2. 传统自研 API 网关 / 独立中间件集成</option>
+        <option value="chatbot" data-page-node-id="67eRuQfwF2ThRQmRVm9U4l">3. 外挂式通用聊天框 / 纯对话接入</option>
+      </select>
+    </div>
+
+    <div class="grid" data-page-node-id="UKoor8pbNZz7y5bngRfnUR">
+      <div class="slot" data-page-node-id="HlAnEtnm2P5af0Qdx4WVay">
+        <div class="sv a" id="out-md-cycle" data-page-node-id="Q717KeX9AjedkAEnCFAv0f">数小时 ~ 数天 (MCP/插件一键启用)</div>
+        <div class="sk" data-page-node-id="eLFA5FFfSc789DimxGK0Yu">交付实施周期</div>
+      </div>
+      <div class="slot" data-page-node-id="fVFQrfa8GQfm95ZjqMDR1F">
+        <div class="sv e" id="out-md-perm" data-page-node-id="0hl6ti03YsMVU6x7ELNDmT">原生继承 (行/列/字段级细粒度权限自动绑定)</div>
+        <div class="sk" data-page-node-id="sMeIMNf5lHdeQtWu4KCShC">权限继承与字段安全 (FLS)</div>
+      </div>
+      <div class="slot" data-page-node-id="enVZA2vobV9TD4j4LEQTX9">
+        <div class="sv c" id="out-md-ui" data-page-node-id="TP8qG5xCRAf7lJdx0BYfSq">任务即时生成 (Claude Artifact / Slack Surfaces 动态看板)</div>
+        <div class="sk" data-page-node-id="G7mu0Bl7DBwJoX4isnhU8s">前端交互形态与动态渲染</div>
+      </div>
+      <div class="slot" data-page-node-id="R6bTg1hWRoR7PsfSWJqyX4">
+        <div class="sv" id="out-md-writeback" data-page-node-id="vUd3sZgSukzh5srmzFTqGH">受治理闭环 (双向校验，强制逐项手动批准后回传写入)</div>
+        <div class="sk" data-page-node-id="kEBo55EHryWZlHy9vfdsRi">写回确认与合规门禁</div>
+      </div>
+      <div class="slot" data-page-node-id="znxjXDzGFCzi13mkOP0BWP">
+        <div class="sv w" id="out-md-retention" data-page-node-id="yRL6qhIYmDZYZaDDX4Jq84">极高 (Salesforce 承诺零数据留存 Zero Data Retention)</div>
+        <div class="sk" data-page-node-id="PCtgCeTUQIZi0rffEfByr1">数据隐私与零留存保障</div>
+      </div>
+    </div>
+
+    <div class="verdict" id="out-md-verdict" data-page-node-id="yjb5xaQ269E0vrMUUybEhU">
+      <b data-page-node-id="TMVRkkJIYGkInKdfm0scor">模式评价：</b>架构最优解。Salesforce 退居幕后成为企业数据与受治理执行引擎，外部 AI 界面仅作为交互投影层。既保留了企业 20 余年积累的权限合规资产，又彻底打破了前端界面的割裂壁垒。
+    </div>
+  </div>
+
+  <footer class="doc" data-page-node-id="W7f623dNBFH0m9Fa5WMo8v">
+    <p data-page-node-id="UWkMIPC8ALwOVxBnduNrIR"><strong data-page-node-id="bNnPmWA93SXzfnpCOvROI7">交付规范声明：</strong>本文件基于 Salesforce Dreamforce 2026 官方发布文档、Anthropic 官方工程实践及 NVIDIA 算力基座深度消化重构。采用纯原生自包含单文件架构（Zero External Dependencies），遵循 AIKnowledge 知识库规范标准归档。</p>
+    <p data-page-node-id="dACf5dACCPd6N4Xb44bimh">© 2026 AIKnowledge 架构专著资产库 · 唯一归档路径：<code data-page-node-id="oGj2Ol1qIG2cULoIyJwFG4">/Users/yangkejin/Documents/Openai/AIKnowledge/20260916_Salesforce_AIforce企业交互层与CRM解耦深度解析.html</code></p>
+  </footer>
+
+</main>
+
+<script>
+(function(){
+  function byId(id){ return document.getElementById(id); }
+
+  /* ---------- 主题切换逻辑 ---------- */
+  var root = document.documentElement;
+  var btnTheme = byId("btn-theme");
+  var btnMobTheme = byId("btn-mob-theme");
+
+  function toggleTheme(){
+    var cur = root.getAttribute("data-theme") || "dark";
+    var next = cur === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+  }
+
+  if (btnTheme) { btnTheme.addEventListener("click", toggleTheme); }
+  if (btnMobTheme) { btnMobTheme.addEventListener("click", toggleTheme); }
+
+  /* ---------- 目录开合与回到顶部 ---------- */
+  var side = byId("sidebar");
+  var btnMobToc = byId("btn-mob-toc");
+  if (btnMobToc && side) {
+    btnMobToc.addEventListener("click", function(){ side.classList.toggle("open"); });
+  }
+
+  function scrollToTop(){
+    if (window.scrollTo) { window.scrollTo({top: 0, behavior: "smooth"}); }
+  }
+
+  var btnTop = byId("btn-top");
+  var btnMobTop = byId("btn-mob-top");
+  if (btnTop) { btnTop.addEventListener("click", scrollToTop); }
+  if (btnMobTop) { btnMobTop.addEventListener("click", scrollToTop); }
+
+  /* ---------- 阅读进度条与侧栏高亮 ---------- */
+  var links = document.querySelectorAll(".toc a");
+  var secs = [];
+  for (var i = 0; i < links.length; i++) {
+    var href = links[i].getAttribute("href");
+    if (href && href.charAt(0) === "#") {
+      var target = byId(href.substring(1));
+      if (target) { secs.push({ el: target, link: links[i] }); }
+    }
+  }
+
+  function onScroll(){
+    var pick = 0;
+    for (var j = 0; j < secs.length; j++) {
+      var rect = secs[j].el.getBoundingClientRect();
+      if (rect.top <= 160) { pick = j; }
+    }
+    for (var k = 0; k < secs.length; k++) {
+      secs[k].link.classList.toggle("active", k === pick);
+    }
+
+    var de = document.documentElement;
+    var span = de.scrollHeight - de.clientHeight;
+    var top = de.scrollTop || (document.body ? document.body.scrollTop : 0);
+    var pct = span > 0 ? (top / span) * 100 : 0;
+    if (pct < 0) { pct = 0; }
+    if (pct > 100) { pct = 100; }
+    var bar = byId("progress");
+    if (bar) { bar.style.width = pct + "%"; }
+  }
+
+  window.addEventListener("scroll", onScroll);
+  onScroll();
+
+  /* ---------- 沙盘 1：双向闭环执行模拟器 ---------- */
+  var selScenario = byId("sel-scenario");
+  var outScFront = byId("out-sc-front");
+  var outScData = byId("out-sc-data");
+  var outScLogic = byId("out-sc-logic");
+  var outScAgent = byId("out-sc-agent");
+  var outScUi = byId("out-sc-ui");
+  var outScAudit = byId("out-sc-audit");
+  var outScVerdict = byId("out-sc-verdict");
+
+  var sim1Data = {
+    "call-prep": {
+      front: "Claude / Claudeforce (桌面 & Web)",
+      data: "Data 360 (拉取未决商机、客户往期工单、团队讨论线程与通话遗留问题)",
+      logic: "Customer 360 (继承当前销售代表原生权限，动态计算字段掩码)",
+      agent: "Agentforce: Meeting Prep Agent (上下文聚合与优先级编排)",
+      ui: "Claude Artifact 专属工作空间卡片 (可下钻待办与商机要点)",
+      audit: "纯读取操作 · 原生权限继承生效 · 零数据留存 (Zero Retention)",
+      verdict: "<b>执行成功：</b>AIforce 将销售代表的自然语言意图转化为受治理查询，按原有 CRM 权限从 Data 360 提取多维上下文，由 Meeting Prep Agent 编排并在 Claude 中即时生成专属 Artifact，无需打开 Salesforce 网页即可完成会前准备。"
+    },
+    "deal-forecast": {
+      front: "Claude Artifact 动态看板 (双向交互)",
+      data: "Data 360 (季度漏斗历史、加权成交率、阶段停留时长与团队指标)",
+      logic: "Customer 360 (校验阶段流转审批规则与销售主管折扣权限上限)",
+      agent: "Agentforce: Deal Strategy Agent (自动生成共同成交计划与预测模型)",
+      ui: "可交互漏斗过滤面板 (支持维度透视、参数调整与一键拟写回)",
+      audit: "待人工审批 · 拟写回数据触发逐项手动批准机制 (Approval Required)",
+      verdict: "<b>就绪待批：</b>系统根据销售团队方法论生成业绩预测与共同成交计划（Mutual Close Plan）。销售人员在动态看板中调整阶段参数后，系统强制要求<b>手动确认</b>，确认后方可沿业务规则写入 Salesforce 记录系统。"
+    },
+    "slack-surface": {
+      front: "Slack 交易专属讨论频道 (多人协作视图)",
+      data: "Data 360 (实时聚合客户工单、Slack 讨论线程与关联工具状态)",
+      logic: "Customer 360 (多角色混合权限过滤，按操作者身份差异化鉴权)",
+      agent: "Agentforce: Cross-System Collaboration Agent (就地组装交互卡片)",
+      ui: "Slack 动态卡片 (多人共同筛选指标、评论并触发业务变更)",
+      audit: "多人细粒度鉴权 · 每次修改绑定发起人凭证写入独立审计流水",
+      verdict: "<b>协同运行中：</b>团队成员在 Slack 讨论频道内直接生成多人操作界面，无需 IT 部门制作专项报表。如服务企业 Engine 案例，一线人员直接用自然语言生成业务界面，无需跨系统切屏即可协同修改并写回 CRM。"
+    },
+    "quick-log": {
+      front: "Slack 会话输入框 (单句自然语言提示词)",
+      data: "Data 360 (精准关联当前客户档案、商机上下文与最新跟进人)",
+      logic: "Customer 360 (验证必填字段完备性、阶段跃迁合规性与排他审批锁)",
+      agent: "Agentforce: CRM Data Entry Agent (自然语言实体抽取与字段映射)",
+      ui: "Slack 确认模态卡片 (预览录入字段、商机阶段跃迁与创建的任务)",
+      audit: "单点写回 · 销售代表个人凭证绑定 · 人工单击确认后触发原子落盘",
+      verdict: "<b>极简录入就绪：</b>员工通话结束后在聊天窗口发送一句提示词，智能体自动解析出客户要点、新建跟进任务并推进商机阶段，销售人员点击卡片确认后，数据立即原子化写回 Salesforce。"
+    }
+  };
+
+  function updateSim1(){
+    if (!selScenario) { return; }
+    var val = selScenario.value;
+    var d = sim1Data[val] || sim1Data["call-prep"];
+    if (outScFront) { outScFront.textContent = d.front; }
+    if (outScData) { outScData.textContent = d.data; }
+    if (outScLogic) { outScLogic.textContent = d.logic; }
+    if (outScAgent) { outScAgent.textContent = d.agent; }
+    if (outScUi) { outScUi.textContent = d.ui; }
+    if (outScAudit) { outScAudit.textContent = d.audit; }
+    if (outScVerdict) { outScVerdict.innerHTML = d.verdict; }
+  }
+
+  if (selScenario) {
+    selScenario.addEventListener("change", updateSim1);
+  }
+
+  /* ---------- 沙盘 2：接入方案对比 ---------- */
+  var selCrmMode = byId("sel-crm-mode");
+  var outMdCycle = byId("out-md-cycle");
+  var outMdPerm = byId("out-md-perm");
+  var outMdUi = byId("out-md-ui");
+  var outMdWriteback = byId("out-md-writeback");
+  var outMdRetention = byId("out-md-retention");
+  var outMdVerdict = byId("out-md-verdict");
+
+  var sim2Data = {
+    "aiforce": {
+      cycle: "数小时 ~ 数天 (MCP/插件一键启用)",
+      perm: "原生继承 (行/列/字段级细粒度权限自动绑定)",
+      ui: "任务即时生成 (Claude Artifact / Slack Surfaces 动态看板)",
+      writeback: "受治理闭环 (双向校验，强制逐项手动批准后回传写入)",
+      retention: "极高 (Salesforce 承诺零数据留存 Zero Data Retention)",
+      verdict: "<b>模式评价：</b>架构最优解。Salesforce 退居幕后成为企业数据与受治理执行引擎，外部 AI 界面仅作为交互投影层。既保留了企业 20 余年积累的权限合规资产，又彻底打破了前端界面的割裂壁垒。"
+    },
+    "custom-gateway": {
+      cycle: "数周 ~ 数月 (需自研网关、身份映射与流控)",
+      perm: "高风险 (通常使用管理员服务账号 Service Account，权限降级)",
+      ui: "静态或简易卡片 (依赖自研 Webhook / 消息模板渲染)",
+      writeback: "弱治理 (需额外开发复杂的状态机与审批校验逻辑)",
+      retention: "中等 (受中间件转发存储及模型供应商条款约束)",
+      verdict: "<b>模式评价：</b>高维护成本、权限穿透难。自研网关很难完全复刻 Salesforce 复杂的角色层级、共享规则与字段级安全性（FLS），极易造成越权访问或数据状态不同步。"
+    },
+    "chatbot": {
+      cycle: "数天 (导入向量库或简单 RAG)",
+      perm: "粗粒度 (缺乏上下文权限感知，易发生横向越权)",
+      ui: "纯纯文本对话流 (无法呈现多维表格、筛选器与可下钻图表)",
+      writeback: "无法安全写回 (仅具备只读知识检索能力，无动作执行闭环)",
+      retention: "高风险 (知识库切片常驻外部第三方服务商数据库)",
+      verdict: "<b>模式评价：</b>仅停留在玩具级问答。无法承接复杂的企业销售、客服与审批流程，缺乏业务语义与状态机支撑，无法解决「数据孤岛与跨系统多步操作」的真实痛点。"
+    }
+  };
+
+  function updateSim2(){
+    if (!selCrmMode) { return; }
+    var val = selCrmMode.value;
+    var d = sim2Data[val] || sim2Data["aiforce"];
+    if (outMdCycle) { outMdCycle.textContent = d.cycle; }
+    if (outMdPerm) { outMdPerm.textContent = d.perm; }
+    if (outMdUi) { outMdUi.textContent = d.ui; }
+    if (outMdWriteback) { outMdWriteback.textContent = d.writeback; }
+    if (outMdRetention) { outMdRetention.textContent = d.retention; }
+    if (outMdVerdict) { outMdVerdict.innerHTML = d.verdict; }
+  }
+
+  if (selCrmMode) {
+    selCrmMode.addEventListener("change", updateSim2);
+  }
+
+})();
+</script>
+
+</body>
+</html>
