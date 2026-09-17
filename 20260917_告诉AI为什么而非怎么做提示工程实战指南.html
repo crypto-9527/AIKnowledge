@@ -1,0 +1,1954 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="pGIm1FXX2Rpprdg2r37qBb">
+<head data-page-node-id="kfoNOaCsqEd8lPjbdV6ICi">
+  <meta charset="utf-8" data-page-node-id="tdwg1rZeJCpFarXhnTwUK6">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="NirEQ2qHxxHA7tcQ3yR34t">
+  <title>告诉 AI 为什么 而不是怎么做：前沿 Agent 提示工程与意图对齐实战指南</title>
+  <style>
+    /* ==========================================================================
+       1. 全局设计令牌与双主题系统 (CSS Design Tokens)
+       ========================================================================== */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+      /* 统一状态与语义色盘 */
+      --accent: #D97757;          /* 陶土红 / 核心强调色 */
+      --accent-hover: #E2886A;
+      --accent-subtle: rgba(217, 119, 87, 0.12);
+      --accent-border: rgba(217, 119, 87, 0.35);
+
+      --emerald: #2E8B57;         /* 正向成果 / 对齐成功 */
+      --emerald-subtle: rgba(46, 139, 87, 0.14);
+      --emerald-border: #38A169;
+
+      --rose: #C53030;            /* 警戒风险 / XY问题 / 错误假设 */
+      --rose-subtle: rgba(197, 48, 48, 0.14);
+      --rose-border: #E53E3E;
+
+      --amber: #D69E2E;           /* 权衡取舍 / 资源约束 */
+      --amber-subtle: rgba(214, 158, 46, 0.14);
+      --amber-border: #ECC94B;
+
+      --cyan: #319795;            /* 系统工程 / 架构方案 */
+      --cyan-subtle: rgba(49, 151, 149, 0.14);
+      --cyan-border: #4FD1C5;
+
+      --purple: #805AD5;          /* 认知心智 / 意图模型 */
+      --purple-subtle: rgba(128, 90, 213, 0.14);
+      --purple-border: #9F7AEA;
+
+      /* 布局常量 */
+      --sidebar-w: 280px;
+      --content-max: 1180px;
+    }
+
+    /* 深色主题 (Dark Theme - 默认黑曜石科技质感) */
+    html[data-theme="dark"] {
+      --bg-canvas: #181715;
+      --bg-surface: #201F1D;
+      --bg-surface-elevated: #2A2926;
+      --bg-surface-highlight: #363430;
+      --border-soft: rgba(255, 255, 255, 0.08);
+      --border-medium: rgba(255, 255, 255, 0.16);
+      --border-hard: rgba(255, 255, 255, 0.28);
+      --text-primary: #F4F1EA;
+      --text-secondary: #B5B2AA;
+      --text-tertiary: #827F77;
+      --text-inverse: #181715;
+      --code-bg: #141312;
+      --code-border: rgba(255, 255, 255, 0.12);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.6);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.7);
+    }
+
+    /* 浅色主题 (Light Theme - 暖羊皮纸经典出版质感) */
+    html[data-theme="light"] {
+      --bg-canvas: #FAF7F2;
+      --bg-surface: #FFFFFF;
+      --bg-surface-elevated: #F3EFE8;
+      --bg-surface-highlight: #EAE5DC;
+      --border-soft: rgba(0, 0, 0, 0.07);
+      --border-medium: rgba(0, 0, 0, 0.14);
+      --border-hard: rgba(0, 0, 0, 0.24);
+      --text-primary: #21201D;
+      --text-secondary: #58554E;
+      --text-tertiary: #8C887F;
+      --text-inverse: #FAF7F2;
+      --code-bg: #F0EAE1;
+      --code-border: rgba(0, 0, 0, 0.1);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.12);
+    }
+
+    /* ==========================================================================
+       2. 基础重置与全局排版 (Typography & Reset)
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      line-height: 1.75;
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      display: block !important;
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    #reading-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--cyan));
+      width: 0%;
+      z-index: 9999;
+      transition: width 0.1s linear;
+    }
+
+    /* ==========================================================================
+       3. 左右分栏与自动对称居中盒模型 (Layout Grid)
+       ========================================================================== */
+    .app-sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: var(--sidebar-w);
+      background-color: var(--bg-surface);
+      border-right: 1px solid var(--border-soft);
+      overflow-y: auto;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 16px;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s ease;
+    }
+
+    /* 遵循 §8.7 规范：侧栏贴左，正文在剩余区域绝对对称居中 */
+    .main-wrapper {
+      display: block !important;
+      max-width: var(--content-max) !important;
+      width: auto !important;
+      flex: none !important;
+      margin-left: calc(var(--sidebar-w) + max(0px, (100% - var(--sidebar-w) - var(--content-max)) / 2)) !important;
+      margin-right: max(0px, calc((100% - var(--sidebar-w) - var(--content-max)) / 2)) !important;
+      box-sizing: border-box !important;
+      padding: 40px 36px 120px 36px;
+      min-width: 0;
+    }
+
+    @media (max-width: 1080px) {
+      .app-sidebar {
+        transform: translateX(-100%);
+        box-shadow: var(--shadow-lg);
+      }
+      .app-sidebar.active {
+        transform: translateX(0);
+      }
+      .main-wrapper {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        padding: 24px 20px 80px 20px !important;
+      }
+      .mobile-menu-trigger {
+        display: flex !important;
+      }
+    }
+
+    /* ==========================================================================
+       4. 侧边导航与目录 (Sidebar Navigation)
+       ========================================================================== */
+    .sidebar-brand {
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-soft);
+      margin-bottom: 16px;
+    }
+
+    .brand-tag {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+      color: var(--accent);
+      display: inline-block;
+      margin-bottom: 6px;
+    }
+
+    .brand-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      line-height: 1.4;
+      color: var(--text-primary);
+    }
+
+    .brand-meta {
+      font-size: 0.76rem;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    .nav-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .nav-item a {
+      display: block;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: all 0.15s ease;
+      line-height: 1.4;
+    }
+
+    .nav-item a:hover {
+      color: var(--text-primary);
+      background-color: var(--bg-surface-elevated);
+    }
+
+    .nav-item.active a {
+      color: var(--accent);
+      background-color: var(--accent-subtle);
+      font-weight: 600;
+    }
+
+    .nav-item.sub {
+      padding-left: 14px;
+    }
+
+    .nav-item.sub a {
+      font-size: 0.78rem;
+      padding: 6px 10px;
+    }
+
+    .sidebar-footer {
+      padding-top: 16px;
+      border-top: 1px solid var(--border-soft);
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background-color: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border-medium);
+      border-radius: 6px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s ease;
+    }
+
+    .action-btn:hover {
+      background-color: var(--bg-surface-highlight);
+      border-color: var(--accent);
+    }
+
+    /* ==========================================================================
+       5. 移动端快捷顶栏 (Mobile Bar)
+       ========================================================================== */
+    .mobile-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background-color: var(--bg-surface);
+      border-bottom: 1px solid var(--border-soft);
+      position: sticky;
+      top: 0;
+      z-index: 900;
+    }
+
+    .mobile-menu-trigger {
+      display: none;
+      background: none;
+      border: 1px solid var(--border-medium);
+      color: var(--text-primary);
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 1080px) {
+      .mobile-bar {
+        display: flex;
+      }
+    }
+
+    /* ==========================================================================
+       6. 正文排版与标题系统 (Article Content & Typography)
+       ========================================================================== */
+    .article-header {
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background-color: var(--accent-subtle);
+      border: 1px solid var(--accent-border);
+      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    h1.article-title {
+      font-family: var(--font-serif);
+      font-size: 2.35rem;
+      line-height: 1.25;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+
+    p.lead-paragraph {
+      font-size: 1.12rem;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+    }
+
+    .doc-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+      padding: 14px 18px;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+    }
+
+    .doc-meta-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .meta-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-tertiary);
+    }
+
+    .meta-val {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-top: 2px;
+    }
+
+    /* 章节通用样式 */
+    section.doc-section {
+      margin-bottom: 56px;
+      scroll-margin-top: 24px;
+    }
+
+    h2.section-heading {
+      font-family: var(--font-serif);
+      font-size: 1.65rem;
+      line-height: 1.35;
+      color: var(--text-primary);
+      margin-bottom: 20px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h2.section-heading .heading-num {
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    h3.sub-heading {
+      font-size: 1.25rem;
+      line-height: 1.4;
+      color: var(--text-primary);
+      margin: 28px 0 14px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h3.sub-heading .sub-bullet {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--accent);
+      display: inline-block;
+    }
+
+    p {
+      margin-bottom: 16px;
+      color: var(--text-secondary);
+      font-size: 0.98rem;
+    }
+
+    p strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    ul, ol {
+      margin-bottom: 20px;
+      padding-left: 24px;
+      color: var(--text-secondary);
+    }
+
+    li {
+      margin-bottom: 8px;
+      line-height: 1.7;
+    }
+
+    li strong {
+      color: var(--text-primary);
+    }
+
+    /* 核心摘要列表卡片 */
+    .summary-card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--accent-border);
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 32px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .summary-card-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .summary-list {
+      list-style: none;
+      padding-left: 0;
+      margin-bottom: 0;
+    }
+
+    .summary-list li {
+      position: relative;
+      padding-left: 20px;
+      margin-bottom: 10px;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+    }
+
+    .summary-list li::before {
+      content: "•";
+      position: absolute;
+      left: 4px;
+      top: 0;
+      color: var(--accent);
+      font-size: 1.2rem;
+      line-height: 1.5;
+    }
+
+    /* 引用块 (Blockquote) */
+    blockquote.quote-box {
+      background-color: var(--bg-surface);
+      border-left: 3px solid var(--accent);
+      padding: 16px 20px;
+      margin: 20px 0;
+      border-radius: 0 8px 8px 0;
+      font-style: normal;
+      color: var(--text-primary);
+    }
+
+    blockquote.quote-box p {
+      margin-bottom: 8px;
+    }
+
+    blockquote.quote-box p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* 重点高亮框 */
+    .callout {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin: 20px 0;
+    }
+
+    .callout.emerald {
+      border-left: 4px solid var(--emerald);
+      background-color: var(--emerald-subtle);
+    }
+
+    .callout.rose {
+      border-left: 4px solid var(--rose);
+      background-color: var(--rose-subtle);
+    }
+
+    .callout.amber {
+      border-left: 4px solid var(--amber);
+      background-color: var(--amber-subtle);
+    }
+
+    .callout.cyan {
+      border-left: 4px solid var(--cyan);
+      background-color: var(--cyan-subtle);
+    }
+
+    .callout-header {
+      font-weight: 700;
+      font-size: 0.92rem;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .callout.emerald .callout-header { color: var(--emerald); }
+    .callout.rose .callout-header { color: var(--rose); }
+    .callout.amber .callout-header { color: var(--amber); }
+    .callout.cyan .callout-header { color: var(--cyan); }
+
+    /* ==========================================================================
+       7. 双语提示词排版与代码容器 (Bilingual Prompts & Code Blocks)
+       ========================================================================== */
+    .bilingual-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 24px 0;
+    }
+
+    @media (max-width: 900px) {
+      .bilingual-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .prompt-pane {
+      background-color: var(--code-bg);
+      border: 1px solid var(--code-border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .pane-header {
+      background-color: var(--bg-surface-elevated);
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .pane-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pane-badge {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background-color: var(--bg-surface);
+      color: var(--text-tertiary);
+    }
+
+    .pane-body {
+      padding: 16px 18px;
+      font-size: 0.92rem;
+      line-height: 1.75;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--font-sans);
+    }
+
+    .pane-body p {
+      margin-bottom: 12px;
+      color: var(--text-primary);
+    }
+
+    .pane-body p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* 语义标注高亮块 */
+    .hl-env {
+      background-color: rgba(49, 151, 149, 0.2);
+      border-bottom: 2px solid var(--cyan);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    .hl-goal {
+      background-color: rgba(217, 119, 87, 0.22);
+      border-bottom: 2px solid var(--accent);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    .hl-constraint {
+      background-color: rgba(214, 158, 46, 0.25);
+      border-bottom: 2px solid var(--amber);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    .hl-guess {
+      background-color: rgba(128, 90, 213, 0.22);
+      border-bottom: 2px solid var(--purple);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    .hl-collab {
+      background-color: rgba(46, 139, 87, 0.22);
+      border-bottom: 2px solid var(--emerald);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    /* ==========================================================================
+       8. 结构化对比表格与指标看板 (Comparison Tables & Metric Cards)
+       ========================================================================== */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      margin: 24px 0;
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      background-color: var(--bg-surface);
+    }
+
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      text-align: left;
+    }
+
+    table.data-table th {
+      background-color: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      padding: 12px 16px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-medium);
+      white-space: nowrap;
+    }
+
+    table.data-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-soft);
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    table.data-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    table.data-table tr:hover td {
+      background-color: var(--bg-surface-elevated);
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin: 24px 0;
+    }
+
+    .metric-card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 18px 20px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .metric-card.accent { border-top: 3px solid var(--accent); }
+    .metric-card.cyan { border-top: 3px solid var(--cyan); }
+    .metric-card.emerald { border-top: 3px solid var(--emerald); }
+    .metric-card.amber { border-top: 3px solid var(--amber); }
+
+    .metric-title {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-tertiary);
+    }
+
+    .metric-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 6px 0 4px 0;
+      font-family: var(--font-mono);
+    }
+
+    .metric-desc {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* ==========================================================================
+       9. 交互实验沙盘与动态控制台 (Interactive Sandboxes)
+       ========================================================================== */
+    .sandbox-panel {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-hard);
+      border-radius: 10px;
+      padding: 24px;
+      margin: 32px 0;
+      box-shadow: var(--shadow-md);
+    }
+
+    .sandbox-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .sandbox-tag {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      background-color: var(--accent-subtle);
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+
+    .sandbox-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* 过滤 Tab 控件 */
+    .filter-tab-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .filter-btn {
+      padding: 6px 14px;
+      background-color: var(--bg-surface-elevated);
+      border: 1px solid var(--border-medium);
+      color: var(--text-secondary);
+      border-radius: 20px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s ease;
+    }
+
+    .filter-btn:hover {
+      background-color: var(--bg-surface-highlight);
+      color: var(--text-primary);
+    }
+
+    .filter-btn.active {
+      background-color: var(--accent);
+      border-color: var(--accent);
+      color: #FFFFFF;
+      font-weight: 600;
+    }
+
+    /* 滑块与控件表单 */
+    .control-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 768px) {
+      .control-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .control-label {
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .control-label .control-val-badge {
+      font-family: var(--font-mono);
+      color: var(--accent);
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: var(--bg-surface-highlight);
+      border-radius: 3px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: transform 0.1s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    select.custom-select {
+      background-color: var(--bg-surface-elevated);
+      border: 1px solid var(--border-medium);
+      color: var(--text-primary);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      font-family: inherit;
+      outline: none;
+    }
+
+    /* 实时演算输出展示区 */
+    .calc-output-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+      background-color: var(--bg-surface-elevated);
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+    }
+
+    .calc-stat-block {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .calc-stat-label {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .calc-stat-val {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      margin-top: 4px;
+    }
+
+    .calc-verdict-box {
+      grid-column: 1 / -1;
+      margin-top: 8px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-soft);
+      font-size: 0.88rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    .calc-verdict-box strong {
+      color: var(--accent);
+    }
+
+    /* ==========================================================================
+       10. 打印样式与辅助设施 (Print & Utilities)
+       ========================================================================== */
+    @media print {
+      .app-sidebar, .mobile-bar, #reading-progress, .filter-tab-bar, .action-btn {
+        display: none !important;
+      }
+      .main-wrapper {
+        margin: 0 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+      }
+      body {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+      }
+      .sandbox-panel, .summary-card, .metric-card, .table-container, .prompt-pane {
+        box-shadow: none !important;
+        border: 1px solid #CCCCCC !important;
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body data-page-node-id="TO7T3eAdbJ6j9CopcA5peL">
+  <!-- 阅读进度条 -->
+  <div id="reading-progress" data-page-node-id="Jz6UPbxrnkmyJwHHr3L3fU"></div>
+
+  <!-- 移动端顶部状态条 -->
+  <div class="mobile-bar" data-page-node-id="CtRtVY7wBqtrzTdDYwOrEQ">
+    <button type="button" class="mobile-menu-trigger" id="sidebar-toggle-btn" data-page-node-id="M7AiOXQjVtpabG4rLJiH6k">目录导航</button>
+    <div style="font-size: 0.85rem; font-weight: 700; color: var(--accent);" data-page-node-id="6XhxAvrc7BRzQVGNwmYkUN">告诉 AI 为什么</div>
+    <button type="button" class="action-btn" id="theme-toggle-btn-mobile" style="padding: 4px 8px; font-size: 0.75rem;" data-page-node-id="aeWwP35Y6gSG0tFBKkxucL">切换主题</button>
+  </div>
+
+  <!-- 左侧目录导航 -->
+  <aside class="app-sidebar" id="sidebar" data-page-node-id="30Mltc2sKoqLkE06GfBD49">
+    <div class="sidebar-brand" data-page-node-id="X1akYmYhhGaFRDWe6FCdgm">
+      <span class="brand-tag" data-page-node-id="OEdqAcFDMZcU1nwCZ6QUMc">Agentic Engineering</span>
+      <h2 class="brand-title" data-page-node-id="vwpVsv2HODCTiS8t4ATNap">告诉 AI 为什么 而不是怎么做</h2>
+      <div class="brand-meta" data-page-node-id="e6loA1qnPimbt6toJQCesq">Sean Goedecke 核心范式复盘</div>
+    </div>
+
+    <ul class="nav-list" data-page-node-id="00hlrccHXXx4FT3EN2QJLC">
+      <li class="nav-item active" data-page-node-id="Ae7CmE7eZ82rVBCXzTvFlD"><a href="#sec-exec-summary" data-page-node-id="ZFfAHjqDEDRDqw9k7AMOcO">核心要旨与关键结论</a></li>
+      <li class="nav-item" data-page-node-id="he4ghXBVlvsbGDgE5kVm3g"><a href="#sec-paradigm-shift" data-page-node-id="rZIHbQEgURTvRZjFWkduKz">1. 核心转变：AI 缺的是全局背景</a></li>
+      <li class="nav-item sub" data-page-node-id="AwVLcVSouyqUs2J0oobfbv"><a href="#sec-shift-comparison" data-page-node-id="UnuwxgdnSWwwR0bgyAVSdp">1.1 “笨蛋”与“顶尖模型”的分水岭</a></li>
+      <li class="nav-item sub" data-page-node-id="W0mqzqX1RVUbMo9YZeaDec"><a href="#sec-minified-code" data-page-node-id="oUhDrg35MZ1jYrCMaJNaeM">1.2 GPT-6-Astra 压缩代码成因</a></li>
+      <li class="nav-item" data-page-node-id="8AmQzbniKWdDSXjwZxbI4e"><a href="#sec-four-rules" data-page-node-id="7V6SufmnEKDfITLbN1U65f">2. 关键操作法则：为什么与取舍</a></li>
+      <li class="nav-item sub" data-page-node-id="gXunLKFQWR99dSDqBdufrp"><a href="#sec-rule-1-macro-goal" data-page-node-id="yq3fLo0jtWHbB6nPV5xox7">2.1 明确宏观目标，避免路径固化</a></li>
+      <li class="nav-item sub" data-page-node-id="TK8hDzdz9lQXgEkmIg20EQ"><a href="#sec-rule-2-exploration" data-page-node-id="CgL4U7Dqz0fME81hcyeJve">2.2 留出发挥空间，邀请反向建言</a></li>
+      <li class="nav-item sub" data-page-node-id="JITquPbKh23GfuLd2nOswr"><a href="#sec-rule-3-priorities" data-page-node-id="RCBlVeV29cAf1iVGD1bZyS">2.3 排定相对优先级与牺牲项</a></li>
+      <li class="nav-item sub" data-page-node-id="dXCXntAX9n61rcILu3Bvxj"><a href="#sec-rule-4-xy-problem" data-page-node-id="xBnyFeFNOGpgSeEhAcBVTi">2.4 警惕 XY 问题：向专家提问</a></li>
+      <li class="nav-item" data-page-node-id="fcScID0atcRNJGtrjx1B31"><a href="#sec-deckard-case" data-page-node-id="RCjfcsKHkaI1Qw00ODHEVk">3. 实战案例：Deckard 提示词拆解</a></li>
+      <li class="nav-item sub" data-page-node-id="EcgjaLyoH0PDb2meQUXh9n"><a href="#sec-deckard-bilingual" data-page-node-id="vEgjRUwIJMehkoXqrENfWD">3.1 英文原文与中文翻译对照</a></li>
+      <li class="nav-item sub" data-page-node-id="lxd90C8veNcBKRjPj6RFBR"><a href="#sec-prompt-anatomy" data-page-node-id="kk8Jh77HyJFelDe2t0tVpK">3.2 提示词解剖台 (Anatomy)</a></li>
+      <li class="nav-item" data-page-node-id="ev9eVUIAt6SbYe5l6PBHLr"><a href="#sec-final-answers" data-page-node-id="3tdxQxMdLKIEpDPHCwuM99">4. Deckard 最终给出的工程答案</a></li>
+      <li class="nav-item sub" data-page-node-id="Ro9ajqEqowNuWLXRBsBRuD"><a href="#sec-native-messaging" data-page-node-id="0SNBvgGb0ZD3oLtyL5eioP">4.1 运行机制：Native Messaging</a></li>
+      <li class="nav-item sub" data-page-node-id="fmKbtTuoh17z6a6UYTjs7D"><a href="#sec-model-selection" data-page-node-id="JYvxXaD4nw5pdrjCQQCefp">4.2 模型选型：Gradient MLX 4-bit</a></li>
+      <li class="nav-item" data-page-node-id="YQB8Vx8WRgZjVUBNSVo8Ev"><a href="#sec-interactive-sandboxes" data-page-node-id="WRRiIp3Oij23Etfb8mYb4g">5. 动态模拟沙盘与决策演算器</a></li>
+      <li class="nav-item sub" data-page-node-id="xCQ3GPo4IY8WqYNm1qANzx"><a href="#sec-sandbox-deckard-sim" data-page-node-id="MxplqRWDpVpRF4QItRuLO5">5.1 Deckard 运行与模型权衡模拟</a></li>
+      <li class="nav-item sub" data-page-node-id="t0a0MjYMJ9wwR75HHjb8Lk"><a href="#sec-sandbox-tradeoff-sim" data-page-node-id="IjGH9dlfNulHY6oNZyOVTN">5.2 需求优先级决策行为模拟器</a></li>
+    </ul>
+
+    <div class="sidebar-footer" data-page-node-id="WuVXpc7qte5W7HMd8vmPiC">
+      <button type="button" class="action-btn" id="theme-toggle-btn" data-page-node-id="pa11uej4CtfsK7Mgrdggn2">
+        <span id="theme-btn-text" data-page-node-id="PBrS6bbZjAGJI8mPlKHQef">切换至暖羊皮纸浅色</span>
+      </button>
+      <button type="button" class="action-btn" id="print-btn" data-page-node-id="kaFfreHT2E52UuougZTwb6">打印 / 保存为 PDF</button>
+      <div style="font-size: 0.72rem; color: var(--text-tertiary); text-align: center; margin-top: 4px;" data-page-node-id="PnmF8nDPFLBaHOOD0PYHCl">
+        唯一归档：Openai/AIKnowledge
+      </div>
+    </div>
+  </aside>
+
+  <!-- 主正文区域 -->
+  <main class="main-wrapper" id="main-content" data-page-node-id="WW5APU0wvOK05xGjhCdRYZ">
+    <!-- 文章头部元信息 -->
+    <header class="article-header" data-page-node-id="ffRtloUdVA5dLqe2mL4zO5">
+      <div class="header-badge" data-page-node-id="6BV4EBYhyJmfzUkhovQpGN">PROMPT ENGINEERING &bull; INTENT ALIGNMENT</div>
+      <h1 class="article-title" data-page-node-id="Ot5OfOm5WN9oxZGbgBK87W">告诉 AI 为什么 而不是怎么做</h1>
+      <p class="lead-paragraph" data-page-node-id="P7CoJzxdEqJaZKctNVoPRK">
+        前沿模型出错，多半是猜错了你的目标和取舍。把目标、约束和可以让步的地方讲清楚，模型才能帮你找到更好的做法；文中附一段真实提示词和深度拆解。
+      </p>
+
+      <div class="doc-meta-grid" data-page-node-id="5dfdvobwLVN47x02wUhFrS">
+        <div class="doc-meta-item" data-page-node-id="IcGUPQcVaiedggknGCHRPF">
+          <span class="meta-label" data-page-node-id="4QNBapVLUMskhejJaE9b8D">原作者</span>
+          <span class="meta-val" data-page-node-id="btVpZJvLeo2GGGzWA4D0Xg">Sean Goedecke (软件工程师)</span>
+        </div>
+        <div class="doc-meta-item" data-page-node-id="FqWZNS1AFH8YFLagd0qEAS">
+          <span class="meta-label" data-page-node-id="HCg2YmYbASAqSonEBtCXKZ">核心模型案例</span>
+          <span class="meta-val" data-page-node-id="wFb4DHflhYaku2rL8J5UfR">GPT-6-Astra / Gradient 4-bit</span>
+        </div>
+        <div class="doc-meta-item" data-page-node-id="RqL19LDFUAbwBZVnsVc9Y8">
+          <span class="meta-label" data-page-node-id="7tnShcEvYXdBEnGrITGqPW">项目实战载体</span>
+          <span class="meta-val" data-page-node-id="nDcAp3N8X5O4zuXLBsUWY0">Deckard (Chrome 扩展)</span>
+        </div>
+        <div class="doc-meta-item" data-page-node-id="8hATCDIWA5kmPQcoGrGr2L">
+          <span class="meta-label" data-page-node-id="XpPldWX8K8LCHl8OnF39Bc">发布与收录基准</span>
+          <span class="meta-val" data-page-node-id="6kpwYNiVvmL0nA9ww2UgOP">2026-09-17 &bull; 架构研讨</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 核心要旨与执行摘要 -->
+    <section class="doc-section" id="sec-exec-summary" data-page-node-id="QM2iafnX8DOpFkvB9CvFtt">
+      <div class="summary-card" data-page-node-id="zisL3dB41aFy4a3e6kUPRU">
+        <div class="summary-card-title" data-page-node-id="lPhJ6K2lRJwEmqu5Tt1eS2">
+          <span data-page-node-id="F2wEug7gcYz98VqCxn0pKm">核心要旨 &bull; Executive Summary</span>
+        </div>
+        <ul class="summary-list" data-page-node-id="1PVAa7yoUEqzjy23UGoTqf">
+          <li data-page-node-id="83lRA91aBxQ7yD016o3ini"><strong data-page-node-id="GjTzYhupv3ul7YRZAOyV12">早期 Agent vs 现阶段前沿模型</strong>：早期 Agent 要把做法一步步交代清楚；如今前沿模型出错，多半是对你的目标或优先级做了错误假设，比如 GPT-6-Astra 以为代码只给自己看时，会写出人很难读的压缩代码。</li>
+          <li data-page-node-id="lqfYBMmWCmwEffqnQwFFWZ"><strong data-page-node-id="nHb4QmNA3vk6eOkJ7beore">背景与优先级占比过半</strong>：Deckard 项目的起始提示词约一半在讲背景和优先级，并邀请模型提出更好的办法；最终方案用上了 native messaging 和 Gradient 模型，Sean 认为只写技术规格会错过这两点。</li>
+          <li data-page-node-id="UYr66vxQsx75LCKJw7Vo5E"><strong data-page-node-id="4CrzOOw0kXv00B86Vb2vOK">明确相对优先级与规避 XY 问题</strong>：交代技术取向时要排出相对优先级，明说哪些可以牺牲；只给模型具体规格、不给目标，等于向专家提问时犯了 XY 问题。</li>
+        </ul>
+      </div>
+
+      <blockquote class="quote-box" data-page-node-id="DXHtrtWI4Mn8jV8PbvCJXU">
+        <p data-page-node-id="Gv2B3LhTIeTaQdorcvCyE0">
+          软件工程师 Sean Goedecke 在博客文章里讲了一个观点：<strong data-page-node-id="Ivl0O2altQn937CBvj2GMK">给前沿 AI Agent 提需求时，别只当指挥官抠具体步骤，要把你的最终目标、背景原因和优先级取舍交代清楚。</strong>
+        </p>
+      </blockquote>
+    </section>
+
+    <!-- 第一章：核心转变 -->
+    <section class="doc-section" id="sec-paradigm-shift" data-page-node-id="AYseRAsnOpSU8wdA0pCQDg">
+      <h2 class="section-heading" data-page-node-id="6SL6Wr3HKIBvnRNZt7S16v">
+        <span class="heading-num" data-page-node-id="iB9dblfptiIwpqJbUezAly">01</span>
+        <span data-page-node-id="fkOTeu8tvilBvrkP0DKB1z">核心转变：AI 不再是“傻小子”，它缺的是全局背景</span>
+      </h2>
+
+      <div id="sec-shift-comparison" data-page-node-id="4kZq5BuqervXKYJf4S2egv">
+        <h3 class="sub-heading" data-page-node-id="jEU3Hb4nwdK7ESSKnDR27i"><span class="sub-bullet" data-page-node-id="H2gNBXHkVAk1w3mkmsCb9t"></span>过去与顶尖模型的本质认知分水岭</h3>
+        <p data-page-node-id="fxRpPHk6pGmjq6e1uPHEAb">
+          人机协作范式正在发生根本性转移。很多工程师依然停留在“微观管理（Micromanagement）”式的提示词习惯中，而忽略了顶尖推理模型的底层决策逻辑：
+        </p>
+
+        <div class="table-container" data-page-node-id="ZV9pmWEEEXXhKE37iJ6EJA">
+          <table class="data-table" data-page-node-id="GSC2TWKsFMnDVybTNu2FGI">
+            <thead data-page-node-id="lxR2lqYQZFiXZho2qOubMl">
+              <tr data-page-node-id="sHpLhztll5w6BPHo8jAZIU">
+                <th style="width: 20%;" data-page-node-id="PFYYSRpx1FGWMnDonUCBiY">AI 演进阶段</th>
+                <th style="width: 35%;" data-page-node-id="zJzkoNjDzVmyQgykghwolY">典型行为特征</th>
+                <th style="width: 45%;" data-page-node-id="yHYuMnVnvsCDYysam8mcLc">失控/出错根因与应对方案</th>
+              </tr>
+            </thead>
+            <tbody data-page-node-id="n1CVFGUwGwIhgU6xKUeqgB">
+              <tr data-page-node-id="f9JeHSLlBBfOf08A66xvFg">
+                <td data-page-node-id="CnHwfka0nT23aGZ7faHYjO"><strong data-page-node-id="3Hi7gFjNrNpwVqfaL8MAdl">过去的 AI<br data-page-node-id="R9ye4aghlgjxc9A1HJZABE"><span style="color:var(--amber); font-size:0.75rem;" data-page-node-id="coIx0msx0n8ylkaxc95vPw">热情的笨蛋</span></strong></td>
+                <td data-page-node-id="64S9ZODKaiFUij1nsMFQ2N">必须把要做的事交代得极其具体，例如：<em data-page-node-id="ULl5SQKOav0NH8l0BBALR7">「类 B 上有方法 A，请给类 C 到 F 各加一个等价的方法」</em>。一旦指令模糊就会彻底做错。</td>
+                <td data-page-node-id="8irBl21CzjXmtlvk5rUwxR"><strong data-page-node-id="b6XE6DjeaTPrZchVfQI9MN">能力不足导致的理解断层</strong>：模型缺乏自主泛化能力，必须依赖人类给出极其微观的执行树，人类充当全量脑力外包指令生成器。</td>
+              </tr>
+              <tr data-page-node-id="KIbU28nolV5GYp4zKssJ4r">
+                <td data-page-node-id="IlldOl8VUAT1gzycSE1ZWc"><strong data-page-node-id="91oHkDtBVVsk0WayPGKZal">现在的顶尖模型<br data-page-node-id="UL6fjaOhXOIPpXAsKpRuOE"><span style="color:var(--emerald); font-size:0.75rem;" data-page-node-id="BmC4oXXxEOuYC5KxghxFHX">前沿推理伙伴</span></strong></td>
+                <td data-page-node-id="9tmtMEupGkXIBDNgpXBQSH">具备强大的系统架构推理、跨语言方案迁移和全局代码生成能力。跑偏通常不是没看懂步骤，而是<strong data-page-node-id="lxa6etmg9PBUenEj5Qm78C">对你的意图做了错误假设</strong>。</td>
+                <td data-page-node-id="2eFyQvqMmNOKIwZ33pObWr"><strong data-page-node-id="KKdNcGeFjBiHIL8O6HBKuL">全局背景与优先级缺失</strong>：模型在空白处自行填补了与人类隐式期望相反的权衡。解决方式是补充“为什么”、“为谁而做”以及“可以让步的项”。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="sec-minified-code" data-page-node-id="zDsHfygEz8AOjFfmCyDOUW">
+        <h3 class="sub-heading" data-page-node-id="XLCK5kLDfVHoY0BfuuPSMS"><span class="sub-bullet" data-page-node-id="ZgkFlnuy9EqVoIbc4uF3YK"></span>深度剖析：GPT-6-Astra 为什么会写出压缩代码（Minified Code）？</h3>
+        <p data-page-node-id="0mq9udUApBvfe8dG0cbNrF">
+          现实中前沿模型最典型的误判案例发生在代码生成领域：比如 GPT-6-Astra 以为代码是写给自己看的，就会写出省掉空格和格式的压缩代码（minified code）。
+        </p>
+
+        <div class="callout amber" data-page-node-id="F7xNZLnOLg9YHP1Z8Z3pu8">
+          <div class="callout-header" data-page-node-id="TOS2pMbWKskyUmcovSevIx">Armin Ronacher（Flask 作者）的深度推测与实测</div>
+          <p data-page-node-id="myLc2tJgESvwx7qi9e3TJE">
+            Armin Ronacher 推测，这是因为模型调用工具时为了省 token，练出了越短越好的写法，结果漏进了要提交的代码里：
+          </p>
+          <ul style="margin-bottom: 0;" data-page-node-id="DrmwJxp1JFKNoRgU3kXxO5">
+            <li data-page-node-id="i9avj6fQt8qkHM3VAE3nji"><strong data-page-node-id="8YbexiGJ2YSAYD4ODbidj3">测算数据</strong>：这样编写的单元测试比格式化后<strong data-page-node-id="4MEJQ5uCWGJC1gsGDA1oJi">省约 10% 的 token</strong>。</li>
+            <li data-page-node-id="FX9jN4Fpo6BKoPTCdNYhzw"><strong data-page-node-id="4ONlVs4588JmLFJhxbK9rd">发生场景偏好</strong>：越像没人在看的环节（比如<strong data-page-node-id="7CjAHPCnd0JlnvDzGeHhj0">子 Agent 的工作、测试代码</strong>），越容易冒出这种压缩写法（不过 Armin 也说不确定模型是不是真以为没人看）。</li>
+          </ul>
+        </div>
+
+        <p data-page-node-id="dpoN5MjaBnttVLmrox9BmT">
+          <strong data-page-node-id="0C6nzKZdevbUXrKSEFBnxO">反过来，只要告诉它代码有人要读，它就能写出人读得懂的代码</strong>：
+        </p>
+        <ul style="margin-bottom: 16px;" data-page-node-id="AgTrD2YuMS1J0O7C5bifoW">
+          <li data-page-node-id="XWjjTSdoPffdZOAE8PEujS">Sean 用它写 Go，得到了几千行「可以接受」的代码（他只在 Go 上试过）。</li>
+          <li data-page-node-id="xifh6yBzeApVhKHjh798uf">在人类写的代码库里，连这句都不用说，它会自己跟随周围代码的风格。</li>
+        </ul>
+
+        <div class="metric-grid" data-page-node-id="eOMbiMcBAqkTyh0yO8kZ9I">
+          <div class="metric-card cyan" data-page-node-id="SkuPp95es8Ie4wQ7YOgnuZ">
+            <div class="metric-title" data-page-node-id="K54FFInrrpMm2ULeMFfe5l">Token 节约幅度</div>
+            <div class="metric-value" data-page-node-id="g7s94OAsfRiO07BmdNITvW">~10%</div>
+            <div class="metric-desc" data-page-node-id="OWxA4VRG4fiwMtBAUbwaPc">压缩代码相比格式化代码在长单元测试中节约的上下文开销。</div>
+          </div>
+          <div class="metric-card rose" data-page-node-id="chPlxDbRdx9iwcyHiUmJ5y">
+            <div class="metric-title" data-page-node-id="byOuObPGOSDMJLJsqmVCW3">主要高发区</div>
+            <div class="metric-value" data-page-node-id="ipnUGEbQLEGdLHCyfTLZj9">Sub-Agent</div>
+            <div class="metric-desc" data-page-node-id="X1IzjiEnPrm3CA3uTjMCeU">子 Agent 内部流水线及被模型假定“无需人类审阅”的代码模块。</div>
+          </div>
+          <div class="metric-card emerald" data-page-node-id="z1j7l2xKEQNUudxuhCoQdz">
+            <div class="metric-title" data-page-node-id="8rEDZxsvNaxvTmzJMIOU64">破除方案成本</div>
+            <div class="metric-value" data-page-node-id="3zksk15F6vQpoVGM9I2Yxp">1 句话</div>
+            <div class="metric-desc" data-page-node-id="ByKUtH8qI8bpuBTtTzBEXl">只需在提示词中显式交代“此代码将由人类工程师长期维护与阅读”。</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第二章：四大关键操作法则 -->
+    <section class="doc-section" id="sec-four-rules" data-page-node-id="Hkwy4DlZMqKOCtZgjFgCXd">
+      <h2 class="section-heading" data-page-node-id="FPmkZ7zFn3HmeJCcwIACnf">
+        <span class="heading-num" data-page-node-id="AgFIDLBV8BsvBCXb0ijPRd">02</span>
+        <span data-page-node-id="0Zh5FFORDnBGFCJJskJZan">关键操作法则：告诉它“为什么”与“权衡取舍”</span>
+      </h2>
+
+      <div id="sec-rule-1-macro-goal" data-page-node-id="PnXUkbb41Ti8iBR9StUrjs">
+        <h3 class="sub-heading" data-page-node-id="WJnoDtMyOHsnvyU044Yn3r"><span class="sub-bullet" data-page-node-id="S0R1PFOHOO7ThsE7OGid7Z"></span>法则一：明确宏观目标，而非过早固化实现路径</h3>
+        <p data-page-node-id="AYFjkSa3djNelA5Riy9tH5">
+          先说清你最终想解决什么，而不是直接丢一份具体的技术规格。做法写死了，模型就只能照着做，没法按你的目标帮你找更合适的方案。
+        </p>
+        <p data-page-node-id="DsKvClVQbPiSFlbONEaa2E">
+          Sean 启动 Deckard 项目时，提示词里<strong data-page-node-id="qxkJHM1aW9RcPYaom5qd49">约一半篇幅在讲背景</strong>：
+        </p>
+        <ul data-page-node-id="rfT4DyMYQV7PA4PDmB28tG">
+          <li data-page-node-id="gEZAHaHohCsGVmEfCuhUPt">想做一个自动藏起网页 AI 内容的本地程序或浏览器扩展；</li>
+          <li data-page-node-id="zdsC1u4I5G1dUf0uQlKwvA">短期要找一个<strong data-page-node-id="T0Cy4ztnlG76zH2GokGXh9">不让 MacBook 发烫、不耗光电池</strong>的检测模型；</li>
+          <li data-page-node-id="BelRRrwOY2xqjLQsLsIP7o">而且这是<strong data-page-node-id="wYltpTud1ZYX6s73TWuu44">给自己用的</strong>。</li>
+        </ul>
+      </div>
+
+      <div id="sec-rule-2-exploration" data-page-node-id="VxVX9hjpP04Jo5ZLCAIO5B">
+        <h3 class="sub-heading" data-page-node-id="cJYSBSCZtoC5p5gl9WpEO3"><span class="sub-bullet" data-page-node-id="VCrDaUC6bZFAGxBCKxEojq"></span>法则二：留出发挥空间，避免错失最优解</h3>
+        <p data-page-node-id="PXyow0F2bwu68ZJPEMACHu">
+          自己的技术设想可以写，但要写成<strong data-page-node-id="Wu1NsGDfbR0xGEGWvint9t">讨论的起点</strong>，而不是命令。
+        </p>
+        <p data-page-node-id="AeGO23Hf1AKjQHRH4hBVHF">
+          Sean 在提示词里把 EditLens 和 RoBERTa 只写成「我的猜测」，结尾还加了一句：<em data-page-node-id="LGjuxl0p1Vh2xmT8UMQaTD">如果你看到实现我目标的更好办法，告诉我，我们商量。</em>
+        </p>
+        <div class="callout cyan" data-page-node-id="Qqc7h8RYXjBb8HJUHJaWGP">
+          <div class="callout-header" data-page-node-id="5FFNUSapFmqArK0fha6nhk">技术决策收益：如果不留探索空间会发生什么？</div>
+          <p data-page-node-id="6f6Me6mwk4GRNHA2IKwtRi">
+            Sean 的判断是：<strong data-page-node-id="y0BsUHCBwU98DGqDfP7uUI">当初如果写成一份明确的技术规格，就会错过后来用上的 native messaging 和 Gradient 模型</strong>。
+          </p>
+          <p style="margin-bottom: 0;" data-page-node-id="8gBw3WxvjQbGhngd6IHYgJ">
+            这个项目是 Sean 和 Astra 一起做的：他负责拍板一批大方向，还能选自己不熟但更合适的语言（<strong data-page-node-id="0B5qwhmWVTtp2pGHFgT3Ju">推理用 C++ 而不是 Python</strong>）；模型则提醒了他自己想不到的做法，比如<strong data-page-node-id="DGi6x7ANBBlOFP9MH2Mp5w">用 native messaging 代替本地 HTTP</strong>。
+          </p>
+        </div>
+      </div>
+
+      <div id="sec-rule-3-priorities" data-page-node-id="uL7vDuauGtMl2OscOkFtk4">
+        <h3 class="sub-heading" data-page-node-id="uEvFaQE6gM3vCvGvnff69B"><span class="sub-bullet" data-page-node-id="xnFS5QnF6oWReiov3oGxCs"></span>法则三：明确“相对优先级”，明说哪些可以牺牲</h3>
+        <p data-page-node-id="1jh9FDWFsFOBi1C5YA7plp">
+          工作里提技术需求，别把“少出 bug”、“可观测性”、“优雅融入现有代码”、“高性能”全列上，说它们都重要。
+        </p>
+        <p data-page-node-id="d3TtQCLCADqGhKNo5BB4QU">
+          Sean 的做法是专门写一段话，讲清这几项谁先谁后，并<strong data-page-node-id="mTUBOltO7QEtTtRSiYugld">明说哪几项他没那么在乎、可以拿去换别的</strong>。这样几个目标冲突时，模型才知道该让哪一项。
+        </p>
+
+        <div class="callout emerald" data-page-node-id="wVVLve9zX7VgPSivmaRV2O">
+          <div class="callout-header" data-page-node-id="vqudXTE9M5DFCGHSWbTy5R">示意写法（本站推荐模板）</div>
+          <blockquote style="margin: 0; padding: 0; border: none; font-style: normal; color: var(--text-primary);" data-page-node-id="BFz8s90zfcPB4oREfwA4YE">
+            “这次最重要的是<strong data-page-node-id="o0t4f6DSEwGS7LuWOI5LOg">别引入 bug</strong>，其次是<strong data-page-node-id="BzzOidYhLLIsgKquBUPWIv">自然融入现有代码</strong>；可观测性保持现有水平即可；<strong data-page-node-id="6aLyY4UFB8tbEXU6nKuosb">性能不是重点，为了前两项可以让出一些性能</strong>。”
+          </blockquote>
+        </div>
+      </div>
+
+      <div id="sec-rule-4-xy-problem" data-page-node-id="OamRtBLYbyZaoN5o2ySbEh">
+        <h3 class="sub-heading" data-page-node-id="kstRdVFE6mlaeHDe8eEAMe"><span class="sub-bullet" data-page-node-id="6yw5wOIIzoYbquSGlBzjEP"></span>法则四：警惕“XY 问题”</h3>
+        <p data-page-node-id="JwhzFfjYpkJmM8SjoeO8KH">
+          <strong data-page-node-id="Dk3pW8qUGCiAPlQEiWJ2jW">XY 问题</strong>是指：你真正想解决 X，却自以为答案是 Y，于是只问 Y。
+        </p>
+        <ul data-page-node-id="m6FrOB7Ofo9v56HuzyHHWg">
+          <li data-page-node-id="zS6HlwQhwjlTD9TXax5OG3"><strong data-page-node-id="LNVyfeIza4rZl77ZvwcD1r">经典例子</strong>：有人问「怎么输出文件名的最后三个字符」，追问才知道他要的是扩展名，而扩展名不一定是三个字母（比如 <code data-page-node-id="ZXV2INAw1A2gAZS8fmXZqN">.jpeg</code>）。</li>
+          <li data-page-node-id="xDFDjQxV8PHmCTOZhCVQZ9"><strong data-page-node-id="EG7K0FcNfrYH1JtEki0YVm">向专家看病的隐喻</strong>：现在的模型已经聪明到能对你的整体目标给出有用的意见；只给它具体技术规格、不给背景，就像<strong data-page-node-id="PxvU3uF5Kagw4i9Alnd4B5">去看病只问某种药怎么吃，医生也就没法帮你找更合适的治法</strong>。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 第三章：完整例子：Sean 给 Deckard 写的提示词 -->
+    <section class="doc-section" id="sec-deckard-case" data-page-node-id="OO0F7tMQDjiXq3c96GCueO">
+      <h2 class="section-heading" data-page-node-id="pC92IzAzgLM7awdE7EcKoy">
+        <span class="heading-num" data-page-node-id="95kvciAd6ZCLx834XV4y1F">03</span>
+        <span data-page-node-id="q6Fe3ipLP2vMxCT4pXSXvi">完整例子：Sean 给 Deckard 写的提示词</span>
+      </h2>
+
+      <p data-page-node-id="nAHk2eYV8OHg0JRHtuJ8c7">
+        Deckard 是 Sean 和 Astra 一起做的 Chrome 扩展，调用 Mac 上本地运行的小模型，自动标出网页里疑似 AI 写的文字。
+      </p>
+      <ul data-page-node-id="G6Y7fFoN7vNJYBDrRQHhFB">
+        <li data-page-node-id="3OJuYLHLG4mGiLP1gARLF0"><strong data-page-node-id="RDoAFyRhcM6UqNJkEvYAxg">Pangram</strong>：目前几乎唯一成熟的商业 AI 文本检测服务，EditLens 是它的模型；</li>
+        <li data-page-node-id="0PLYQo84wuqCk0AAFbgFHm"><strong data-page-node-id="IKqjsFCVBDE0IiPVimMMri">Runpod</strong>：Sean 通过 MCP 接给模型用的远程算力，用来跑本地太热、太久、太慢的实验。</li>
+      </ul>
+
+      <div id="sec-deckard-bilingual" data-page-node-id="aexZsPP00RvBNz3W9SX24b">
+        <h3 class="sub-heading" data-page-node-id="wSl0PQ9qbbtniPALv9sm7U"><span class="sub-bullet" data-page-node-id="ZM01icXr8D3phkkly0JURU"></span>中英文提示词逐段对齐</h3>
+
+        <div class="bilingual-grid" data-page-node-id="Tt0CYVkSOZsNIEaHrbB9jB">
+          <!-- 英文面板 -->
+          <div class="prompt-pane" data-page-node-id="hAW46EQLixP4EW4zEGuGLB">
+            <div class="pane-header" data-page-node-id="ssPZMJCL1WdCYUMAVDbNm6">
+              <span class="pane-title" data-page-node-id="7BKjtl3DZdkwLG5MSaD3Q7">English Original Prompt</span>
+              <span class="pane-badge" data-page-node-id="oCUBqLKhofwlDG4PFRJbAh">Sean Goedecke</span>
+            </div>
+            <div class="pane-body" data-page-node-id="A08YSIanQkk4UHL1V55W9r">
+<p data-page-node-id="hbzwQq6MEntwH13K44hpXt"><span class="hl-env" data-page-node-id="yXvBm02aWnjdrzJGUH4R2a">Hello. You should have Runpod access via MCP (if not, tell me and I’ll fix it).</span></p>
+
+<p data-page-node-id="KLLCP75akB6EPfBDCbyFaw"><span class="hl-goal" data-page-node-id="Zh2SrW08rXIzZcJAsBfssS">I have the long-term goal of building a local program or browser extension to automatically scan pages I load for AI content and hide it.</span> <span class="hl-constraint" data-page-node-id="ZD489BsiWyebqepVcR9ecr">I have the short-term goal of figuring out the best AI detection model I can run on my macbook without killing my battery or making it hot, and (relatedly) figuring out how to run the model most efficiently.</span></p>
+
+<p data-page-node-id="NwBWmlY1BxqehZvDZl7cjf"><span class="hl-guess" data-page-node-id="gEp1joBD58SlaGcNlAMtP1">My guess is that Pangram’s EditLens 3B or the smaller Roberta model might be a good place to start, though they might require quantizing and will definitely require some work to make them run as efficiently as possible on my macbook.</span></p>
+
+<p data-page-node-id="E2RWFtE0ThhqhqMdr3p1hJ"><span class="hl-env" data-page-node-id="JSGBSFi1SLEGBeumMVXgat">I would like you to use my Runpod account to start answering these questions. Eventually we’ll move to doing things on this macbook pro, but my hope is that Runpod can help with some experiments that are too hot/long/slow to run locally.</span></p>
+
+<p data-page-node-id="JF7x6iaBxh1CcdUvaE5CTt"><span class="hl-collab" data-page-node-id="yuue3XbJYA71KaiOSoYXjm">You are a smart model; if you can see a better way to achieve my goals, please let me know and we’ll talk about it. Good luck.</span></p>
+            </div>
+          </div>
+
+          <!-- 中文面板 -->
+          <div class="prompt-pane" data-page-node-id="6jW6XlRxsE3AHyJthB2HK4">
+            <div class="pane-header" data-page-node-id="jpLcVdaFsDg0UAzPl3dB0v">
+              <span class="pane-title" data-page-node-id="rBRKbcaPJ3aBtA4UKvqsUF">中文对照翻译</span>
+              <span class="pane-badge" data-page-node-id="7qWIxLHlqpXvc3vMUFQEHF">对齐解析</span>
+            </div>
+            <div class="pane-body" data-page-node-id="z2BVOAdRXjFiWrMKv63iDr">
+<p data-page-node-id="OP8e5ZzffNSdw149trH4V0"><span class="hl-env" data-page-node-id="eruQmC2XC3vyALNvYh45mY">你好。你应该可以通过 MCP 访问 Runpod（如果不行，告诉我，我去修）。</span></p>
+
+<p data-page-node-id="VaBiV7fZsSKSUPQBXd7WNT"><span class="hl-goal" data-page-node-id="kTPHkgLTW2B7dH0q2wcWZF">我的长期目标是开发一个本地程序或浏览器扩展，自动扫描我加载的网页中的 AI 生成内容并将其隐藏。</span> <span class="hl-constraint" data-page-node-id="MuzirqrKJmjZ7llOnPYlUY">我的短期目标是找出最适合在我这台 MacBook 上运行的 AI 检测模型，要求不能让笔记本发烫或迅速耗尽电池，并且（与此相关地）搞清楚如何以最高效的方式运行该模型。</span></p>
+
+<p data-page-node-id="3mqqzwcmGn53eFBZcItbwJ"><span class="hl-guess" data-page-node-id="1lAIzjVmkHnfmWcSy6rmBS">我的猜测是，Pangram 的 EditLens 3B 或更小一些的 RoBERTa 模型可能是一个不错的切入点，不过它们可能需要量化，而且肯定需要做一些工作才能尽可能高效在我的 MacBook 上跑起来。</span></p>
+
+<p data-page-node-id="JFffoISHQLvDEMwos3BPJQ"><span class="hl-env" data-page-node-id="BVeemh71f0V7Sod3NMk8pO">我希望你使用我的 Runpod 账户开始探寻这些问题的答案。我们最终会把工作迁移到这台 MacBook Pro 上完成，但我希望 Runpod 能协助做一些在本地跑起来太热、太耗时或太慢的实验。</span></p>
+
+<p data-page-node-id="JvV2JBWXXdEj5vma0k6eET"><span class="hl-collab" data-page-node-id="kxwjDgRc0ICaxLU3P3CH6G">你是一个聪明的模型；如果你看到了实现我目标的更好途径，请告诉我，我们一起讨论。祝好运。</span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="sec-prompt-anatomy" data-page-node-id="gswN9raTSQ5ssVBryy8UUB">
+        <h3 class="sub-heading" data-page-node-id="wrE1mXtCHWn0uZkeYEyLmU"><span class="sub-bullet" data-page-node-id="j340wzWlHNZdfQ62De2JMU"></span>提示词解剖台（Prompt Anatomy）</h3>
+        <p data-page-node-id="EExkkGUaisgUqSj05r0IUW">
+          细看这段提示词，<strong data-page-node-id="YDlLkeaRr1LC985yOHAaPZ">约一半篇幅在交代背景</strong>：项目的整体目标、这是给自己用而不是工作，以及笔记本不能发烫、不能耗光电池。
+        </p>
+
+        <!-- 对应原文的 component:prompt-anatomy 结构化组件 -->
+        <div class="sandbox-panel" id="panel-prompt-anatomy" data-page-node-id="euy6XxvyJMj6b90EHQItsb">
+          <div class="sandbox-header" data-page-node-id="uVLg1vJRSrAkCeaPldENQU">
+            <div data-page-node-id="8pg6s65J3SeKbzlgDxwaDz">
+              <span class="sandbox-tag" data-page-node-id="l0JetrDW93Kx0q99VgVswR">Prompt Anatomy Visualizer</span>
+              <h4 class="sandbox-title" style="margin-top: 4px;" data-page-node-id="33Hu66A5HMCzsOwfTBCmhY">提示词结构与语义成分解剖器</h4>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-tertiary);" data-page-node-id="4EFwGCxYe8e3Qw7fuuxdk0">交互筛选对应语句</div>
+          </div>
+
+          <div class="filter-tab-bar" data-page-node-id="4znZoJPIaQfVRZF1Wiiiw4">
+            <button type="button" class="filter-btn active" id="btn-tab-all" data-page-node-id="mm5Wb99gwCx7lYHA7zAFpJ">全部维度概览 (100%)</button>
+            <button type="button" class="filter-btn" id="btn-tab-env" data-page-node-id="7UoeU95MwfpZ11cDa41t5o">算力环境与MCP (20%)</button>
+            <button type="button" class="filter-btn" id="btn-tab-goal" data-page-node-id="LUxp4x7VusdiLaDVRX05AO">宏观终极目标 (20%)</button>
+            <button type="button" class="filter-btn" id="btn-tab-constraint" data-page-node-id="u4l009edQTr6YuAyBOwtKo">物理边界约束 (25%)</button>
+            <button type="button" class="filter-btn" id="btn-tab-guess" data-page-node-id="G9GgSBgjmwfJJxe4yWB4AM">探索起点假设 (20%)</button>
+            <button type="button" class="filter-btn" id="btn-tab-auth" data-page-node-id="26sIJz2NCSq8nVjKU6F1Y3">反向建言赋权 (15%)</button>
+          </div>
+
+          <div class="calc-output-grid" data-page-node-id="jzEDCQp64wVrJ0cl2UlZDH">
+            <div class="calc-stat-block" data-page-node-id="qBdBDxPyRciFGTisCiuRfw">
+              <span class="calc-stat-label" data-page-node-id="FpFirPfVakx5iLnFLHsGS8">所选维度篇幅占比</span>
+              <span class="calc-stat-val" id="out-anatomy-ratio" data-page-node-id="BAzNF9bOQu7MtUySBbDJLU">100% 全貌</span>
+            </div>
+            <div class="calc-stat-block" style="grid-column: span 2;" data-page-node-id="05qNDOop3vXQ85cGOygaLV">
+              <span class="calc-stat-label" data-page-node-id="VnjG4ish5KbAAbrpbN8fqE">工程架构意图</span>
+              <div class="calc-stat-val" style="font-size: 1rem; line-height: 1.5;" id="out-anatomy-intent" data-page-node-id="SdNHbS03pqsorCKKvNMpxu">
+                完整覆盖环境准备、全局终极目标、硬件物理限制、可证伪假设以及双向对等沟通协议。
+              </div>
+            </div>
+            <div class="calc-verdict-box" id="out-anatomy-risk" data-page-node-id="fxPrQ0yRlyZLPl3JXElKUD">
+              <strong data-page-node-id="RcmrC8ZLBDhpXsjiR3AIEn">未说明该维度的常见后果：</strong>如果只给技术规格（例如“请在 Mac 上部署 EditLens 3B”），模型将无法建议改用 Gradient 4-bit 和 Native Messaging，导致笔记本发烫且无法解决扩展进程驻留问题。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第四章：Deckard 最终给出的工程答案 -->
+    <section class="doc-section" id="sec-final-answers" data-page-node-id="oqFhDveYiDK1pJ7kDJXrJw">
+      <h2 class="section-heading" data-page-node-id="Ug93K63FHxmD2peFrIrqAj">
+        <span class="heading-num" data-page-node-id="PCpjz9k4HwbHz7SGD5pMAQ">04</span>
+        <span data-page-node-id="gAdKbYSGiueij4ijuyw4Hk">Deckard 最终给出的工程答案</span>
+      </h2>
+
+      <p data-page-node-id="wccj7DGUDxaHgbtae6v48z">
+        这段提示词本质上问了两件事：<strong data-page-node-id="3ccP4vOCBdjG0XPFqeHeSB">选哪个模型</strong>，以及<strong data-page-node-id="K5rVOBDy6Mes1IyqmS5alm">怎么在 MacBook 上跑得不发热、不耗电</strong>。最终 Deckard 的落地答案令人惊喜：
+      </p>
+
+      <div id="sec-native-messaging" data-page-node-id="il3I2cwMwKcO2lTNxKBXww">
+        <h3 class="sub-heading" data-page-node-id="K8DQ4zK26wHBtyzhw05vNw"><span class="sub-bullet" data-page-node-id="Uiy87ueZlF9nj2mZDpFD4l"></span>1. 怎么跑：Native Messaging 彻底取代本地 HTTP Daemon</h3>
+        <p data-page-node-id="xGQRVC5t9U3UCSXiicViCA">
+          模型提醒使用 <strong data-page-node-id="CEdHFIKw3n3SD4iu8o2fQZ">Native Messaging</strong>，让 Chrome 扩展直接调用电脑上的模型程序，不用另开一个本地网页服务：
+        </p>
+        <ul data-page-node-id="3pZkxaZ6ilvpiuFaE6HNo7">
+          <li data-page-node-id="RuDhBnGppWFH0mNdEDLxqG"><strong data-page-node-id="45sHKsOORKpwPmViWGLDU6">按需启动与闲置关闭</strong>：用的时候才启动，<strong data-page-node-id="HkPEf0XeKjykILomo7gFCc">5 分钟不用就自动关掉</strong>；</li>
+          <li data-page-node-id="7NpqssQrmQMC0t8Jbx9tl5"><strong data-page-node-id="BxUu1j2JFMY9zup7RDQToI">极低内存足迹</strong>：运行时占 <strong data-page-node-id="tdQUPW7F70W6F5qWkkfOP1">400MB–1.2GB</strong> 内存，大约相当于多开五六个浏览器标签页；</li>
+          <li data-page-node-id="HrdAjJoKCOdH5IghDzkREO"><strong data-page-node-id="T254widVOd02lkI0Ju4Kzc">硬件友好</strong>：Sean 没发现 MacBook Pro 发热或掉电（但也说换台机器可能不一样）。</li>
+        </ul>
+      </div>
+
+      <div id="sec-model-selection" data-page-node-id="vcFcxqWq0wp1Y7Dvf2jUZL">
+        <h3 class="sub-heading" data-page-node-id="QtVlDhkQPvi6YAbNOhHPCa"><span class="sub-bullet" data-page-node-id="mBXAYxvqbuunZC1eCiS7C0"></span>2. 选哪个模型：放弃 EditLens，采纳 Gradient MLX 4-bit</h3>
+        <p data-page-node-id="vDN6Hfkm7Z3n8CX1vB4BEm">
+          没用最初猜的 EditLens，选了 <strong data-page-node-id="Q3TGY8iNg0OJiqXDmBcX45">Gradient 的 MLX 4-bit 版</strong>（压缩过、能在苹果电脑上高效跑的版本）：
+        </p>
+
+        <div class="table-container" data-page-node-id="In1Bra4Y0OyTrsMPg7GIq8">
+          <table class="data-table" data-page-node-id="sw9DmGrK2wyg9FGvv7dLUp">
+            <thead data-page-node-id="QySVhR3XWRO2v3SINDo0Eq">
+              <tr data-page-node-id="Az1PDlvmGPuaDmXDXnYbaU">
+                <th data-page-node-id="vaFhg30CRyxeFhaDGioCZC">对比维度</th>
+                <th data-page-node-id="lZo4lVqfNCzaoHFeISHgWx">Gradient MLX 4-bit (Deckard 最终解)</th>
+                <th data-page-node-id="Jrw4TEFBEyCWyCDEfcs5g5">Pangram 商业云服务 (行业黄金标杆)</th>
+                <th data-page-node-id="OBqIB7qJj7lH1a5GgEafHq">初始猜测 EditLens 3B (原始未量化)</th>
+              </tr>
+            </thead>
+            <tbody data-page-node-id="2hAFXqU8GHPaDwjNHCAsKC">
+              <tr data-page-node-id="zcYGz51yhPSKDZPwjmn0xU">
+                <td data-page-node-id="grzhHSd4NEHc62KgXBVhKU"><strong data-page-node-id="XRUUGBPgH0V2FempoXFQAT">AI 文字抓出率</strong></td>
+                <td data-page-node-id="Jpy8LV4zFSnKCR96x4unh3"><strong style="color:var(--emerald);" data-page-node-id="SfG24WrjexFlk4U6VstZNS">~52%</strong> (抓出过半)</td>
+                <td data-page-node-id="f4E6T0ae4HGVWjCVim7DwR"><strong style="color:var(--cyan);" data-page-node-id="uppy5nCuUfMQL6z1AocXPC">99.66%</strong> (极致精准)</td>
+                <td data-page-node-id="XVNjo04A4MCfBA4DDwMD5p">预估 ~68% (未剪裁)</td>
+              </tr>
+              <tr data-page-node-id="HaRX64mSqPYTWZokYzk1eD">
+                <td data-page-node-id="GtjGLoXIkm2mIzIfFl6IMR"><strong data-page-node-id="Bg4PrzqyCjI3OtUBfaeeiV">误判率 (人判为AI)</strong></td>
+                <td data-page-node-id="dC2dFZRkD2H2i7Q5B4WrlU"><strong data-page-node-id="WHJFee4nLWl2yJiRS5v3to">~2.7%</strong></td>
+                <td data-page-node-id="QfAGWkRe12b4BQS3ergUsu"><strong data-page-node-id="ABffNiJ7WD6trEnhRmkpQg">0.004%</strong> (极低)</td>
+                <td data-page-node-id="N6ZC9rTMIwwBjijviLYK0l">预估 ~1.5%</td>
+              </tr>
+              <tr data-page-node-id="6PFbH1LsROR9CMrf1hQDEc">
+                <td data-page-node-id="Vg1GtFpvViQry77z6o5iPS"><strong data-page-node-id="y9t5ZvIIa3RN8JE19Uz6Bm">运行环境与网络</strong></td>
+                <td data-page-node-id="ZMBnUTA51JbLoc5HZc8Cxl">100% 本地运行，完全脱机</td>
+                <td data-page-node-id="nR2H4oxQ5GifHFy57Q4jok">依赖云端 API 连网</td>
+                <td data-page-node-id="OqBmeuQhtcnuQoqV0YuthT">本地运行困难，显存占用大</td>
+              </tr>
+              <tr data-page-node-id="yNXovuBWzlUPgTEW6yOif7">
+                <td data-page-node-id="FKI7ckgS2D69QVUScUXcXe"><strong data-page-node-id="8KdE7zVKij59WFLAkRZOQb">发热与功耗</strong></td>
+                <td data-page-node-id="h4UJP2T9f4CoWWJ3VJGyVV">极低（5分钟闲置自动关闭进程）</td>
+                <td data-page-node-id="S01BHbum59xtkk0PEUgrW5">本机零发热（计算在云端）</td>
+                <td data-page-node-id="hoYASQ9CAmLvktFALuVFyX">高发热，风扇狂转并迅速耗电</td>
+              </tr>
+              <tr data-page-node-id="mjZap1ChfZvGcjFFCPZFHS">
+                <td data-page-node-id="G2I7OGAPko0PKkFrEVHySY"><strong data-page-node-id="aGzD3cOFyEgWjHl0urHv4O">个人使用实用性</strong></td>
+                <td data-page-node-id="NF7k3Vm9J7lKUOyQVhW8IH"><strong data-page-node-id="T9u84NTFgASwZpq7x7WrXB">足够</strong>：一篇文章标出几处就足以起疑</td>
+                <td data-page-node-id="NolCS1m9ZrPZPzzKMcszhZ">过剩：个人无需商业法庭级证据</td>
+                <td data-page-node-id="egvrzxxMBjx6qf3iGpesri">不可用：严重拖垮日常续航</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <blockquote class="quote-box" data-page-node-id="VFHAYYdxohV6NlBqsnUrIo">
+          <p data-page-node-id="gOAovdR11VgkYvksZ0MPSO">
+            <strong data-page-node-id="dpJhM22ECA6iFtCHvlkXEU">Sean 的实用主义权衡：</strong>一篇文章不用每句都抓到，标出几处就足够让人起疑；只是误判约 2%，单个标记不能当证据。这正是<strong data-page-node-id="vb5tj3gfqtjAWmusDjBdVG">明确了“这是给自己用”</strong>才能达成的妥协方案！
+          </p>
+        </blockquote>
+      </div>
+    </section>
+
+    <!-- 第五章：动态模拟沙盘与决策演算器 -->
+    <section class="doc-section" id="sec-interactive-sandboxes" data-page-node-id="aMPeoNDSpWD63x3P4fptCZ">
+      <h2 class="section-heading" data-page-node-id="xN8S24SElokRzSyeKBc9K9">
+        <span class="heading-num" data-page-node-id="ZDWwh5tO6zFzhtibtIDYLe">05</span>
+        <span data-page-node-id="JFCn0dPsvOSpzGJGBGcPSr">动态模拟沙盘与决策演算器</span>
+      </h2>
+
+      <!-- 沙盘 1：Deckard 权衡演算 -->
+      <div id="sec-sandbox-deckard-sim" data-page-node-id="oydbsZO3XeittuaAtKn16E">
+        <h3 class="sub-heading" data-page-node-id="V51EGePZnQ9lnoUxT91c8E"><span class="sub-bullet" data-page-node-id="gdaY9fGq4R2zGdyyj2exe4"></span>5.1 Deckard 架构开销与检测收益动态模拟器</h3>
+        <p data-page-node-id="p4evktlrIwSpUwDBBVtTj2">
+          调整闲置退出时长与每日浏览负载，量化观察 Native Messaging 带来的内存释放和功耗节省，直观理解为什么“5 分钟闲置退出”是 MacBook 上的黄金平衡点：
+        </p>
+
+        <div class="sandbox-panel" id="panel-deckard-sim" data-page-node-id="5Uz2wXmQXOCekcGw1Wfavj">
+          <div class="sandbox-header" data-page-node-id="Dw4u2GHohEygBvod24EdBG">
+            <div data-page-node-id="yoRmbQyF2LkycmCLJTOU2X">
+              <span class="sandbox-tag" data-page-node-id="58dMWaXaeRgK8zG2RZ9Ao3">Resource & Accuracy Model</span>
+              <h4 class="sandbox-title" style="margin-top: 4px;" data-page-node-id="5fwnhUx2lTwgCOSMQfuUu8">Deckard 本地运行开销模拟沙盘</h4>
+            </div>
+            <button type="button" class="action-btn" id="btn-reset-deckard" data-page-node-id="yAuXjLBxgZ9LUSA8iymzYX">恢复默认参数</button>
+          </div>
+
+          <div class="control-row" data-page-node-id="6ZwaprDG3vHWgmhuEbDxLa">
+            <div class="control-group" data-page-node-id="FMAdDQLHq9FNPKcftHTcHu">
+              <div class="control-label" data-page-node-id="AacsyZOIcqxFfJMsBIN6ym">
+                <span data-page-node-id="r5rm7FnHFh8FoqBL82VrGj">闲置自动释放时长</span>
+                <span class="control-val-badge" id="val-disp-timeout" data-page-node-id="RfSdn06B5M5mLihPitkZwL">5 分钟</span>
+              </div>
+              <input type="range" id="input-idle-timeout" min="1" max="30" value="5" step="1" data-page-node-id="qB17eLgGU8i8DXVA3azADr">
+              <div style="font-size: 0.75rem; color: var(--text-tertiary);" data-page-node-id="SsyIZP9I0WgvBG0tbZRJr8">超时后 Native Messaging 自动杀掉推理进程释放显存</div>
+            </div>
+
+            <div class="control-group" data-page-node-id="X9eFDA3pSSJwsU0ELMSbNc">
+              <div class="control-label" data-page-node-id="9Mp2YppGvSmwTumY3YPuCN">
+                <span data-page-node-id="ZFjiTDBInOiR6DxJqsQlVu">每日浏览潜在 AI 网页数</span>
+                <span class="control-val-badge" id="val-disp-pages" data-page-node-id="NENLMNhdF6L7qTkeVQnUWJ">10 页</span>
+              </div>
+              <input type="range" id="input-page-volume" min="1" max="50" value="10" step="1" data-page-node-id="g0g4qkvho0x7Kp43oLXr8R">
+              <div style="font-size: 0.75rem; color: var(--text-tertiary);" data-page-node-id="LYo19qqvCRrrAVBue8v31J">触发内容扫描与模型唤醒的频次</div>
+            </div>
+          </div>
+
+          <div class="control-row" data-page-node-id="IKF5jbgRYctIiuTBbelHAU">
+            <div class="control-group" style="grid-column: span 2;" data-page-node-id="bW42cJ64CnpV00rS69TXA5">
+              <label class="control-label" for="select-model-choice" data-page-node-id="hZVNbXyMD9x8J0sMc3nBu1">
+                <span data-page-node-id="bSCjLdBKGYFwDksFEAwyh0">模型选型方案</span>
+              </label>
+              <select class="custom-select" id="select-model-choice" data-page-node-id="D7JlK9GOawNin5xTEuvmwb">
+                <option value="mlx" selected data-page-node-id="2WTza4VWbbs9xXokjoHJVD">Gradient MLX 4-bit (本地优化版 - 检出率 52%, 误判 2.7%)</option>
+                <option value="editlens" data-page-node-id="sPYzvIStZebO2j9sIoPFzr">原始 EditLens 3B (未充分优化 - 检出率 68%, 内存占用高)</option>
+                <option value="pangram" data-page-node-id="OOATYCIo1Vd4RyUQXKL0Yg">Pangram 商业 API (云端服务 - 检出率 99.66%, 误判 0.004%)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="calc-output-grid" data-page-node-id="ntZR4ULYJFeNC1BN2uOghV">
+            <div class="calc-stat-block" data-page-node-id="GeMjK3qgtSN3CyXEzL8nQ2">
+              <span class="calc-stat-label" data-page-node-id="S441zhOy1ZpFQQE7sZdaa5">运行期内存占用</span>
+              <span class="calc-stat-val" id="out-deckard-mem" data-page-node-id="OBui9uinHJOQNMZIeqhrKD">~800 MB</span>
+            </div>
+            <div class="calc-stat-block" data-page-node-id="bJ9iZch3zrkzlbuTr0UT0O">
+              <span class="calc-stat-label" data-page-node-id="73JmJaDnlvGFDa0EB3reZ0">AI 文本检出率</span>
+              <span class="calc-stat-val" id="out-deckard-detect-rate" data-page-node-id="sWV58WeY5NJbfxQDSDwTXm">52.0%</span>
+            </div>
+            <div class="calc-stat-block" data-page-node-id="VAJu14qJN3xCrbDDrc2CHJ">
+              <span class="calc-stat-label" data-page-node-id="A39M5VXOTIESjFyIdmh5vA">人类误报率 (FP)</span>
+              <span class="calc-stat-val" id="out-deckard-fp-rate" data-page-node-id="ryxHcvgrTuT5OpSSEUEgRo">2.70%</span>
+            </div>
+            <div class="calc-stat-block" data-page-node-id="Mbag7jMowQjtFxvnhcOoap">
+              <span class="calc-stat-label" data-page-node-id="Ha4zrT8NHBaim5HXj45bnt">发热与续航影响</span>
+              <span class="calc-stat-val" id="out-deckard-battery" style="color:var(--emerald);" data-page-node-id="tOCsEVoKpD5xWB4bDQIREp">几乎无感</span>
+            </div>
+            <div class="calc-verdict-box" id="out-deckard-verdict" data-page-node-id="CyxQXSOuv4VzndIlBhBM3T">
+              <strong data-page-node-id="RzqxMgyB6le3n0wlPTg81C">工程裁决：</strong>当前配置下，每天约有 50 分钟内存驻留（约 800MB），不会引起 MacBook Pro 发热与风扇噪声，符合个人自用轻量工具的黄金取舍。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 沙盘 2：需求相对优先级演练 -->
+      <div id="sec-sandbox-tradeoff-sim" data-page-node-id="x9NIVgRJ7BwIK2CNXpMEIX">
+        <h3 class="sub-heading" data-page-node-id="UtYKZP7HM9FgRmdgTAgGQn"><span class="sub-bullet" data-page-node-id="pnBVvKU3UOErAwOmIhqpsz"></span>5.2 需求优先级排布与 Agent 行为决策模拟器</h3>
+        <p data-page-node-id="MJvXzePjPJY1jrFBVsrtdv">
+          通过调节四个工程维度的相对权重，观察前沿推理模型（如 GPT-6-Astra）在不同权衡约束下的输出倾斜度：
+        </p>
+
+        <div class="sandbox-panel" id="panel-tradeoff-sim" data-page-node-id="nnY4DBTKFG8UOt26hPCEnF">
+          <div class="sandbox-header" data-page-node-id="vTPxLc7JaQgB08hO9FsxHe">
+            <div data-page-node-id="Dc1CZXQVECHi9EdIvrWgdl">
+              <span class="sandbox-tag" data-page-node-id="Uiiu7zBwLn7ewS1gOa116o">Trade-Off Simulator</span>
+              <h4 class="sandbox-title" style="margin-top: 4px;" data-page-node-id="9DOKS7YSN1nBtdpnHTX477">工程维度相对优先级决策演练器</h4>
+            </div>
+            <div style="display: flex; gap: 8px;" data-page-node-id="ZUEoCWDHO0BYSoVRyEAsEA">
+              <button type="button" class="action-btn" id="btn-preset-sean" data-page-node-id="y2gAFNNy424wzIEgqlQfqi">载入 Sean 推荐预设</button>
+              <button type="button" class="action-btn" id="btn-reset-priorities" data-page-node-id="pIsKiWxAIMd0W7hOOOa3TY">重置权重</button>
+            </div>
+          </div>
+
+          <div class="control-row" data-page-node-id="SZmJo7bpVBc2H0arK4Ych8">
+            <div class="control-group" data-page-node-id="XoiCpO0NPZTshv3MR0NZtZ">
+              <div class="control-label" data-page-node-id="CQvQYDiqwCpHqB3qZhJ6rM">
+                <span data-page-node-id="k6oGgPZ6L6pe2RQgQCgfwP">维度 1：绝不引入 Bug (No Bugs)</span>
+                <span class="control-val-badge" id="val-disp-p1" data-page-node-id="YuoEHXn9YFrWGlhq6OP2Kw">10</span>
+              </div>
+              <input type="range" id="input-p-bug" min="1" max="10" value="10" step="1" data-page-node-id="fOzf2hqg9F8ouua19BmbMc">
+            </div>
+
+            <div class="control-group" data-page-node-id="B4gFkVf0bvNc9Bb6hsV1vk">
+              <div class="control-label" data-page-node-id="jWwSI3eCRUk1aKq9e0rGiW">
+                <span data-page-node-id="w7s58jJZyB16KtXxD0oxPY">维度 2：自然融入现有代码 (Harmony)</span>
+                <span class="control-val-badge" id="val-disp-p2" data-page-node-id="cREXU7C9nZsEo9AaSlp3rG">8</span>
+              </div>
+              <input type="range" id="input-p-harmony" min="1" max="10" value="8" step="1" data-page-node-id="Cts1JS0PGjJIpSJy5LGVcQ">
+            </div>
+          </div>
+
+          <div class="control-row" data-page-node-id="3PfWpikRCaVBacDjzrYnXS">
+            <div class="control-group" data-page-node-id="DiPATOnfvYVVVkwlmsM1cT">
+              <div class="control-label" data-page-node-id="TZa7FoxC4LwlolTKgaoxMQ">
+                <span data-page-node-id="kakwD2KX8rZ9ou3AKOzcmf">维度 3：可观测性保持 (Observability)</span>
+                <span class="control-val-badge" id="val-disp-p3" data-page-node-id="PAG9nQfkUkl2w56WGfO9Rr">5</span>
+              </div>
+              <input type="range" id="input-p-obs" min="1" max="10" value="5" step="1" data-page-node-id="KJkgItFVADV7Dg7pAZBrKE">
+            </div>
+
+            <div class="control-group" data-page-node-id="vGt6KpxZ8WI5YdHo2pKSoL">
+              <div class="control-label" data-page-node-id="N7w4UKAGhfUAfe6O2go93N">
+                <span data-page-node-id="ZUlDuZfXl0NEIn7HmDAxG4">维度 4：极致性能与省Token (Performance)</span>
+                <span class="control-val-badge" id="val-disp-p4" data-page-node-id="jpHgXSHmeWHJ82fgBtySLy">3</span>
+              </div>
+              <input type="range" id="input-p-perf" min="1" max="10" value="3" step="1" data-page-node-id="cnJqc8G4GcPrxnOnikU62Y">
+            </div>
+          </div>
+
+          <div class="calc-output-grid" data-page-node-id="X4JcrHyIh503ANw8yr9P17">
+            <div class="calc-stat-block" data-page-node-id="gY55iEPrYn33JyCiVXeMIK">
+              <span class="calc-stat-label" data-page-node-id="dCn9mPPZAmpSDxLaGA8MZS">模型代码风格预测</span>
+              <span class="calc-stat-val" id="out-tradeoff-strategy" style="color:var(--emerald);" data-page-node-id="BWuPSzM3Rwfn1pK46mLEHr">人类可读标准风格</span>
+            </div>
+            <div class="calc-stat-block" data-page-node-id="BX1LDdBFztVNQPJxY7iXoB">
+              <span class="calc-stat-label" data-page-node-id="wTp6VSj3E44uhRGR3NA56g">Token 消耗倾斜</span>
+              <span class="calc-stat-val" id="out-tradeoff-token" data-page-node-id="gfQEFWzqcpV3TWTlYjUBsf">正常格式化</span>
+            </div>
+            <div class="calc-stat-block" style="grid-column: span 2;" data-page-node-id="B5KWcKLptV0cu0Pht6drmb">
+              <span class="calc-stat-label" data-page-node-id="dGDnGINebCB4VHPHRbvyxq">潜在副作用预警</span>
+              <div class="calc-stat-val" style="font-size: 0.95rem; font-weight: normal; margin-top: 4px;" id="out-tradeoff-risk" data-page-node-id="O4FslOD7wB9ldJHCQCoBxW">
+                无。防御性代码充分，变量命名规范，符合长期维护要求。
+              </div>
+            </div>
+            <div class="calc-verdict-box" data-page-node-id="csId1fb1DOuVqZ7T4H1Z89">
+              <span class="calc-stat-label" data-page-node-id="BLkhGWDshE5YCnfq7ST46J">推荐追加至提示词中的约束声明：</span>
+              <div id="out-tradeoff-prompt-preview" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); margin-top: 4px;" data-page-node-id="lWELhtLv1gs3GqI51iK1ns">
+                “最重要的是绝不引入新 bug，其次是与周围代码规范完全对齐；性能与可观测性保持现状即可，无需过度优化。”
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 附录：前沿提问模版 -->
+    <section class="doc-section" id="sec-appendix-templates" data-page-node-id="WHEoNx1ClztlW9f8mBC1j3">
+      <h2 class="section-heading" data-page-node-id="oDR7ERjlbb0ejLAm61kfL7">
+        <span class="heading-num" data-page-node-id="nNdjxukrEGAB4gj33QW4We">06</span>
+        <span data-page-node-id="WbKt9TeSKJnqwCPIKEDff4">附录：告诉 AI 为什么的标准化结构模版</span>
+      </h2>
+
+      <p data-page-node-id="uVkDhMvPcP2MY6LbzHnHGp">
+        在向前沿 Agent（如 GPT-6-Astra、Claude 3.7 Sonnet / Opus 等）发起复杂工程任务时，可直接参考以下三段式结构化模版：
+      </p>
+
+      <div class="prompt-pane" style="margin-top: 16px;" data-page-node-id="cxnNg4Afb8WCKrrQZtYHYK">
+        <div class="pane-header" data-page-node-id="4qHrCt5ZMvhSD7NNwMc8AV">
+          <span class="pane-title" data-page-node-id="JCTLoBCiGqMZ9KjV1vzudP">Recommended Prompt Blueprint &bull; 推荐提问模版</span>
+        </div>
+        <div class="pane-body" style="font-family: var(--font-mono); font-size: 0.88rem;" data-page-node-id="66XF1UEJlQl2o4wx0os7XG">
+<strong data-page-node-id="Vt947QXKMVhoTzFU59wqpV">[1. 宏观意图与终极受众 (The Why & Audience)]</strong>
+“我的长期目标是解决 [X 业务痛点]，最终产物是给 [目标受众，如自己本地自用 / 生产团队多人维护] 运行的。”
+
+<strong data-page-node-id="defW1TrMteFIhLsvVpR5Hi">[2. 物理与工程硬约束 (Hard Constraints)]</strong>
+“短期内最核心的物理与工程限制是：[例如：不能让本地设备发热 / 内存峰值不能超过 1.5GB / 严格离线不可访问外网]。”
+
+<strong data-page-node-id="SoIgmvdj38F905psYCQ18V">[3. 技术设想与可证伪假设 (Hypothesis, Not Order)]</strong>
+“我目前的初步猜测是尝试使用 [技术方案 A 或 B]，但这只是起点。你有更适合此目标的替代方案吗？”
+
+<strong data-page-node-id="d1ExyxxkSccXY0ULyrdmMV">[4. 相对优先级与牺牲项 (Trade-offs & Sacrifices)]</strong>
+“在本次实现中：
+- 优先级最高（绝不能牺牲）：[例如：零缺陷与清晰可读性]
+- 优先级次之：[例如：自然融入现有接口风格]
+- 可以让步牺牲的项：[例如：执行速度可以略慢，可以多占一点编译时间换取简单性]”
+
+<strong data-page-node-id="kKlQoPlBMzz34WFb0NoJBP">[5. 反向赋权与协作邀请 (Collaborative Mandate)]</strong>
+“如果你看到实现我终极目标的更优雅架构，请明确指出并与我商量，不要受限于我最初的技术猜想。”
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ==========================================================================
+    // 纯原生 JavaScript 交互控制器 (Zero External Dependencies)
+    // ==========================================================================
+    (function () {
+      "use strict";
+
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // 1. 双主题切换逻辑 (Dark <-> Light)
+      var currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
+      var themeBtn = byId("theme-toggle-btn");
+      var themeBtnMobile = byId("theme-toggle-btn-mobile");
+      var themeBtnText = byId("theme-btn-text");
+
+      function updateThemeUI(theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        if (themeBtnText) {
+          themeBtnText.textContent = theme === "dark" ? "切换至暖羊皮纸浅色" : "切换至黑曜石深色";
+        }
+      }
+
+      function toggleTheme() {
+        currentTheme = currentTheme === "dark" ? "light" : "dark";
+        updateThemeUI(currentTheme);
+      }
+
+      if (themeBtn) {
+        themeBtn.addEventListener("click", toggleTheme);
+      }
+      if (themeBtnMobile) {
+        themeBtnMobile.addEventListener("click", toggleTheme);
+      }
+
+      // 2. 打印功能
+      var printBtn = byId("print-btn");
+      if (printBtn) {
+        printBtn.addEventListener("click", function () {
+          window.print();
+        });
+      }
+
+      // 3. 移动端抽屉式侧栏折叠
+      var sidebar = byId("sidebar");
+      var sidebarToggleBtn = byId("sidebar-toggle-btn");
+      if (sidebarToggleBtn && sidebar) {
+        sidebarToggleBtn.addEventListener("click", function () {
+          sidebar.classList.toggle("active");
+        });
+      }
+
+      // 4. 阅读进度条与侧边目录平滑高亮
+      var progressBar = byId("reading-progress");
+      var navItems = document.querySelectorAll(".nav-list .nav-item");
+      var sections = [];
+
+      var links = document.querySelectorAll(".nav-list a");
+      for (var i = 0; i < links.length; i++) {
+        var href = links[i].getAttribute("href");
+        if (href && href.startsWith("#") && href.length > 1) {
+          var targetElem = byId(href.substring(1));
+          if (targetElem) {
+            sections.push({ elem: targetElem, link: links[i].parentElement });
+          }
+        }
+      }
+
+      window.addEventListener("scroll", function () {
+        var docElem = document.documentElement;
+        var bodyElem = document.body;
+        var scrollTop = docElem.scrollTop || bodyElem.scrollTop || 0;
+        var scrollHeight = (docElem.scrollHeight || bodyElem.scrollHeight) - docElem.clientHeight;
+
+        if (progressBar && scrollHeight > 0) {
+          var progress = (scrollTop / scrollHeight) * 100;
+          progressBar.style.width = Math.min(100, Math.max(0, progress)) + "%";
+        }
+
+        // 高亮当前可视章节
+        var currentSection = null;
+        for (var j = 0; j < sections.length; j++) {
+          var top = sections[j].elem.getBoundingClientRect().top;
+          if (top <= 140) {
+            currentSection = sections[j].link;
+          }
+        }
+
+        if (currentSection) {
+          for (var k = 0; k < navItems.length; k++) {
+            navItems[k].classList.remove("active");
+          }
+          currentSection.classList.add("active");
+        }
+      });
+
+      // 5. 提示词解剖台 (Prompt Anatomy Filter)
+      var btnTabAll = byId("btn-tab-all");
+      var btnTabEnv = byId("btn-tab-env");
+      var btnTabGoal = byId("btn-tab-goal");
+      var btnTabConstraint = byId("btn-tab-constraint");
+      var btnTabGuess = byId("btn-tab-guess");
+      var btnTabAuth = byId("btn-tab-auth");
+
+      var outAnatomyRatio = byId("out-anatomy-ratio");
+      var outAnatomyIntent = byId("out-anatomy-intent");
+      var outAnatomyRisk = byId("out-anatomy-risk");
+
+      var anatomyTabs = [
+        {
+          btn: btnTabAll,
+          ratio: "100% 全貌",
+          intent: "完整覆盖环境准备、全局终极目标、硬件物理限制、可证伪假设以及双向对等沟通协议。",
+          risk: "<strong>未说明该维度的常见后果：</strong>如果只给技术规格（例如“请在 Mac 上部署 EditLens 3B”），模型将无法建议改用 Gradient 4-bit 和 Native Messaging，导致笔记本发烫且无法解决扩展进程驻留问题。"
+        },
+        {
+          btn: btnTabEnv,
+          ratio: "20% 篇幅",
+          intent: "清晰交代外部算力访问通道（Runpod via MCP）及其边界，指明远程与本机的环境迁移演进路线。",
+          risk: "<strong>未说明该维度的常见后果：</strong>模型可能直接在本地尝试运行极其重型的训练或大型推理测试，迅速耗光 MacBook 电池并导致系统卡死。"
+        },
+        {
+          btn: btnTabGoal,
+          ratio: "20% 篇幅",
+          intent: "明确最终交付形态是自用 Chrome 扩展与隐藏网页 AI 内容，定义了核心价值衡量标准（为谁而做、解决什么）。",
+          risk: "<strong>未说明该维度的常见后果：</strong>模型误以为这是生产级合规审核系统，会优先选择 99.66% 检出率的重型云端方案，增加极大复杂度和外部 API 成本。"
+        },
+        {
+          btn: btnTabConstraint,
+          ratio: "25% 篇幅",
+          intent: "显式列出物理铁律：MacBook 不能发烫、电池不能迅速耗尽，为性能和选型划定硬性死线。",
+          risk: "<strong>未说明该维度的常见后果：</strong>模型默认假设在云端 GPU 服务器运行，选择未量化的原始 Python PyTorch 服务，导致风扇狂转。"
+        },
+        {
+          btn: btnTabGuess,
+          ratio: "20% 篇幅",
+          intent: "将 EditLens 3B 和 RoBERTa 降级标注为“我的猜测”，并指出量化需求，给模型保留证伪空间。",
+          risk: "<strong>未说明该维度的常见后果：</strong>模型会把你的设想当作命令，竭尽全力在 EditLens 上打补丁，错失表现更好、资源更友好的 Gradient MLX 模型。"
+        },
+        {
+          btn: btnTabAuth,
+          ratio: "15% 篇幅",
+          intent: "赋权模型：主动邀请它提出更好方案，确立了平等探讨而不是单向指挥的人机协作通道。",
+          risk: "<strong>未说明该维度的常见后果：</strong>前沿模型即使发现了 Native Messaging 这种更优方案，也会因为不敢违背人类指令而保持沉默。"
+        }
+      ];
+
+      function selectAnatomyTab(index) {
+        for (var t = 0; t < anatomyTabs.length; t++) {
+          if (anatomyTabs[t].btn) {
+            anatomyTabs[t].btn.classList.remove("active");
+          }
+        }
+        var current = anatomyTabs[index];
+        if (current && current.btn) {
+          current.btn.classList.add("active");
+          if (outAnatomyRatio) outAnatomyRatio.textContent = current.ratio;
+          if (outAnatomyIntent) outAnatomyIntent.textContent = current.intent;
+          if (outAnatomyRisk) outAnatomyRisk.innerHTML = current.risk;
+        }
+      }
+
+      if (btnTabAll) btnTabAll.addEventListener("click", function () { selectAnatomyTab(0); });
+      if (btnTabEnv) btnTabEnv.addEventListener("click", function () { selectAnatomyTab(1); });
+      if (btnTabGoal) btnTabGoal.addEventListener("click", function () { selectAnatomyTab(2); });
+      if (btnTabConstraint) btnTabConstraint.addEventListener("click", function () { selectAnatomyTab(3); });
+      if (btnTabGuess) btnTabGuess.addEventListener("click", function () { selectAnatomyTab(4); });
+      if (btnTabAuth) btnTabAuth.addEventListener("click", function () { selectAnatomyTab(5); });
+
+      // 6. Deckard 运行与模型开销沙盘
+      var inputIdleTimeout = byId("input-idle-timeout");
+      var inputPageVolume = byId("input-page-volume");
+      var selectModelChoice = byId("select-model-choice");
+      var btnResetDeckard = byId("btn-reset-deckard");
+
+      var valDispTimeout = byId("val-disp-timeout");
+      var valDispPages = byId("val-disp-pages");
+
+      var outDeckardMem = byId("out-deckard-mem");
+      var outDeckardDetectRate = byId("out-deckard-detect-rate");
+      var outDeckardFpRate = byId("out-deckard-fp-rate");
+      var outDeckardBattery = byId("out-deckard-battery");
+      var outDeckardVerdict = byId("out-deckard-verdict");
+
+      function updateDeckardSim() {
+        var timeout = parseInt(inputIdleTimeout ? inputIdleTimeout.value : 5, 10);
+        var pages = parseInt(inputPageVolume ? inputPageVolume.value : 10, 10);
+        var model = selectModelChoice ? selectModelChoice.value : "mlx";
+
+        if (valDispTimeout) valDispTimeout.textContent = timeout + " 分钟";
+        if (valDispPages) valDispPages.textContent = pages + " 页";
+
+        var memText = "";
+        var detectText = "";
+        var fpText = "";
+        var batteryText = "";
+        var batteryColor = "var(--emerald)";
+        var verdictHtml = "";
+
+        var totalActiveMinutes = Math.min(pages * (1 + timeout), 1440);
+
+        if (model === "mlx") {
+          memText = timeout <= 5 ? "400 - 800 MB" : "800 - 1.2 GB";
+          detectText = "52.0%";
+          fpText = "2.70%";
+          if (timeout > 15) {
+            batteryText = "极轻微温热";
+            batteryColor = "var(--amber)";
+          } else {
+            batteryText = "几乎无感";
+            batteryColor = "var(--emerald)";
+          }
+          verdictHtml = "<strong>工程裁决：</strong>采用 Gradient MLX 4-bit 搭配 Native Messaging，每天推理驻留仅约 " +
+            totalActiveMinutes + " 分钟。抓出 52% 文本对个人阅读已足够起疑，误判率 2.7% 在可接受范围内，完全满足 MacBook 续航硬约束。";
+        } else if (model === "editlens") {
+          memText = "3.2 - 4.8 GB";
+          detectText = "68.0%";
+          fpText = "1.50%";
+          batteryText = "发热显著 / 风扇启动";
+          batteryColor = "var(--rose)";
+          verdictHtml = "<strong>工程裁决：</strong>EditLens 3B 未量化前常驻开销极大，每天运行将显著消耗电池并触发风扇，<strong>直接违反了提示词中的硬件约束</strong>。";
+        } else {
+          // pangram
+          memText = "< 50 MB (扩展本体)";
+          detectText = "99.66%";
+          fpText = "0.004%";
+          batteryText = "零本地计算负担";
+          batteryColor = "var(--cyan)";
+          verdictHtml = "<strong>工程裁决：</strong>商业级 Pangram 虽然指标极致，但需要长周期网络通信与 API 计费，且存在网页内容外泄风险，对于个人自用脚本存在功能过剩与隐私顾虑。";
+        }
+
+        if (outDeckardMem) outDeckardMem.textContent = memText;
+        if (outDeckardDetectRate) outDeckardDetectRate.textContent = detectText;
+        if (outDeckardFpRate) outDeckardFpRate.textContent = fpText;
+        if (outDeckardBattery) {
+          outDeckardBattery.textContent = batteryText;
+          outDeckardBattery.style.color = batteryColor;
+        }
+        if (outDeckardVerdict) outDeckardVerdict.innerHTML = verdictHtml;
+      }
+
+      if (inputIdleTimeout) inputIdleTimeout.addEventListener("input", updateDeckardSim);
+      if (inputPageVolume) inputPageVolume.addEventListener("input", updateDeckardSim);
+      if (selectModelChoice) selectModelChoice.addEventListener("change", updateDeckardSim);
+      if (btnResetDeckard) {
+        btnResetDeckard.addEventListener("click", function () {
+          if (inputIdleTimeout) inputIdleTimeout.value = 5;
+          if (inputPageVolume) inputPageVolume.value = 10;
+          if (selectModelChoice) selectModelChoice.value = "mlx";
+          updateDeckardSim();
+        });
+      }
+
+      // 7. 工程优先级 Trade-off 决策器
+      var inputPBug = byId("input-p-bug");
+      var inputPHarmony = byId("input-p-harmony");
+      var inputPObs = byId("input-p-obs");
+      var inputPPerf = byId("input-p-perf");
+
+      var valDispP1 = byId("val-disp-p1");
+      var valDispP2 = byId("val-disp-p2");
+      var valDispP3 = byId("val-disp-p3");
+      var valDispP4 = byId("val-disp-p4");
+
+      var outTradeoffStrategy = byId("out-tradeoff-strategy");
+      var outTradeoffToken = byId("out-tradeoff-token");
+      var outTradeoffRisk = byId("out-tradeoff-risk");
+      var outTradeoffPromptPreview = byId("out-tradeoff-prompt-preview");
+
+      var btnResetPriorities = byId("btn-reset-priorities");
+      var btnPresetSean = byId("btn-preset-sean");
+
+      function updateTradeoffSim() {
+        var pBug = parseInt(inputPBug ? inputPBug.value : 10, 10);
+        var pHarmony = parseInt(inputPHarmony ? inputPHarmony.value : 8, 10);
+        var pObs = parseInt(inputPObs ? inputPObs.value : 5, 10);
+        var pPerf = parseInt(inputPPerf ? inputPPerf.value : 3, 10);
+
+        if (valDispP1) valDispP1.textContent = pBug;
+        if (valDispP2) valDispP2.textContent = pHarmony;
+        if (valDispP3) valDispP3.textContent = pObs;
+        if (valDispP4) valDispP4.textContent = pPerf;
+
+        var strategy = "";
+        var strategyColor = "var(--emerald)";
+        var token = "";
+        var risk = "";
+        var promptText = "";
+
+        // 逻辑判定
+        if (pPerf >= 9 && pHarmony <= 4) {
+          strategy = "极度压缩 (Minified Code) 倾向";
+          strategyColor = "var(--rose)";
+          token = "压减约 10% - 15%";
+          risk = "高危：模型默认认为代码无人阅读，将去除换行与空格，牺牲代码可维护性来节省 Token。";
+          promptText = "“注意：虽然性能要求高，但必须保证人类可读性，禁止生成压缩代码。”";
+        } else if (pBug >= 8 && pHarmony >= 7) {
+          strategy = "人类友好融入型 (Sean 推荐)";
+          strategyColor = "var(--emerald)";
+          token = "标准消耗 (格式化)";
+          risk = "无显著风险。防御性重构完备，代码自然遵循宿主工程代码风格。";
+          promptText = "“这次最重要的是别引入 bug，其次是自然融入现有代码；可观测性保持现状；性能为了前两项可以适当让步。”";
+        } else if (pObs >= 8) {
+          strategy = "高防御与日志密集型";
+          strategyColor = "var(--cyan)";
+          token = "膨胀约 15% - 25%";
+          risk = "可能引入过多打点与冗余校验，增加微小运行时代价。";
+          promptText = "“优先强化全链路可观测性与追踪，排查容易度高于微小的运行时损耗。”";
+        } else {
+          strategy = "中庸平衡型";
+          strategyColor = "var(--amber)";
+          token = "标准基线";
+          risk = "模型可能在不同子任务间摇摆，建议显式明确谁先谁后。";
+          promptText = "“请明确核心优先级排序，说明各目标发生冲突时优先满足哪一项。”";
+        }
+
+        if (outTradeoffStrategy) {
+          outTradeoffStrategy.textContent = strategy;
+          outTradeoffStrategy.style.color = strategyColor;
+        }
+        if (outTradeoffToken) outTradeoffToken.textContent = token;
+        if (outTradeoffRisk) outTradeoffRisk.textContent = risk;
+        if (outTradeoffPromptPreview) outTradeoffPromptPreview.textContent = promptText;
+      }
+
+      if (inputPBug) inputPBug.addEventListener("input", updateTradeoffSim);
+      if (inputPHarmony) inputPHarmony.addEventListener("input", updateTradeoffSim);
+      if (inputPObs) inputPObs.addEventListener("input", updateTradeoffSim);
+      if (inputPPerf) inputPPerf.addEventListener("input", updateTradeoffSim);
+
+      if (btnPresetSean) {
+        btnPresetSean.addEventListener("click", function () {
+          if (inputPBug) inputPBug.value = 10;
+          if (inputPHarmony) inputPHarmony.value = 8;
+          if (inputPObs) inputPObs.value = 5;
+          if (inputPPerf) inputPPerf.value = 3;
+          updateTradeoffSim();
+        });
+      }
+
+      if (btnResetPriorities) {
+        btnResetPriorities.addEventListener("click", function () {
+          if (inputPBug) inputPBug.value = 5;
+          if (inputPHarmony) inputPHarmony.value = 5;
+          if (inputPObs) inputPObs.value = 5;
+          if (inputPPerf) inputPPerf.value = 5;
+          updateTradeoffSim();
+        });
+      }
+
+      // 初始化执行
+      updateDeckardSim();
+      updateTradeoffSim();
+      selectAnatomyTab(0);
+    })();
+  </script>
+</body>
+</html>

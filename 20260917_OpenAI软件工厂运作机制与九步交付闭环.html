@@ -1,0 +1,2306 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>当代码变成通用界面：揭秘OpenAI 内部的「软件工厂」是如何运转的</title>
+<meta name="description" content="深度解析 OpenAI 内部由 Codex 驱动的九步软件工厂闭环：从目标委托到 CI、专业审查、变更级 SRE 观测与生产反馈自愈链路，剖析 99.8% Token 口径、人工把关点与下游十倍负载瓶颈。">
+<style>
+/* ==========================================================================
+   AIKNOWLEDGE DESIGN SYSTEM · THEME OBSIDIAN & WARM PARCHMENT
+   自包含单文件设计规范，零外部网络依赖，纯系统字体栈降级
+   ========================================================================== */
+:root {
+  --bg-app: #181715;
+  --bg-surface: #21201D;
+  --bg-subtle: #2A2824;
+  --bg-muted: #33312C;
+  --bg-card: #21201D;
+  --bg-card-hover: #292723;
+  --bg-code: #1E1D1A;
+  
+  --bd-subtle: #302E29;
+  --bd-normal: #3D3A34;
+  --bd-strong: #545048;
+  --bd-hairline: rgba(232, 230, 227, 0.08);
+
+  --t-primary: #ECE8E1;
+  --t-secondary: #B3ADA3;
+  --t-muted: #857F75;
+  --t-code: #E5DFD5;
+
+  --accent: #E2886A;
+  --accent-soft: rgba(226, 136, 106, 0.12);
+  --accent-border: rgba(226, 136, 106, 0.32);
+  --accent-hover: #EA997F;
+
+  --emerald: #34D399;
+  --emerald-soft: rgba(52, 211, 153, 0.12);
+  --emerald-border: rgba(52, 211, 153, 0.3);
+
+  --rose: #FB7185;
+  --rose-soft: rgba(251, 113, 133, 0.12);
+  --rose-border: rgba(251, 113, 133, 0.3);
+
+  --amber: #FBBF24;
+  --amber-soft: rgba(251, 191, 36, 0.12);
+  --amber-border: rgba(251, 191, 36, 0.3);
+
+  --cyan: #38BDF8;
+  --cyan-soft: rgba(56, 189, 248, 0.12);
+  --cyan-border: rgba(56, 189, 248, 0.3);
+
+  --purple: #C084FC;
+  --purple-soft: rgba(192, 132, 252, 0.12);
+  --purple-border: rgba(192, 132, 252, 0.3);
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 14px rgba(0,0,0,0.4);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
+
+  --aike-sidebar-w: 290px;
+  --aike-content-max: 1040px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: "Songti SC", "SimSun", "STSong", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, "JetBrains Mono", monospace;
+}
+
+html[data-theme="light"] {
+  --bg-app: #FAF7F2;
+  --bg-surface: #FFFFFF;
+  --bg-subtle: #F4EFE9;
+  --bg-muted: #EBE4D8;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #FCFAF7;
+  --bg-code: #F0EAE1;
+
+  --bd-subtle: #E8E2D7;
+  --bd-normal: #DDD5C7;
+  --bd-strong: #C4B9A5;
+  --bd-hairline: rgba(43, 40, 37, 0.08);
+
+  --t-primary: #2B2825;
+  --t-secondary: #5C574F;
+  --t-muted: #8E877C;
+  --t-code: #3A3630;
+
+  --accent: #D97757;
+  --accent-soft: rgba(217, 119, 87, 0.1);
+  --accent-border: rgba(217, 119, 87, 0.28);
+  --accent-hover: #C66848;
+
+  --emerald: #10B981;
+  --emerald-soft: rgba(16, 185, 129, 0.1);
+  --emerald-border: rgba(16, 185, 129, 0.28);
+
+  --rose: #E11D48;
+  --rose-soft: rgba(225, 29, 72, 0.1);
+  --rose-border: rgba(225, 29, 72, 0.28);
+
+  --amber: #D97706;
+  --amber-soft: rgba(217, 119, 6, 0.1);
+  --amber-border: rgba(217, 119, 6, 0.28);
+
+  --cyan: #0284C7;
+  --cyan-soft: rgba(2, 132, 199, 0.1);
+  --cyan-border: rgba(2, 132, 199, 0.28);
+
+  --purple: #9333EA;
+  --purple-soft: rgba(147, 51, 234, 0.1);
+  --purple-border: rgba(147, 51, 234, 0.28);
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 14px rgba(0,0,0,0.08);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.1);
+}
+
+/* ==========================================================================
+   RESET & BASE STYLES
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
+  color: var(--t-primary);
+  line-height: 1.75;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* ==========================================================================
+   LAYOUT STRUCTURE · 侧栏贴左，正文在剩余区域自动对称居中 (8.7 规范)
+   ========================================================================== */
+.sidebar-layout {
+  display: block;
+  min-height: 100vh;
+}
+
+aside.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--aike-sidebar-w);
+  background: var(--bg-surface);
+  border-right: 1px solid var(--bd-subtle);
+  overflow-y: auto;
+  padding: 24px 18px 48px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+main.content {
+  display: block;
+  max-width: var(--aike-content-max);
+  width: auto;
+  margin-left: calc(var(--aike-sidebar-w) + max(0px, (100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+  margin-right: max(0px, calc((100% - var(--aike-sidebar-w) - var(--aike-content-max)) / 2));
+  padding: 44px 36px 96px;
+}
+
+@media (max-width: 1180px) {
+  aside.sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  aside.sidebar.open {
+    transform: translateX(0);
+  }
+  main.content {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    max-width: 100% !important;
+    padding: 28px 20px 72px;
+  }
+  .mobile-toggle {
+    display: inline-flex !important;
+  }
+}
+
+/* ==========================================================================
+   SIDEBAR COMPONENTS
+   ========================================================================== */
+.sidebar-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--bd-subtle);
+}
+
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  width: fit-content;
+}
+
+.sidebar-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--t-primary);
+}
+
+.sidebar-meta {
+  font-size: 0.8rem;
+  color: var(--t-muted);
+  line-height: 1.5;
+}
+
+.sidebar-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.btn-ctrl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--t-secondary);
+  border: 1px solid var(--bd-subtle);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-ctrl:hover {
+  background: var(--bg-muted);
+  color: var(--t-primary);
+  border-color: var(--bd-normal);
+}
+
+.progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--t-muted);
+}
+
+.progress-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+.nav-group-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--t-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+
+.toc-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.toc-link {
+  display: block;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--t-secondary);
+  text-decoration: none;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  transition: all 0.15s ease;
+}
+
+.toc-link:hover {
+  background: var(--bg-subtle);
+  color: var(--accent);
+}
+
+.toc-link.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.toc-link.sub {
+  padding-left: 20px;
+  font-size: 0.78rem;
+  color: var(--t-muted);
+}
+
+.toc-link.sub:hover {
+  color: var(--accent);
+}
+
+/* ==========================================================================
+   MOBILE CONTROLS
+   ========================================================================== */
+.mobile-header {
+  display: none;
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--bd-subtle);
+  padding: 10px 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@media (max-width: 1180px) {
+  .mobile-header {
+    display: flex;
+  }
+}
+
+.mobile-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px solid var(--bd-subtle);
+  color: var(--t-primary);
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   TYPOGRAPHY & ARTICLE CONTENT
+   ========================================================================== */
+.article-header {
+  margin-bottom: 36px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--bd-subtle);
+}
+
+.header-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tag-item {
+  font-size: 0.75rem;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--t-secondary);
+  border: 1px solid var(--bd-subtle);
+  font-weight: 500;
+}
+
+.tag-item.primary {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-border);
+  font-weight: 600;
+}
+
+h1.doc-title {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1.28;
+  color: var(--t-primary);
+  margin-bottom: 18px;
+  letter-spacing: -0.02em;
+}
+
+.doc-subtitle {
+  font-size: 1.15rem;
+  line-height: 1.65;
+  color: var(--t-secondary);
+  margin-bottom: 20px;
+  font-style: normal;
+}
+
+.author-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.85rem;
+  color: var(--t-muted);
+}
+
+.author-bar span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+h2.sec-heading {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--t-primary);
+  margin-top: 52px;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--bd-subtle);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  scroll-margin-top: 24px;
+}
+
+h2.sec-heading::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 1.1em;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+h3.sub-heading {
+  font-size: 1.18rem;
+  font-weight: 600;
+  color: var(--t-primary);
+  margin-top: 32px;
+  margin-bottom: 14px;
+  scroll-margin-top: 24px;
+}
+
+p {
+  margin-bottom: 18px;
+  color: var(--t-primary);
+}
+
+p.lead {
+  font-size: 1.08rem;
+  line-height: 1.8;
+  color: var(--t-secondary);
+}
+
+ul, ol {
+  margin-bottom: 22px;
+  padding-left: 24px;
+  color: var(--t-primary);
+}
+
+li {
+  margin-bottom: 8px;
+  line-height: 1.7;
+}
+
+strong {
+  font-weight: 600;
+  color: var(--t-primary);
+}
+
+hr.divider {
+  border: 0;
+  height: 1px;
+  background: var(--bd-subtle);
+  margin: 44px 0;
+}
+
+/* ==========================================================================
+   CARDS, CALLOUTS & HIGHLIGHTS
+   ========================================================================== */
+.callout-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--bd-subtle);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 18px 22px;
+  margin: 24px 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.callout-box.info {
+  border-left-color: var(--cyan);
+  background: var(--cyan-soft);
+  border-color: var(--cyan-border);
+}
+
+.callout-box.warning {
+  border-left-color: var(--amber);
+  background: var(--amber-soft);
+  border-color: var(--amber-border);
+}
+
+.callout-box.danger {
+  border-left-color: var(--rose);
+  background: var(--rose-soft);
+  border-color: var(--rose-border);
+}
+
+.callout-box.success {
+  border-left-color: var(--emerald);
+  background: var(--emerald-soft);
+  border-color: var(--emerald-border);
+}
+
+.callout-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.executive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 16px;
+  margin: 24px 0 32px;
+}
+
+.exec-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--bd-subtle);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.exec-card:hover {
+  border-color: var(--accent-border);
+  transform: translateY(-2px);
+}
+
+.exec-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  width: fit-content;
+  letter-spacing: 0.04em;
+}
+
+.badge-acc { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-border); }
+.badge-eme { background: var(--emerald-soft); color: var(--emerald); border: 1px solid var(--emerald-border); }
+.badge-ros { background: var(--rose-soft); color: var(--rose); border: 1px solid var(--rose-border); }
+.badge-amb { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-border); }
+.badge-cya { background: var(--cyan-soft); color: var(--cyan); border: 1px solid var(--cyan-border); }
+
+.exec-card-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--t-primary);
+  line-height: 1.4;
+}
+
+.exec-card-desc {
+  font-size: 0.88rem;
+  color: var(--t-secondary);
+  line-height: 1.6;
+}
+
+/* Interviewee Table */
+.interviewee-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+  margin: 18px 0 28px;
+}
+
+.person-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--bd-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.person-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--t-primary);
+}
+
+.person-role {
+  font-size: 0.78rem;
+  color: var(--t-muted);
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   TABLES & COMPARISON MATRICES
+   ========================================================================== */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin: 24px 0 32px;
+  border: 1px solid var(--bd-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  text-align: left;
+  background: var(--bg-surface);
+}
+
+table.data-table th, table.data-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--bd-subtle);
+  vertical-align: top;
+}
+
+table.data-table th {
+  background: var(--bg-subtle);
+  font-weight: 600;
+  color: var(--t-primary);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+table.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+table.data-table tr:hover td {
+  background: var(--bg-subtle);
+}
+
+/* ==========================================================================
+   SVG VISUALIZATION & CHARTS
+   ========================================================================== */
+.chart-container {
+  background: var(--bg-surface);
+  border: 1px solid var(--bd-subtle);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin: 28px 0;
+  box-shadow: var(--shadow-md);
+}
+
+.chart-header {
+  margin-bottom: 18px;
+}
+
+.chart-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--t-primary);
+  margin-bottom: 4px;
+}
+
+.chart-caption {
+  font-size: 0.84rem;
+  color: var(--t-muted);
+  line-height: 1.5;
+}
+
+.svg-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+svg.vector-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--font-sans);
+}
+
+/* ==========================================================================
+   INTERACTIVE WORKBENCH · 九步闭环责任与自动化边界沙盘
+   ========================================================================== */
+.workbench-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--bd-normal);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  margin: 36px 0;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+}
+
+.workbench-badge {
+  position: absolute;
+  top: -12px;
+  left: 28px;
+  background: var(--accent);
+  color: #FFFFFF;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 12px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-shadow: var(--shadow-sm);
+}
+
+.workbench-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  color: var(--t-primary);
+}
+
+.workbench-subtitle {
+  font-size: 0.88rem;
+  color: var(--t-secondary);
+  margin-bottom: 22px;
+}
+
+.steps-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--bd-subtle);
+}
+
+.step-btn {
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px solid var(--bd-subtle);
+  color: var(--t-secondary);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.step-btn:hover {
+  background: var(--bg-muted);
+  color: var(--t-primary);
+  border-color: var(--bd-normal);
+}
+
+.step-btn.active {
+  background: var(--accent);
+  color: #FFFFFF;
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(226, 136, 106, 0.35);
+}
+
+.step-card-display {
+  background: var(--bg-subtle);
+  border: 1px solid var(--bd-subtle);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.step-display-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.step-headline {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--t-primary);
+}
+
+.step-gate-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+}
+
+.gate-human { background: var(--rose-soft); color: var(--rose); border: 1px solid var(--rose-border); }
+.gate-agent { background: var(--cyan-soft); color: var(--cyan); border: 1px solid var(--cyan-border); }
+.gate-system { background: var(--emerald-soft); color: var(--emerald); border: 1px solid var(--emerald-border); }
+
+.step-grid-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.detail-pane {
+  background: var(--bg-surface);
+  border: 1px solid var(--bd-subtle);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pane-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--t-muted);
+}
+
+.pane-content {
+  font-size: 0.88rem;
+  color: var(--t-primary);
+  line-height: 1.55;
+}
+
+.step-quote-box {
+  background: var(--bg-surface);
+  border-left: 3px solid var(--purple);
+  padding: 12px 16px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 0.86rem;
+  font-style: italic;
+  color: var(--t-secondary);
+}
+
+/* ==========================================================================
+   SIMULATION SANDBOX · 下游排队拥塞与 USL 吞吐计算器
+   ========================================================================== */
+.sim-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 18px;
+}
+
+@media (max-width: 860px) {
+  .sim-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sim-controls-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sim-slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slider-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--t-primary);
+}
+
+.slider-val-tag {
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-muted);
+  outline: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  border: 2px solid #FFFFFF;
+}
+
+.sim-results-pane {
+  background: var(--bg-subtle);
+  border: 1px solid var(--bd-subtle);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--bd-subtle);
+}
+
+.stat-label {
+  font-size: 0.84rem;
+  color: var(--t-secondary);
+}
+
+.stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--t-primary);
+  font-family: var(--font-mono);
+}
+
+.bottleneck-indicator {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--rose-soft);
+  border: 1px solid var(--rose-border);
+  color: var(--rose);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   FOOTER & BACK TO TOP
+   ========================================================================== */
+footer.doc-footer {
+  margin-top: 64px;
+  padding-top: 28px;
+  border-top: 1px solid var(--bd-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 0.82rem;
+  color: var(--t-muted);
+}
+
+#toTopBtn {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--bd-normal);
+  color: var(--t-primary);
+  box-shadow: var(--shadow-md);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 99;
+  transition: all 0.2s ease;
+}
+
+#toTopBtn:hover {
+  background: var(--accent);
+  color: #FFFFFF;
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+/* ==========================================================================
+   PRINT STYLES (@media print)
+   ========================================================================== */
+@media print {
+  aside.sidebar, #toTopBtn, .mobile-header, .btn-ctrl, input[type="range"] {
+    display: none !important;
+  }
+  main.content {
+    margin: 0 !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+  }
+  .workbench-box, .chart-container, .callout-box, .exec-card {
+    box-shadow: none !important;
+    border: 1px solid #CCCCCC !important;
+    page-break-inside: avoid;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- Mobile Sticky Header -->
+<div class="mobile-header">
+  <button id="mobileNavToggle" class="mobile-toggle" aria-label="打开目录">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+  </button>
+  <span style="font-weight: 700; font-size: 0.9rem;">OpenAI 内部软件工厂运转揭秘</span>
+  <button id="mobileThemeBtn" class="btn-ctrl" style="padding: 4px 8px;">🌓</button>
+</div>
+
+<div class="sidebar-layout">
+
+  <!-- Sidebar Navigation -->
+  <aside id="sidebarNav" class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-badge">OpenAI Engineering Report</div>
+      <div class="sidebar-title">代码变成通用界面</div>
+      <div class="sidebar-meta">揭秘 OpenAI 内部「软件工厂」运转机制</div>
+    </div>
+
+    <div class="sidebar-controls">
+      <button id="aikeThemeBtn" class="btn-ctrl" title="切换深色/浅色模式">
+        <span id="themeBtnIcon">🌓</span>
+        <span id="themeBtnText">明暗切换</span>
+      </button>
+      <button id="btnPrintDoc" class="btn-ctrl" title="打印或另存为 PDF">
+        <span>🖨️</span>
+        <span>打印导出</span>
+      </button>
+    </div>
+
+    <div class="progress-container">
+      <div class="progress-label">
+        <span>阅读进度</span>
+        <span id="progressPercent">0%</span>
+      </div>
+      <div class="progress-track">
+        <div id="aikeProgressBar" class="progress-fill"></div>
+      </div>
+    </div>
+
+    <nav aria-label="文章目录">
+      <div class="nav-group-title">核心全景导览</div>
+      <ul class="toc-list">
+        <li><a href="#sec-overview" class="toc-link">执行摘要与关键发现</a></li>
+        <li><a href="#sec-interviewees" class="toc-link">七位受访技术主管证词</a></li>
+        <li><a href="#sec-boundary" class="toc-link">材料边界与公开范围</a></li>
+      </ul>
+
+      <div class="nav-group-title">正文核心章节</div>
+      <ul class="toc-list">
+        <li><a href="#sec-entry" class="toc-link">一、全公司通用工作入口</a></li>
+        <li><a href="#sec-chart-usage" class="toc-link sub">· 部门使用变化与 Token 份额图</a></li>
+        <li><a href="#sec-stats-audit" class="toc-link sub">· 官方公布数据与口径核查</a></li>
+        
+        <li><a href="#sec-unit-shift" class="toc-link">二、工作基本单位之变</a></li>
+        <li><a href="#sec-no-fork" class="toc-link sub">· 为什么没有 Fork VS Code</a></li>
+        <li><a href="#sec-hockey-stick" class="toc-link sub">· 曲棍球棒增长与下游瓶颈</a></li>
+        <li><a href="#sec-mobile-bottleneck" class="toc-link sub">· 原生移动端审核的不可压缩性</a></li>
+
+        <li><a href="#sec-factory-arch" class="toc-link">三、九步闭环软件工厂</a></li>
+        <li><a href="#sec-chart-factory" class="toc-link sub">· 传统流水线 vs 闭环工厂对比图</a></li>
+        <li><a href="#sec-nine-details" class="toc-link sub">· 九大交互闭环全景详解</a></li>
+        <li><a href="#sec-responsibility-matrix" class="toc-link sub">· 交互沙盘：人机责任与边界</a></li>
+        <li><a href="#sec-three-powers" class="toc-link sub">· 三种能力的相互制衡</a></li>
+
+        <li><a href="#sec-human-gates" class="toc-link">四、人工关卡与未来演进</a></li>
+        <li><a href="#sec-three-gates" class="toc-link sub">· 人类把守的三大关键节点</a></li>
+        <li><a href="#sec-auto-evolution" class="toc-link sub">· 自主 SRE 与常规事故自治</a></li>
+
+        <li><a href="#sec-takeaways" class="toc-link">五、外部团队的真正借鉴</a></li>
+        <li><a href="#sec-five-principles" class="toc-link sub">· 五项可迁移工程化实践</a></li>
+        <li><a href="#sec-scarcity-shift" class="toc-link sub">· 稀缺性的历史性位移</a></li>
+
+        <li><a href="#sec-simulation" class="toc-link">附录、排队论与吞吐沙盘</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- Main Article Content -->
+  <main class="content">
+
+    <!-- Article Header -->
+    <header class="article-header">
+      <div class="header-tags">
+        <span class="tag-item primary">The Pragmatic Engineer 特刊解读</span>
+        <span class="tag-item">Agentic SDLC</span>
+        <span class="tag-item">Codex Harness</span>
+        <span class="tag-item">软件工程范式转移</span>
+        <span class="tag-item">SRE 自治演进</span>
+      </div>
+      <h1 class="doc-title">当代码变成通用界面：揭秘OpenAI 内部的「软件工厂」是如何运转的</h1>
+      <p class="doc-subtitle">Codex 把工作的基本单位从逐行编码变成目标委托，也把瓶颈推向 CI、审查、发布与运维。这篇解读还原 OpenAI 九步软件工厂的证据、人工关卡与自动化方向。</p>
+      
+      <div class="author-bar">
+        <span>✍️ <strong>特约解读</strong>：AI 架构与系统工程研析</span>
+        <span>🏢 <strong>调研对象</strong>：OpenAI 总部研发工程体系</span>
+        <span>📅 <strong>基准日期</strong>：2026 年 9 月 17 日</span>
+        <span>⏱️ <strong>阅读时长</strong>：约 18 分钟深度阅读</span>
+      </div>
+    </header>
+
+    <!-- Section: Executive Summary -->
+    <section id="sec-overview">
+      <div class="executive-grid">
+        <div class="exec-card">
+          <span class="exec-badge badge-acc">工作界面变迁</span>
+          <div class="exec-card-title">通用工作入口与 99.8% Token 口径</div>
+          <div class="exec-card-desc">Codex 在 OpenAI 已从编码工具扩展为全公司工作入口；官方公布的 <strong>99.8%</strong> 指全公司每周输出 Token 中 Codex 的份额，<strong>绝不是</strong>员工人数或工时占比。</div>
+        </div>
+        <div class="exec-card">
+          <span class="exec-badge badge-amb">瓶颈剧烈后移</span>
+          <div class="exec-card-title">下游系统半年承受近十倍负载膨胀</div>
+          <div class="exec-card-desc">代码生成吞吐飙升后，工程瓶颈全面后移到 CI、专业代码审查、风险分流、移动商店发布和生产观测；传统人工逐行审查彻底失效。</div>
+        </div>
+        <div class="exec-card">
+          <span class="exec-badge badge-ros">人类坚守底线</span>
+          <div class="exec-card-title">三大人工安全关卡与渐进自治路线</div>
+          <div class="exec-card-desc">当前绝非“黑灯无人工厂”：人类把守<strong>目标定义</strong>、<strong>生产发布批准</strong>与<strong>具体故障缓解授权</strong>；未来长期方向则是变更级自主 SRE 与常规事故有限自治。</div>
+        </div>
+      </div>
+
+      <p class="lead">技术作家 Gergely Orosz 再次走进 OpenAI 总部时，距离上一次探访只有一年，内部的工作方式却已经换了底座。Codex 从一个“有也不错”的编程工具，变成了工程、研究、财务、招聘、法律和市场团队共同使用的工作入口；面向通用工作的 ChatGPT Work，也建立在 Codex harness 这套执行框架之上。员工不一定以代码作为最终产物，但智能体会在幕后编写代码、调用工具、生成文档和表格，把目标变成可交付的结果。</p>
+    </section>
+
+    <!-- Section: Interviewees & Boundary -->
+    <section id="sec-interviewees">
+      <h3 class="sub-heading">七位技术负责人的证词拼图</h3>
+      <p>这份深度观察并非来自公关通稿，而是来自一线主导基础设施、桌面端、智能体与生产力的七位关键受访者：</p>
+      
+      <div class="interviewee-grid">
+        <div class="person-card">
+          <div class="person-name">Venkat Venkataramani</div>
+          <div class="person-role">应用基础设施工程副总裁 (VP of App Infra)</div>
+        </div>
+        <div class="person-card">
+          <div class="person-name">Sulman Choudhry</div>
+          <div class="person-role">ChatGPT 工程负责人 (Head of Engineering, ChatGPT)</div>
+        </div>
+        <div class="person-card">
+          <div class="person-name">Andrew Ambrosino</div>
+          <div class="person-role">Codex 桌面端工程负责人 (Desktop Lead)</div>
+        </div>
+        <div class="person-card">
+          <div class="person-name">Joe Gershenson</div>
+          <div class="person-role">核心智能体团队负责人 (Core Agent Lead)</div>
+        </div>
+        <div class="person-card">
+          <div class="person-name">Akshay Nathan</div>
+          <div class="person-role">生产力团队工程负责人 (Productivity Engineering Lead)</div>
+        </div>
+        <div class="person-card">
+          <div class="person-name">Ahmed Ibrahim</div>
+          <div class="person-role">Codex 核心工程师 (Codex Engineer)</div>
+        </div>
+        <div class="person-card">
+          <div class="person-name">Steve Coffey</div>
+          <div class="person-role">Responses API 核心工程师 (API Reliability Engineer)</div>
+        </div>
+      </div>
+
+      <p>不同岗位的证词拼出了一条完整链路：智能体先改变个人如何工作，随后放大代码产量，最后迫使测试、审查、发布和线上运维一起重构。</p>
+    </section>
+
+    <!-- Section: Material Boundary -->
+    <section id="sec-boundary">
+      <div class="callout-box warning">
+        <div class="callout-title">
+          <span>⚠️</span>
+          <span>严谨求实声明：材料边界与公开范围核查</span>
+        </div>
+        <p style="margin-bottom: 0;">这里也存在一个必须说清的材料边界。原报告元数据标记全文为 <strong>7,686 个英文词</strong>且属于付费内容；当前公开页面只提供引言、第 1～3 节全文和第 4 节的开头一段，实际约 <strong>3,536 词，相当于全文约 46%</strong>。后续关于内部工具和调试、十亿用户基础设施、API 可靠性与性能，以及工程岗位变化的正文并未公开。<strong>本报告只解读能够逐项核对的公开内容，绝不根据目录预告凭空补写后半篇的论据</strong>。</p>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- Section 1: From Programming Tool to Company Entrance -->
+    <section id="sec-entry">
+      <h2 class="sec-heading">一、从编程工具到全公司的工作入口</h2>
+      <p>转折发生得很快。Codex 桌面应用在 2 月推出 Mac 版，3 月推出 Windows 版，随后在 7 月推出由 Codex harness 驱动的 ChatGPT Work。几个月内，财务、招聘、法律等非工程团队从几乎不用 Codex，转向大多数人每周都会使用。这个扩散并非来自管理层强制推行。</p>
+
+      <!-- Figure 1: Codex Usage by Department Chart (Inline SVG) -->
+      <div id="sec-chart-usage" class="chart-container">
+        <div class="chart-header">
+          <div class="chart-title">OpenAI 各部门 Codex 使用变化（月度输出 Token 占比演进）</div>
+          <div class="chart-caption">图：各部门平均用户的月度输出 Token 中，Codex 所占的份额。来源：OpenAI / The Pragmatic Engineer。</div>
+        </div>
+        <div class="svg-wrap">
+          <svg class="vector-chart" viewBox="0 0 880 420" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="gradEng" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#E2886A" stop-opacity="0.25"/>
+                <stop offset="100%" stop-color="#E2886A" stop-opacity="0.0"/>
+              </linearGradient>
+              <linearGradient id="gradWork" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.2"/>
+                <stop offset="100%" stop-color="#34D399" stop-opacity="0.2"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Chart Background Grid -->
+            <rect x="70" y="30" width="770" height="320" fill="var(--bg-subtle)" rx="6"/>
+            <line x1="70" y1="350" x2="840" y2="350" stroke="var(--bd-normal)" stroke-width="1.5"/>
+            <line x1="70" y1="270" x2="840" y2="270" stroke="var(--bd-subtle)" stroke-dasharray="4"/>
+            <line x1="70" y1="190" x2="840" y2="190" stroke="var(--bd-subtle)" stroke-dasharray="4"/>
+            <line x1="70" y1="110" x2="840" y2="110" stroke="var(--bd-subtle)" stroke-dasharray="4"/>
+            <line x1="70" y1="30" x2="840" y2="30" stroke="var(--bd-subtle)" stroke-dasharray="4"/>
+
+            <!-- Y-Axis Labels -->
+            <text x="58" y="354" fill="var(--t-muted)" font-size="11" text-anchor="end">0%</text>
+            <text x="58" y="274" fill="var(--t-muted)" font-size="11" text-anchor="end">25%</text>
+            <text x="58" y="194" fill="var(--t-muted)" font-size="11" text-anchor="end">50%</text>
+            <text x="58" y="114" fill="var(--t-muted)" font-size="11" text-anchor="end">75%</text>
+            <text x="58" y="34" fill="var(--t-muted)" font-size="11" text-anchor="end">100%</text>
+
+            <!-- X-Axis Labels (Months) -->
+            <text x="120" y="375" fill="var(--t-muted)" font-size="12" text-anchor="middle">1月 (CLI)</text>
+            <text x="240" y="375" fill="var(--t-muted)" font-size="12" text-anchor="middle">2月 (Mac)</text>
+            <text x="360" y="375" fill="var(--t-muted)" font-size="12" text-anchor="middle">3月 (Win)</text>
+            <text x="480" y="375" fill="var(--t-muted)" font-size="12" text-anchor="middle">4月</text>
+            <text x="600" y="375" fill="var(--t-muted)" font-size="12" text-anchor="middle">5月 (/goal)</text>
+            <text x="720" y="375" fill="var(--t-muted)" font-size="12" text-anchor="middle">6月 (编辑)</text>
+            <text x="810" y="375" fill="var(--t-muted)" font-size="12" text-anchor="middle">7月 (Work)</text>
+
+            <!-- Milestone Vertical Highlights -->
+            <line x1="240" y1="30" x2="240" y2="350" stroke="var(--bd-strong)" stroke-dasharray="2" stroke-width="1"/>
+            <line x1="600" y1="30" x2="600" y2="350" stroke="var(--amber)" stroke-dasharray="3" stroke-width="1.2"/>
+            <line x1="810" y1="30" x2="810" y2="350" stroke="var(--emerald)" stroke-dasharray="3" stroke-width="1.2"/>
+
+            <!-- Milestone Banners -->
+            <rect x="520" y="42" width="160" height="24" rx="4" fill="var(--amber-soft)" stroke="var(--amber-border)"/>
+            <text x="600" y="58" fill="var(--amber)" font-size="11" font-weight="600" text-anchor="middle">长周期 /goal 突破 60%→90%</text>
+
+            <rect x="730" y="74" width="105" height="24" rx="4" fill="var(--emerald-soft)" stroke="var(--emerald-border)"/>
+            <text x="782" y="90" fill="var(--emerald)" font-size="11" font-weight="600" text-anchor="middle">全司 Token 99.8%</text>
+
+            <!-- Area Fill for Engineering -->
+            <path d="M 120 286 L 240 210 L 360 146 L 480 92 L 600 58 L 720 42 L 810 32 L 810 350 L 120 350 Z" fill="url(#gradEng)"/>
+
+            <!-- Line 1: Engineering -->
+            <path d="M 120 286 L 240 210 L 360 146 L 480 92 L 600 58 L 720 42 L 810 32" fill="none" stroke="#E2886A" stroke-width="3"/>
+            
+            <!-- Line 2: Research -->
+            <path d="M 120 310 L 240 250 L 360 178 L 480 106 L 600 70 L 720 48 L 810 36" fill="none" stroke="#C084FC" stroke-width="2.5" stroke-dasharray="5 2"/>
+
+            <!-- Line 3: Finance (Non-technical jump) -->
+            <path d="M 120 350 L 240 344 L 360 226 L 480 154 L 600 102 L 720 72 L 810 44" fill="none" stroke="#38BDF8" stroke-width="2.5"/>
+
+            <!-- Line 4: Recruiting & Legal -->
+            <path d="M 120 350 L 240 346 L 360 238 L 480 162 L 600 110 L 720 78 L 810 48" fill="none" stroke="#34D399" stroke-width="2"/>
+
+            <!-- Line 5: Marketing & GTM -->
+            <path d="M 120 350 L 240 348 L 360 230 L 480 150 L 600 98 L 720 68 L 810 40" fill="none" stroke="#FBBF24" stroke-width="2"/>
+
+            <!-- Data Dots at 3 Month (Early GUI 40% penetration) -->
+            <circle cx="360" cy="226" r="4.5" fill="#38BDF8" stroke="#FFFFFF" stroke-width="1.5"/>
+            <text x="368" y="222" fill="var(--cyan)" font-size="10" font-weight="600">非技术约40% (代码裸露期)</text>
+
+            <!-- Legend Box -->
+            <rect x="80" y="42" width="410" height="28" rx="4" fill="var(--bg-surface)" stroke="var(--bd-subtle)"/>
+            <circle cx="95" cy="56" r="4" fill="#E2886A"/><text x="105" y="60" fill="var(--t-secondary)" font-size="11">工程团队</text>
+            <circle cx="165" cy="56" r="4" fill="#C084FC"/><text x="175" y="60" fill="var(--t-secondary)" font-size="11">研究团队</text>
+            <circle cx="235" cy="56" r="4" fill="#38BDF8"/><text x="245" y="60" fill="var(--t-secondary)" font-size="11">财务团队</text>
+            <circle cx="305" cy="56" r="4" fill="#34D399"/><text x="315" y="60" fill="var(--t-secondary)" font-size="11">招聘/法律</text>
+            <circle cx="385" cy="56" r="4" fill="#FBBF24"/><text x="395" y="60" fill="var(--t-secondary)" font-size="11">市场团队</text>
+          </svg>
+        </div>
+      </div>
+
+      <p>更值得注意的是，产品当时并不好用。2 月至 4 月的 Codex 应用仍会把代码直接显示在屏幕上，对非技术用户相当不友好，但非工程团队的采用率依然接近 <strong>40%</strong>。原因很现实：即使界面像开发工具，它已经能完成调研、制作演示文稿、生成文档、处理电子表格等复杂工作，产出的价值足以抵消使用门槛。</p>
+
+      <p>随后，<strong>长周期任务能力</strong>把使用率从大约 60% 推到 90%。用户可以通过 <code>/goal</code> 交代一个目标，让智能体持续工作，线程甚至延续数天。Andrew Ambrosino 观察到一个反直觉变化：<strong>智能体工作得越久，人反而越少同时管理多个任务</strong>，因为一个长线程会自行派生其他智能体并行处理子问题。人负责的对象从许多零散对话，收束为少数几个目标及其验收。</p>
+
+      <p>另一个动力是 Akshay Nathan 所说的“认知差距”（awareness gap）。模型能力早已存在，但许多人不知道能力可以落到哪些工作上。有人先用 Codex 完成一个任务，后来从同事那里发现它还可以监控 Slack、更新 Airtable、制作入职材料。用途通过口口相传扩散，各团队再把成熟流程封装成角色或团队插件。通用智能体由此不再只是一个空白输入框，而是带着业务上下文和惯用工具进入具体岗位。</p>
+
+      <div class="callout-box info">
+        <div class="callout-title">
+          <span>💡</span>
+          <span>将领域专家直接嵌入 Harness 工程团队</span>
+        </div>
+        <p>这种适配也暴露了工程团队的知识边界。开发者知道怎样构建 harness，却未必知道一份优秀的演示文稿、电子表格或商业报告应达到什么标准。因此，OpenAI 将领域专家嵌入 ChatGPT Work 的工程团队，让专业人员直接定义“好结果”的品味和要求。这里的关键并不是模型在所有领域都胜过专家，而是开发者无法凭自己的经验替每个专业领域设定质量标准。</p>
+      </div>
+
+      <p>OpenAI 内部的 Codex 还比公开产品接入了更多公司系统，这一点限制了外部类比。它已经深到足以形成运营依赖：即使只是一次轻微故障，同事发给 Codex 和 Work 团队的消息，也可能与自动监控告警同时甚至更早抵达。外部团队不能只安装同名产品，就假定会自然获得相同效果。</p>
+
+      <!-- Section: Stats Audit -->
+      <div id="sec-stats-audit" class="callout-box warning">
+        <div class="callout-title">
+          <span>📊</span>
+          <span>官方公布核心数据与统计口径逐一核查</span>
+        </div>
+        <p>OpenAI 后来公布的数据能补充这次访谈，但必须严格保留其<strong>原始统计口径</strong>，防范外界过度解读与误传：</p>
+        
+        <ul>
+          <li><strong>85% 与 99.8% 的真实含义</strong>：对平均一名 OpenAI 员工而言，Codex 已占其 AI 工具输出 Token 的 85% 以上；全公司每周生成的输出 Token 中，Codex 占 <strong>99.8%</strong>。<strong>这是 Token 份额，不是使用人数或工作时间占比</strong>。</li>
+          <li><strong>P99 用户的“60 小时运行时间”</strong>：在 OpenAI 日活用户中，位于第 99 百分位的重度用户每天经由多个并行智能体产生超过 <strong>60 小时的 agent-turn 运行时间</strong>。<strong>并行运行时间可以轻易超过一天的 24 小时，绝不能等同于人类一天工作了 60 小时</strong>。</li>
+          <li><strong>任务复杂度的估算口径</strong>：在 2026 年 5 月的抽样个人用户中，<strong>80.6%</strong> 至少提交过一次模型估算相当于人类工作超过 30 分钟的请求，<strong>70.2%</strong> 至少有一次超过 1 小时，<strong>25.6%</strong> 至少有一次超过 8 小时。<strong>这些数字是模型对“等效人类任务耗时”的方向性估算，不是请求实际运行的挂钟时间，更不是独立测得的生产率</strong>。</li>
+        </ul>
+
+        <p style="margin-bottom: 0;"><strong>结论审视</strong>：这些数据能证明工作正在从短问答迁移到长期委托，却不能单独证明代码质量更好、人员需求下降，或任何公司照做都能获得相同生产率。</p>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- Section 2: IDE Did Not Disappear -->
+    <section id="sec-unit-shift">
+      <h2 class="sec-heading">二、IDE 没有消失，工作的基本单位先变了</h2>
+      <p>Codex 桌面应用差点没有发布。2025 年 12 月，团队已经有 Codex CLI，市场上也有功能完整的 IDE，于是一个介于终端和 IDE 之间的工具是否有独立价值，并不明显。Andrew Ambrosino 把这种担忧比作 <strong>iPad</strong>：用户可能宁可选择更便携的手机，或者功能更强的笔记本电脑，中间设备反而无处安放。</p>
+
+      <div id="sec-no-fork" class="callout-box">
+        <div class="callout-title">
+          <span>🎯</span>
+          <span>关键战略抉择：为什么 OpenAI 没有 Fork VS Code？</span>
+        </div>
+        <p>与此同时，Antigravity 在 11 月以 VS Code 分支的形态出现，更加诱使团队沿用成熟编辑器。但 OpenAI 最终没有 fork VS Code。他们押注的是：<strong>随着智能体能力提高，开发者会减少直接操作 IDE，把工作重心移到目标定义、任务委托和结果判断</strong>。内部 IDE 使用量从 1 月起下降，说明这一变化正在发生；不过 Codex 应用也在 6 月加入了文件编辑功能。这组事实更适合解释为“<strong>IDE 不再垄断开发入口</strong>”，而不是宣布 IDE 已经死亡。</p>
+      </div>
+
+      <p><strong>真正改变的是工作的基本单位。</strong>过去，开发者在编辑器里完成一组行级修改；现在，人可以交代一个结果，让智能体查找上下文、修改多个文件、运行验证并处理后续反馈。<strong>当产出单位从“改一段代码”扩大为“完成一个目标”，代码生成速度就会远超原有研发基础设施的设计容量。</strong></p>
+
+      <div id="sec-hockey-stick">
+        <h3 class="sub-heading">“曲棍球棒”式 PR 暴增与下游基础设施承压</h3>
+        <p>Venkat Venkataramani 看到，每名工程师产生的 PR 数量呈“<strong>曲棍球棒</strong>”式急剧上升，部分构建、测试和部署系统在<strong>大约六个月内承受了近十倍负载</strong>。其他公司可能用两三年才经历同等增长，OpenAI 却几乎每个月都会遇到一组新的扩容问题：版本控制要接住更多代码，CI/CD 要执行更多任务，发布系统还要吸收更高频的变更。<strong>模型能力每前进一步，瓶颈就向下游移动一次。</strong></p>
+
+        <p>这也是传统 PR 和代码审查开始显得不合时宜的原因。如果每次变更仍完全依赖人工逐行检查，人的接受速度会成为固定上限。但取消审查并不能解决问题，只会把风险直接推到生产环境。OpenAI 的做法是把审查拆成<strong>专业化智能体、风险分流和明确的人工关卡</strong>，让审查能力随变更量一起扩展。</p>
+      </div>
+
+      <div id="sec-mobile-bottleneck" class="callout-box danger">
+        <div class="callout-title">
+          <span>📱</span>
+          <span>原生移动端的物理鸿沟：无法被内部自动化消除的硬瓶颈</span>
+        </div>
+        <p>原生移动端则展示了另一类无法靠内部自动化直接消除的瓶颈。iOS 和 Android 更新仍须经过 Apple 与 Google 的应用商店审核，往往需要<strong>数小时或数天</strong>。Sulman Choudhry 回忆，Facebook 在 2010 年代把移动发布从每月一次逐步提升到双周一次、每周一次，同时依靠实验系统和 Feature Flag 让代码先随版本进入客户端，再远程决定何时开放功能。这曾显著提高移动团队的速度，但面对今天几分钟即可生成的软件变更仍显得迟缓。OpenAI 的 Codex 使用高度偏向移动端，而原生应用发布距离网页部署的速度还很远。</p>
+        <p style="margin-bottom: 0;"><strong>核心启示</strong>：这个案例揭示了软件工厂的真实约束——智能体可以压缩内部生产时间，却不能凭空消除商店审核、合规要求和生产风险。<strong>生成变快以后，原先不显眼的外部等待会成为主导交付周期的新瓶颈。</strong></p>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- Section 3: The 9-Step Factory Closed Loop -->
+    <section id="sec-factory-arch">
+      <h2 class="sec-heading">三、九步闭环：代码生成只是中间一环</h2>
+      <p>“软件工厂”借用了制造业的比喻：人和机器人共同生产汽车，在软件里则是人和智能体共同生产、发布并维护系统。制造业甚至存在不需要照明的“黑灯工厂”，但 OpenAI 当前的流程还不是无人系统。<strong>人类定义目标、批准生产发布；故障智能体目前也只能建议缓解措施，除非工程师明确授权，否则不会执行。</strong></p>
+
+      <!-- Figure 2: Architecture Diagram (Inline SVG) -->
+      <div id="sec-chart-factory" class="chart-container">
+        <div class="chart-header">
+          <div class="chart-title">传统开发流水线 vs OpenAI 智能体软件工厂九步闭环</div>
+          <div class="chart-caption">图：人类定义目标后，Codex 与上下文、CI、审查、发布、生产观测、Perf Factory 和 Sevbot 构成反馈回路。来源：The Pragmatic Engineer。</div>
+        </div>
+        <div class="svg-wrap">
+          <svg class="vector-chart" viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <filter id="shadowBox" x="-4%" y="-4%" width="108%" height="108%">
+                <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+              </filter>
+              <marker id="arrowHead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="var(--bd-strong)"/>
+              </marker>
+              <marker id="arrowAcc" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#E2886A"/>
+              </marker>
+              <marker id="arrowEme" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#34D399"/>
+              </marker>
+              <marker id="arrowCya" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#38BDF8"/>
+              </marker>
+              <marker id="arrowRos" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#FB7185"/>
+              </marker>
+            </defs>
+
+            <!-- ================= TOP: TRADITIONAL PIPELINE ================= -->
+            <rect x="30" y="24" width="900" height="120" rx="10" fill="var(--bg-subtle)" stroke="var(--bd-subtle)"/>
+            <text x="50" y="50" fill="var(--t-muted)" font-size="12" font-weight="700" letter-spacing="0.05em">传统线性软件开发流水线 (TRADITIONAL LINEAR PIPELINE · 单向受限)</text>
+
+            <!-- Trad Step 1 -->
+            <rect x="50" y="66" width="140" height="60" rx="6" fill="var(--bg-surface)" stroke="var(--bd-normal)"/>
+            <text x="62" y="90" fill="var(--t-primary)" font-size="11" font-weight="600">① 需求与手写代码</text>
+            <text x="62" y="110" fill="var(--t-muted)" font-size="10">人逐行敲代码 / 查文档</text>
+
+            <line x1="190" y1="96" x2="225" y2="96" stroke="var(--bd-strong)" stroke-width="1.5" marker-end="url(#arrowHead)"/>
+
+            <!-- Trad Step 2 -->
+            <rect x="230" y="66" width="140" height="60" rx="6" fill="var(--bg-surface)" stroke="var(--rose-border)"/>
+            <text x="242" y="90" fill="var(--rose)" font-size="11" font-weight="600">② 人工代码审查</text>
+            <text x="242" y="110" fill="var(--t-muted)" font-size="10">🚨 吞吐瓶颈 · 漫长排队</text>
+
+            <line x1="370" y1="96" x2="405" y2="96" stroke="var(--bd-strong)" stroke-width="1.5" marker-end="url(#arrowHead)"/>
+
+            <!-- Trad Step 3 -->
+            <rect x="410" y="66" width="140" height="60" rx="6" fill="var(--bg-surface)" stroke="var(--bd-normal)"/>
+            <text x="422" y="90" fill="var(--t-primary)" font-size="11" font-weight="600">③ 静态 CI 测试</text>
+            <text x="422" y="110" fill="var(--t-muted)" font-size="10">全量昂贵运行 · 易慢</text>
+
+            <line x1="550" y1="96" x2="585" y2="96" stroke="var(--bd-strong)" stroke-width="1.5" marker-end="url(#arrowHead)"/>
+
+            <!-- Trad Step 4 -->
+            <rect x="590" y="66" width="140" height="60" rx="6" fill="var(--bg-surface)" stroke="var(--bd-normal)"/>
+            <text x="602" y="90" fill="var(--t-primary)" font-size="11" font-weight="600">④ 周期性批量发布</text>
+            <text x="602" y="110" fill="var(--t-muted)" font-size="10">人工审批 · 批次合并</text>
+
+            <line x1="730" y1="96" x2="765" y2="96" stroke="var(--bd-strong)" stroke-width="1.5" marker-end="url(#arrowHead)"/>
+
+            <!-- Trad Step 5 -->
+            <rect x="770" y="66" width="140" height="60" rx="6" fill="var(--bg-surface)" stroke="var(--bd-normal)"/>
+            <text x="782" y="90" fill="var(--t-primary)" font-size="11" font-weight="600">⑤ 被动监控与告警</text>
+            <text x="782" y="110" fill="var(--t-muted)" font-size="10">On-Call 人工深夜救火</text>
+
+            <!-- ================= BOTTOM: OPENAI 9-STEP AGENTIC FACTORY ================= -->
+            <rect x="30" y="170" width="900" height="400" rx="10" fill="var(--bg-surface)" stroke="var(--accent-border)" stroke-width="1.5"/>
+            <text x="50" y="200" fill="var(--accent)" font-size="13" font-weight="700" letter-spacing="0.05em">OPENAI 智能体闭环软件工厂 (9-STEP CLOSED-LOOP AGENTIC FACTORY · 目标驱动)</text>
+
+            <!-- Step 1: Human Define Goal (RED GATE) -->
+            <g transform="translate(50, 220)">
+              <rect x="0" y="0" width="180" height="85" rx="8" fill="var(--bg-subtle)" stroke="var(--rose)" stroke-width="2"/>
+              <rect x="8" y="8" width="68" height="18" rx="4" fill="var(--rose-soft)"/>
+              <text x="14" y="21" fill="var(--rose)" font-size="10" font-weight="700">🔒 人类关卡 1</text>
+              <text x="10" y="44" fill="var(--t-primary)" font-size="12" font-weight="700">1. 人类定义结果</text>
+              <text x="10" y="62" fill="var(--t-muted)" font-size="10">工程师充当 PM</text>
+              <text x="10" y="76" fill="var(--t-secondary)" font-size="10">界定期望与品味标准</text>
+            </g>
+
+            <!-- Arrow 1 -> 2 -->
+            <line x1="230" y1="262" x2="265" y2="262" stroke="#E2886A" stroke-width="2" marker-end="url(#arrowAcc)"/>
+
+            <!-- Step 2: Codex Gather Context -->
+            <g transform="translate(270, 220)">
+              <rect x="0" y="0" width="180" height="85" rx="8" fill="var(--bg-subtle)" stroke="var(--bd-normal)"/>
+              <rect x="8" y="8" width="60" height="18" rx="4" fill="var(--cyan-soft)"/>
+              <text x="14" y="21" fill="var(--cyan)" font-size="10" font-weight="700">🤖 跨系统</text>
+              <text x="10" y="44" fill="var(--t-primary)" font-size="12" font-weight="700">2. Codex 汇集上下文</text>
+              <text x="10" y="62" fill="var(--t-muted)" font-size="10">代码+文档同仓</text>
+              <text x="10" y="76" fill="var(--t-secondary)" font-size="10">Git / Slack / Datadog / 技能</text>
+            </g>
+
+            <!-- Arrow 2 -> 3 -->
+            <line x1="450" y1="262" x2="485" y2="262" stroke="#E2886A" stroke-width="2" marker-end="url(#arrowAcc)"/>
+
+            <!-- Step 3: Agent Implement & Verify -->
+            <g transform="translate(490, 220)">
+              <rect x="0" y="0" width="190" height="85" rx="8" fill="var(--bg-subtle)" stroke="var(--bd-normal)"/>
+              <rect x="8" y="8" width="60" height="18" rx="4" fill="var(--cyan-soft)"/>
+              <text x="14" y="21" fill="var(--cyan)" font-size="10" font-weight="700">🤖 自主迭代</text>
+              <text x="10" y="44" fill="var(--t-primary)" font-size="12" font-weight="700">3. 实现并验证变更</text>
+              <text x="10" y="62" fill="var(--t-muted)" font-size="10">多文件自主修改</text>
+              <text x="10" y="76" fill="var(--t-secondary)" font-size="10">持续运行行为自验证</text>
+            </g>
+
+            <!-- Arrow 3 -> 4 -->
+            <line x1="680" y1="262" x2="715" y2="262" stroke="#E2886A" stroke-width="2" marker-end="url(#arrowAcc)"/>
+
+            <!-- Step 4: Build, Test, Guard CI -->
+            <g transform="translate(720, 220)">
+              <rect x="0" y="0" width="190" height="85" rx="8" fill="var(--bg-subtle)" stroke="var(--bd-normal)"/>
+              <rect x="8" y="8" width="66" height="18" rx="4" fill="var(--emerald-soft)"/>
+              <text x="14" y="21" fill="var(--emerald)" font-size="10" font-weight="700">⚡ 持续看护</text>
+              <text x="10" y="44" fill="var(--t-primary)" font-size="12" font-weight="700">4. CI与性能测试通过</text>
+              <text x="10" y="62" fill="var(--t-muted)" font-size="10">Agent 自动修复失败</text>
+              <text x="10" y="76" fill="var(--t-secondary)" font-size="10">Synthetics A/B 性能筛选</text>
+            </g>
+
+            <!-- Flow down: 4 -> 5 -->
+            <path d="M 815 305 L 815 340 L 815 345" stroke="#E2886A" stroke-width="2" marker-end="url(#arrowAcc)"/>
+
+            <!-- ROW 2: Steps 5, 6, 7, 8, 9 (Right to Left flow to complete closed loop) -->
+
+            <!-- Step 5: Review & Risk Routing -->
+            <g transform="translate(720, 350)">
+              <rect x="0" y="0" width="190" height="90" rx="8" fill="var(--bg-subtle)" stroke="var(--bd-normal)"/>
+              <rect x="8" y="8" width="76" height="18" rx="4" fill="var(--amber-soft)"/>
+              <text x="14" y="21" fill="var(--amber)" font-size="10" font-weight="700">⚖️ 风险分流</text>
+              <text x="10" y="44" fill="var(--t-primary)" font-size="12" font-weight="700">5. 专业审查与合规路由</text>
+              <text x="10" y="62" fill="var(--t-muted)" font-size="10">领域狭窄 Agent 阵列</text>
+              <text x="10" y="78" fill="var(--t-secondary)" font-size="10">低风险 opt-in / 高风险人工</text>
+            </g>
+
+            <!-- Arrow 5 -> 6 -->
+            <line x1="720" y1="395" x2="685" y2="395" stroke="#E2886A" stroke-width="2" marker-end="url(#arrowAcc)"/>
+
+            <!-- Step 6: Escort Deploy (RED GATE 2) -->
+            <g transform="translate(490, 350)">
+              <rect x="0" y="0" width="190" height="90" rx="8" fill="var(--bg-subtle)" stroke="var(--rose)" stroke-width="2"/>
+              <rect x="8" y="8" width="68" height="18" rx="4" fill="var(--rose-soft)"/>
+              <text x="14" y="21" fill="var(--rose)" font-size="10" font-weight="700">🔒 人类关卡 2</text>
+              <text x="10" y="44" fill="var(--t-primary)" font-size="12" font-weight="700">6. 智能体护送发布</text>
+              <text x="10" y="62" fill="var(--t-muted)" font-size="10">人批准生产部署</text>
+              <text x="10" y="78" fill="var(--t-secondary)" font-size="10">变更级发布 Agent 自生成看板</text>
+            </g>
+
+            <!-- Arrow 6 -> 7 -->
+            <line x1="490" y1="395" x2="455" y2="395" stroke="#E2886A" stroke-width="2" marker-end="url(#arrowAcc)"/>
+
+            <!-- Step 7: Observe Production Per-change -->
+            <g transform="translate(270, 350)">
+              <rect x="0" y="0" width="180" height="90" rx="8" fill="var(--bg-subtle)" stroke="var(--bd-normal)"/>
+              <rect x="8" y="8" width="66" height="18" rx="4" fill="var(--emerald-soft)"/>
+              <text x="14" y="21" fill="var(--emerald)" font-size="10" font-weight="700">🔭 细粒度</text>
+              <text x="10" y="44" fill="var(--t-primary)" font-size="12" font-weight="700">7. 变更粒度观测</text>
+              <text x="10" y="62" fill="var(--t-muted)" font-size="10">Wide Events / 指标</text>
+              <text x="10" y="78" fill="var(--t-secondary)" font-size="10">独立追踪改动健康度</text>
+            </g>
+
+            <!-- Arrow 7 -> 8 -->
+            <line x1="270" y1="395" x2="235" y2="395" stroke="#E2886A" stroke-width="2" marker-end="url(#arrowAcc)"/>
+
+            <!-- Step 8: Perf Factory Signal Loop -->
+            <g transform="translate(50, 350)">
+              <rect x="0" y="0" width="180" height="90" rx="8" fill="var(--bg-subtle)" stroke="var(--bd-normal)"/>
+              <rect x="8" y="8" width="70" height="18" rx="4" fill="var(--purple-soft)"/>
+              <text x="14" y="21" fill="var(--purple)" font-size="10" font-weight="700">🔄 自动修复</text>
+              <text x="10" y="44" fill="var(--t-primary)" font-size="12" font-weight="700">8. 生产信号回流</text>
+              <text x="10" y="62" fill="var(--t-muted)" font-size="10">Perf Factory 过滤降噪</text>
+              <text x="10" y="78" fill="var(--t-secondary)" font-size="10">定位回归并生成修复补丁</text>
+            </g>
+
+            <!-- Step 9: Sevbot (RED GATE 3) -->
+            <g transform="translate(50, 465)">
+              <rect x="0" y="0" width="400" height="85" rx="8" fill="var(--bg-subtle)" stroke="var(--rose)" stroke-width="2"/>
+              <rect x="8" y="8" width="68" height="18" rx="4" fill="var(--rose-soft)"/>
+              <text x="14" y="21" fill="var(--rose)" font-size="10" font-weight="700">🔒 人类关卡 3</text>
+              <text x="10" y="44" fill="var(--t-primary)" font-size="12" font-weight="700">9. Sevbot 事故辅助响应（人授权缓解操作）</text>
+              <text x="10" y="62" fill="var(--t-muted)" font-size="10">Slack 交互排障 · 推荐缓解措施 · 严禁擅自执行破坏性操作</text>
+              <text x="10" y="76" fill="var(--t-secondary)" font-size="10">未来愿景：常规事故有限自愈</text>
+            </g>
+
+            <!-- FEEDBACK ARROWS (LOOPS) -->
+            <!-- Loop 1: CI & Review Failures back to Step 3 -->
+            <path d="M 720 235 C 680 205, 600 205, 585 220" fill="none" stroke="#FBBF24" stroke-width="1.8" stroke-dasharray="4" marker-end="url(#arrowHead)"/>
+            <text x="635" y="200" fill="var(--amber)" font-size="10" text-anchor="middle">CI/审查意见自愈迭代</text>
+
+            <!-- Loop 2: Perf Factory (Step 8) -> Step 3 (Direct back to Implementation) -->
+            <path d="M 140 350 L 140 315 C 140 310, 470 310, 520 307" fill="none" stroke="#C084FC" stroke-width="1.8" stroke-dasharray="4" marker-end="url(#arrowHead)"/>
+            <text x="320" y="318" fill="var(--purple)" font-size="10" text-anchor="middle">Perf 补丁回流开发重新跑流水线</text>
+
+            <!-- Loop 3: Sevbot (Step 9) -> Step 3 -->
+            <path d="M 450 500 C 600 500, 640 450, 640 310" fill="none" stroke="#FB7185" stroke-width="1.8" stroke-dasharray="4" marker-end="url(#arrowRos)"/>
+            <text x="560" y="525" fill="var(--rose)" font-size="10" text-anchor="middle">事故诊断 ➔ 触发编码智能体修复</text>
+          </svg>
+        </div>
+      </div>
+
+      <div id="sec-nine-details">
+        <h3 class="sub-heading">完整九步闭环流程逐项详述</h3>
+        <p>完整流程由九个相互反馈、强力协同的环节组成：</p>
+        <ol>
+          <li><strong>人类定义结果。</strong> 软件工程师或产品经理先说明问题和期望结果。Venkat 观察到，工程师正在变得更像产品经理：编码被大量委托之后，判断、优先级和品味变得更重要。智能体可以扩大执行力，却不能替组织决定什么值得做、什么结果可以接受。</li>
+          <li><strong>Codex 汇集上下文。</strong> OpenAI 把文档移进源代码仓库，让代码和说明更容易同步演进。Codex 还可以访问 Git 仓库与 GitHub、Slack 与 Notion、Databricks、Datadog、内部日志以及团队技能；有些内部技能甚至由 Codex 自己维护。由于接入足够深，新工程师入职时会被建议直接向 Codex 询问系统问题。</li>
+          <li><strong>智能体实现并验证变更。</strong> Codex 根据目标持续修改代码，直到达到要求，并验证软件行为。公开材料没有说明这里必然使用某种特定沙箱，也没有限定验证只能在本地完成，因此不能把未披露的执行环境当成既定事实。</li>
+          <li><strong>构建、测试并等待 CI 通过。</strong> 智能体构建代码、运行测试、根据失败结果修正实现，然后创建 PR，触发更完整的 linter 和测试套件。它会持续看护 PR，处理 CI 失败并更新变更。额外的性能 harness 只把被判定为可能有问题的 PR 送入 Synthetics A/B 框架，评估性能影响；并非所有 PR 都接受同一套昂贵性能测试。</li>
+          <li><strong>专业审查、风险分流与合规路由。</strong> 系统不是只调用一个通用代码审查器，而是派生多个拥有领域配置的审查智能体。Gergely 最初对此持怀疑态度：仅在提示词里要求模型“扮演云基础设施专家”，并不会自动带来专业判断。这套方式可能有效，依赖的是智能体能访问相关代码和文档，并把有限上下文集中到一个狭窄领域。低风险 PR 只有在相应代码区域主动 opt-in 后，才可能由智能体自动批准；高风险变更可以增加更多 AI 审查，或强制加入人工审查。系统还可根据风险自动决定何时需要额外的自动合规检查或人工合规意见。编码智能体会继续跟踪审查评论并修复问题。</li>
+          <li><strong>智能体护送发布。</strong> 人类批准某项变更进入生产后，系统才为它分配发布智能体。智能体会找到 Feature Flag，理解变更，判断哪些信号代表成功或失败，并为这次变更生成自己的监控看板，再持续观察发布状态。OpenAI 的长期目标，是形成接近“每次变更一个自主 SRE”的能力；这是方向，不是当前已经完全自主发布的事实。</li>
+          <li><strong>按变更粒度观察生产。</strong> 观测来源包括前一步生成的看板，以及 OpenAI 内部产生日志、指标、追踪和 wide events 的可观测系统。过去由工程师为服务搭建看板，现在智能体能够针对单次变更生成观测视图，使“这次改动是否健康”成为可以独立追踪的问题。</li>
+          <li><strong>生产信号回流开发。</strong> Perf Factory 从告警和看板中筛选信号、去重、识别真正的延迟回退、定位根因并提出修复方案。报告导言还概括说，它可以启动 Codex 智能体处理性能问题；但公开的流程描述只证明它会提出修复，不能据此推断补丁会绕过审查自动合入或上线。</li>
+          <li><strong>Sevbot 协助事故响应。</strong> 事故发生时，Sevbot 收集上下文、判断可能的缓解措施，并在 Slack 频道回答开发者的问题。它当前不会自行执行缓解操作；工程师可以指定某项措施，再让它实施。OpenAI 希望未来让 Sevbot 自主处理一部分常规事故，使人不必在非工作时间被叫醒，事后再审查它的行动，但现阶段 on-call 仍然存在。</li>
+        </ol>
+      </div>
+
+      <!-- INTERACTIVE WORKBENCH: factory-responsibility component -->
+      <div id="sec-responsibility-matrix" class="workbench-box">
+        <div class="workbench-badge">核心交互组件 · 原文对应</div>
+        <div class="workbench-title">九步闭环人机责任分配与自动化边界交互沙盘</div>
+        <div class="workbench-subtitle">点击下方各步骤，动态探索每个环节的机器职责、可验证自动化系统、人类把关底线与长期演进方向：</div>
+
+        <div class="steps-selector" role="tablist">
+          <button id="btnStep1" class="step-btn active" data-step="1">1. 目标定义</button>
+          <button id="btnStep2" class="step-btn" data-step="2">2. 上下文汇集</button>
+          <button id="btnStep3" class="step-btn" data-step="3">3. 实现与验证</button>
+          <button id="btnStep4" class="step-btn" data-step="4">4. CI 看护与性能</button>
+          <button id="btnStep5" class="step-btn" data-step="5">5. 审查与分流</button>
+          <button id="btnStep6" class="step-btn" data-step="6">6. 护送发布</button>
+          <button id="btnStep7" class="step-btn" data-step="7">7. 变更级观测</button>
+          <button id="btnStep8" class="step-btn" data-step="8">8. 性能回流</button>
+          <button id="btnStep9" class="step-btn" data-step="9">9. Sevbot 响应</button>
+        </div>
+
+        <div class="step-card-display">
+          <div class="step-display-header">
+            <div>
+              <span id="outStepBadge" class="exec-badge badge-ros">第 1 环节 · 核心关卡</span>
+              <h3 id="outStepTitle" class="step-headline">1. 人类定义结果 (Human Definition)</h3>
+            </div>
+            <div id="outStepGate" class="step-gate-tag gate-human">🔒 强人工关卡 · 责任不可让渡</div>
+          </div>
+
+          <div class="step-grid-details">
+            <div class="detail-pane">
+              <div class="pane-label">前置输入与目标</div>
+              <div id="outStepInput" class="pane-content">业务痛点、产品功能需求、Bug 报告或架构重构目标。</div>
+            </div>
+            <div class="detail-pane">
+              <div class="pane-label">智能体执行角色 (AI)</div>
+              <div id="outStepAi" class="pane-content">辅助澄清需求，提供方案候选项，但不替代最终决策。</div>
+            </div>
+            <div class="detail-pane">
+              <div class="pane-label">系统自动化机制</div>
+              <div id="outStepSys" class="pane-content">任务管理跟踪系统、需求上下文与代码库自动关联。</div>
+            </div>
+            <div class="detail-pane">
+              <div class="pane-label">人类工程师最终责任</div>
+              <div id="outStepHuman" class="pane-content">扮演“产品经理”角色：拍板优先级、定义成功标准与审美/质量底线。</div>
+            </div>
+          </div>
+
+          <div class="step-grid-details">
+            <div class="detail-pane">
+              <div class="pane-label">当前生产事实状态</div>
+              <div id="outStepCurrent" class="pane-content">100% 由人类发起和授权，未引入任何无人化自主需求生成。</div>
+            </div>
+            <div class="detail-pane">
+              <div class="pane-label">长期自动化探索演进</div>
+              <div id="outStepFuture" class="pane-content">高阶意图补全与端到端指标对齐，但责任归属仍恒定锚定在人。</div>
+            </div>
+          </div>
+
+          <div id="outStepQuote" class="step-quote-box">
+            “工程师正在变得更像产品经理：编码被大量委托之后，判断、优先级和品味变得更重要。智能体可以扩大执行力，却不能替组织决定什么值得做、什么结果可以接受。” —— Venkat Venkataramani
+          </div>
+        </div>
+      </div>
+
+      <div id="sec-three-powers">
+        <h3 class="sub-heading">三种能力的相互制衡定律</h3>
+        <p>把九步连起来看，工厂的核心并不是“一个模型写完所有代码”，而是<strong>三种能力彼此制约</strong>：</p>
+        <ul>
+          <li><strong>机器的高频执行与持续观察</strong>：智能体在幕后并发编写代码、看护 PR、生成看板、轮询信号；</li>
+          <li><strong>自动化系统的可验证反馈</strong>：Git、CI、Linter、Synthetics A/B 测试、Wide Events 监控提供真实客观的物理反馈；</li>
+          <li><strong>人类在目标、风险与生产动作上承担责任</strong>：人把守输入意图、决定发布上线、批准灾难处置动作。</li>
+        </ul>
+        <p><strong>任何一层缺失，代码吞吐提高都可能只是更快地制造等待、噪声或事故。</strong></p>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- Section 4: Human Gates & Future -->
+    <section id="sec-human-gates">
+      <h2 class="sec-heading">四、现在的人工关卡，与未来的自动化方向</h2>
+      
+      <div id="sec-three-gates">
+        <p>从当前事实看，人类仍把守<strong>三个关键节点</strong>：</p>
+        <div class="executive-grid">
+          <div class="exec-card" style="border-left: 4px solid var(--rose);">
+            <div class="exec-card-title">关卡 1：开头决定问题与期望结果</div>
+            <div class="exec-card-desc">定义需求价值与验收基准，避免智能体在无意义的方向上高速空转。</div>
+          </div>
+          <div class="exec-card" style="border-left: 4px solid var(--rose);">
+            <div class="exec-card-title">关卡 2：代码进入生产前给予批准</div>
+            <div class="exec-card-desc">对生产环境的变更承担最终责任；发布智能体在获批前不得触发推流。</div>
+          </div>
+          <div class="exec-card" style="border-left: 4px solid var(--rose);">
+            <div class="exec-card-title">关卡 3：Sevbot 执行具体缓解前明确授权</div>
+            <div class="exec-card-desc">避免故障机器人在缺乏全局业务感知时擅自触发毁灭性回滚或切流操作。</div>
+          </div>
+        </div>
+        <p>此外，风险较高的代码还可能被强制送交人工审查。<strong>把 OpenAI 现状描述成完全无人参与的“黑灯软件工厂”并不准确。</strong></p>
+      </div>
+
+      <div id="sec-auto-evolution" class="callout-box success">
+        <div class="callout-title">
+          <span>🚀</span>
+          <span>未来的自动化演进路线：先建立约束，再扩大自治</span>
+        </div>
+        <p>但这不意味着边界会永久停在这里。OpenAI 正在探索让发布智能体承担更完整的<strong>变更级 SRE 职责</strong>，也希望 Sevbot 最终可以<strong>自主处置部分常规事故</strong>。</p>
+        <p style="margin-bottom: 0;">真正的演进路线是：<strong>先建立足够可靠的上下文、风险分类、测试和生产信号，再逐步扩大可自主执行的范围</strong>。当前状态与长期目标必须同时保留，既不能把愿景当成已实现能力，也不能把今天的人工关卡说成永远不会移动。</p>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- Section 5: Key Takeaways -->
+    <section id="sec-takeaways">
+      <h2 class="sec-heading">五、其他团队真正可以借鉴什么</h2>
+      
+      <div id="sec-prerequisites" class="callout-box warning">
+        <div class="callout-title">
+          <span>🔍</span>
+          <span>清醒审视：OpenAI 软件工厂落地的严苛特殊条件</span>
+        </div>
+        <p>OpenAI 的实践建立在少见的客观前提上，不能脱离条件盲目照搬：</p>
+        <ul style="margin-bottom: 0;">
+          <li><strong>文档与代码深度同仓演进</strong>，消除了文档与实现的割裂漂移；</li>
+          <li>智能体被授予极深且审计严密的跨系统权限（GitHub、Slack、Notion、Databricks、Datadog、内部日志与技能）；</li>
+          <li>构建、测试、CI 与生产观测能提供极其迅速的短反馈回路；</li>
+          <li>完备的代码风险分级和合规自动路由体系；</li>
+          <li>组织能够提供常人难以企及的高额 Token 与充沛算力预算。</li>
+        </ul>
+      </div>
+
+      <div id="sec-five-principles">
+        <h3 class="sub-heading">更具可操作性的五项迁移原则</h3>
+        <p>对于外部工程团队，更可迁移的顺序是<strong>先让系统变得可被机器理解、可被测试验证、可被生产信号约束，再提高代码生成量</strong>：</p>
+
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 25%;">落地策略维度</th>
+                <th style="width: 45%;">核心执行要求</th>
+                <th style="width: 30%;">常见误区与反模式</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>1. 文档随代码同行</strong></td>
+                <td>把真正影响实现的架构设计、接口说明放到代码仓库附近，建立与代码 PR 同步变更的责任机制。</td>
+                <td>❌ 文档四散在 Wiki/语雀中长期不更新，导致 Agent 读取腐化上下文后产生幻觉代码。</td>
+              </tr>
+              <tr>
+                <td><strong>2. 明确上下文与安全边界</strong></td>
+                <td>让智能体获得完成任务所需的上下文，同时把读写权限、操作审计与生产隔离边界定义清楚。</td>
+                <td>❌ 给 Agent 裸传生产高危 Token 或直接赋予无沙箱终端执行权限。</td>
+              </tr>
+              <tr>
+                <td><strong>3. 建立极短反馈回路</strong></td>
+                <td>用单测、自动化 CI、性能评估和实时观测建立几分钟内的短回路，让逻辑错误尽早暴露。</td>
+                <td>❌ CI 动辄跑 40 分钟，Agent 生成完代码后处于长时间等待悬空状态。</td>
+              </tr>
+              <tr>
+                <td><strong>4. 风险分级分流审查</strong></td>
+                <td>按变更风险决定需要多少智能体审查、合规输入和人工批准，低风险 opt-in 自动合入，高风险人工把关。</td>
+                <td>❌ 对所有 PR 一刀切采用人工逐行看，或一刀切无脑相信 AI 直接 Merge。</td>
+              </tr>
+              <tr>
+                <td><strong>5. 测量下游吞吐承载力</strong></td>
+                <td>先测量下游构建、代码审查、发布系统与 SRE 运维能承受多少吞吐，再决定是否扩大前端生成速度。</td>
+                <td>❌ 前端人手一个 Copilot 日产 50 个 PR，下游测试环境和主干发布彻底拥堵瘫痪。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="sec-scarcity-shift" class="callout-box" style="border-left-color: var(--accent); background: var(--accent-soft);">
+        <div class="callout-title" style="color: var(--accent);">
+          <span>💎</span>
+          <span>历史性启示：代码通胀时代的稀缺性大转移</span>
+        </div>
+        <p style="font-size: 1.05rem; line-height: 1.8; margin-bottom: 0;"><strong>这套软件工厂最重要的启示，是代码不再是唯一稀缺资源。</strong>当智能体显著降低实现成本，<strong>稀缺性会转移到高质量上下文、可执行的判断、验证能力和风险承担上</strong>。工程组织要改造的不是一个编辑器入口，而是从目标到生产反馈的整条链路。</p>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- Appendix: Queue & USL Simulation -->
+    <section id="sec-simulation">
+      <h2 class="sec-heading">附录、软件工厂吞吐与下游排队拥塞模拟沙盘</h2>
+      <p>为实证 Venkat 提出的“曲棍球棒增长引发下游 10 倍负载”的系统动力学，本沙盘基于排队论与服务率衰减模型，模拟前端代码生成加速时下游瓶颈的物理转移：</p>
+
+      <div class="workbench-box">
+        <div class="workbench-badge">排队论实证沙盘</div>
+        <div class="workbench-title">SDLC 下游吞吐、排队积压与交付时延推演</div>
+        
+        <div class="sim-grid">
+          <!-- Controls -->
+          <div class="sim-controls-pane">
+            <div class="sim-slider-group">
+              <div class="slider-label-row">
+                <span>每位工程师日均生成 PR 数量：</span>
+                <span id="outPrRateVal" class="slider-val-tag">6 个/人/天</span>
+              </div>
+              <input type="range" id="ctrlPrRate" min="1" max="25" value="6" step="1">
+            </div>
+
+            <div class="sim-slider-group">
+              <div class="slider-label-row">
+                <span>团队工程师人数：</span>
+                <span id="outTeamSizeVal" class="slider-val-tag">15 人</span>
+              </div>
+              <input type="range" id="ctrlTeamSize" min="3" max="50" value="15" step="1">
+            </div>
+
+            <div class="sim-slider-group">
+              <div class="slider-label-row">
+                <span>CI / 合并队列每日最大承载能力：</span>
+                <span id="outCiCapVal" class="slider-val-tag">80 个/天</span>
+              </div>
+              <input type="range" id="ctrlCiCap" min="20" max="300" value="80" step="5">
+            </div>
+
+            <div class="sim-slider-group">
+              <div class="slider-label-row">
+                <span>人工代码审查与审批每日吞吐上限：</span>
+                <span id="outReviewCapVal" class="slider-val-tag">45 个/天</span>
+              </div>
+              <input type="range" id="ctrlReviewCap" min="10" max="200" value="45" step="5">
+            </div>
+          </div>
+
+          <!-- Results -->
+          <div class="sim-results-pane">
+            <div class="stat-row">
+              <span class="stat-label">前端每日生成 PR 总量：</span>
+              <span id="outTotalPr" class="stat-value">90 个/天</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">生产环境实际安全合并量：</span>
+              <span id="outMergedPr" class="stat-value" style="color: var(--emerald);">45 个/天</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">每日在制品 (WIP) 积压堆积：</span>
+              <span id="outWipQueue" class="stat-value" style="color: var(--rose);">+45 个/天</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">预估平均 PR 滞留交付周期：</span>
+              <span id="outAvgLatency" class="stat-value" style="color: var(--amber);">36.4 小时</span>
+            </div>
+
+            <div id="outBottleneckAlert" class="bottleneck-indicator">
+              🚨 警告：人工代码审查成为第一瓶颈！生成速度已超出人类审查带宽 100%，积压呈线性暴增。
+            </div>
+
+            <div style="font-size: 0.8rem; color: var(--t-muted); line-height: 1.5;">
+              <strong>工程处方</strong>：单纯增加工程师端 AI 工具并无助于系统总吞吐；必须引入<strong>步骤 5 专业审查智能体分流</strong>与低风险自动 Opt-in，将审查能力提高至 100+，方可解除系统拥塞。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="doc-footer">
+      <div>OpenAI 软件工厂运转全景解读 · 架构白皮书级单文件交付物</div>
+      <div>基于 The Pragmatic Engineer 与 OpenAI 七位核心工程主管的一手访谈公开实录</div>
+      <div>遵循 AIKnowledge 资产命名与唯一存储规范：<code>/Users/yangkejin/Documents/Openai/AIKnowledge/20260917_OpenAI软件工厂运作机制与九步交付闭环.html</code></div>
+    </footer>
+
+  </main>
+</div>
+
+<!-- Back To Top Button -->
+<button id="toTopBtn" title="回到顶部" aria-label="回到顶部">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
+</button>
+
+<!-- Inline Pure JavaScript Logic (Zero External Dependencies) -->
+<script>
+(function() {
+  // DOM 查找助手 (遵守规范，绝不使用 $ 避免 LaTeX 误判)
+  var byId = function(id) {
+    return document.getElementById(id);
+  };
+
+  // ==========================================
+  // 1. 主题切换逻辑 (暗色优先，适配 aikeThemeBtn)
+  // ==========================================
+  var themeBtn = byId("aikeThemeBtn");
+  var mobileThemeBtn = byId("mobileThemeBtn");
+  var themeIcon = byId("themeBtnIcon");
+  var themeText = byId("themeBtnText");
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    if (theme === "dark") {
+      if (themeIcon) themeIcon.textContent = "🌙";
+      if (themeText) themeText.textContent = "暗黑模式";
+    } else {
+      if (themeIcon) themeIcon.textContent = "☀️";
+      if (themeText) themeText.textContent = "明亮模式";
+    }
+  }
+
+  function toggleTheme() {
+    var cur = document.documentElement.getAttribute("data-theme") || "dark";
+    var next = (cur === "dark") ? "light" : "dark";
+    applyTheme(next);
+  }
+
+  if (themeBtn) {
+    themeBtn.addEventListener("click", toggleTheme);
+  }
+  if (mobileThemeBtn) {
+    mobileThemeBtn.addEventListener("click", toggleTheme);
+  }
+
+  // 初始化主题为 dark
+  applyTheme("dark");
+
+  // ==========================================
+  // 2. 打印功能
+  // ==========================================
+  var printBtn = byId("btnPrintDoc");
+  if (printBtn) {
+    printBtn.addEventListener("click", function() {
+      window.print();
+    });
+  }
+
+  // ==========================================
+  // 3. 移动端侧栏开合
+  // ==========================================
+  var mobileToggle = byId("mobileNavToggle");
+  var sidebar = byId("sidebarNav");
+  if (mobileToggle && sidebar) {
+    mobileToggle.addEventListener("click", function() {
+      sidebar.classList.toggle("open");
+    });
+  }
+
+  // ==========================================
+  // 4. 阅读进度条与回到顶部
+  // ==========================================
+  var progressBar = byId("aikeProgressBar");
+  var progressPercent = byId("progressPercent");
+  var toTopBtn = byId("toTopBtn");
+
+  window.addEventListener("scroll", function() {
+    var scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var docHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+    var pct = 0;
+    if (docHeight > 0) {
+      pct = Math.min(100, Math.max(0, Math.round((scrollTop / docHeight) * 100)));
+    }
+
+    if (progressBar) {
+      progressBar.style.width = pct + "%";
+    }
+    if (progressPercent) {
+      progressPercent.textContent = pct + "%";
+    }
+
+    if (toTopBtn) {
+      if (scrollTop > 350) {
+        toTopBtn.style.display = "inline-flex";
+      } else {
+        toTopBtn.style.display = "none";
+      }
+    }
+  });
+
+  if (toTopBtn) {
+    toTopBtn.addEventListener("click", function() {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  // ==========================================
+  // 5. 九步工厂责任交互沙盘数据与事件绑定
+  // ==========================================
+  var stepData = {
+    "1": {
+      badge: "第 1 环节 · 核心关卡",
+      badgeClass: "badge-ros",
+      title: "1. 人类定义结果 (Human Definition)",
+      gateText: "🔒 强人工关卡 · 责任不可让渡",
+      gateClass: "gate-human",
+      input: "业务痛点、产品功能需求、Bug 报告或架构重构目标。",
+      ai: "辅助澄清需求，提供方案候选项，但不替代最终决策。",
+      sys: "任务管理跟踪系统、需求上下文与代码库自动关联。",
+      human: "扮演“产品经理”角色：拍板优先级、定义成功标准与审美/质量底线。",
+      current: "100% 由人类发起和授权，未引入任何无人化自主需求生成。",
+      future: "高阶意图补全与端到端指标对齐，但责任归属仍恒定锚定在人。",
+      quote: "“工程师正在变得更像产品经理：编码被大量委托之后，判断、优先级和品味变得更重要。智能体可以扩大执行力，却不能替组织决定什么值得做、什么结果可以接受。” —— Venkat Venkataramani"
+    },
+    "2": {
+      badge: "第 2 环节 · 基础底座",
+      badgeClass: "badge-cya",
+      title: "2. Codex 汇集上下文 (Context Gathering)",
+      gateText: "🤖 自动化连接 · 安全审计",
+      gateClass: "gate-agent",
+      input: "人类目标交代、关联代码库、仓库内 Markdown 文档、企业业务系统。",
+      ai: "自动索引 Git 仓库、Notion、Slack、Databricks、Datadog 指标并提炼关键先验。",
+      sys: "文档与代码同仓规范、内部专属 Agent Skills 库、安全审计链路。",
+      human: "维护文档与系统权限，确保关键决策有据可查、不发生知识腐化。",
+      current: "深入打通全公司核心系统，新工程师入职直接向 Codex 询问架构设计与惯例。",
+      future: "自主技能合成与跨组织知识图谱动态演进。",
+      quote: "“OpenAI 把文档移进源代码仓库，让代码和说明更容易同步演进。新工程师入职时会被建议直接向 Codex 询问系统问题。”"
+    },
+    "3": {
+      badge: "第 3 环节 · 高频吞吐",
+      badgeClass: "badge-cya",
+      title: "3. 实现并验证变更 (Implementation & Verification)",
+      gateText: "🤖 智能体闭环 · 行为自验",
+      gateClass: "gate-agent",
+      input: "结构化目标提示词与相关代码上下文。",
+      ai: "持续修改多文件代码，调用本地或沙箱环境运行验证，修正逻辑直到行为符合要求。",
+      sys: "执行环境（测试运行器、轻量依赖模拟）、变更追踪与差异生成器。",
+      human: "离线脱手，仅在智能体遇到无法理解的业务歧义或死循环时介入引导。",
+      current: "长周期任务 /goal 可自主运行数天并派生子智能体并行处理子问题。",
+      future: "跨代码库端到端异构协同与形式化验证集成。",
+      quote: "“一个长线程会自行派生其他智能体并行处理子问题。人负责的对象从许多零散对话，收束为少数几个目标及其验收。” —— Andrew Ambrosino"
+    },
+    "4": {
+      badge: "第 4 环节 · 质量守门",
+      badgeClass: "badge-eme",
+      title: "4. 构建、测试并等待 CI 通过 (CI & Performance Guard)",
+      gateText: "⚡ 自动化硬门禁 · Agent 看护",
+      gateClass: "gate-system",
+      input: "智能体生成的初始变更分支与 PR。",
+      ai: "提交 PR 并全天候驻守，当 CI 失败或 Linter 报错时，读取日志自主修改重推。",
+      sys: "CI/CD 集群、分流评估器、Synthetics A/B 性能测试 Harness。",
+      human: "仅维护 CI 套件的健全性与测试用例质量，无需人工看守测试进度。",
+      current: "部分变更进入 Synthetics 评估真实时延；Agent 自主处理常规构建与格式失败。",
+      future: "测试用例自主变异生成 (Mutation Testing) 与性能拐点智能推断。",
+      quote: "“智能体会持续看护 PR，处理 CI 失败并更新变更。额外的性能 harness 只把被判定为可能有问题的 PR 送入 Synthetics A/B 框架，评估性能影响。”"
+    },
+    "5": {
+      badge: "第 5 环节 · 吞吐解耦",
+      badgeClass: "badge-amb",
+      title: "5. 专业审查与风险分流 (Domain Review & Risk Routing)",
+      gateText: "⚖️ 混合治理 · 低风险免审 / 高风险人工",
+      gateClass: "gate-human",
+      input: "CI 全绿且带有风险分级标记的 PR 分支。",
+      ai: "派生多个窄上下文、领域特化的审查智能体（如基础设施、安全、前端性能）。",
+      sys: "风险分级分流路由表、Opt-in 自动合入规则引擎、合规检查挂钩器。",
+      human: "针对高风险业务变更与合规敏感项进行人工复审把关。",
+      current: "低风险 PR 仅在特定代码区 Opt-in 后由 Agent 自动批准；高风险多重审查。",
+      future: "基于代码改动语义指纹与依赖图谱实现动态精准风险路由。",
+      quote: "“系统不是只调用一个通用审查器，而是派生多个拥有领域配置的审查智能体……把有限上下文集中到一个狭窄领域。”"
+    },
+    "6": {
+      badge: "第 6 环节 · 核心关卡",
+      badgeClass: "badge-ros",
+      title: "6. 智能体护送发布 (Deployment Escort)",
+      gateText: "🔒 强人工关卡 · 发布终审",
+      gateClass: "gate-human",
+      input: "审查通过且具备部署就绪状态的代码 PR。",
+      ai: "分配专属发布智能体：读取 Feature Flag、识别成功失败指标并自建专属监控看板。",
+      sys: "分阶段灰度推流系统、Feature Flag 远程配置中心、变更看板生成器。",
+      human: "最终生产发布必须由人类工程师明确审批同意。",
+      current: "变更由专属发布 Agent 护送推流并持续观察指标，但上线必须人工确认。",
+      future: "迈向“每次变更一个自主 SRE (One Autonomous SRE per Change)”。",
+      quote: "“人类批准某项变更进入生产后，系统才为它分配发布智能体……OpenAI 的长期目标，是形成接近‘每次变更一个自主 SRE’的能力。”"
+    },
+    "7": {
+      badge: "第 7 环节 · 观测基座",
+      badgeClass: "badge-eme",
+      title: "7. 按变更粒度观察生产 (Per-Change Observability)",
+      gateText: "🔭 细粒度观测 · 机器原生",
+      gateClass: "gate-system",
+      input: "正在灰度或已全量生效的单次代码变更。",
+      ai: "读取单次变更专属看板，自主关联分布式追踪与日志，验证业务指标是否偏离。",
+      sys: "Wide Events 宽事件流、分布式链路 Tracing、高基数实时聚合引擎。",
+      human: "告别传统人工拼装固定仪表盘，仅在出现跨系统未定义异常时审查信号。",
+      current: "针对具体变更动态自生成观测视图，使‘这次改动是否健康’成为独立可问答对象。",
+      future: "全链路异常自动溯源归因与自适应告警基线。",
+      quote: "“过去由工程师为服务搭建看板，现在智能体能够针对单次变更生成观测视图，使‘这次改动是否健康’成为可以独立追踪的问题。”"
+    },
+    "8": {
+      badge: "第 8 环节 · 自愈闭环",
+      badgeClass: "badge-cya",
+      title: "8. 生产信号回流开发 (Signal Loop & Perf Factory)",
+      gateText: "🔄 自动化诊断 · 补丁提炼",
+      gateClass: "gate-agent",
+      input: "生产环境中的微小延迟回退、偶发告警与 Wide Events 异常聚类。",
+      ai: "Perf Factory 筛选噪声、聚合去重、锁定性能恶化根因并启动 Codex 编写补丁。",
+      sys: "告警去重引擎、历史回归比对库、自动开单与关联系统。",
+      human: "评估性能补丁是否合规，决定是否纳入下一轮发布队列。",
+      current: "Perf Factory 自动生成回归报告与修复建议，但补丁仍需走正规审查。",
+      future: "低风险性能微调补丁自主验证合入与持续热修复。",
+      quote: "“Perf Factory 从告警和看板中筛选信号、去重、识别真正的延迟回退、定位根因并提出修复方案。”"
+    },
+    "9": {
+      badge: "第 9 环节 · 核心关卡",
+      badgeClass: "badge-ros",
+      title: "9. Sevbot 协助事故响应 (Incident Response & Sevbot)",
+      gateText: "🔒 强人工关卡 · 动作执行授权",
+      gateClass: "gate-human",
+      input: "线上 P0/P1 严重故障、用户中断通知或生产告警风暴。",
+      ai: "Sevbot 聚合上下游拓扑与变更历史，在 Slack 协作频道解答排查疑问并提出应急方案。",
+      sys: "事故管理系统、Slack 联动机器人、执行审计与权限沙盒。",
+      human: "担任 Incident Commander (IC)：对 Sevbot 建议的切流/降级/回滚措施给出执行许可。",
+      current: "Sevbot 不会自主执行任何具有破坏性的线上动作，人类授权后方可执行。",
+      future: "针对已知常规事故（如依赖超时、缓存雪崩）实现受限条件下的自动化安全愈合。",
+      quote: "“它当前不会自行执行缓解操作；工程师可以指定某项措施，再让它实施。OpenAI 希望未来让 Sevbot 自主处理一部分常规事故……但现阶段 on-call 仍然存在。”"
+    }
+  };
+
+  var stepButtons = [
+    byId("btnStep1"), byId("btnStep2"), byId("btnStep3"),
+    byId("btnStep4"), byId("btnStep5"), byId("btnStep6"),
+    byId("btnStep7"), byId("btnStep8"), byId("btnStep9")
+  ];
+
+  function selectStep(stepNum) {
+    var data = stepData[String(stepNum)];
+    if (!data) return;
+
+    stepButtons.forEach(function(btn) {
+      if (btn) {
+        if (btn.getAttribute("data-step") === String(stepNum)) {
+          btn.classList.add("active");
+        } else {
+          btn.classList.remove("active");
+        }
+      }
+    });
+
+    var badge = byId("outStepBadge");
+    var title = byId("outStepTitle");
+    var gate = byId("outStepGate");
+    var input = byId("outStepInput");
+    var ai = byId("outStepAi");
+    var sys = byId("outStepSys");
+    var human = byId("outStepHuman");
+    var current = byId("outStepCurrent");
+    var future = byId("outStepFuture");
+    var quote = byId("outStepQuote");
+
+    if (badge) {
+      badge.textContent = data.badge;
+      badge.className = "exec-badge " + data.badgeClass;
+    }
+    if (title) title.textContent = data.title;
+    if (gate) {
+      gate.textContent = data.gateText;
+      gate.className = "step-gate-tag " + data.gateClass;
+    }
+    if (input) input.textContent = data.input;
+    if (ai) ai.textContent = data.ai;
+    if (sys) sys.textContent = data.sys;
+    if (human) human.textContent = data.human;
+    if (current) current.textContent = data.current;
+    if (future) future.textContent = data.future;
+    if (quote) quote.textContent = data.quote;
+  }
+
+  stepButtons.forEach(function(btn) {
+    if (btn) {
+      btn.addEventListener("click", function() {
+        var st = this.getAttribute("data-step");
+        selectStep(st);
+      });
+    }
+  });
+
+  // ==========================================
+  // 6. 排队论与下游拥塞沙盘模拟器
+  // ==========================================
+  var ctrlPrRate = byId("ctrlPrRate");
+  var ctrlTeamSize = byId("ctrlTeamSize");
+  var ctrlCiCap = byId("ctrlCiCap");
+  var ctrlReviewCap = byId("ctrlReviewCap");
+
+  var outPrRateVal = byId("outPrRateVal");
+  var outTeamSizeVal = byId("outTeamSizeVal");
+  var outCiCapVal = byId("outCiCapVal");
+  var outReviewCapVal = byId("outReviewCapVal");
+
+  var outTotalPr = byId("outTotalPr");
+  var outMergedPr = byId("outMergedPr");
+  var outWipQueue = byId("outWipQueue");
+  var outAvgLatency = byId("outAvgLatency");
+  var outBottleneckAlert = byId("outBottleneckAlert");
+
+  function recalculateSimulation() {
+    if (!ctrlPrRate || !ctrlTeamSize || !ctrlCiCap || !ctrlReviewCap) return;
+
+    var prRate = parseInt(ctrlPrRate.value, 10);
+    var teamSize = parseInt(ctrlTeamSize.value, 10);
+    var ciCap = parseInt(ctrlCiCap.value, 10);
+    var reviewCap = parseInt(ctrlReviewCap.value, 10);
+
+    if (outPrRateVal) outPrRateVal.textContent = prRate + " 个/人/天";
+    if (outTeamSizeVal) outTeamSizeVal.textContent = teamSize + " 人";
+    if (outCiCapVal) outCiCapVal.textContent = ciCap + " 个/天";
+    if (outReviewCapVal) outReviewCapVal.textContent = reviewCap + " 个/天";
+
+    var totalPr = prRate * teamSize;
+    var safeThroughput = Math.min(totalPr, Math.min(ciCap, reviewCap));
+    var delta = totalPr - safeThroughput;
+
+    if (outTotalPr) outTotalPr.textContent = totalPr + " 个/天";
+    if (outMergedPr) outMergedPr.textContent = safeThroughput + " 个/天";
+
+    if (outWipQueue) {
+      if (delta > 0) {
+        outWipQueue.textContent = "+" + delta + " 个/天 (积压暴涨)";
+        outWipQueue.style.color = "var(--rose)";
+      } else {
+        outWipQueue.textContent = "0 个/天 (完全消化)";
+        outWipQueue.style.color = "var(--emerald)";
+      }
+    }
+
+    if (outAvgLatency) {
+      if (delta <= 0) {
+        outAvgLatency.textContent = "4.2 小时 (健康平稳)";
+        outAvgLatency.style.color = "var(--emerald)";
+      } else {
+        var estHours = (4.2 + (delta / safeThroughput) * 24).toFixed(1);
+        outAvgLatency.textContent = estHours + " 小时";
+        outAvgLatency.style.color = estHours > 24 ? "var(--rose)" : "var(--amber)";
+      }
+    }
+
+    if (outBottleneckAlert) {
+      if (delta <= 0) {
+        outBottleneckAlert.textContent = "✅ 系统上下游平衡：CI 与代码审查带宽能够完全消化前端生成的 PR，无排队积压。";
+        outBottleneckAlert.style.background = "var(--emerald-soft)";
+        outBottleneckAlert.style.borderColor = "var(--emerald-border)";
+        outBottleneckAlert.style.color = "var(--emerald)";
+      } else {
+        if (reviewCap < ciCap) {
+          outBottleneckAlert.textContent = "🚨 核心瓶颈点：【人工代码审查与审批】严重过载！生成速度超出人工带宽，需引入专业审查 Agent 分流。";
+          outBottleneckAlert.style.background = "var(--rose-soft)";
+          outBottleneckAlert.style.borderColor = "var(--rose-border)";
+          outBottleneckAlert.style.color = "var(--rose)";
+        } else {
+          outBottleneckAlert.textContent = "⚠️ 核心瓶颈点：【CI 构建与测试集群】承载达到上限！需对昂贵测试进行分流（如仅关键改动跑 Synthetics）。";
+          outBottleneckAlert.style.background = "var(--amber-soft)";
+          outBottleneckAlert.style.borderColor = "var(--amber-border)";
+          outBottleneckAlert.style.color = "var(--amber)";
+        }
+      }
+    }
+  }
+
+  [ctrlPrRate, ctrlTeamSize, ctrlCiCap, ctrlReviewCap].forEach(function(slider) {
+    if (slider) {
+      slider.addEventListener("input", recalculateSimulation);
+    }
+  });
+
+  // 初始执行一次
+  recalculateSimulation();
+
+  // ==========================================
+  // 7. 目录滚动监听高亮
+  // ==========================================
+  var navLinks = document.querySelectorAll(".toc-link");
+  var sections = [];
+  navLinks.forEach(function(link) {
+    var href = link.getAttribute("href");
+    if (href && href.startsWith("#") && href.length > 1) {
+      var targetId = href.substring(1);
+      var el = byId(targetId);
+      if (el) {
+        sections.push({ id: targetId, link: link, el: el });
+      }
+    }
+  });
+
+  window.addEventListener("scroll", function() {
+    var scrollPos = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var activeId = null;
+
+    for (var i = sections.length - 1; i >= 0; i--) {
+      var top = sections[i].el.offsetTop - 120;
+      if (scrollPos >= top) {
+        activeId = sections[i].id;
+        break;
+      }
+    }
+
+    sections.forEach(function(item) {
+      if (item.id === activeId) {
+        item.link.classList.add("active");
+      } else {
+        item.link.classList.remove("active");
+      }
+    });
+  });
+
+})();
+</script>
+
+</body>
+</html>
