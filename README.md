@@ -30,7 +30,7 @@
 
 ## 二、知识资产全景矩阵
 
-知识库按技术领域解构为五大核心板块，涵盖 99 篇深度白皮书：
+知识库按技术领域解构为五大核心板块，涵盖 101 篇深度白皮书：
 
 ### 1. 软件工程与开发生命周期（AI-Native SDLC & Software Factory）
 
@@ -100,6 +100,8 @@
 | **Anthropic 中小企业 43 个自动化工作流与商业工具** | • 双轨执行机制：按需触发（Slash Commands）与计划任务（Scheduled Background Automations）绑定固定时间节拍<br>• 控制权设计：默认审批与最后一步刹车，Human-in-the-Loop 阻断高风险资金操作<br>• 43 个工作流与 37 个连接器全景；一周业务节拍（周一经营简报、夜间非工作时间获客、月末跨账户对账闭环） | • Human-in-the-Loop 控制权交互沙盘（五类典型业务流在不同权限模式下的风险阻断与执行边界）<br>• 43 工作流与 37 连接器全景检索矩阵、小企业一周业务节拍浏览器<br>• 五大真实企业落地案例与「汇报成效 vs 归因边界」证据分级 | [`20260916_Anthropic中小企业43个自动化工作流与商业工具.html`](./20260916_Anthropic中小企业43个自动化工作流与商业工具.html) |
 | **Salesforce AIforce 企业交互层与 CRM 解耦** | • 定位界定：AIforce 不是新模型或单一 Agent，而是把 Salesforce 的数据、语义、权限与执行能力送进各类 AI 界面的动态交互交付层<br>• 四层协同体系：Data 360 → Customer 360 → Agentforce → AIforce 交互层，意图解析 ⇄ 协议动态投射的受治理双向闭环<br>• 前端贬值与护城河位移：固定界面让位于协议输出，竞争重心回到数据与执行引擎<br>• Koa：面向 Agentforce 的 CRM 专用推理模型，与 NVIDIA 全栈基础设施协同 | • 2 大交互沙盘（受治理双向闭环执行模拟器、企业级 CRM 接入模式与治理模型对比矩阵）<br>• Claudeforce 官方 MCP 服务端（37 项销售技能）、Slackforce 多人实时操作台、Agentforce Coworker 原生副驾<br>• Headless Toolkit 与 AgentExchange 开放生态、写回批准门禁 | [`20260916_Salesforce_AIforce企业交互层与CRM解耦深度解析.html`](./20260916_Salesforce_AIforce企业交互层与CRM解耦深度解析.html) |
 | **Anthropic 中小企业 43 工作流与 27 个商业工具全景** | • 43 个工作流与技能全量清单；27 个新增商业工具官方尚未公布明细，不可凭空推断增量列表<br>• 37 个现有合作伙伴连接器与「总表 ≠ 新增清单」的口径边界<br>• 双轨执行机制（Slash Commands 按需触发 + 定时后台自动化节拍）与默认审批、最后一步刹车的控制权设计 | • Human-in-the-Loop 控制权交互沙盘与工作流 / 连接器全景检索沙盘（多维过滤）<br>• 一周自动化时间节拍拆解（周一经营简报、夜间非工作时间获客、月末跨账户对账闭环）<br>• 五大真实企业案例与证据边界辨析、中国中小企业落地评估与行动建议 | [`20260917_Anthropic中小企业43个自动化工作流与商业工具全景.html`](./20260917_Anthropic中小企业43个自动化工作流与商业工具全景.html) |
+| **Anthropic 十个金融 Agent 模板架构拆解与 Harness 工程启示** | • 范式跃迁：从提示词工程到以 Skills（领域本体）+ Connectors（数据访问）+ Subagents（专项校验）为核心的受控多智能体参考架构<br>• 行业 Harness 终局竞争模型：底层模型大宗商品化后，竞争重心位移到「领域本体 + SOP 规则 + 专有连接器 + 质检子代理 + 人机闭环」的 Harness 资产<br>• 人效杠杆与返工抑制模型：裸模型一次通过率 $P_{\text{raw}}$、返工惩罚系数 $\alpha$ 与漏出衰减率下的期望工时 $T_{\text{eff}}$，单任务成本 $= T_{\text{eff}} \times C_{\text{base}} + Cost_{\text{api}}$ | • 10 大金融 Agent 架构装配与能力透视沙盘（Pitch Builder 等模板逐项展开）<br>• 垂直 Harness 人效杠杆与返工成本测算沙盘（业务复杂度 × 覆盖度 → 漏出率、工时节省与年度组织 ROI）<br>• 金融 Agent 到量化交易系统的映射矩阵（拒绝裸 SQL，Wren AI / Ibis 语义层充当 Connectors）与 Ulike-Agent 销售域落地指南 | [`20260918_Anthropic十个金融Agent模板架构拆解与Harness工程启示.html`](./20260918_Anthropic十个金融Agent模板架构拆解与Harness工程启示.html) |
+| **Kimi 金融行业解决方案与量化 Harness 架构映射** | • 三大核心落差诊断：数据孤岛与时效滞后、金融复杂逻辑与建模失真、机构数据隐私与合规红线苛求<br>• 四层解耦架构：MCP 权威数据层 → 9 大金融领域 Skill 层 → Agent 工作流编排层 → 合规安全交付层<br>• 范式转移命题：参数不是壁垒、流程才是资产，竞争焦点从基础模型参数量转向抗幻觉金融工作流封装的完整性 | • Kimi Skill ↔ Quant Trading Harness 联动检视沙盘（9 大技能逐个穿梭映射到量化内核职能与 Gate / Metric 验证机制）<br>• 9 大金融 Skill 的输入数据约束（MCP）与标准输出工件（Deliverable）全量清单<br>• 与 Anthropic 2026-05 金融 Agent 模板的四维对照（开源轻量脚手架 vs 工业级深度封装体系）演进洞察 | [`20260918_Kimi金融行业解决方案与量化Harness架构映射.html`](./20260918_Kimi金融行业解决方案与量化Harness架构映射.html) |
 
 ### 4. 团队落地实战与开发者生态（Startup Best Practices & Developer Guides）
 

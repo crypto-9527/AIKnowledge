@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-page-node-id="BjjjMUB49CAal5jJOfeulP">
+<head data-page-node-id="Cw1dLSI7vcsXCsZN77IMAa">
+<meta charset="utf-8" data-page-node-id="2EOsUFrnyfc7BPT8VycdRI">
+<meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="pbBMrkJFwMfz2No3KmgFlP">
+<meta name="description" content="Anthropic 2026年5月发布的10个金融Agent模板深度拆解：Skills+Connectors+Subagents三层参考架构、Charles Schwab落地演进、量化Trading Harness与Ulike-Agent映射体系及垂直Harness护城河ROI沙盘。" data-page-node-id="mH8E4UtnKEgoB4EGX9aCPA">
+<meta name="author" content="WorkBuddy AI" data-page-node-id="rcg0Rm9zETuiP1htcouTcI">
+<title>Anthropic 10 个金融 Agent 模板架构拆解与 Harness 工程启示</title>
+<style>
+/* ============================================================
+   Anthropic 金融 Agent 架构拆解与 Harness 工程白皮书
+   规范：纯内联零外部依赖 · 系统字体栈降级 · 双主题五色语义系统
+   ============================================================ */
+:root{
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-head: "Songti SC", "SimSun", "Newsreader", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
+
+  --sidebar-w: 286px;
+  --content-max: 1180px;
+
+  --bg:        #181715;
+  --bg-elev:   #201E1A;
+  --bg-card:   #23211D;
+  --bg-inset:  #141311;
+  --border:    #35322B;
+  --border-2:  #4A463C;
+  --text:      #E9E4D9;
+  --text-dim:  #A9A294;
+  --text-faint:#7C766A;
+  --accent:    #E2886A;
+  --accent-2:  #C9703F;
+  --accent-soft: rgba(226,136,106,.14);
+  --emerald:   #7FC39A;
+  --emerald-soft: rgba(127,195,154,.13);
+  --rose:      #E28B87;
+  --rose-soft: rgba(226,139,135,.13);
+  --amber:     #E3B75C;
+  --amber-soft: rgba(227,183,92,.13);
+  --cyan:      #8FC2CE;
+  --cyan-soft: rgba(143,194,206,.13);
+  --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.28);
+  --radius: 12px;
+}
+html[data-theme="light"]{
+  --bg:        #FAF7F2;
+  --bg-elev:   #FFFFFF;
+  --bg-card:   #FFFDF8;
+  --bg-inset:  #F3EEE5;
+  --border:    #E2DACD;
+  --border-2:  #CFC5B4;
+  --text:      #2A2622;
+  --text-dim:  #6B6357;
+  --text-faint:#948A7C;
+  --accent:    #D97757;
+  --accent-2:  #B85C3C;
+  --accent-soft: rgba(217,119,87,.12);
+  --emerald:   #3F8F63;
+  --emerald-soft: rgba(63,143,99,.11);
+  --rose:      #B54E49;
+  --rose-soft: rgba(181,78,73,.10);
+  --amber:     #9A7318;
+  --amber-soft: rgba(154,115,24,.11);
+  --cyan:      #3A7C8C;
+  --cyan-soft: rgba(58,124,140,.11);
+  --shadow: 0 1px 2px rgba(60,48,30,.08), 0 8px 24px rgba(60,48,30,.07);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; -webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-body); font-size:16.5px; line-height:1.85;
+  letter-spacing:.01em; overflow-x:hidden;
+}
+::selection{background:var(--accent-soft); color:var(--text)}
+
+/* 顶部进度条 */
+#topbar{
+  position:fixed; top:0; left:0; right:0; height:3px; z-index:90;
+  background:transparent; pointer-events:none;
+}
+#topbar-progress{
+  height:100%; width:0%; background:linear-gradient(90deg,var(--accent-2),var(--accent));
+  transition:width .1s linear;
+}
+
+/* 侧栏目录：严格贴左 */
+#sidebar{
+  position:fixed; top:0; left:0; bottom:0; width:var(--sidebar-w); z-index:70;
+  background:var(--bg-elev); border-right:1px solid var(--border);
+  overflow-y:auto; padding:26px 18px 40px 22px;
+  transition:transform .28s cubic-bezier(.4,0,.2,1);
+}
+#sidebar .toc-title{
+  font-family:var(--font-head); font-size:14px; font-weight:700;
+  letter-spacing:.14em; color:var(--text-faint);
+  text-transform:uppercase; margin:0 0 16px 4px;
+}
+#sidebar ol{list-style:none; margin:0; padding:0; counter-reset:toc}
+#sidebar li{counter-increment:toc; margin:0 0 2px}
+#sidebar a{
+  display:block; padding:7px 10px 7px 30px; position:relative;
+  color:var(--text-dim); text-decoration:none; font-size:13.4px; line-height:1.55;
+  border-radius:7px; transition:background .16s, color .16s;
+}
+#sidebar a::before{
+  content:counter(toc,decimal-leading-zero); position:absolute; left:8px; top:7px;
+  font-family:var(--font-mono); font-size:11px; color:var(--text-faint);
+}
+#sidebar a:hover{background:var(--bg-inset); color:var(--text)}
+#sidebar a.active{background:var(--accent-soft); color:var(--accent); font-weight:600}
+#sidebar a.active::before{color:var(--accent)}
+#sidebar .toc-foot{
+  margin-top:22px; padding:14px 10px 0; border-top:1px solid var(--border);
+  font-size:12px; color:var(--text-faint); line-height:1.7;
+}
+
+/* 正文容器：侧栏右侧剩余区域绝对对称居中（§8.7 规范） */
+#main{
+  display:block; max-width:var(--content-max); width:auto;
+  margin-left:calc(var(--sidebar-w) + max(0px, (100% - var(--sidebar-w) - var(--content-max)) / 2));
+  margin-right:max(0px, calc((100% - var(--sidebar-w) - var(--content-max)) / 2));
+  padding:52px 42px 120px;
+}
+
+/* 基础排版 */
+h1,h2,h3,h4{font-family:var(--font-head); font-weight:700; line-height:1.35; letter-spacing:.01em}
+h1{font-size:36px; margin:0 0 18px}
+h2{font-size:25px; margin:60px 0 20px; padding-bottom:12px; border-bottom:1px solid var(--border); scroll-margin-top:24px}
+h3{font-size:19.5px; margin:36px 0 14px; color:var(--text); scroll-margin-top:24px}
+h4{font-size:16.5px; margin:24px 0 10px; color:var(--accent)}
+p{margin:0 0 16px}
+a{color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent-soft)}
+a:hover{border-bottom-color:var(--accent)}
+strong{color:var(--text); font-weight:650}
+em{color:var(--accent); font-style:normal; font-weight:600}
+ul,ol{margin:0 0 18px; padding-left:24px}
+li{margin:0 0 8px}
+li::marker{color:var(--text-faint)}
+code{
+  font-family:var(--font-mono); font-size:.88em; background:var(--bg-inset);
+  border:1px solid var(--border); border-radius:5px; padding:.12em .42em; color:var(--cyan);
+}
+pre{
+  background:var(--bg-inset); border:1px solid var(--border); border-radius:var(--radius);
+  padding:18px 22px; overflow-x:auto; font-family:var(--font-mono); font-size:13.6px;
+  line-height:1.65; color:var(--text); margin:20px 0;
+}
+pre code{border:none; padding:0; background:transparent; color:inherit; font-size:inherit}
+hr{border:0; border-top:1px solid var(--border); margin:44px 0}
+blockquote{
+  margin:20px 0; padding:14px 22px; background:var(--bg-inset);
+  border-left:3px solid var(--accent); border-radius:0 8px 8px 0;
+  color:var(--text-dim); font-size:15.5px; line-height:1.8;
+}
+blockquote p:last-child{margin-bottom:0}
+
+/* Hero 头部 */
+.hero{padding:10px 0 8px; border-bottom:1px solid var(--border); margin-bottom:34px}
+.kicker{
+  display:inline-block; font-size:12px; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--accent); font-weight:700; margin-bottom:14px;
+}
+.hero h1{margin-bottom:18px; letter-spacing:-.005em}
+.lede{font-size:18px; line-height:1.8; color:var(--text-dim); max-width:100%; margin-bottom:24px}
+.lede strong{color:var(--text)}
+.meta-line{
+  display:flex; flex-wrap:wrap; gap:10px 22px; font-size:13px; color:var(--text-faint);
+  padding:14px 0 20px; border-top:1px dashed var(--border); margin-top:8px;
+}
+.meta-line span b{color:var(--text-dim); font-weight:600}
+
+/* 通用容器块 */
+.box{
+  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:22px 26px; margin:26px 0; box-shadow:var(--shadow);
+}
+.box-t{
+  font-family:var(--font-head); font-size:16.5px; font-weight:700; margin:0 0 14px;
+  color:var(--accent); letter-spacing:.05em;
+}
+.box.inset{background:var(--bg-inset); box-shadow:none}
+
+/* 核心指标与卡片 */
+.grid-duo{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:24px 0}
+.grid-tri{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; margin:24px 0}
+.card{
+  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:20px 22px; box-shadow:var(--shadow);
+}
+.card h4{margin:0 0 10px; font-size:16px}
+.card.bad{border-left:3px solid var(--rose)}
+.card.good{border-left:3px solid var(--emerald)}
+.card.accent{border-left:3px solid var(--accent)}
+.card.cyan{border-left:3px solid var(--cyan)}
+.card p:last-child{margin-bottom:0}
+
+/* 数据表格 */
+.table-wrap{overflow-x:auto; margin:24px 0; border:1px solid var(--border); border-radius:var(--radius)}
+table{width:100%; border-collapse:collapse; font-size:14.6px; min-width:620px}
+thead th{
+  background:var(--bg-inset); color:var(--text); font-weight:700; text-align:left;
+  padding:12px 16px; border-bottom:1px solid var(--border-2); font-size:13.5px; letter-spacing:.03em;
+  white-space:nowrap;
+}
+tbody td{padding:12px 16px; border-bottom:1px solid var(--border); vertical-align:top; line-height:1.7}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:nth-child(even){background:var(--bg-inset)}
+td.k{font-weight:650; color:var(--text); white-space:nowrap}
+
+/* 标签 / 徽章 */
+.tag{
+  display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.06em;
+  padding:2px 8px; border-radius:20px; border:1px solid var(--border-2);
+  color:var(--text-dim); background:var(--bg-inset); vertical-align:middle;
+}
+.tag.t-accent{color:var(--accent); border-color:var(--accent); background:var(--accent-soft)}
+.tag.t-emerald{color:var(--emerald); border-color:var(--emerald); background:var(--emerald-soft)}
+.tag.t-rose{color:var(--rose); border-color:var(--rose); background:var(--rose-soft)}
+.tag.t-amber{color:var(--amber); border-color:var(--amber); background:var(--amber-soft)}
+.tag.t-cyan{color:var(--cyan); border-color:var(--cyan); background:var(--cyan-soft)}
+
+/* 数学公式容器（零外部依赖原生样式） */
+.math-block{
+  background:var(--bg-inset); border:1px solid var(--border); border-radius:var(--radius);
+  padding:18px 24px; margin:22px 0; text-align:center; font-family:var(--font-head);
+  font-size:18px; color:var(--text); overflow-x:auto;
+}
+.math-frac{display:inline-flex; flex-direction:column; vertical-align:middle; text-align:center; padding:0 4px}
+.math-num{border-bottom:1px solid var(--text); padding-bottom:2px; font-size:.92em}
+.math-den{padding-top:2px; font-size:.92em}
+
+/* SVG 图表通用 */
+.figure{margin:28px 0; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:22px 20px 16px; overflow-x:auto}
+.figure svg{display:block; width:100%; max-width:820px; height:auto; margin:0 auto}
+.figcap{font-size:12.8px; color:var(--text-faint); text-align:center; margin:12px 0 2px; line-height:1.7}
+
+/* 交互沙盘控件 */
+.sandbox-card{
+  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius);
+  padding:26px; margin:28px 0; box-shadow:var(--shadow);
+}
+.ctrl-row{margin-bottom:18px}
+.ctrl-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:14.2px}
+.ctrl-label{font-weight:600; color:var(--text)}
+.ctrl-val{font-family:var(--font-mono); font-weight:700; color:var(--accent); font-size:14.5px}
+input[type="range"]{
+  width:100%; height:6px; background:var(--bg-inset); border:1px solid var(--border);
+  border-radius:3px; outline:none; -webkit-appearance:none; margin:4px 0; cursor:pointer;
+}
+input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:18px; height:18px; border-radius:50%;
+  background:var(--accent); cursor:pointer; border:2px solid var(--bg-elev);
+}
+select{
+  width:100%; padding:10px 14px; background:var(--bg-inset); border:1px solid var(--border-2);
+  border-radius:8px; color:var(--text); font-family:var(--font-body); font-size:14.5px; outline:none;
+}
+.btn-toggle{
+  padding:8px 14px; background:var(--bg-card); border:1px solid var(--border-2);
+  border-radius:6px; color:var(--text-dim); font-size:13px; font-weight:600;
+  cursor:pointer; transition:all .18s; outline:none;
+}
+.btn-toggle:hover{background:var(--bg-inset); color:var(--text)}
+.btn-toggle.active{background:var(--accent-soft); color:var(--accent); border-color:var(--accent)}
+
+/* 回显数值卡片网格 */
+.res-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin-top:20px}
+.res-cell{
+  background:var(--bg-inset); border:1px solid var(--border); border-radius:10px;
+  padding:14px 16px; position:relative; overflow:hidden;
+}
+.res-cell::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent)}
+.res-cell.c-emerald::before{background:var(--emerald)}
+.res-cell.c-cyan::before{background:var(--cyan)}
+.res-cell.c-amber::before{background:var(--amber)}
+.res-val{font-family:var(--font-head); font-size:26px; font-weight:700; color:var(--text); line-height:1.15}
+.res-lbl{font-size:12.5px; color:var(--text-dim); margin-top:6px}
+.res-sub{font-size:11.5px; color:var(--text-faint); margin-top:3px}
+
+/* 按钮组 */
+.btn-group{display:flex; flex-wrap:wrap; gap:8px; margin:14px 0}
+
+/* 移动端与打印响应 */
+@media (max-width: 1080px){
+  #sidebar{transform:translateX(-100%)}
+  #sidebar.open{transform:translateX(0)}
+  #main{margin-left:0; margin-right:0; padding:44px 20px 80px}
+  .grid-duo{grid-template-columns:1fr}
+}
+@media print{
+  #sidebar, #topbar, .btn-group, input, select{display:none !important}
+  #main{margin:0 !important; padding:0 !important; max-width:100% !important}
+  body{background:#fff !important; color:#000 !important}
+  .card, .box, .sandbox-card{box-shadow:none !important; border:1px solid #ddd !important}
+}
+</style>
+</head>
+<body data-page-node-id="iEmTS6Eo5lZ1lziz04r4x5">
+
+<div id="topbar" data-page-node-id="X35wE6TyxXU6PWaEjjVeBy"><div id="topbar-progress" data-page-node-id="LLu8vGt90rjalPngAJXZwq"></div></div>
+
+<!-- 侧栏目录 -->
+<aside id="sidebar" data-page-node-id="QHyLMxYwZ6D3jmfPjyyeCB">
+  <div class="toc-title" data-page-node-id="HtVpMfRJyzSGnbtqulgZ3h">目录导航 · CONTENTS</div>
+  <ol data-page-node-id="qZhN36JVWHg42DLbfuXexH">
+    <li data-page-node-id="RjIpIvq0ULzpxSMll3RiHk"><a href="#sec-origin" data-page-node-id="qyZQnG1t8oU8QpFSYBCBhE">官方出处与背景回溯</a></li>
+    <li data-page-node-id="RSoyzYvDSJUUoEvJiAcwvo"><a href="#sec-matrix" data-page-node-id="eBw5BBL6on2c1zOD5VcQ3a">10 个金融 Agent 场景矩阵</a></li>
+    <li data-page-node-id="q2I0HfGE2D0Ed9FELzCESX"><a href="#sec-arch" data-page-node-id="TyOGkoZTDIKrusaJRK2hrp">三层参考架构深度拆解</a></li>
+    <li data-page-node-id="AFPeoBbzwYAPfoLfbxiyh0"><a href="#sec-timeline" data-page-node-id="6Cgl5CDiYwb7cwE6IvoDGu">演进时间线：平台到落地</a></li>
+    <li data-page-node-id="Lc1HTCzW1relq42hxMenX3"><a href="#sec-quant-ulike" data-page-node-id="KGLuwEzQ9jHBxnM5FBLUP3">量化与 Ulike-Agent 映射</a></li>
+    <li data-page-node-id="TwCWQ9J7AlIlhefqDGXgAI"><a href="#sec-sandbox-roi" data-page-node-id="FxEqyTqMHEP3rFSk0DtbcC">行业 Harness ROI 仿真模型</a></li>
+    <li data-page-node-id="JeMDHPt0KQAByidtwj0jdZ"><a href="#sec-sandbox-agent" data-page-node-id="bK6A8AyyIlFiudDxO1pZDO">10 大模板能力装配沙盘</a></li>
+    <li data-page-node-id="T5nxBkIVfAiLtIODb90Nvs"><a href="#sec-references" data-page-node-id="Jpfb2WH9PHgdNrVNWgWovf">参考文献与官方出处</a></li>
+  </ol>
+  <div class="toc-foot" data-page-node-id="UjK4aDvcLuINCu4jLR7WkF">
+    <div data-page-node-id="XSdKVcF5EGovCEvQnCTQNl">基准版本：2026-09-18</div>
+    <div style="margin-top:6px;" data-page-node-id="m65ZEKtH19xr0KrdgcJaKS">
+      <button type="button" id="theme-btn" class="btn-toggle" style="width:100%;" data-page-node-id="y3v3jpFsv7AY6d26aBfTVN">切换深浅主题</button>
+    </div>
+  </div>
+</aside>
+
+<!-- 正文主体 -->
+<main id="main" data-page-node-id="Ah7DNtTOcQOqDQlFTebKAK">
+
+  <header class="hero" data-page-node-id="eF6rm7dV3XQ8Gn3HL1vw3z">
+    <div class="kicker" data-page-node-id="taSCCVkq2yEVDbwmANKxku">Anthropic Financial Services Agent Architecture &amp; Quant/Ulike Harness Digest</div>
+    <h1 data-page-node-id="xffetKEe29AHzeXwhVLYMB">Anthropic 10 个金融 Agent 模板架构拆解与 Harness 工程启示</h1>
+    <p class="lede" data-page-node-id="ZaAIoRP1D74SB1TiWifn3o">
+      Anthropic 在 2026 年 5 月发布的 10 个金融服务 Agent 模板，标志着企业级 AI 架构从“提示词工程（Prompt Engineering）”正式迈向以 <strong data-page-node-id="LA5NO57KCHyCmGQji0n6vh">“Skills（领域本体）+ Connectors（数据访问）+ Subagents（专项校验）”</strong> 为核心的 <strong data-page-node-id="1bFqOKMOcsQ6HwLRgPnQAG">Agent Reference Architecture</strong>。本文深度还原官方出处、场景矩阵与三层工程架构，透视 9 月赋能全美 16,000+ RIA 投顾机构的落地脉络，并推导其对 <strong data-page-node-id="bwijI9AdSatmjxAopgWGPX">Quantitative Trading Harness</strong> 与 <strong data-page-node-id="IdyoApAzXBWxOAoFxF0mOp">Ulike-Agent</strong> 销售域经营分析的底层工程启示。
+    </p>
+    <div class="meta-line" data-page-node-id="TWJqMnJj23MyZ33rwyiBBm">
+      <span data-page-node-id="mrRnUnlK0lGLUxIqqcNrmD">发布时间：<b data-page-node-id="4TK5Utodad49WcLDKyQzPm">2026-05-05 / 2026-09-14</b></span>
+      <span data-page-node-id="G0cQele0DLEAdvFzPcxeQP">基准定稿：<b data-page-node-id="UHARXts9OmU0MSOgbuq3k3">2026-09-18</b></span>
+      <span data-page-node-id="SXfNjIvIR56QVkKCNPcmPY">官方出处：<b data-page-node-id="Gt2Bxyb73MCJaff13TE5Ca">Anthropic 官方博客 &amp; Future Proof</b></span>
+      <span data-page-node-id="EhS4C4HTKdA2K3PAad2JE1">技术领域：<b data-page-node-id="aM36n2qrGuTQP0uFOHkf9i">Agentic Architecture / Financial AI / Harness Engineering</b></span>
+    </div>
+  </header>
+
+  <!-- 第一章 -->
+  <section id="sec-origin" data-page-node-id="BlK9xiL9NyIzNy5O3pj1xQ">
+    <h2 data-page-node-id="CpjIyMzPHoucvvxNS2ApWA">01 / 官方出处与背景回溯</h2>
+    <div class="box" data-page-node-id="VTsECWf15QnKk3ptIKrxQ6">
+      <div class="box-t" data-page-node-id="N9VLZFBcyB7oTUe22vZDyK">官方核心发布事实</div>
+      <p data-page-node-id="SHURUJt1uCCHqSt3oWsI4M">
+        <strong data-page-node-id="Rm6WcX3HOKTyyJViT4mVZf">官方出处：</strong>Anthropic 官方博客 <em data-page-node-id="JEqMzhqEZ64e6LeYeLxK8E">《Agents for financial services》</em><br data-page-node-id="WbWCWCeOvQlMRBLEfFUiwo">
+        <strong data-page-node-id="IqyZWfnhXp3y2MxSBfuI2t">发布时间：</strong>2026 年 5 月 5 日<br data-page-node-id="6HSvhRQ17bzQErOStYcUku">
+        <strong data-page-node-id="V0uZUPR2Lcum4ignS9YulK">官方来源：</strong><a href="https://www.anthropic.com/news/finance-agents?utm_source=chatgpt.com" target="_blank" rel="noopener" data-page-node-id="apq84ZaPXqBQVIUfEYhju2">Anthropic - Agents for financial services</a>
+      </p>
+      <blockquote data-page-node-id="mmAFtvJxeVCgev38FXg8k2">
+        <p data-page-node-id="0e4vUrmu4pmdq1GXFU5WPs">“We’re releasing ten ready-to-run agent templates for the most time-consuming work in financial services...”</p>
+        <p style="font-size:14px; margin-top:8px; color:var(--text-faint);" data-page-node-id="0UQQ2Dk5olaKVa5pTNaykX">—— 译文：我们正式发布 10 个开箱即用（ready-to-run）的金融服务 Agent 模板，专门用于金融行业中高频、繁重、耗时最长的工作场景，例如构建 Pitchbook、KYC 客户尽调文件筛查、月末结账对账等。</p>
+      </blockquote>
+    </div>
+
+    <p data-page-node-id="lG3kqeOQIGbBeFEpGkPe5V">
+      金融行业是一个高容错门槛、重合规审查且严重依赖高精度数值计算的垂直领域。传统以“单轮对话”或“纯 Prompt 提示词”包装的 AI 方案，在遇到动辄数百页的资产评估报告、复杂的跨报表总账核对以及严格的客户准入反洗钱（AML/KYC）筛查时，极易因幻觉、上下文遗忘或非确定性输出而彻底失效。
+    </p>
+    <p data-page-node-id="A94xJB84wgYfXQDViTHTC7">
+      Anthropic 发布的 10 个模板，其战略意义不在于提供了一组现成的 Prompt 范文，而在于向整个行业正式公布了<strong data-page-node-id="Ra5ZLboZxFdlLawZkyigEp">受控多智能体（Controlled Multi-Agent）在金融严苛场景下的参考实现规范</strong>。
+    </p>
+  </section>
+
+  <!-- 第二章 -->
+  <section id="sec-matrix" data-page-node-id="I4mmDNXTobmk3JK8cAfiTY">
+    <h2 data-page-node-id="Z58r7mCOvFh73mdOhEwxsg">02 / 10 个金融 Agent 场景矩阵</h2>
+    <p data-page-node-id="Ks9ni5CRmG7OK9KfuBoyvS">
+      Anthropic 在官方 Marketplace 中上架的 10 个 Agent 模板覆盖了金融企业从前台展业、中台风控到后台运营结账的全生命周期业务链路：
+    </p>
+
+    <div class="table-wrap" data-page-node-id="3VaNvD24FZbO3l4yDUA16o">
+      <table data-page-node-id="3LH82U30nxYlTVvOzcTAtM">
+        <thead data-page-node-id="BYGN052jIW5tguPa3YogFj">
+          <tr data-page-node-id="W7ok8HY5QAwAeo5t0AjEL7">
+            <th data-page-node-id="ejEdX3KiWhXl4CDvWoqXis">Agent 模板</th>
+            <th data-page-node-id="JjeSPAcOabaKYkwFyvECn7">业务场景与核心功能</th>
+            <th data-page-node-id="kUsHaFyTkjzS5bD73kX3C0">典型目标用户</th>
+            <th data-page-node-id="mtP42ShhElW4zDDd4Yp8mN">对应业务层级</th>
+          </tr>
+        </thead>
+        <tbody data-page-node-id="jd8Z9qHkBINTnWMqZadMTL">
+          <tr data-page-node-id="Vy5iXi3zA7Arff100gXTDR">
+            <td class="k" data-page-node-id="Ud6bh0ZB4EBF9eRQmADps5"><span class="tag t-accent" data-page-node-id="iBDMN2fsAIoQYq19d83nyk">Pitch Builder</span></td>
+            <td data-page-node-id="ey4QOQZvZeqY3EwWcX2XDW">自动检索标的与行业数据，构建投资银行 Pitch Book（路演推介书）演示文稿与估值附录</td>
+            <td data-page-node-id="Yo32xlnMqZtOwgd1f92syU">投资银行部门（IBD）、M&amp;A 顾问</td>
+            <td data-page-node-id="oAdjcGxD7ex0cQzrnBmcyx">前台承揽与交易</td>
+          </tr>
+          <tr data-page-node-id="YbIHQBcfxANmSHBV0BGwxC">
+            <td class="k" data-page-node-id="wBzOFaEIUurXej6PzsiUa9"><span class="tag t-cyan" data-page-node-id="wdGClhURyt4NLpBUtpoNTZ">Valuation Reviewer</span></td>
+            <td data-page-node-id="x5zBy9yhunUM04znegJDtj">财务模型与估值模型审查，核实 DCF/LBO 模型公式逻辑、折现率设定与敏感性分析完整性</td>
+            <td data-page-node-id="6tADhTFGbsAXZNpKoMIPGX">买方股权研究（Equity Research）、PE 机构</td>
+            <td data-page-node-id="wFl02DGtcWlygxFr6HjXzP">中台投研风控</td>
+          </tr>
+          <tr data-page-node-id="ImVB0BrovmQ3bBturunq4x">
+            <td class="k" data-page-node-id="OAiFE8bzSar5b8WHdIvCDw"><span class="tag t-emerald" data-page-node-id="FQj0nabafOmgDHE98EenBr">Earnings Reviewer</span></td>
+            <td data-page-node-id="lLm2uxQJ2597o7I5Cq0CCh">自动化季度财报分析、业绩电话会 Transcript 关键信息提炼、指引偏差与异动归因</td>
+            <td data-page-node-id="f0ZpFe0UerEksmBb6Zlz6Q">买卖方行业研究员、基金经理</td>
+            <td data-page-node-id="1lPziwpKI5XO9QXVQB38QV">前台宏观与个股研究</td>
+          </tr>
+          <tr data-page-node-id="8U9AVGcbI9ECgqvlHUsGve">
+            <td class="k" data-page-node-id="PKRVkhMoZ7MvDA6XHsvdIK"><span class="tag t-accent" data-page-node-id="UwJFqYuOEjzusHleYJpn9A">Market Researcher</span></td>
+            <td data-page-node-id="nc21phBB2vHeUgNndgEe7g">全市场横向行业研究、宏观经济周期追踪、竞争格局对标与产业链深度扫描</td>
+            <td data-page-node-id="3aDWXDQPrtpEGOTECMjCm9">投资团队、战略投资部、咨询顾问</td>
+            <td data-page-node-id="o91PgVaR2AXqkKR0cUUtSE">前台策略研究</td>
+          </tr>
+          <tr data-page-node-id="2QnonjxyQ5hnSDApQbYYpA">
+            <td class="k" data-page-node-id="khMmHvEYVNNfuD9HAYMmPK"><span class="tag t-cyan" data-page-node-id="n6Q5j3TjGBHEemNetwMLdg">Model Builder</span></td>
+            <td data-page-node-id="phlw4C1CQ7YyVGWV9FmR1M">标准化财务模型与预测底表搭建，根据历史报表自动推导三表联动并生成基础假设参数</td>
+            <td data-page-node-id="JCcCF2NUL3Vt30grVBMZHv">金融初级分析师（Junior Analyst）、估值团队</td>
+            <td data-page-node-id="NGcF2GWmGCVvAXeOzpi1Qc">前台模型工程</td>
+          </tr>
+          <tr data-page-node-id="88g14eE4UU4OFQc974G1gm">
+            <td class="k" data-page-node-id="PGDOskSixWp61XWhXt7RbS"><span class="tag t-rose" data-page-node-id="kW4DpUVHlHCxnFyADX2Ata">KYC Screener</span></td>
+            <td data-page-node-id="FxErdcCMFeDKISqqOcxcqp">KYC（了解你的客户）合规筛查、制裁名单检索、UBO 最终受益所有人穿透与风险评级</td>
+            <td data-page-node-id="bE6YkgrwaRfOkaeUKGYNaf">商业银行合规部、券商风控运营团队</td>
+            <td data-page-node-id="qgKlZTqvaiomdKXkkMD8ue">中台合规准入</td>
+          </tr>
+          <tr data-page-node-id="1bE6acNDYaqHlh327s4ydn">
+            <td class="k" data-page-node-id="nq9c3g4twHG2TDyQGjFor7"><span class="tag t-amber" data-page-node-id="WdXmt6mDR8K5jrBaYFqczG">GL Reconciler</span></td>
+            <td data-page-node-id="BLj1t3bRODbi8rp9aHGokK">总账（General Ledger）流水与银行对账单自动化核对、凭证差额定位与未达账项识别</td>
+            <td data-page-node-id="66oqJOBAkomviWq81AhO14">财务核算部门、共享财务服务中心</td>
+            <td data-page-node-id="nsOptr9gHHYuyyK9Vwhxd4">后台清算核算</td>
+          </tr>
+          <tr data-page-node-id="cJxtWLTWGkzCfWoHLcrWYA">
+            <td class="k" data-page-node-id="flZkw9F6k70Oz1IsIYI2k2"><span class="tag t-amber" data-page-node-id="zL84TdGGopzfnVqQkY7O2I">Month-End Close</span></td>
+            <td data-page-node-id="DAAemyUzAQWKU2B7dFQ8Bs">月末关账端到端编排流程，自动驱动多系统结转校验、计提确认与关账试算平衡</td>
+            <td data-page-node-id="wH7JqgqOld55pG6kKFnwvi">财务总监（Controller）、财务主管</td>
+            <td data-page-node-id="BB4GM9aETLQhCjRm1nzcxI">后台财务结算</td>
+          </tr>
+          <tr data-page-node-id="HHXtqhGIY9fj9QDAJbHbkf">
+            <td class="k" data-page-node-id="P0ZZtBi5eQRkWfBuVryR3T"><span class="tag t-rose" data-page-node-id="OuGdxwGGTEJcBbtULICepQ">Statement Auditor</span></td>
+            <td data-page-node-id="h5OSsoVXx4JtFNnVdxnBFC">财务报表勾稽关系与审计检查，识别附注披露矛盾、会计政策变动与违规调账风险</td>
+            <td data-page-node-id="VQYfRrfDCTwRZ01C3mZ4cD">外部审计师、内部审计部、财务稽核团队</td>
+            <td data-page-node-id="4SpD3OUUX3udmabdgvqDfm">中后台质量审计</td>
+          </tr>
+          <tr data-page-node-id="xIxKyltmDOlG0DnfTdGDLd">
+            <td class="k" data-page-node-id="iKE54nsimQJSx8uNr83WUV"><span class="tag t-emerald" data-page-node-id="CdceJCmHpQKGnG9md7gdyM">Meeting Prep</span></td>
+            <td data-page-node-id="namXoyW5FE0LcUElyNrmvb">高净值或机构客户会议准备，自动汇编客户过往持仓变动、资产偏好、关注议题与纪要大纲</td>
+            <td data-page-node-id="9KnQiNJDYsuBQW2vR5XQz7">投资顾问（FA）、私人银行客户经理、财富管理团队</td>
+            <td data-page-node-id="ErEnf98oPuCRW7eBS3H2Ll">前台客户展业</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid-tri" data-page-node-id="dFT3gp9bdQ11BIBehdt9nW">
+      <div class="card accent" data-page-node-id="VSaSk6LMFTj7FnBtl9c4S3">
+        <h4 data-page-node-id="wih20FBwPEUm0TPpgofIFE">前台高阶展业 (Front Office)</h4>
+        <p data-page-node-id="e6Ui2xoUBjmupgLyl7HnJJ">Pitch Builder / Model Builder / Market Researcher / Meeting Prep：通过自动化数据汇编与大纲草拟，将高薪分析师与投顾从枯燥的格式排版和数据复制中解脱出来，聚焦于交易撮合与策略洞察。</p>
+      </div>
+      <div class="card cyan" data-page-node-id="izREi6t7gPUVy1owbhafPS">
+        <h4 data-page-node-id="gyMuhI92TPgz1u7kwVpnYT">中台严格风控 (Middle Office)</h4>
+        <p data-page-node-id="GACEjIukTbAz4qVvDcktwS">Valuation Reviewer / Earnings Reviewer / KYC Screener：引入硬性合规与逻辑审查规则，防止财务模型逻辑断裂与反洗钱监管漏检，构筑机构级防御纵深。</p>
+      </div>
+      <div class="card good" data-page-node-id="DZiPKDtNdtHNFzrsawNBZU">
+        <h4 data-page-node-id="P351WUVBXGJsOrcQfMCXnf">后台运营关账 (Back Office)</h4>
+        <p data-page-node-id="JZkRgrGW1u8UF8xBG7q3M6">GL Reconciler / Month-End Close / Statement Auditor：直击月度/季度关账高峰期痛点，通过端到端对账与勾稽校验，将数天的对账关账周期压缩至小时级。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 第三章 -->
+  <section id="sec-arch" data-page-node-id="pO0Lu2pjD06AgcqTAMFnMX">
+    <h2 data-page-node-id="1D5fD6xALzJ39XiYpxR9dq">03 / 三层参考架构深度拆解</h2>
+    <p data-page-node-id="GzOCdhnRGGQ07LdvKKZYAE">
+      在 Anthropic 的设计哲学中，这些金融 Agent 绝非单个庞大的 Prompt 模板，而是一套严谨规范的 <strong data-page-node-id="kAYcx8GFIVK3TrnZAztFAi">Agent Reference Architecture（Agent 参考架构）</strong>。每个模板由三层解耦的结构有机组合而成：
+    </p>
+
+    <pre data-page-node-id="hyZiNzTSThFSNZHL2nAgSV"><code data-page-node-id="Ku5zqv9FqZP57ELEuQCcDS">Financial Agent (金融业务协同编排智能体)
+│
+├── Skills (业务能力层：金融领域知识本体 + 确定性工作流程规则 SOP)
+│
+├── Connectors (数据访问层：企业级 MCP 外部数据连接器)
+│   ├── FactSet
+│   ├── S&amp;P Capital IQ
+│   ├── PitchBook
+│   ├── Morningstar
+│   ├── LSEG (Refinitiv)
+│   └── 机构内部数仓 / ERP / CRM
+│
+└── Subagents (专项子 Agent 层：高内聚专精质检与计算子智能体)
+    ├── Comparable Analysis (同行可比对标分析)
+    ├── Data Verification (关键指标与勾稽交叉核验)
+    ├── Methodology Check (估值与审计方法论合规核查)
+    └── Quality Review (输出格式与内容完整性质量评审)</code></pre>
+
+    <!-- 高保真内联 SVG 架构全景图 -->
+    <div class="figure" data-page-node-id="rqAMEOL8csFLi2OJo1sKP3">
+      <svg viewBox="0 0 800 480" width="100%" height="480" xmlns="http://www.w3.org/2000/svg" data-page-node-id="mZZM4DhBnlaJXDVwsp2mP2">
+        <!-- 背景卡片与区域分组 -->
+        <rect x="20" y="20" width="760" height="440" rx="12" fill="var(--bg-card)" stroke="var(--border)" stroke-width="1.2" data-page-node-id="6JAcawCFwwfBH7DWDMmEDY"/>
+        <text x="40" y="48" fill="var(--text)" font-family="var(--font-head)" font-size="16" font-weight="700" data-page-node-id="YO90rCQf4G0c9mmemI0TX1">Anthropic 金融 Agent 三层参考架构全景 (Three-Tier Reference Architecture)</text>
+        <text x="40" y="68" fill="var(--text-faint)" font-family="var(--font-mono)" font-size="11.5" data-page-node-id="XIaVncACgGNq05qoBgeuqM">CONTROLLED AGENTIC ENGINEERING WITH MC-PROTOCOL &amp; SPECIALIZED SUBAGENTS</text>
+
+        <!-- 顶层：主协同编排器 -->
+        <rect x="230" y="90" width="340" height="60" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.8" data-page-node-id="6214w9nyKQgHIrZDEICNS2"/>
+        <text x="400" y="116" fill="var(--text)" font-family="var(--font-body)" font-size="14.5" font-weight="700" text-anchor="middle" data-page-node-id="ZwJwXfcec48IONYL0h4ths">Financial Agent (领域主调度智能体)</text>
+        <text x="400" y="136" fill="var(--accent)" font-family="var(--font-mono)" font-size="11" text-anchor="middle" data-page-node-id="MHQjvOD1jNF0OrblbEe1cr">Planning · Orchestration · Human Approval Gate</text>
+
+        <!-- 连线：主智能体到三层 -->
+        <path d="M 320 150 L 320 185 L 145 185 L 145 210" fill="none" stroke="var(--border-2)" stroke-width="1.4" stroke-dasharray="4 4" data-page-node-id="dLyYSiwkcFxW2igMU81OMv"/>
+        <path d="M 400 150 L 400 210" fill="none" stroke="var(--border-2)" stroke-width="1.4" data-page-node-id="SzFSZ5hPHqzdyHxjr8jDrM"/>
+        <path d="M 480 150 L 480 185 L 655 185 L 655 210" fill="none" stroke="var(--border-2)" stroke-width="1.4" stroke-dasharray="4 4" data-page-node-id="KfsTOdkUvxS0GWoccgCvIm"/>
+
+        <!-- 第一层：Skills -->
+        <rect x="40" y="210" width="210" height="135" rx="8" fill="var(--bg-elev)" stroke="var(--amber)" stroke-width="1.4" data-page-node-id="7CODQJpV8Brw3SD7g5ftHH"/>
+        <text x="145" y="235" fill="var(--amber)" font-family="var(--font-head)" font-size="13.5" font-weight="700" text-anchor="middle" data-page-node-id="4gbDqUWAB3IbREUZfkSp20">① Skills (能力与规则层)</text>
+        <text x="56" y="260" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="DGy0wZG5dArZe3TJsYSzbK">• 估值模型逻辑 (DCF/LBO/PE)</text>
+        <text x="56" y="280" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="lO1bTH1EfXq9ZdDhqyl0dw">• 会计准则与三表勾稽关系</text>
+        <text x="56" y="300" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="TumanJbHcA6R6eF5wXntMm">• KYC/反洗钱风险判定矩阵</text>
+        <text x="56" y="320" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="BtTcU1DPDSy4COWEUshe4h">• 标准化工作流 SOP 约束</text>
+
+        <!-- 第二层：Connectors -->
+        <rect x="295" y="210" width="210" height="135" rx="8" fill="var(--bg-elev)" stroke="var(--cyan)" stroke-width="1.4" data-page-node-id="0ywyb93fSuw75bElbYwbr6"/>
+        <text x="400" y="235" fill="var(--cyan)" font-family="var(--font-head)" font-size="13.5" font-weight="700" text-anchor="middle" data-page-node-id="LxR0QFy5TW0ZuDYgn44Dbk">② Connectors (MCP 数据连接器)</text>
+        <text x="311" y="260" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="g4UZKtvd7h9W53SBxMezQS">• FactSet / S&amp;P Capital IQ</text>
+        <text x="311" y="280" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="ARydCJauUCbLtVLBIqWm4F">• PitchBook / Morningstar</text>
+        <text x="311" y="300" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="HJxCGtqClZ4sLdClGeANTb">• LSEG / Refinitiv 实时行情</text>
+        <text x="311" y="320" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="ydWT9gpFzEa54LqMaxZq5c">• 内部企业湖仓 / ERP / CRM</text>
+
+        <!-- 第三层：Subagents -->
+        <rect x="550" y="210" width="210" height="135" rx="8" fill="var(--bg-elev)" stroke="var(--emerald)" stroke-width="1.4" data-page-node-id="WTj0itMd4Y9S0FJaoQcKg7"/>
+        <text x="655" y="235" fill="var(--emerald)" font-family="var(--font-head)" font-size="13.5" font-weight="700" text-anchor="middle" data-page-node-id="ExjBHEJIlLB7cy7BZQqLEP">③ Subagents (专项质检子代理)</text>
+        <text x="566" y="260" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="1pwe4HIRpvffK0VUBdDW9R">• Comparable Analysis (对标)</text>
+        <text x="566" y="280" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="rk9DRPReHua6vZCLY9tL2X">• Data Verification (交叉核验)</text>
+        <text x="566" y="300" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="FAkQ5f9i4LfxlrbJ6NJK1Q">• Methodology Check (合规性)</text>
+        <text x="566" y="320" fill="var(--text-dim)" font-family="var(--font-body)" font-size="11.5" data-page-node-id="gbosGsDxTgAyNp0BwqDYmU">• Quality Review (格式审阅)</text>
+
+        <!-- 底层：外部数据资产与执行环境 -->
+        <rect x="40" y="380" width="720" height="60" rx="8" fill="var(--bg-inset)" stroke="var(--border)" stroke-width="1.2" data-page-node-id="a3XmnCv1tVUJw0w1hwnLo2"/>
+        <text x="400" y="405" fill="var(--text)" font-family="var(--font-body)" font-size="13" font-weight="600" text-anchor="middle" data-page-node-id="WrPyRZCkp6CnC9RlDCOZPd">受保护的底层环境：金融数据孤岛 · 只读安全隔离 · 人在回路审批（Human-in-the-Loop）</text>
+        <text x="400" y="425" fill="var(--text-faint)" font-family="var(--font-mono)" font-size="11" text-anchor="middle" data-page-node-id="z3Pl1uUfEzVUZJMB60rMV4">MCP PROTOCOL BOUNDARY · ZERO ARBITRARY WRITE PERMISSIONS · FAIL-CLOSED POLICY</text>
+      </svg>
+      <div class="figcap" data-page-node-id="V6PBQtAZycDJyYWCC1fXiT">图 1：Anthropic 金融服务 Agent 参考架构拓扑（主调度器、领域 Skills、MCP 数据连接器与质检 Subagents）</div>
+    </div>
+
+    <h3 data-page-node-id="D9ZGvq09DUBqnWRpp6oAQP">3.1 Skills 层：注入确定性专业规则与领域本体</h3>
+    <p data-page-node-id="Bq2xp7ZFyD6jwDHzyvHJBv">
+      通用大语言模型虽然读过海量金融语料，但并不天然具备特定投行或基金公司的估值建模规范（例如折现现金流模型中 WACC 的贝塔选取偏好、折旧摊销测算口径）。Skills 层将这类<strong data-page-node-id="Zag42nqSEuZlBhSLKDBl86">领域专家经验、SOP 流程约束与行业合规清单</strong>作为外部工程资产封装进来。模型不再随意发挥，而是在严格的业务护栏下运行。
+    </p>
+
+    <h3 data-page-node-id="K4My5JUOS7dUEqlX8CZUUd">3.2 Connectors 层：MCP 协议规范下的数据直连</h3>
+    <p data-page-node-id="I6H2fgAuBhCJViJMsF26JA">
+      金融分析最忌讳过时数据与虚假数字。Anthropic 没有让模型自由调用不受控的搜索引擎，而是依托 <strong data-page-node-id="wcmmLUlU2PDFBBIXpWnypA">MCP（Model Context Protocol）</strong> 构建标准化连接器：
+    </p>
+    <ul data-page-node-id="xivkUXOasJ2umQFvRXA9VZ">
+      <li data-page-node-id="2HPqJa8DD0rhFCq3fJLANE"><strong data-page-node-id="gNR41FONJx2AEZaZuyXO0E">权威金融数据源：</strong>FactSet、S&amp;P Capital IQ、PitchBook、Morningstar、LSEG 等，提供可穿透的一手历史报表、分析师一致预期与资本市场高频行情。</li>
+      <li data-page-node-id="koXBYkTEwxxyzwikOsEOLQ"><strong data-page-node-id="h1kr3F61hnd4c6e6J77gQR">企业私有系统：</strong>直连银行/基金内部的 ERP、总账系统、CRM 与专有数据湖，保证只读访问权限与机构级安全审计。</li>
+      <li data-page-node-id="czCGatQBje2oDtFtnJ5Q4N"><strong data-page-node-id="VsHzVEg9RpjPw3G8d79KrO">结构化封套（Structured Envelope）：</strong>工具返回结构化 JSON 而非松散文本，杜绝数据解析漂移。</li>
+    </ul>
+
+    <h3 data-page-node-id="rFwHp1An3nGafXUkfOW9Zo">3.3 Subagents 层：分工质检与对抗式防错</h3>
+    <p data-page-node-id="MasNFuMIOY0I7sKFUa5gXw">
+      传统单体 Agent 最容易犯的错误是“自己出方案、自己评判”，从而陷入认知死角。Anthropic 引入了多专职 Subagents 协作机制：
+    </p>
+    <ul data-page-node-id="EnuQSBpHCqHrohUm6mQ7pD">
+      <li data-page-node-id="G4KjPHtDhuItF3XcULAvgN"><code data-page-node-id="zPtqXHi6HCjlyQUNVdRDHB">Data Verification Agent</code>：专注于数值真伪核实，抓取的数据必须与审计底稿逐字比对，杜绝幻觉。</li>
+      <li data-page-node-id="fUfMYI0aLQ1jM4RZISi96b"><code data-page-node-id="bmfaEI762T9pSZG1BojvR0">Methodology Check Agent</code>：核实计算方法论是否合规（如是否存在循环引用、折现期数是否对齐）。</li>
+      <li data-page-node-id="UNxl0ZhCRxczAxjMn1TYeQ"><code data-page-node-id="yikKPGWiC1QRuKFDYjXsFq">Comparable Analysis Agent</code>：从全行业自动拉取可比公司中位数，验证估值倍数是否合理。</li>
+      <li data-page-node-id="JaFv2eBLzzmGH5DxvfBIsn"><code data-page-node-id="FAtrhvGs2BTfSEMzXGp3lW">Quality Review Agent</code>：审查输出成果物是否符合机构出版级标准。</li>
+    </ul>
+  </section>
+
+  <!-- 第四章 -->
+  <section id="sec-timeline" data-page-node-id="JAHUrDgDaImRMjpa8kJGFp">
+    <h2 data-page-node-id="nUmS8Fwf3JSxS1kHAudAyX">04 / 演进时间线：从 5 月模板到 9 月 Claude for Financial Advisors</h2>
+    <p data-page-node-id="nHejqDAH7x2J8Pr5PY9FuD">
+      从 2026 年 5 月推出 10 个通用模板，到 9 月与金融巨头深度捆绑，Anthropic 展示了垂直 Agent 商业落地的经典演进路径：
+    </p>
+
+    <div class="box inset" data-page-node-id="lfWi0Gw6k9Y8dgpYRIcfPU">
+      <pre data-page-node-id="mRNDvCFOEtHVRPfi45QxND"><code data-page-node-id="2TTPK3SpwslciFotlhKDWT">2026-05-05 ──────▶  Anthropic: Agents for financial services
+                     • 首次发布 10 个金融 Agent 模板
+                     • 推出金融级 MCP Connectors 规范
+                     • 配套 Claude Cowork / Claude Code 插件
+                     • 开源 Managed Agent Cookbook 实施指南
+                     │
+                     │  [4 个月平台能力纵深演进与机构合规打磨]
+                     ▼
+2026-09-14 ──────▶  Future Proof Festival: Claude for Financial Advisors
+                     • 战略合作伙伴：Charles Schwab（嘉信理财）
+                     • 直接覆盖：全美 16,000+ RIA（Registered Investment Advisor）独立投顾机构
+                     • 商业闭环：将 5 月通用模板转化为开箱即用的财富管理生产力中枢</code></pre>
+    </div>
+
+    <p data-page-node-id="DwjUpdi8UDN0XCWOhFaLow">
+      <strong data-page-node-id="lqSC9qw8ALPrKjeRfv8Jsc">核心洞见：</strong>9 月发布的 <em data-page-node-id="GotZOFtFON5cTpisD2Um8q">Claude for Financial Advisors</em>，绝非凭空诞生的新模型，而是 <strong data-page-node-id="eGwgLvos4C14vQcyrQt6fx">5 月金融 Agent 平台能力的行业垂直化特化落地</strong>。通用模型（Claude 3.5 / 3.7 / Opus）是底座，而真正的商业兑现，必须依靠与 Charles Schwab 这样的行业垄断级数据与客户网络结合，将 <code data-page-node-id="IAqAdIQfHiV45Tu1l0eRGG">Meeting Prep</code>、<code data-page-node-id="PS5oeFUIHnSKpVqEK3C7WX">Market Researcher</code>、<code data-page-node-id="It6bJ2zFfZJSyz082Lj1Q1">Valuation Reviewer</code> 封装成投顾日常点选即用的合规工作流。
+    </p>
+  </section>
+
+  <!-- 第五章 -->
+  <section id="sec-quant-ulike" data-page-node-id="Hys2joUwB05BlLwtqyEQ7U">
+    <h2 data-page-node-id="a2DjYL2vV1JCuYWQGReIxH">05 / 对 Quant Trading Harness 与 Ulike-Agent 的工程启示</h2>
+    <p data-page-node-id="OCBRW3R6uAJtGjaLEl7jew">
+      Anthropic 在金融服务领域的工程实践，对我们正在推进的量化研究框架 <strong data-page-node-id="eeJErZEeWBOlD4GZmJi6Lb">Quantitative Trading Harness</strong> 以及销售域智能业务分析平台 <strong data-page-node-id="N5vhYlV77zLPuaAakcb5Dy">Ulike-Agent</strong> 具有决定性的参考价值。
+    </p>
+
+    <div class="math-block" data-page-node-id="hgRR5Rk7aKZVuIRGZCZr4X">
+      <div data-page-node-id="Vhx0cK9IbGJfKawHya5Aaq"><strong data-page-node-id="Pm6vpIHle8yqj4E6U0pP6Q">Quantitative Trading Harness</strong> = Model + Trading Harness</div>
+      <div style="margin-top:10px;" data-page-node-id="5Z6DLTQAz112nhn5VKv6GB"><strong data-page-node-id="ZyDEi48dC3bzEnjL6oDVaY">Ulike-Agent</strong> = Data + Semantic Layer + Agent Workflow</div>
+    </div>
+
+    <div class="grid-duo" data-page-node-id="zAf94enLGSyZQpn1lk9QLz">
+      <div class="card bad" data-page-node-id="Beo4WVLvpPTN8zwSEzbGZa">
+        <h4 data-page-node-id="2JYyn7ftbqPTMZ9XL70dfA">❌ 传统反模式：单体超级 Agent (Monolithic Super-Agent)</h4>
+        <p data-page-node-id="LnrpGRnwvM5R9OEZK6eGAm">试图写一个包含两千行 Prompt 的“量化大师”或“全能销售分析师”，既让它查库、又让它算因子、还让它写交易策略。结果：职责过度耦合、上下文溢出、幻觉率极高、毫无调试可复现性。</p>
+      </div>
+      <div class="card good" data-page-node-id="OuyhjBwPy6JH90sxGztaKq">
+        <h4 data-page-node-id="9NbCZ4ryKArDJjWBGUlH5C">✅ 现代工程范式：解耦的行业 Harness 协同网络</h4>
+        <p data-page-node-id="IGBpULPhmWHZJnFo4F8CdX"><strong data-page-node-id="g4djzqDxHGTv6kaIvEeZ8A">行业 Workflow 模板 + 标准化工具连接器 + 专项 Subagents + 人在回路审批（Human-in-the-Loop）</strong>。主 Agent 只负责拆解意图与分派任务，专业工作交由专精子 Agent 与带防呆逻辑的确定性代码完成。</p>
+      </div>
+    </div>
+
+    <h3 data-page-node-id="sHd07SwYj96L6o53INPTJj">5.1 金融 Agent 到量化交易系统的映射矩阵</h3>
+    <p data-page-node-id="SaVf25m3LSIOxkjjlTulRC">
+      Anthropic 的 10 大金融模板，几乎可以 1:1 映射到 Quantitative Trading Harness 的核心研发链路中：
+    </p>
+
+    <div class="table-wrap" data-page-node-id="JXL29DY0B4FT060ag9JYoP">
+      <table data-page-node-id="st8QX7gxfANG6Ksph8lXoM">
+        <thead data-page-node-id="Hz4BwuUrl5CWlYlPt9OQpB">
+          <tr data-page-node-id="Nsyeur9u5fQhHdS5rWSQiy">
+            <th data-page-node-id="N5Np6KrMpmhCL9chdcbMxs">Anthropic 金融模板</th>
+            <th data-page-node-id="TfYWPNq9SffY1VbAiQ8Z4d">量化交易对应智能体 (Quant Agent)</th>
+            <th data-page-node-id="ccAVSciq6P7E9L20klA5Nj">输入数据源 (Connectors)</th>
+            <th data-page-node-id="gDFles33kUlWpCcL9e8dKm">工程职责与防呆机制</th>
+          </tr>
+        </thead>
+        <tbody data-page-node-id="tdqBzpjUrgJBT4GF2FwCYB">
+          <tr data-page-node-id="sgNqTCEnrY35N6Lx9eKcER">
+            <td class="k" data-page-node-id="ZxfdzXwGQj7a5AZHu27YhR">Earnings Reviewer</td>
+            <td data-page-node-id="lfg116fc4KxmMVKmhTMHHF"><strong data-page-node-id="AhOCNnkEncnzoDlHut9FxA">Earnings Intelligence Agent</strong></td>
+            <td data-page-node-id="XZDwpBxvE6GZy66hJLvLbx">SEC 申报底稿、实时业绩电话会音频流</td>
+            <td data-page-node-id="tqrCmAyVlP3cDcv4pqdP3n">提炼超预期指标，过滤自媒体噪音，生成非结构化 alpha 信号</td>
+          </tr>
+          <tr data-page-node-id="OQOiw6spAnOn80xnnYDCio">
+            <td class="k" data-page-node-id="GNeHWHQFFDGG6lDIMI6AfG">Market Researcher</td>
+            <td data-page-node-id="suI4nDrL6W1lzHzLyqz9Yh"><strong data-page-node-id="24uisAXuXmH97Kpnh9U1So">Market Regime Agent</strong></td>
+            <td data-page-node-id="TGVwmO1qdJ3xVrNty96rIM">波动率曲面、多资产收益相关性矩阵</td>
+            <td data-page-node-id="Sn0dTstiBce5OWN1ryVu9i">宏观与微观市场状态分类（牛/熊/震荡/流动性危机），指导动态风控档位</td>
+          </tr>
+          <tr data-page-node-id="ot7C8VnLt8j3CjtUahPvY6">
+            <td class="k" data-page-node-id="hOCvAXwOUaKHaAa8FjqGDx">Model Builder</td>
+            <td data-page-node-id="wpNJCHrI6Wt02aqAEAagUK"><strong data-page-node-id="LsehfW2HB6LaEBKsoZmFIr">Strategy Research Agent</strong></td>
+            <td data-page-node-id="sTW4yDiJwALZLotFR6F22W">因子库、量价时序数据、Tick 级成交明细</td>
+            <td data-page-node-id="3jyapARkfVLZW6zGkNmx7P">量化因子逻辑推演、数学公式符号回归与特征工程构建</td>
+          </tr>
+          <tr data-page-node-id="iQze6JzEpGWqUL9YvmP3Ki">
+            <td class="k" data-page-node-id="GGyLwgs14eoFjjPskmPxuU">Valuation Reviewer</td>
+            <td data-page-node-id="QZW2bqBiHdsoEyDRVW8lmB"><strong data-page-node-id="uAdWpAwmGQuaAbxQs3ZEqh">Strategy Backtest Reviewer</strong></td>
+            <td data-page-node-id="SgR3tBi10QotvdGdryBwKx">历史撮合仿真器、回测回撤指标</td>
+            <td data-page-node-id="IEONBCyF9wncNjo2kjd1Ri">审查回测过拟合风险，排查未来函数（Look-ahead Bias）与幸存者偏差</td>
+          </tr>
+          <tr data-page-node-id="f1WlfsaHEmiPRSYCzyf6wD">
+            <td class="k" data-page-node-id="NQBAfxNGGLB6M9u3KkTmMV">Statement Auditor</td>
+            <td data-page-node-id="yMsDBcdapD0rc6O7aovoHJ"><strong data-page-node-id="b20f0zmiFe3t3FgBfAyc3w">Trade Risk Auditor</strong></td>
+            <td data-page-node-id="qoDOVF65iBbC5VJYMxWrEL">实时持仓、保证金水位、未成交挂单</td>
+            <td data-page-node-id="3pao7NuKhHLZA1ISwPlhuo">头寸硬性风控审计，验证 VaR 限额、杠杆上限与黑天鹅断路器</td>
+          </tr>
+          <tr data-page-node-id="evDeMoxMxeKDuBHjfQUAi9">
+            <td class="k" data-page-node-id="iZTl242sKnyEoSc8uKaPEk">Meeting Prep</td>
+            <td data-page-node-id="xDPDdzLEEgbveWvleDqy2E"><strong data-page-node-id="atE6FMxbefsIr64qFy2Mas">Investment Memo Agent</strong></td>
+            <td data-page-node-id="1OvjrYi9aZcwVRpwCkgsf4">投委会历史决议、策略归因分解报表</td>
+            <td data-page-node-id="Gn80cUrafQquOFT4wCxGZW">自动化产出规范化投资备忘录与因子衰减评估总结</td>
+          </tr>
+          <tr data-page-node-id="p4u28lgBDoXrCucroYPiVV">
+            <td class="k" data-page-node-id="t1hCOLPH9T87HZN2ACCyTP">KYC Screener</td>
+            <td data-page-node-id="FqZEik287QHtLgBrcas5m8"><strong data-page-node-id="BrrnBrBo96IkxZakZAC2FB">Risk Compliance Agent</strong></td>
+            <td data-page-node-id="44X142xJiDVBAigMBC3fNj">交易所规则库、监管限制做空名单</td>
+            <td data-page-node-id="PStEt5WhzEtOYFGSGKxtli">穿透核查交易指令合法性，防范穿仓与洗仓违规指令</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 data-page-node-id="IB8m7zpcaOtUM4X6AeowLd">5.2 对 Ulike-Agent 销售域经营分析的落地指南</h3>
+    <p data-page-node-id="YoPLM2S5oHJI9l4DEMprbC">
+      在 Ulike-Agent（open-webui + genie-backend/tool + Wren AI 语义层 + MySQL）中，同样必须遵循这套三层原则：
+    </p>
+    <ul data-page-node-id="eQzqzkCXcMyiRmgXtgGAHx">
+      <li data-page-node-id="16VwKPKWZvj6V0qEcL7WAB"><strong data-page-node-id="eDGhkhKz8Gsmdee8PtlUB1">拒绝裸 SQL 生成：</strong>通过 Wren AI / Ibis 语义层作为 Connectors，杜绝模型直接触碰物理表的脏读与语法错误。</li>
+      <li data-page-node-id="PIPmC36siEQOMUFq5aYXa8"><strong data-page-node-id="jQVytk66Dhy78zGEgodxjx">引入专用 Attribution Reviewer：</strong>借鉴 <code data-page-node-id="gAHdxYHWTIoXvLlCec4s0h">Valuation Reviewer</code> 的思路，对异动归因分析增加交叉验证子代理，排查是否存在“伪相关”与口径不一致。</li>
+      <li data-page-node-id="UZQWKbZPVn3pjF031HEwqO"><strong data-page-node-id="boKCKwH4BV5K6CBYpBJ9SR">高风险写操作必须 Fail-Closed：</strong>所有涉及营销预算划拨、调价建议或数据导出的操作，必须停在 Human Approval Gate（人在回路审批闸门），严禁 Agent 自行闭环执行。</li>
+    </ul>
+  </section>
+
+  <!-- 第六章 -->
+  <section id="sec-sandbox-roi" data-page-node-id="YePXRz2rxejEAqyaizH115">
+    <h2 data-page-node-id="Ftc1gwaXz2Brnj2rHhpgEE">06 / 行业 Harness 终局竞争模型与 ROI 仿真沙盘</h2>
+    <p data-page-node-id="0kZrj2TyPgc5FIGV4xaSvk">
+      Anthropic 的实践向行业昭示了一个颠覆传统认知的终局结论：
+    </p>
+    <div class="box" style="border-left:4px solid var(--accent);" data-page-node-id="65lk9jAh65vaG1xbgFxgSn">
+      <div class="box-t" style="font-size:18px;" data-page-node-id="JJ2PGxIrWjdPfN8IRwAD98">“未来垂直 Agent 产品的竞争点，不是模型能力，而是行业 Harness。”</div>
+      <p style="margin-bottom:0;" data-page-node-id="fMnODLTIhYFHUeXGzUjzyU">
+        底层通用模型（Claude、GPT、Gemini、DeepSeek）日趋大宗商品化（Commoditized），Token 成本正以每年数倍的速度坍缩。客户最终购买的，从来不是模型本身，而是<strong data-page-node-id="MZg3o9dJcpeBQ3PA83pJtK">深度嵌入金融场景的 Harness 资产（领域本体知识 + SOP 规则 + 专有连接器 + 质检子代理 + 人机闭环）</strong>。
+      </p>
+    </div>
+
+    <p data-page-node-id="lD0ihtBkdpiZADLbpZ6YDp">
+      我们可以建立可计算的 <strong data-page-node-id="rabHZC9SBxSTASFEvgPQE6">Harness 人效杠杆与返工抑制数学模型</strong>：
+      设基准人工单任务耗时为 <code data-page-node-id="lo3rNBVKtYhE1dK75fo7as">T₀</code>（小时），分析师时薪为 <code data-page-node-id="zgfoM5lazMR31Rgsnp66gp">C_base</code>。在没有垂直 Harness 治理时，裸模型任务一次通过率仅为 <code data-page-node-id="Lr8wE3Bzyk7L9Z6QGdQe8K">P_raw</code>；失败导致的人工介入与排错返工惩罚系数为 <code data-page-node-id="0hBxDlIPHJ4HGFdfNvvuqA">α</code>（通常取 0.8）。
+      引入完备度为 <code data-page-node-id="79mpXEYBrnI6aqz7joSDog">H_cov</code>（0%~100%）的垂直 Harness 后：
+    </p>
+
+    <div class="math-block" data-page-node-id="yTkQosHEl886LFBFBGifZY">
+      <div data-page-node-id="BL0VkF4IOGMM62rsgar7DU">错误漏出率：<code data-page-node-id="1CbEKuKmqNavnIpNMZG4BN">E_leak = (1 - P_raw) × (1 - 0.90 × H_cov)</code></div>
+      <div style="margin-top:6px;" data-page-node-id="svbYEF2vKiTO7yMtebFkpu">综合期望工时：<code data-page-node-id="QBnzmVYmCyZGCspoBw1ZGs">T_eff = T₀ × [ (1 - 0.75 × H_cov) + E_leak × α ]</code></div>
+      <div style="margin-top:6px;" data-page-node-id="AK5DUZ74rtKbVEOmctuu8T">单任务成本：<code data-page-node-id="5acFsCJsi1kF8mG2XftTh7">Cost = T_eff × C_base + Cost_api</code></div>
+    </div>
+
+    <!-- 交互沙盘 1：ROI 仿真 -->
+    <div class="sandbox-card" data-page-node-id="rU4OmlJd8ghcKToa3fMzcH">
+      <div class="box-t" style="margin-bottom:6px;" data-page-node-id="hbRWV9S34QqNhdey3H7vap">交互沙盘 · 垂直 Harness 人效杠杆与返工成本测算模型</div>
+      <p style="font-size:13.5px; color:var(--text-faint); margin-bottom:20px;" data-page-node-id="smyUCmSn9D93CwegD190Qp">调整业务复杂度与 Harness 覆盖度参数，观察错误漏出率衰减、期望工时节省与年度组织 ROI。</p>
+
+      <div class="ctrl-row" data-page-node-id="Ta4Qfrg70qCEsm8lCZIPkc">
+        <div class="ctrl-head" data-page-node-id="D20aQIX6WY9jrwi4DDwHH8">
+          <span class="ctrl-label" data-page-node-id="owvW6M3dOQSN83hIgECsqm">单任务基准纯人工耗时 (T₀)</span>
+          <span class="ctrl-val" data-page-node-id="31qUVSca016S60xUzImVFh"><span id="out-val-t0" data-page-node-id="b0s2McS27T5cM3GOGxnYmH">12.0</span> 小时</span>
+        </div>
+        <input type="range" id="in-t0" min="2" max="40" step="1" value="12" data-page-node-id="rzSCmwIFjvkD3djcEJ2Kmd">
+      </div>
+
+      <div class="ctrl-row" data-page-node-id="Mo9FBAhEkLWmlg62OkioBI">
+        <div class="ctrl-head" data-page-node-id="7vZJ2vTQ6ZhwN8zapZtHfs">
+          <span class="ctrl-label" data-page-node-id="UfE9HofJ6SXwnFIkow54YF">专业分析师综合时薪 (C_base)</span>
+          <span class="ctrl-val" data-page-node-id="5JwBNCygJNCbu8lpBs42ru">$<span id="out-val-cbase" data-page-node-id="bsArfSPEbcqL6NDwEJd8t3">120</span> / hr</span>
+        </div>
+        <input type="range" id="in-cbase" min="40" max="300" step="10" value="120" data-page-node-id="Ofjk2mbFscWqbkJUUGExVd">
+      </div>
+
+      <div class="ctrl-row" data-page-node-id="Evob2SuCMzmGzCvEbH3dSV">
+        <div class="ctrl-head" data-page-node-id="WhLyI0VMlqShytALwRlmSN">
+          <span class="ctrl-label" data-page-node-id="ZNQdsGjpH2mapIgB1BrwFF">裸模型单次任务通过率 (P_raw)</span>
+          <span class="ctrl-val" data-page-node-id="PGeT05HDQkG3BmxUhzWieX"><span id="out-val-praw" data-page-node-id="OM01BHW5pxAgTnksguwwJg">45%</span></span>
+        </div>
+        <input type="range" id="in-praw" min="10" max="90" step="5" value="45" data-page-node-id="ZIFoMhKjCjfEKqmXkGzSIP">
+      </div>
+
+      <div class="ctrl-row" data-page-node-id="yEtAdIf5vkPooCcmVVFtFV">
+        <div class="ctrl-head" data-page-node-id="rK5rx7nP3L1AU6LFnAZHWO">
+          <span class="ctrl-label" data-page-node-id="wmjN4EPsTQg7EVZnPlRdFJ">垂直行业 Harness 完备度 (H_cov)</span>
+          <span class="ctrl-val" data-page-node-id="l0yYarCLEXpVGAAsf8tVZB"><span id="out-val-hcov" data-page-node-id="ItRyYMxdN2MfraLiyFKfNo">85%</span></span>
+        </div>
+        <input type="range" id="in-hcov" min="10" max="100" step="5" value="85" data-page-node-id="o7TbEX1wgX3wMMDSynRhPP">
+      </div>
+
+      <!-- 回显结果网格 -->
+      <div class="res-grid" data-page-node-id="dceDGrgySfISgM3T21KC4h">
+        <div class="res-cell" data-page-node-id="S6Hl5BjjtM0ClZlR2iYvZO">
+          <div class="res-val" id="out-eleak" data-page-node-id="E47WoNiQ6ubq1V5MAlkoCx">12.93%</div>
+          <div class="res-lbl" data-page-node-id="Hs6TJepVhmCMhHqrtHG1GH">错误漏出率 (E_leak)</div>
+          <div class="res-sub" data-page-node-id="MKl6ur4aRz2LClGfaFPUnv">有效防差错率 <span id="out-peff" data-page-node-id="QSnbzARGM6G5k5KRh9hbEx">87.08%</span></div>
+        </div>
+        <div class="res-cell c-cyan" data-page-node-id="xTPHDErFAIFThytrS89QgK">
+          <div class="res-val" data-page-node-id="mEQYJnTb0jfVPFolWeELf3"><span id="out-teff" data-page-node-id="anREu0bupr1TfsZXuG9emr">5.59</span> h</div>
+          <div class="res-lbl" data-page-node-id="MITuyf5L2qA90IxW0jqrcF">综合期望工时 (T_eff)</div>
+          <div class="res-sub" data-page-node-id="8Ws9b3icv5Czt7XqCsdBQ8">人效倍率 <span id="out-leverage" data-page-node-id="HVmv17dTlCk7HG12dJPfMV">2.15x</span></div>
+        </div>
+        <div class="res-cell c-emerald" data-page-node-id="9UBBYqzQQaFWFXembtvivk">
+          <div class="res-val" data-page-node-id="PAKvzovIb1a8wfukKhRcnr">$<span id="out-cost-agent" data-page-node-id="sf4T3rI8jhIkJ97481DtYI">673.40</span></div>
+          <div class="res-lbl" data-page-node-id="N0jHlqM41bZ6KaLVsH7mgS">单任务综合成本</div>
+          <div class="res-sub" data-page-node-id="YU0aL1pCbXMFZZFkahjLLl">基线 $<span id="out-cost-base" data-page-node-id="8GkpOPTSekNGwOip7DmdBy">1440.00</span></div>
+        </div>
+        <div class="res-cell c-amber" data-page-node-id="MNSDeM3IyyHkk5rqJQ6r7u">
+          <div class="res-val" data-page-node-id="GZse5gaiXArIh22mcGSOrT"><span id="out-savings-rate" data-page-node-id="uPvMpyQ7H9tyqbXOrMztbX">53.2%</span></div>
+          <div class="res-lbl" data-page-node-id="nB6zdZWvp86jaTVfwqsFJW">成本压减比例</div>
+          <div class="res-sub" data-page-node-id="NBv3GiSMQ7OeM0Ehwo6xyv">年化节约 $<span id="out-annual-savings" data-page-node-id="2FkuFwZJhkV2dGwovdn06D">383,302</span> (500笔)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 第七章 -->
+  <section id="sec-sandbox-agent" data-page-node-id="V80NH8ndl0p7kgecLLowN7">
+    <h2 data-page-node-id="TXiTWjpop5XCip5WeaXEr1">07 / 10 大金融 Agent 架构装配与能力透视沙盘</h2>
+    <p data-page-node-id="bA0s9qSS3YMemBCRdDZynW">
+      点击下方 Agent 标签或切换下拉框，深度透视 10 个金融 Agent 在 Skills、Connectors、Subagents 各层的实际装配组合与对应的量化交易映射：
+    </p>
+
+    <!-- 交互沙盘 2：Agent 架构透视 -->
+    <div class="sandbox-card" data-page-node-id="Ye2JCgpYU9rEVNbvEHcAhy">
+      <div style="margin-bottom:16px;" data-page-node-id="U9vfJEMKY7C2vOPw5qki2c">
+        <label for="agent-select" style="display:block; font-size:14px; font-weight:600; margin-bottom:8px; color:var(--text);" data-page-node-id="O3tA0N1sqM7efxfRRT0jfn">快速选择 Agent 模板：</label>
+        <select id="agent-select" data-page-node-id="DJX8Ij4LSljugJDg1sRzuY">
+          <option value="pitch" data-page-node-id="lS3NlhuiB6DedmI8eSAsvi">Pitch Builder (投资银行 Pitchbook 智能体)</option>
+          <option value="val" data-page-node-id="pb1WKairbOqPB3lFGd3qCx">Valuation Reviewer (估值模型审查智能体)</option>
+          <option value="earn" data-page-node-id="SXaQCZaonnIPZXvn2FFvRH">Earnings Reviewer (财报深度分析智能体)</option>
+          <option value="mkt" data-page-node-id="isUiESugaAe8g9xFVMZeO2">Market Researcher (全市场竞争研究智能体)</option>
+          <option value="model" data-page-node-id="4FAI92s7y6s8xIwsnVT5QD">Model Builder (财务模型搭建智能体)</option>
+          <option value="kyc" data-page-node-id="bQ8DIyjh7lyLYGkVHJ4E00">KYC Screener (客户合规筛查智能体)</option>
+          <option value="gl" data-page-node-id="y1JVEVCXKGwa6YXcF3dk2K">GL Reconciler (总账对账核对智能体)</option>
+          <option value="close" data-page-node-id="QfmX9wXzLTdgpQYpJiNN8F">Month-End Close (月末结账流程智能体)</option>
+          <option value="audit" data-page-node-id="Qg7f8AqJQqznFAmIGqEtes">Statement Auditor (报表勾稽审计智能体)</option>
+          <option value="meet" data-page-node-id="FqulqOapMUS7CMrEOlXgDY">Meeting Prep (投顾会议准备智能体)</option>
+        </select>
+      </div>
+
+      <div class="btn-group" data-page-node-id="fdMFZwj4xUXvOBY5mahMyI">
+        <button type="button" class="btn-toggle active" data-agent="pitch" data-page-node-id="XSlYLYr2KVsnmnnOt6Pjax">Pitch Builder</button>
+        <button type="button" class="btn-toggle" data-agent="val" data-page-node-id="GgseheJc8qH6aXuv5rZ3uu">Valuation Reviewer</button>
+        <button type="button" class="btn-toggle" data-agent="earn" data-page-node-id="ixoKbGotsMfGB0aI8B3M12">Earnings Reviewer</button>
+        <button type="button" class="btn-toggle" data-agent="mkt" data-page-node-id="FWoGTBEkvRPFvAieRIifmG">Market Researcher</button>
+        <button type="button" class="btn-toggle" data-agent="model" data-page-node-id="lKr8P69gx3WlBe4lW6tER3">Model Builder</button>
+        <button type="button" class="btn-toggle" data-agent="kyc" data-page-node-id="G0p7CzzgrzAj17UN3IcBHe">KYC Screener</button>
+        <button type="button" class="btn-toggle" data-agent="gl" data-page-node-id="oJXrs0D5nuh3NbwtSApWhl">GL Reconciler</button>
+        <button type="button" class="btn-toggle" data-agent="close" data-page-node-id="qXpwHYtK6z89THZAj619zF">Month-End Close</button>
+        <button type="button" class="btn-toggle" data-agent="audit" data-page-node-id="15ProEi6zet3Z428vZ4p7I">Statement Auditor</button>
+        <button type="button" class="btn-toggle" data-agent="meet" data-page-node-id="0YmcVa4eFgcvfBYFjfJiD1">Meeting Prep</button>
+      </div>
+
+      <div class="box inset" style="margin-top:20px;" data-page-node-id="CLGo1TF09tODYnbuqmpN5J">
+        <h3 id="out-agent-name" style="margin-top:0; color:var(--accent);" data-page-node-id="3Iupa4Bn7K59mRukQUXlL1">Pitch Builder (投资银行 Pitchbook 智能体)</h3>
+        <p data-page-node-id="Ccb1EAvBsY2exZWbudrkkn"><strong data-page-node-id="9uSBucuMr4flPSsqd6gpJm">应用场景：</strong><span id="out-agent-scenario" data-page-node-id="SN8I29JGc7B4YDedc6SE8N">自动生成投资银行 Pitch Book 路演推介文稿与估值附录</span></p>
+        <p data-page-node-id="oiqzel8eunrp8sidCXn5ZA"><strong data-page-node-id="reGdtIjYBlS8pwwYWziPvj">目标用户：</strong><span id="out-agent-user" data-page-node-id="aycZHY6KoQlgDDl93FKqJ8">投资银行部门（IBD）、并购顾问、一级市场承揽承做团队</span></p>
+        <hr style="margin:16px 0;" data-page-node-id="dqjgQJ5pXa2nqqEwEB95Ud">
+        <p data-page-node-id="axa2TKQVAM8z16tQRp7Vdd"><strong data-page-node-id="rcQIqbAiy6DPYs1WVfGp6f">① 领域 Skills 本体：</strong><span id="out-agent-skills" data-page-node-id="4FLHKwK45KCtSrEprIwbTr">投行演示文稿结构规范、交易倍数计算规则、估值区间确定性法则、执行大纲提取</span></p>
+        <p data-page-node-id="kt0YGbEVthnAFuNnDf9Ctv"><strong data-page-node-id="yz8LcaoC7cKK7vfx3jfFfF">② MCP Connectors：</strong><span id="out-agent-connectors" data-page-node-id="A83AeZdIs26uBFl9lGzbCj">FactSet（行业对标）、PitchBook（一级投融资历史）、企业内部交易案例数仓</span></p>
+        <p data-page-node-id="yMHWSPsMeo1mjPDV1UPN5O"><strong data-page-node-id="vRIabBaIDEWFtsjtcMTBCk">③ 专精 Subagents：</strong><span id="out-agent-subagents" data-page-node-id="7GjdiBAjLpYdx6gDCABAKW">Comparable Analysis（可比估值矩阵）、Quality Review（排版格式与一致性校验）</span></p>
+        <hr style="margin:16px 0;" data-page-node-id="MQQqgbOvmEXPOqs1spk6RM">
+        <p data-page-node-id="a4JbAK05oXSCJHMLu3jCFY"><strong data-page-node-id="yvzXTBMIJHP1j0M1TNsV9q">量化 / Ulike 映射角色：</strong><span id="out-agent-quant" data-page-node-id="J0KDPnKSxb1ImYPHUC1lJm">Investment Memo Agent / 自动化业务经营洞察 Deck 生成器</span></p>
+        <p data-page-node-id="WYTRYH0kvxHS92oT0NnPYF"><strong data-page-node-id="e2ahvO5sNVqH9USVJFIkbi">核心壁垒与防御点：</strong><span id="out-agent-moat" data-page-node-id="0GxYVEG4jFjBIEOGlz069M">严禁虚构先例交易数据，所有交易倍数必须带 FactSet 原文穿透证明链接。</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 第八章 -->
+  <section id="sec-references" data-page-node-id="TcWcExtQWxY3iGDdixBaSL">
+    <h2 data-page-node-id="FMN8NpjAY5mAkMYsnK3QzW">08 / 参考文献与官方出处</h2>
+    <div class="box" data-page-node-id="nvjcsoXnjXsNDn8HIuxNIh">
+      <ol style="margin-bottom:0;" data-page-node-id="DQGDw99idu8ViTYKKVORJu">
+        <li data-page-node-id="FTZZsONFDavHEltPvCA0qe">
+          <strong data-page-node-id="wgXZGo9nB5PLQTSmjA6cnv">[Anthropic 官方博客]</strong><br data-page-node-id="KCmPsDzKA7tlHEeWeZS9RU">
+          <em data-page-node-id="EnE2rzsJteBMSDHZ97tDn2">Agents for financial services</em>, 发布时间：2026-05-05.<br data-page-node-id="okYtALY1oIL7DDBOuQtSDO">
+          链接：<a href="https://www.anthropic.com/news/finance-agents?utm_source=chatgpt.com" target="_blank" rel="noopener" data-page-node-id="Tuod0nwP1qFxymXMLETObs">https://www.anthropic.com/news/finance-agents?utm_source=chatgpt.com</a>
+        </li>
+        <li style="margin-top:14px;" data-page-node-id="6vssvbmt64DBwxyvLCBMWh">
+          <strong data-page-node-id="5ykQUAiNUJ7FcJDPE0VsUu">[Chasing Next 追踪报道]</strong><br data-page-node-id="uQOxF4eBHzZqAX9ohSQMHI">
+          <em data-page-node-id="OSyqhVDszd0Q7RBHMdfHKz">Claude Finance Agent Templates | Anthropic</em>, 追踪更新：2026-05.<br data-page-node-id="DxfwMRN0FgwbYFy6g9t2qc">
+          链接：<a href="https://chasingnext.com/updates/claude-finance-agent-templates?utm_source=chatgpt.com" target="_blank" rel="noopener" data-page-node-id="kf5r2IiUyKCRoavIx0CduX">https://chasingnext.com/updates/claude-finance-agent-templates?utm_source=chatgpt.com</a>
+        </li>
+        <li style="margin-top:14px;" data-page-node-id="IGsxttCc0xFjU9X7syuty7">
+          <strong data-page-node-id="0wR0coEtFdjfOvnN8ANwJ3">[Future Proof 2026 发布大会]</strong><br data-page-node-id="1e5KjGMQUOJ7NEib1fCea4">
+          <em data-page-node-id="Z4UaEI3TDyHWLv8rG7lxZG">Claude for Financial Advisors in partnership with Charles Schwab</em>, 2026-09-14.<br data-page-node-id="FU5dlqRAoyUZaI3Aqtsp6U">
+          赋能覆盖全美 16,000+ RIA 机构的财富管理智能中枢。
+        </li>
+      </ol>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  // 严格 DOM 助手
+  function byId(id){ return document.getElementById(id); }
+
+  // 1. 阅读进度条
+  window.addEventListener("scroll", function(){
+    var doc = document.documentElement;
+    var st = doc.scrollTop || document.body.scrollTop || 0;
+    var sh = doc.scrollHeight - doc.clientHeight;
+    var pct = sh > 0 ? (st / sh) * 100 : 0;
+    var pb = byId("topbar-progress");
+    if(pb){ pb.style.width = pct.toFixed(1) + "%"; }
+  }, {passive:true});
+
+  // 2. 主题切换
+  var themeBtn = byId("theme-btn");
+  if(themeBtn){
+    themeBtn.addEventListener("click", function(){
+      var cur = document.documentElement.getAttribute("data-theme") || "dark";
+      var nxt = cur === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", nxt);
+    });
+  }
+
+  // 3. 目录动态高亮
+  var tocLinks = document.querySelectorAll("#sidebar a");
+  var secList = [];
+  tocLinks.forEach(function(a){
+    var href = a.getAttribute("href");
+    if(href && href.indexOf("#") === 0){
+      var sec = byId(href.substring(1));
+      if(sec){ secList.push({ link: a, sec: sec }); }
+    }
+  });
+
+  window.addEventListener("scroll", function(){
+    var scrollPos = (document.documentElement.scrollTop || 0) + 120;
+    var curActive = null;
+    for(var i = 0; i < secList.length; i++){
+      if(secList[i].sec.offsetTop <= scrollPos){
+        curActive = secList[i].link;
+      }
+    }
+    tocLinks.forEach(function(l){ l.classList.remove("active"); });
+    if(curActive){ curActive.classList.add("active"); }
+  }, {passive:true});
+
+  // 4. 沙盘 1：ROI 仿真测算模型
+  var inT0 = byId("in-t0");
+  var inCbase = byId("in-cbase");
+  var inPraw = byId("in-praw");
+  var inHcov = byId("in-hcov");
+
+  function calcROI(){
+    if(!inT0 || !inCbase || !inPraw || !inHcov) return;
+    var T0 = parseFloat(inT0.value);
+    var Cbase = parseFloat(inCbase.value);
+    var Praw = parseFloat(inPraw.value) / 100.0;
+    var Hcov = parseFloat(inHcov.value) / 100.0;
+    var alpha = 0.80;
+    var costApi = 2.50;
+    var nTasks = 500;
+
+    // 回显控件自身数值
+    byId("out-val-t0").textContent = T0.toFixed(1);
+    byId("out-val-cbase").textContent = Cbase.toFixed(0);
+    byId("out-val-praw").textContent = (Praw * 100).toFixed(0) + "%";
+    byId("out-val-hcov").textContent = (Hcov * 100).toFixed(0) + "%";
+
+    // 数学公式推导
+    var Eleak = (1.0 - Praw) * (1.0 - 0.90 * Hcov);
+    var Peff = 1.0 - Eleak;
+    var Teff = T0 * ((1.0 - 0.75 * Hcov) + Eleak * alpha);
+    var costBase = T0 * Cbase;
+    var costAgent = Teff * Cbase + costApi;
+    var leverage = Teff > 0 ? (T0 / Teff) : 0;
+    var savingsRate = costBase > 0 ? ((costBase - costAgent) / costBase * 100.0) : 0;
+    var annualSavings = nTasks * (costBase - costAgent);
+
+    // 格式化输出到槽位（严格与静态初始值保持同逻辑）
+    byId("out-eleak").textContent = (Eleak * 100).toFixed(2) + "%";
+    byId("out-peff").textContent = (Peff * 100).toFixed(2) + "%";
+    byId("out-teff").textContent = Teff.toFixed(2);
+    byId("out-leverage").textContent = leverage.toFixed(2) + "x";
+    byId("out-cost-base").textContent = costBase.toFixed(2);
+    byId("out-cost-agent").textContent = costAgent.toFixed(2);
+    byId("out-savings-rate").textContent = savingsRate.toFixed(1) + "%";
+    byId("out-annual-savings").textContent = Math.round(annualSavings).toLocaleString();
+  }
+
+  if(inT0) inT0.addEventListener("input", calcROI);
+  if(inCbase) inCbase.addEventListener("input", calcROI);
+  if(inPraw) inPraw.addEventListener("input", calcROI);
+  if(inHcov) inHcov.addEventListener("input", calcROI);
+
+  // 5. 沙盘 2：10 大金融 Agent 能力透视数据字典
+  var AGENT_DATA = {
+    pitch: {
+      name: "Pitch Builder (投资银行 Pitchbook 智能体)",
+      scenario: "自动生成投资银行 Pitch Book 路演推介文稿与估值附录",
+      user: "投资银行部门（IBD）、并购顾问、一级市场承揽承做团队",
+      skills: "投行演示文稿结构规范、交易倍数计算规则、估值区间确定性法则、执行大纲提取",
+      connectors: "FactSet（行业对标）、PitchBook（一级投融资历史）、企业内部交易案例数仓",
+      subagents: "Comparable Analysis（可比估值矩阵）、Quality Review（排版格式与一致性校验）",
+      quant: "Investment Memo Agent / 自动化业务经营洞察 Deck 生成器",
+      moat: "严禁虚构先例交易数据，所有交易倍数必须带 FactSet 原文穿透证明链接。"
+    },
+    val: {
+      name: "Valuation Reviewer (估值模型审查智能体)",
+      scenario: "财务模型与估值模型审查，排查 DCF/LBO/倍数模型中的公式断裂与假设偏离",
+      user: "二级市场买方（Equity Research）、私募股权投资团队（PE）、投资委员会",
+      skills: "企业价值评估指南、WACC/Beta 参数校验规则、敏感性测试矩阵、财务勾稽合法性检查",
+      connectors: "S&P Capital IQ、FactSet、内部财务底稿 Excel/XLSX 模型库",
+      subagents: "Data Verification（底稿数据比对）、Methodology Check（折现模型方法论合规）",
+      quant: "Strategy Backtest Reviewer（排查量化回测过拟合与未来函数）",
+      moat: "模型公式必须做拓扑排序与环状依赖检测，防止公式隐式截断。"
+    },
+    earn: {
+      name: "Earnings Reviewer (财报深度分析智能体)",
+      scenario: "季度与年度财报快评、业绩说明会 Transcript 关键信息提取、业绩指引异动归因",
+      user: "行业研究员、对冲基金投资经理、宏观策略分析师",
+      skills: "财报异动指标提取规则、管理层表态情绪分析、Non-GAAP 调整项剔除准则",
+      connectors: "SEC EDGAR 底稿库、Refinitiv/LSEG 电话会议实录音频流、公司公告库",
+      subagents: "Data Verification（GAAP/Non-GAAP 对比）、Comparable Analysis（同行横向对比）",
+      quant: "Earnings Intelligence Agent（自动抽取非结构化财报事件 Alpha 信号）",
+      moat: "严禁采信未经审计的二手口径，所有数据锚定 SEC 10-Q/10-K 原生申报表。"
+    },
+    mkt: {
+      name: "Market Researcher (全市场竞争研究智能体)",
+      scenario: "宏观行业全景扫描、产业链上下游供需调研、竞争对手动态追踪与市场份额测算",
+      user: "战略投资部（Corp Dev）、产业基金投资经理、管理咨询顾问",
+      skills: "波特五力分析规则、TAM/SAM/SOM 测算模型、产业链节点依赖度评分体系",
+      connectors: "Morningstar、PitchBook、权威产业数据库、行业协会统计年鉴",
+      subagents: "Quality Review（观点交叉验证）、Methodology Check（市场空间测算逻辑）",
+      quant: "Market Regime Agent（宏观流动性与资产类别波动态势分类器）",
+      moat: "自动识别咨询机构报告与第三方软文的水分，建立交叉佐证门槛。"
+    },
+    model: {
+      name: "Model Builder (财务模型搭建智能体)",
+      scenario: "从零搭建标准化三表联动预测模型，根据历史报表自动外推经营现金流与损益预估",
+      user: "金融初级分析师（Junior Analyst）、估值建模工程师",
+      skills: "标准三表联动勾稽规则、资本开支折旧摊销递延资产测算逻辑、存货周转假设",
+      connectors: "S&P Capital IQ、内部 ERP/财务历史底表、数据湖历史审计表",
+      subagents: "Methodology Check（会计平账校验）、Data Verification（历史基数校验）",
+      quant: "Strategy Research Agent（量化策略数学形式化定义与特征工程底表）",
+      moat: "所有外推假设必须参数化暴露，杜绝在单元格内硬编码（Hardcode）魔法数字。"
+    },
+    kyc: {
+      name: "KYC Screener (客户合规筛查智能体)",
+      scenario: "客户尽职调查、反洗钱合规筛查、制裁名单穿透、最终受益所有人（UBO）识别",
+      user: "银行风控合规官、券商账户准入审查员、离岸信托合规经理",
+      skills: "全球制裁名单穿透准则、PEP 政治公众人物识别规则、企业多层股权穿透算法",
+      connectors: "World-Check、LexisNexis、各国工商登记数据库、制裁与观察名单专线",
+      subagents: "Data Verification（身份与企业登记穿透）、Quality Review（合规风险审查备忘录）",
+      quant: "Risk Compliance Agent（量化下单席位合规审查与账户准入闸门）",
+      moat: "命中制裁名单必须硬性熔断（Fail-Closed），严禁 Agent 擅自放行疑点账户。"
+    },
+    gl: {
+      name: "GL Reconciler (总账对账核对智能体)",
+      scenario: "总账流水与外部银行流水对账、跨币种头寸调拨核实、未达账项与差异差额定位",
+      user: "企业财务共享服务中心对账会计、银行资金清算专员",
+      skills: "复式记账法勾稽规则、银企对账匹配准则、未达账项容忍阈值算法",
+      connectors: "SAP/Oracle ERP 总账模块、SWIFT 银行报文流、银企直连 API",
+      subagents: "Data Verification（流水金额与时间戳单据精确撮合）",
+      quant: "Trade Execution Reconciler（交易成交单与券商结算席位逐笔对账）",
+      moat: "差异账项精确到每一笔凭证号，严禁通过净额掩盖方向相反的单据差错。"
+    },
+    close: {
+      name: "Month-End Close (月末结账流程智能体)",
+      scenario: "月末/季末财务关账工作流自动化推进，结转摊销校验、试算平衡与关账待办监控",
+      user: "财务主管、财务总监（Controller）、财务系统运维工程师",
+      skills: "权责发生制计提摊销 SOP、合并报表抵销分录规则、财务关账甘特图编排机制",
+      connectors: "核心 ERP 财务套件、OA 审批流、资金管理系统 TMS",
+      subagents: "Quality Review（关账试算平衡表）、Methodology Check（计提折旧分摊合规）",
+      quant: "Portfolio NAV Calculation Agent（量化产品月度净值核算与费用计提闭环）",
+      moat: "关账每一步必须有不可篡改的操作审计日志与主管审批签名记录。"
+    },
+    audit: {
+      name: "Statement Auditor (报表勾稽审计智能体)",
+      scenario: "财务报表内生矛盾审计、勾稽关系破损识别、会计估计变更与附注异常披露监测",
+      user: "会计师事务所审计师、公司内部监事会稽核专家",
+      skills: "审计准则风险评估模型、本期与上期对比分析异常波动率阈值、附注穿透规则",
+      connectors: "公司法定申报审计报告、底稿系统、税务比对系统",
+      subagents: "Data Verification（表间勾稽校验）、Methodology Check（会计政策变更合规）",
+      quant: "Trade Risk Auditor（交易风控与持仓异常勾稽审计器）",
+      moat: "对跨期重分类与异常关联交易设置硬性红色预警阈值。"
+    },
+    meet: {
+      name: "Meeting Prep (投顾会议准备智能体)",
+      scenario: "高净值与机构客户拜访前准备，汇编历史收益持仓、风险偏好测评与交流备忘",
+      user: "独立投资顾问（RIA）、私人银行理财经理、机构销售代表",
+      skills: "客户持仓画像构建准则、资产配置策略再平衡建议规则、合规展业话术护栏",
+      connectors: "CRM 客户档案、财富管理组合管理系统（Portfolio PMS）、投研观点库",
+      subagents: "Quality Review（材料隐私合规审阅）、Comparable Analysis（同类组合收益对比）",
+      quant: "Investment Memo Agent（投资者关系与策略月报自动化汇编）",
+      moat: "严格执行客户隐私脱敏（PII Redaction），杜绝跨客户数据泄露。"
+    }
+  };
+
+  function updateAgent(key){
+    var d = AGENT_DATA[key];
+    if(!d) return;
+    byId("out-agent-name").textContent = d.name;
+    byId("out-agent-scenario").textContent = d.scenario;
+    byId("out-agent-user").textContent = d.user;
+    byId("out-agent-skills").textContent = d.skills;
+    byId("out-agent-connectors").textContent = d.connectors;
+    byId("out-agent-subagents").textContent = d.subagents;
+    byId("out-agent-quant").textContent = d.quant;
+    byId("out-agent-moat").textContent = d.moat;
+
+    // 联动更新 select 与按钮组
+    var sel = byId("agent-select");
+    if(sel && sel.value !== key){ sel.value = key; }
+
+    var btns = document.querySelectorAll(".btn-group button");
+    btns.forEach(function(b){
+      if(b.getAttribute("data-agent") === key){
+        b.classList.add("active");
+      } else {
+        b.classList.remove("active");
+      }
+    });
+  }
+
+  var selCtrl = byId("agent-select");
+  if(selCtrl){
+    selCtrl.addEventListener("change", function(){
+      updateAgent(this.value);
+    });
+  }
+
+  var agentBtns = document.querySelectorAll(".btn-group button");
+  agentBtns.forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var k = this.getAttribute("data-agent");
+      if(k){ updateAgent(k); }
+    });
+  });
+
+  // 默认触发一次确保与初值绝对同源
+  calcROI();
+
+})();
+</script>
+
+</body>
+</html>
